@@ -29,6 +29,33 @@ class MemoryAnalyzerTest {
                 "explicit preference")), result);
     }
 
+        @Test
+        void rejectsQuestionsAndUncontextualizedSingleWordCandidates() {
+        CompletedConversation conversation = new CompletedConversation(
+            "conversation-questions", List.of(
+                new CompletedConversation.Message("user", "mac"),
+                new CompletedConversation.Message("user", "โปรเจคที่เราทำอยู่คือโปรเจคอะไรหรอ?")));
+        MemoryExtractionClient client = ignored -> List.of(
+            new CandidateMemory(MemoryCategory.PROFILE, "mac", 0.9, "user stated directly"),
+            new CandidateMemory(MemoryCategory.PROJECT, "โปรเจคที่เราทำอยู่คือโปรเจคอะไรหรอ?", 0.9,
+                "user stated directly"));
+
+        assertEquals(List.of(), new MemoryAnalyzer(client, MemoryPolicy.defaults()).analyze(conversation));
+        }
+
+        @Test
+        void acceptsShortCandidateWhenAnotherUserMessageProvidesContext() {
+        CompletedConversation conversation = new CompletedConversation(
+            "conversation-context", List.of(
+                new CompletedConversation.Message("user", "mac"),
+                new CompletedConversation.Message("user", "ฉันใช้ mac เป็นเครื่องหลัก")));
+        MemoryExtractionClient client = ignored -> List.of(
+            new CandidateMemory(MemoryCategory.PROFILE, "mac", 0.9, "user uses mac"));
+
+        assertEquals(List.of(new CandidateMemory(MemoryCategory.PROFILE, "mac", 0.9, "user uses mac")),
+            new MemoryAnalyzer(client, MemoryPolicy.defaults()).analyze(conversation));
+        }
+
     @Test
     void propagatesExtractionFailure() {
         MemoryException failure = new MemoryException("llm unavailable");

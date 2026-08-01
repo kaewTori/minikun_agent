@@ -27,7 +27,7 @@ public class MemoryAnalyzer {
             Set<String> seen = new HashSet<>();
             List<CandidateMemory> accepted = candidates.stream()
                     .filter(this::valid)
-                    .filter(policy::accepts)
+                    .filter(candidate -> policy.accepts(candidate, conversation))
                     .filter(candidate -> seen.add(fingerprint(candidate)))
                     .toList();
             log.info("memory_extraction conversation_id={} duration_ms={} candidate_count={} accepted_count={} rejected_count={} extraction_success=true",

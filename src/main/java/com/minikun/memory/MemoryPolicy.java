@@ -1,6 +1,9 @@
 package com.minikun.memory;
 
+import java.util.Locale;
+
 import com.minikun.memory.model.CandidateMemory;
+import com.minikun.memory.model.CompletedConversation;
 
 public record MemoryPolicy(
         double minimumConfidence,
@@ -19,13 +22,42 @@ public record MemoryPolicy(
     }
 
     public boolean accepts(CandidateMemory candidate) {
+        return accepts(candidate, null);
+    }
+
+    public boolean accepts(CandidateMemory candidate, CompletedConversation conversation) {
         return candidate.confidence() >= minimumConfidence
                 && candidate.content().length() <= maximumContentLength
-                && !isTemporary(candidate.content());
+                && !isTemporary(candidate.content())
+                && !isQuestionOrRequest(candidate.content())
+                && hasContextForShortContent(candidate.content(), conversation);
     }
 
     private boolean isTemporary(String content) {
-        String normalized = content.toLowerCase(java.util.Locale.ROOT);
+        String normalized = content.toLowerCase(Locale.ROOT);
         return normalized.matches(".*\\b(today|tonight|this week|for now|ชั่วคราว|วันนี้|คืนนี้)\\b.*");
+    }
+
+    private boolean isQuestionOrRequest(String content) {
+        String normalized = content.strip().toLowerCase(Locale.ROOT);
+        return normalized.endsWith("?")
+                || normalized.endsWith("？")
+                || normalized.matches("^(what|why|how|which|who|where|when|can you|could you|please|tell me)\\b.*")
+                || normalized.matches("^(อะไร|อะไรคือ|คืออะไร|ทำไม|อย่างไร|ยังไง|ที่ไหน|เมื่อไหร่|ไหม|หรือยัง|ช่วย|ขอ|แนะนำ|บอก|อธิบาย).*" );
+    }
+
+    private boolean hasContextForShortContent(String content, CompletedConversation conversation) {
+        if (conversation == null || content.strip().isEmpty() || content.strip().split("\\s+").length > 1) {
+            return true;
+        }
+        String normalizedContent = content.strip().toLowerCase(Locale.ROOT);
+        return conversation.messages().stream()
+                .filter(message -> "user".equalsIgnoreCase(message.role()))
+                .map(CompletedConversation.Message::content)
+                .map(String::strip)
+                .filter(message -> !message.equalsIgnoreCase(content.strip()))
+                .filter(message -> !isQuestionOrRequest(message))
+                .map(message -> message.toLowerCase(Locale.ROOT))
+                .anyMatch(message -> message.contains(normalizedContent));
     }
 }
