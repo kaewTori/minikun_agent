@@ -6,6 +6,9 @@ import java.util.List;
 import java.util.UUID;
 
 import org.springframework.ai.chat.model.ChatResponse;
+import org.springframework.ai.chat.messages.Message;
+import org.springframework.ai.chat.messages.SystemMessage;
+import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.embedding.EmbeddingModel;
@@ -27,6 +30,7 @@ import com.minikun.pcs.PromptComposer;
 import com.minikun.pcs.PromptException;
 import com.minikun.pcs.PromptRequest;
 import com.minikun.pcs.model.ConversationContext;
+import com.minikun.pcs.model.PromptMessage;
 import com.minikun.pcs.model.RuntimeContext;
 
 import lombok.RequiredArgsConstructor;
@@ -180,7 +184,21 @@ public class ChatService {
                 null,
                 List.of(),
                 new com.minikun.pcs.model.UserMessage(userMessage.content()));
-        return new Prompt(promptComposer.compose(promptRequest));
+        return toSpringPrompt(promptComposer.compose(promptRequest));
+    }
+
+    private Prompt toSpringPrompt(com.minikun.pcs.model.Prompt prompt) {
+        List<Message> messages = prompt.messages().stream()
+                .map(this::toSpringMessage)
+                .toList();
+        return new Prompt(messages);
+    }
+
+    private Message toSpringMessage(PromptMessage message) {
+        return switch (message.role()) {
+            case SYSTEM -> new SystemMessage(message.content());
+            case USER -> new UserMessage(message.content());
+        };
     }
 
     private void appendAssistantText(StringBuilder content, ChatResponse response) {

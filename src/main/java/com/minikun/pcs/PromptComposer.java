@@ -1,9 +1,10 @@
 package com.minikun.pcs;
 
 import com.minikun.pcs.model.UserMessage;
+import com.minikun.pcs.model.Prompt;
 
 public final class PromptComposer {
-    public String compose(PromptRequest request) {
+    public Prompt compose(PromptRequest request) {
         if (request == null) {
             throw new PromptException("request must not be null");
         }

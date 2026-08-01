@@ -2,6 +2,9 @@ package com.minikun.pcs;
 
 import com.minikun.character.model.CharacterSpecification;
 import com.minikun.pcs.model.CapabilityInstruction;
+import com.minikun.pcs.model.Prompt;
+import com.minikun.pcs.model.PromptMessage;
+import com.minikun.pcs.model.PromptRole;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -10,7 +13,7 @@ final class PromptRenderer {
     private PromptRenderer() {
     }
 
-    static String render(PromptRequest request) {
+    static Prompt render(PromptRequest request) {
         List<String> sections = new ArrayList<>();
         sections.add(character(request.character()));
         sections.add(section("Runtime", request.runtime().content()));
@@ -28,8 +31,9 @@ final class PromptRenderer {
                 sections.add(capabilities.toString());
             }
         }
-        sections.add(section("User Message", request.userMessage().content()));
-        return String.join("\n\n", sections);
+        return new Prompt(List.of(
+            new PromptMessage(PromptRole.SYSTEM, String.join("\n\n", sections)),
+            new PromptMessage(PromptRole.USER, request.userMessage().content())));
     }
 
     private static String character(CharacterSpecification specification) {

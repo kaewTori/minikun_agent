@@ -5,6 +5,8 @@ import com.minikun.character.model.CharacterSpecification;
 import com.minikun.pcs.model.CapabilityInstruction;
 import com.minikun.pcs.model.ConversationContext;
 import com.minikun.pcs.model.KnowledgeContext;
+import com.minikun.pcs.model.Prompt;
+import com.minikun.pcs.model.PromptRole;
 import com.minikun.pcs.model.RuntimeContext;
 import com.minikun.pcs.model.UserMessage;
 import org.junit.jupiter.api.Test;
@@ -21,13 +23,17 @@ class PromptComposerTest {
 
     @Test
     void composesSectionsInFixedOrder() {
-        String prompt = new PromptComposer().compose(request());
+        Prompt prompt = new PromptComposer().compose(request());
+        assertEquals(2, prompt.messages().size());
+        assertEquals(PromptRole.SYSTEM, prompt.messages().get(0).role());
+        assertEquals(PromptRole.USER, prompt.messages().get(1).role());
 
-        assertTrue(prompt.indexOf("[Character]") < prompt.indexOf("[Runtime]"));
-        assertTrue(prompt.indexOf("[Runtime]") < prompt.indexOf("[Conversation]"));
-        assertTrue(prompt.indexOf("[Conversation]") < prompt.indexOf("[Knowledge]"));
-        assertTrue(prompt.indexOf("[Knowledge]") < prompt.indexOf("[Capabilities]"));
-        assertTrue(prompt.indexOf("[Capabilities]") < prompt.indexOf("[User Message]"));
+        String system = prompt.messages().get(0).content();
+        assertTrue(system.indexOf("[Character]") < system.indexOf("[Runtime]"));
+        assertTrue(system.indexOf("[Runtime]") < system.indexOf("[Conversation]"));
+        assertTrue(system.indexOf("[Conversation]") < system.indexOf("[Knowledge]"));
+        assertTrue(system.indexOf("[Knowledge]") < system.indexOf("[Capabilities]"));
+        assertEquals("Answer this", prompt.messages().get(1).content());
     }
 
     @Test
@@ -35,11 +41,12 @@ class PromptComposerTest {
         PromptRequest request = new PromptRequest(
                 character(), new RuntimeContext("now"), null, null, List.of(), new UserMessage("hello"));
 
-        String prompt = new PromptComposer().compose(request);
+        Prompt prompt = new PromptComposer().compose(request);
+        String system = prompt.messages().get(0).content();
 
-        assertTrue(!prompt.contains("[Conversation]"));
-        assertTrue(!prompt.contains("[Knowledge]"));
-        assertTrue(!prompt.contains("[Capabilities]"));
+        assertTrue(!system.contains("[Conversation]"));
+        assertTrue(!system.contains("[Knowledge]"));
+        assertTrue(!system.contains("[Capabilities]"));
     }
 
     @Test
@@ -56,10 +63,12 @@ class PromptComposerTest {
     @Test
     void requestCopiesCapabilityListAndOutputIsDeterministic() {
         PromptRequest request = request();
-        String first = new PromptComposer().compose(request);
-        String second = new PromptComposer().compose(request);
+        Prompt first = new PromptComposer().compose(request);
+        Prompt second = new PromptComposer().compose(request);
 
         assertEquals(first, second);
+        assertThrows(UnsupportedOperationException.class,
+            () -> first.messages().add(first.messages().get(0)));
         assertThrows(UnsupportedOperationException.class,
                 () -> request.capabilities().add(new CapabilityInstruction("later", "instruction")));
     }
