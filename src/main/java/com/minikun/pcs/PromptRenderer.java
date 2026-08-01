@@ -15,7 +15,6 @@ final class PromptRenderer {
         sections.add(character(request.character()));
         sections.add(section("Runtime", request.runtime().content()));
         addOptional(sections, "Conversation", request.conversation() == null ? null : request.conversation().content());
-        addOptional(sections, "Memory", request.memory() == null ? null : request.memory().content());
         addOptional(sections, "Knowledge", request.knowledge() == null ? null : request.knowledge().content());
         if (!request.capabilities().isEmpty()) {
             StringBuilder capabilities = new StringBuilder("[Capabilities]");

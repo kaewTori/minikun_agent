@@ -5,7 +5,6 @@ import com.minikun.character.model.CharacterSpecification;
 import com.minikun.pcs.model.CapabilityInstruction;
 import com.minikun.pcs.model.ConversationContext;
 import com.minikun.pcs.model.KnowledgeContext;
-import com.minikun.pcs.model.MemoryContext;
 import com.minikun.pcs.model.RuntimeContext;
 import com.minikun.pcs.model.UserMessage;
 import org.junit.jupiter.api.Test;
@@ -26,8 +25,7 @@ class PromptComposerTest {
 
         assertTrue(prompt.indexOf("[Character]") < prompt.indexOf("[Runtime]"));
         assertTrue(prompt.indexOf("[Runtime]") < prompt.indexOf("[Conversation]"));
-        assertTrue(prompt.indexOf("[Conversation]") < prompt.indexOf("[Memory]"));
-        assertTrue(prompt.indexOf("[Memory]") < prompt.indexOf("[Knowledge]"));
+        assertTrue(prompt.indexOf("[Conversation]") < prompt.indexOf("[Knowledge]"));
         assertTrue(prompt.indexOf("[Knowledge]") < prompt.indexOf("[Capabilities]"));
         assertTrue(prompt.indexOf("[Capabilities]") < prompt.indexOf("[User Message]"));
     }
@@ -35,12 +33,11 @@ class PromptComposerTest {
     @Test
     void omitsEmptyOptionalSections() {
         PromptRequest request = new PromptRequest(
-                character(), new RuntimeContext("now"), null, null, null, List.of(), new UserMessage("hello"));
+                character(), new RuntimeContext("now"), null, null, List.of(), new UserMessage("hello"));
 
         String prompt = new PromptComposer().compose(request);
 
         assertTrue(!prompt.contains("[Conversation]"));
-        assertTrue(!prompt.contains("[Memory]"));
         assertTrue(!prompt.contains("[Knowledge]"));
         assertTrue(!prompt.contains("[Capabilities]"));
     }
@@ -49,11 +46,11 @@ class PromptComposerTest {
     void rejectsInvalidRequiredInputs() {
         assertThrows(PromptException.class, () -> new PromptComposer().compose(null));
         assertThrows(PromptException.class, () -> new PromptComposer().compose(
-                new PromptRequest(null, new RuntimeContext("now"), null, null, null, List.of(), new UserMessage("hello"))));
+                new PromptRequest(null, new RuntimeContext("now"), null, null, List.of(), new UserMessage("hello"))));
         assertThrows(PromptException.class, () -> new PromptComposer().compose(
-                new PromptRequest(character(), new RuntimeContext(" "), null, null, null, List.of(), new UserMessage("hello"))));
+                new PromptRequest(character(), new RuntimeContext(" "), null, null, List.of(), new UserMessage("hello"))));
         assertThrows(PromptException.class, () -> new PromptComposer().compose(
-                new PromptRequest(character(), new RuntimeContext("now"), null, null, null, List.of(), new UserMessage(" "))));
+                new PromptRequest(character(), new RuntimeContext("now"), null, null, List.of(), new UserMessage(" "))));
     }
 
     @Test
@@ -69,8 +66,7 @@ class PromptComposerTest {
 
     private PromptRequest request() {
         return new PromptRequest(character(), new RuntimeContext("2026-08-01"),
-                new ConversationContext("Previous turn"), new MemoryContext("Remembered fact"),
-                new KnowledgeContext("Retrieved fact"),
+            new ConversationContext("Previous turn"), new KnowledgeContext("Retrieved fact"),
                 List.of(new CapabilityInstruction("search", "Use retrieved sources")),
                 new UserMessage("Answer this"));
     }

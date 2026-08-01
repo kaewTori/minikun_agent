@@ -4,10 +4,8 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
-import java.util.stream.IntStream;
 
 import org.springframework.ai.chat.model.ChatResponse;
-import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.embedding.EmbeddingModel;
@@ -21,6 +19,9 @@ import com.minikun.agent.minikun_agent.api.openai.dto.ChatCompletionRequest;
 import com.minikun.agent.minikun_agent.api.openai.dto.ChatCompletionResponse;
 import com.minikun.agent.minikun_agent.api.openai.dto.EmbeddingRequest;
 import com.minikun.agent.minikun_agent.api.openai.dto.EmbeddingResponse;
+import com.minikun.agent.minikun_agent.conversation.ChatMessage;
+import com.minikun.agent.minikun_agent.conversation.ConversationId;
+import com.minikun.agent.minikun_agent.conversation.ConversationMemoryService;
 import com.minikun.character.model.CharacterSpecification;
 import com.minikun.pcs.PromptComposer;
 import com.minikun.pcs.PromptException;
@@ -38,6 +39,7 @@ public class ChatService {
     private final ChatModel chatModel;
     private final EmbeddingModel embeddingModel;
     private final ChatTransactionLogger transactionLogger;
+    private final ConversationMemoryService conversationMemoryService;
     private final CharacterSpecification characterSpecification;
     private final PromptComposer promptComposer;
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -52,9 +54,14 @@ public class ChatService {
         String model = modelName(request.model(), configuredChatModel);
         ChatTransactionLogger.Transaction transaction = transactionLogger.start(
             "chatcmpl-" + UUID.randomUUID(), model, false, request.messages().size());
+        ConversationId conversationId = conversationId(request);
+        ChatMessage userMessage = userMessage(request);
+        List<ChatMessage> history = conversationMemoryService.load(conversationId);
         try {
-        var response = chatModel.call(promptFor(request));
+        conversationMemoryService.append(conversationId, userMessage);
+        var response = chatModel.call(promptFor(request, history));
         String content = response.getResult().getOutput().getText();
+        conversationMemoryService.append(conversationId, new ChatMessage("assistant", content));
         var choice = new ChatCompletionResponse.Choice(
                 0,
                 new com.minikun.agent.minikun_agent.api.openai.dto.Message("assistant", content),
@@ -77,8 +84,14 @@ public class ChatService {
             requestId, model, true, request.messages().size());
         String id = requestId;
         long created = Instant.now().getEpochSecond();
+        ConversationId conversationId = conversationId(request);
+        ChatMessage userMessage = userMessage(request);
+        List<ChatMessage> history = conversationMemoryService.load(conversationId);
+        conversationMemoryService.append(conversationId, userMessage);
+        StringBuilder assistantContent = new StringBuilder();
 
-        Flux<String> chunks = chatModel.stream(promptFor(request))
+        Flux<String> chunks = chatModel.stream(promptFor(request, history))
+            .doOnNext(response -> appendAssistantText(assistantContent, response))
                 .map(response -> streamChunk(response, id, created, model))
                 .filter(chunk -> !chunk.isBlank());
 
@@ -93,7 +106,13 @@ public class ChatService {
                         List.of(new ChatCompletionResponse.StreamChoice(0,
                                 new ChatCompletionResponse.Delta(null, null), "stop"))))),
                 Flux.just("[DONE]"))
-                .doOnComplete(transaction::success)
+                .doOnComplete(() -> {
+                    if (!assistantContent.isEmpty()) {
+                        conversationMemoryService.append(
+                                conversationId, new ChatMessage("assistant", assistantContent.toString()));
+                    }
+                    transaction.success();
+                })
                 .doOnError(transaction::failed)
                 .doOnCancel(transaction::cancelled);
     }
@@ -140,20 +159,17 @@ public class ChatService {
         return values;
     }
 
-    private Prompt promptFor(ChatCompletionRequest request) {
-        int userMessageIndex = lastUserMessageIndex(request.messages());
-        var userMessage = request.messages().get(userMessageIndex);
+    private Prompt promptFor(ChatCompletionRequest request, List<ChatMessage> history) {
+        var userMessage = userMessage(request);
         String runtime = request.messages().stream()
                 .filter(message -> "system".equals(message.role()))
                 .map(com.minikun.agent.minikun_agent.api.openai.dto.Message::content)
                 .filter(this::hasText)
                 .reduce((left, right) -> left + "\n\n" + right)
                 .orElse("Current date: " + LocalDate.now());
-        String conversation = IntStream.range(0, userMessageIndex)
-                .mapToObj(request.messages()::get)
-                .filter(message -> !"system".equals(message.role()))
-                .filter(message -> hasText(message.content()))
-                .map(message -> message.role() + ": " + message.content())
+        String conversation = history.stream()
+            .filter(message -> !"system".equals(message.role()))
+            .map(message -> message.role() + ": " + message.content())
                 .reduce((left, right) -> left + "\n\n" + right)
                 .orElse("");
 
@@ -162,10 +178,28 @@ public class ChatService {
                 new RuntimeContext(runtime),
                 conversation.isBlank() ? null : new ConversationContext(conversation),
                 null,
-                null,
                 List.of(),
                 new com.minikun.pcs.model.UserMessage(userMessage.content()));
-        return new Prompt(List.of(new SystemMessage(promptComposer.compose(promptRequest))));
+        return new Prompt(promptComposer.compose(promptRequest));
+    }
+
+    private void appendAssistantText(StringBuilder content, ChatResponse response) {
+        String text = response.getResult().getOutput().getText();
+        if (text != null) {
+            content.append(text);
+        }
+    }
+
+    private ConversationId conversationId(ChatCompletionRequest request) {
+        if (!hasText(request.conversation_id())) {
+            throw new PromptException("conversation_id must not be blank");
+        }
+        return new ConversationId(request.conversation_id());
+    }
+
+    private ChatMessage userMessage(ChatCompletionRequest request) {
+        int userMessageIndex = lastUserMessageIndex(request.messages());
+        return new ChatMessage("user", request.messages().get(userMessageIndex).content());
     }
 
     private int lastUserMessageIndex(List<com.minikun.agent.minikun_agent.api.openai.dto.Message> messages) {
