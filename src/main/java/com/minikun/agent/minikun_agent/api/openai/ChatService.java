@@ -27,6 +27,7 @@ import com.minikun.agent.minikun_agent.conversation.ChatMessage;
 import com.minikun.agent.minikun_agent.conversation.ConversationId;
 import com.minikun.agent.minikun_agent.conversation.ConversationMemoryService;
 import com.minikun.memory.MemoryAnalyzer;
+import com.minikun.memory.MemoryRecallService;
 import com.minikun.memory.MemoryService;
 import com.minikun.memory.model.CompletedConversation;
 import com.minikun.character.model.CharacterSpecification;
@@ -34,6 +35,7 @@ import com.minikun.pcs.PromptComposer;
 import com.minikun.pcs.PromptException;
 import com.minikun.pcs.PromptRequest;
 import com.minikun.pcs.model.ConversationContext;
+import com.minikun.pcs.model.KnowledgeContext;
 import com.minikun.pcs.model.PromptMessage;
 import com.minikun.pcs.model.RuntimeContext;
 
@@ -52,6 +54,7 @@ public class ChatService {
     private final ConversationMemoryService conversationMemoryService;
     private final MemoryAnalyzer memoryAnalyzer;
     private final ObjectProvider<MemoryService> memoryService;
+    private final ObjectProvider<MemoryRecallService> memoryRecallService;
     private final CharacterSpecification characterSpecification;
     private final PromptComposer promptComposer;
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -73,7 +76,8 @@ public class ChatService {
         if (persistConversation) {
             conversationMemoryService.append(conversationId, userMessage);
         }
-        var response = chatModel.call(promptFor(request, history));
+        KnowledgeContext knowledge = recallKnowledge();
+        var response = chatModel.call(promptFor(request, history, knowledge));
         String content = response.getResult().getOutput().getText();
         if (persistConversation) {
             conversationMemoryService.append(conversationId, new ChatMessage("assistant", content));
@@ -109,7 +113,8 @@ public class ChatService {
         }
         StringBuilder assistantContent = new StringBuilder();
 
-        Flux<String> chunks = chatModel.stream(promptFor(request, history))
+        KnowledgeContext knowledge = recallKnowledge();
+        Flux<String> chunks = chatModel.stream(promptFor(request, history, knowledge))
             .doOnNext(response -> appendAssistantText(assistantContent, response))
                 .map(response -> streamChunk(response, id, created, model))
                 .filter(chunk -> !chunk.isBlank());
@@ -179,7 +184,10 @@ public class ChatService {
         return values;
     }
 
-    private Prompt promptFor(ChatCompletionRequest request, List<ChatMessage> history) {
+    private Prompt promptFor(
+            ChatCompletionRequest request,
+            List<ChatMessage> history,
+            KnowledgeContext knowledge) {
         var userMessage = userMessage(request);
         String runtime = request.messages().stream()
                 .filter(message -> "system".equals(message.role()))
@@ -197,10 +205,23 @@ public class ChatService {
                 characterSpecification,
                 new RuntimeContext(runtime),
                 conversation.isBlank() ? null : new ConversationContext(conversation),
-                null,
+                knowledge,
                 List.of(),
                 new com.minikun.pcs.model.UserMessage(userMessage.content()));
         return toSpringPrompt(promptComposer.compose(promptRequest));
+    }
+
+    private KnowledgeContext recallKnowledge() {
+        MemoryRecallService service = memoryRecallService.getIfAvailable();
+        if (service == null) {
+            return null;
+        }
+        try {
+            return service.recall();
+        } catch (RuntimeException exception) {
+            log.warn("Long-term memory recall failed; continuing without knowledge", exception);
+            return null;
+        }
     }
 
     private Prompt toSpringPrompt(com.minikun.pcs.model.Prompt prompt) {

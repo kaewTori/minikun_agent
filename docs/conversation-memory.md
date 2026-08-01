@@ -38,6 +38,10 @@ For a non-streaming chat request:
 
 Streaming requests follow the same history and user-message ordering. Assistant chunks are accumulated and appended once when the stream completes successfully.
 
+Before either model call, `ChatService` asks `MemoryRecallService` for long-term knowledge. The recall path reads persisted memories from PostgreSQL, applies deterministic recent-first ordering and a maximum count in `MemorySelector`, and converts the selected records to a bounded `KnowledgeContext` through `MemoryFormatter`. It does not use an LLM, embeddings, semantic search, or vector storage. Recall covers all categories and all conversations in this version; `conversation_id` remains persistence provenance rather than a recall filter.
+
+Recall failures are handled by `ChatService`: a warning is logged and the request continues without a Knowledge section. `MemoryRepository` only retrieves persisted rows; it does not apply selection rules. The KnowledgeContext character budget and maximum memory count are configurable with `MINIKUN_MEMORY_RECALL_MAXIMUM_CHARACTERS` and `MINIKUN_MEMORY_RECALL_MAXIMUM_COUNT`.
+
 Loading history before appending the current user message prevents the current message from appearing twice in the composed conversation section and as the separate PCS `USER` message.
 
 ## Storage and windowing

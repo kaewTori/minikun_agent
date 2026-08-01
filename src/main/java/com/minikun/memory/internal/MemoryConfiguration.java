@@ -18,6 +18,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.minikun.memory.MemoryAnalyzer;
 import com.minikun.memory.MemoryExtractionClient;
 import com.minikun.memory.MemoryPolicy;
+import com.minikun.memory.MemoryRecallService;
 import com.minikun.memory.MemoryRepository;
 import com.minikun.memory.MemoryService;
 
@@ -65,6 +66,18 @@ public class MemoryConfiguration {
     @ConditionalOnBean(MemoryRepository.class)
     MemoryService memoryService(MemoryRepository repository, Clock memoryClock) {
         return new MemoryService(repository, memoryClock);
+    }
+
+    @Bean
+    @ConditionalOnBean(MemoryRepository.class)
+    MemoryRecallService memoryRecallService(
+            MemoryRepository repository,
+            @Value("${minikun.memory.recall.maximum-count:10}") int maximumCount,
+            @Value("${minikun.memory.recall.maximum-characters:4000}") int maximumCharacters) {
+        MemorySelector selector = new MemorySelector(maximumCount);
+        MemoryFormatter formatter = new MemoryFormatter(maximumCharacters);
+        return new MemoryRecallService(repository,
+            memories -> formatter.format(selector.select(memories)));
     }
 
     @Bean
