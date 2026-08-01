@@ -13,6 +13,7 @@ import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -25,6 +26,9 @@ import com.minikun.agent.minikun_agent.api.openai.dto.EmbeddingResponse;
 import com.minikun.agent.minikun_agent.conversation.ChatMessage;
 import com.minikun.agent.minikun_agent.conversation.ConversationId;
 import com.minikun.agent.minikun_agent.conversation.ConversationMemoryService;
+import com.minikun.memory.MemoryAnalyzer;
+import com.minikun.memory.MemoryService;
+import com.minikun.memory.model.CompletedConversation;
 import com.minikun.character.model.CharacterSpecification;
 import com.minikun.pcs.PromptComposer;
 import com.minikun.pcs.PromptException;
@@ -34,16 +38,20 @@ import com.minikun.pcs.model.PromptMessage;
 import com.minikun.pcs.model.RuntimeContext;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class ChatService {
 
     private final ChatModel chatModel;
     private final EmbeddingModel embeddingModel;
     private final ChatTransactionLogger transactionLogger;
     private final ConversationMemoryService conversationMemoryService;
+    private final MemoryAnalyzer memoryAnalyzer;
+    private final ObjectProvider<MemoryService> memoryService;
     private final CharacterSpecification characterSpecification;
     private final PromptComposer promptComposer;
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -65,6 +73,7 @@ public class ChatService {
         var response = chatModel.call(promptFor(request, history));
         String content = response.getResult().getOutput().getText();
         conversationMemoryService.append(conversationId, new ChatMessage("assistant", content));
+        extractMemories(conversationId);
         var choice = new ChatCompletionResponse.Choice(
                 0,
                 new com.minikun.agent.minikun_agent.api.openai.dto.Message("assistant", content),
@@ -112,6 +121,7 @@ public class ChatService {
                     if (!assistantContent.isEmpty()) {
                         conversationMemoryService.append(
                                 conversationId, new ChatMessage("assistant", assistantContent.toString()));
+                        extractMemories(conversationId);
                     }
                     transaction.success();
                 })
@@ -209,6 +219,20 @@ public class ChatService {
     private ChatMessage userMessage(ChatCompletionRequest request) {
         int userMessageIndex = lastUserMessageIndex(request.messages());
         return new ChatMessage("user", request.messages().get(userMessageIndex).content());
+    }
+
+    private void extractMemories(ConversationId conversationId) {
+        try {
+            CompletedConversation conversation = new CompletedConversation(
+                    conversationId.value(),
+                    conversationMemoryService.load(conversationId).stream()
+                            .map(message -> new CompletedConversation.Message(message.role(), message.content()))
+                            .toList());
+            var candidates = memoryAnalyzer.analyze(conversation);
+            memoryService.ifAvailable(service -> service.persist(conversation, candidates));
+        } catch (RuntimeException exception) {
+            log.warn("Long-term memory extraction failed for conversation {}", conversationId.value(), exception);
+        }
     }
 
     private int lastUserMessageIndex(List<com.minikun.agent.minikun_agent.api.openai.dto.Message> messages) {
