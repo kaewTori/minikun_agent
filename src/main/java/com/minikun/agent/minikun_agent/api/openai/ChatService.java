@@ -54,11 +54,10 @@ public class ChatService {
     @Value("${spring.ai.ollama.embedding.options.model:nomic-embed-text}")
     private String configuredEmbeddingModel;
 
-    public ChatCompletionResponse chatCompletion(ChatCompletionRequest request) {
+    public ChatCompletionResponse chatCompletion(ChatCompletionRequest request, ConversationId conversationId) {
         String model = modelName(request.model(), configuredChatModel);
         ChatTransactionLogger.Transaction transaction = transactionLogger.start(
             "chatcmpl-" + UUID.randomUUID(), model, false, request.messages().size());
-        ConversationId conversationId = conversationId(request);
         ChatMessage userMessage = userMessage(request);
         List<ChatMessage> history = conversationMemoryService.load(conversationId);
         try {
@@ -81,14 +80,13 @@ public class ChatService {
         }
     }
 
-    public Flux<String> chatCompletionStream(ChatCompletionRequest request) {
+    public Flux<String> chatCompletionStream(ChatCompletionRequest request, ConversationId conversationId) {
         String model = modelName(request.model(), configuredChatModel);
         String requestId = "chatcmpl-" + UUID.randomUUID();
         ChatTransactionLogger.Transaction transaction = transactionLogger.start(
             requestId, model, true, request.messages().size());
         String id = requestId;
         long created = Instant.now().getEpochSecond();
-        ConversationId conversationId = conversationId(request);
         ChatMessage userMessage = userMessage(request);
         List<ChatMessage> history = conversationMemoryService.load(conversationId);
         conversationMemoryService.append(conversationId, userMessage);
@@ -206,13 +204,6 @@ public class ChatService {
         if (text != null) {
             content.append(text);
         }
-    }
-
-    private ConversationId conversationId(ChatCompletionRequest request) {
-        if (!hasText(request.conversation_id())) {
-            throw new PromptException("conversation_id must not be blank");
-        }
-        return new ConversationId(request.conversation_id());
     }
 
     private ChatMessage userMessage(ChatCompletionRequest request) {
