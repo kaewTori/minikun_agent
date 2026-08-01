@@ -1,11 +1,11 @@
 package com.minikun.memory.internal;
 
-import java.net.http.HttpClient;
 import java.time.Clock;
 import java.time.Duration;
 
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.ai.ollama.api.OllamaApi;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -67,25 +67,25 @@ public class MemoryConfiguration {
     }
 
     @Bean
-    MemoryExtractionClient llamaCppMemoryClient(
+    MemoryExtractionClient mainModelMemoryClient(
             MemoryPromptBuilder promptBuilder,
             MemoryResponseParser responseParser,
             MemoryValidator validator,
             MemoryPolicy policy,
             Clock memoryClock,
-            @Value("${minikun.memory.llama-cpp.url:http://z-flip:8080/v1/chat/completions}") String url,
-            @Value("${minikun.memory.llama-cpp.model:${OLLAMA_MODEL:hf.co/llmfan46/gemma-4-E4B-it-ultra-uncensored-heretic-GGUF:Q6_K}}") String model,
-            @Value("${minikun.memory.llama-cpp.timeout:30s}") Duration timeout) {
-        HttpClient httpClient = HttpClient.newBuilder()
+                @Value("${minikun.memory.model:${spring.ai.ollama.chat.options.model:main-model}}") String model,
+                @Value("${spring.ai.ollama.base-url:http://127.0.0.1:11434}") String baseUrl,
+            @Value("${minikun.memory.main-model.timeout:150s}") Duration timeout) {
+            var httpClient = java.net.http.HttpClient.newBuilder()
                 .connectTimeout(timeout)
                 .build();
-        JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(httpClient);
-        requestFactory.setReadTimeout(timeout);
-        RestClient restClient = RestClient.builder()
-                .baseUrl(url)
-                .requestFactory(requestFactory)
+            var requestFactory = new JdkClientHttpRequestFactory(httpClient);
+            requestFactory.setReadTimeout(timeout);
+            OllamaApi ollamaApi = OllamaApi.builder()
+                .baseUrl(baseUrl)
+                .restClientBuilder(RestClient.builder().requestFactory(requestFactory))
                 .build();
-        return new LlamaCppClient(restClient, model, timeout, memoryClock,
+            return new MainModelMemoryClient(ollamaApi, model, timeout, memoryClock,
                 promptBuilder, responseParser, validator, policy);
     }
 

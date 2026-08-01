@@ -22,6 +22,11 @@ class MemoryResponseParserTest {
     }
 
     @Test
+    void parsesConversationWithNoMemories() {
+        assertEquals(0, parser.parse("{\"memories\":[]}").size());
+    }
+
+    @Test
     void rejectsMalformedAndEmptyResponses() {
         assertThrows(MemoryException.class, () -> parser.parse("not json"));
         assertThrows(MemoryException.class, () -> parser.parse("{}"));

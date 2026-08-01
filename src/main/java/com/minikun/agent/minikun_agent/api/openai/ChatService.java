@@ -67,13 +67,18 @@ public class ChatService {
         ChatTransactionLogger.Transaction transaction = transactionLogger.start(
             "chatcmpl-" + UUID.randomUUID(), model, false, request.messages().size());
         ChatMessage userMessage = userMessage(request);
+        boolean persistConversation = shouldPersistConversation(request);
         List<ChatMessage> history = conversationMemoryService.load(conversationId);
         try {
-        conversationMemoryService.append(conversationId, userMessage);
+        if (persistConversation) {
+            conversationMemoryService.append(conversationId, userMessage);
+        }
         var response = chatModel.call(promptFor(request, history));
         String content = response.getResult().getOutput().getText();
-        conversationMemoryService.append(conversationId, new ChatMessage("assistant", content));
-        extractMemories(conversationId);
+        if (persistConversation) {
+            conversationMemoryService.append(conversationId, new ChatMessage("assistant", content));
+            extractMemories(conversationId);
+        }
         var choice = new ChatCompletionResponse.Choice(
                 0,
                 new com.minikun.agent.minikun_agent.api.openai.dto.Message("assistant", content),
@@ -97,8 +102,11 @@ public class ChatService {
         String id = requestId;
         long created = Instant.now().getEpochSecond();
         ChatMessage userMessage = userMessage(request);
+        boolean persistConversation = shouldPersistConversation(request);
         List<ChatMessage> history = conversationMemoryService.load(conversationId);
-        conversationMemoryService.append(conversationId, userMessage);
+        if (persistConversation) {
+            conversationMemoryService.append(conversationId, userMessage);
+        }
         StringBuilder assistantContent = new StringBuilder();
 
         Flux<String> chunks = chatModel.stream(promptFor(request, history))
@@ -118,7 +126,7 @@ public class ChatService {
                                 new ChatCompletionResponse.Delta(null, null), "stop"))))),
                 Flux.just("[DONE]"))
                 .doOnComplete(() -> {
-                    if (!assistantContent.isEmpty()) {
+                    if (persistConversation && !assistantContent.isEmpty()) {
                         conversationMemoryService.append(
                                 conversationId, new ChatMessage("assistant", assistantContent.toString()));
                         extractMemories(conversationId);
@@ -246,6 +254,16 @@ public class ChatService {
 
     private boolean hasText(String value) {
         return value != null && !value.isBlank();
+    }
+
+    private boolean shouldPersistConversation(ChatCompletionRequest request) {
+        return request.messages().stream()
+                .map(com.minikun.agent.minikun_agent.api.openai.dto.Message::content)
+                .filter(this::hasText)
+                .map(String::toLowerCase)
+                .noneMatch(content -> content.contains("generate a concise title summarizing the chat history")
+                        || content.contains("your entire response must consist solely of the json object")
+                        || content.contains("### task:\n") && content.contains("### chat history:"));
     }
 
     private String modelName(String requestedModel, String configuredModel) {
