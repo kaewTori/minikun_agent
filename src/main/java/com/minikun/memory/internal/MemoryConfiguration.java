@@ -7,6 +7,7 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.ai.ollama.api.OllamaApi;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -55,7 +56,7 @@ public class MemoryConfiguration {
     }
 
     @Bean
-    @ConditionalOnBean(JdbcTemplate.class)
+    @ConditionalOnProperty(name = "minikun.memory.persistence.enabled", havingValue = "true", matchIfMissing = true)
     MemoryRepository memoryRepository(JdbcTemplate jdbcTemplate) {
         return new JdbcMemoryRepository(jdbcTemplate);
     }

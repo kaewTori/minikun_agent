@@ -1,6 +1,7 @@
 package com.minikun.memory.internal;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 import java.time.Instant;
 import java.util.List;
@@ -23,9 +24,13 @@ class MemoryPromptBuilderTest {
 
         assertTrue(prompt.contains("หน้าที่เดียวของคุณคือค้นหาข้อเท็จจริงที่คงอยู่ระยะยาว"));
         assertTrue(prompt.contains("ให้ส่งคืน JSON object เพียงหนึ่ง object เท่านั้น"));
+        assertTrue(prompt.contains("ห้ามสรุปจนรายละเอียดหาย"));
+        assertTrue(prompt.contains("เลือก category ตามความหมายของข้อความ"));
+        assertTrue(prompt.contains("PROFILE คือข้อมูลเกี่ยวกับผู้ใช้หรือสภาพแวดล้อมของผู้ใช้"));
         assertTrue(prompt.contains("{\"memories\":[]}"));
-        assertTrue(prompt.contains("BEGIN CONVERSATION"));
+        assertTrue(prompt.contains("BEGIN USER MESSAGES"));
         assertTrue(prompt.contains("\"content\":\"I prefer Vim.\""));
+        assertFalse(prompt.contains("Noted."));
         assertTrue(prompt.contains("Prompt version: " + MemoryPromptBuilder.VERSION));
     }
 }

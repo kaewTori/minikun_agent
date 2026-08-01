@@ -56,7 +56,7 @@ public class ChatService {
     private final PromptComposer promptComposer;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    @Value("${spring.ai.ollama.chat.options.model:hf.co/llmfan46/gemma-4-E4B-it-ultra-uncensored-heretic-GGUF:Q6_K}")
+    @Value("${spring.ai.ollama.chat.options.model:hf.co/llmfan46/gemma-4-E4B-it-ultra-uncensored-heretic-GGUF:Q5_K_M}")
     private String configuredChatModel;
 
     @Value("${spring.ai.ollama.embedding.options.model:nomic-embed-text}")
@@ -237,7 +237,15 @@ public class ChatService {
                             .map(message -> new CompletedConversation.Message(message.role(), message.content()))
                             .toList());
             var candidates = memoryAnalyzer.analyze(conversation);
-            memoryService.ifAvailable(service -> service.persist(conversation, candidates));
+                var service = memoryService.getIfAvailable();
+                if (service == null) {
+                    log.warn("memory_persistence conversation_id={} skipped=true reason=memory_service_unavailable candidate_count={}",
+                            conversationId.value(), candidates.size());
+                    return;
+                }
+                    var persisted = service.persist(conversation, candidates);
+                    log.info("memory_persistence conversation_id={} candidate_count={} persisted_count={} skipped_count={}",
+                        conversationId.value(), candidates.size(), persisted.size(), candidates.size() - persisted.size());
         } catch (RuntimeException exception) {
             log.warn("Long-term memory extraction failed for conversation {}", conversationId.value(), exception);
         }

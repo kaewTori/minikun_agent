@@ -2,6 +2,7 @@ package com.minikun.memory.internal;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.minikun.memory.MemoryException;
@@ -28,7 +29,8 @@ class MemoryResponseParserTest {
 
     @Test
     void rejectsMalformedAndEmptyResponses() {
-        assertThrows(MemoryException.class, () -> parser.parse("not json"));
+        MemoryException malformed = assertThrows(MemoryException.class, () -> parser.parse("not json"));
+        assertTrue(malformed.getMessage().contains("line 1, column 1"));
         assertThrows(MemoryException.class, () -> parser.parse("{}"));
         assertThrows(MemoryException.class, () -> parser.parse("  "));
     }

@@ -3,6 +3,7 @@ package com.minikun.memory.internal;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.minikun.memory.MemoryException;
@@ -35,6 +36,12 @@ final class MemoryResponseParser {
             return List.copyOf(result);
         } catch (MemoryException exception) {
             throw exception;
+        } catch (JsonProcessingException exception) {
+            String location = exception.getLocation() == null
+                    ? "unknown location"
+                    : "line " + exception.getLocation().getLineNr()
+                            + ", column " + exception.getLocation().getColumnNr();
+            throw new MemoryException("memory extraction response is not valid JSON at " + location, exception);
         } catch (Exception exception) {
             throw new MemoryException("memory extraction response is not valid JSON", exception);
         }

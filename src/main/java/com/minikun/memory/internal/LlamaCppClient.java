@@ -10,7 +10,6 @@ import org.springframework.web.client.RestClient;
 
 import lombok.extern.slf4j.Slf4j;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.minikun.memory.MemoryException;
 import com.minikun.memory.MemoryExtractionClient;
 import com.minikun.memory.MemoryPolicy;
@@ -56,8 +55,12 @@ final class LlamaCppClient implements MemoryExtractionClient {
                     || response.choices().getFirst().message() == null) {
                 throw new MemoryException("llama.cpp returned an empty response");
             }
-            var validation = validator.validate(
-                    responseParser.parse(response.choices().getFirst().message().content()), policy);
+                String rawResponse = response.choices().getFirst().message().content();
+                log.debug("memory_llm_response conversation_id={} provider=llama_cpp raw_response={}",
+                    conversation.conversationId(), rawResponse);
+                var validation = validator.validate(responseParser.parse(rawResponse), policy);
+                log.debug("memory_llm_validation conversation_id={} provider=llama_cpp valid_candidates={} validation_errors={}",
+                    conversation.conversationId(), validation.valid(), validation.errors());
             log.info("memory_llm_call conversation_id={} prompt_version={} model={} timeout_ms={} duration_ms={} extraction_success=true",
                     conversation.conversationId(), promptBuilder.version(), model, timeout.toMillis(), elapsedMillis(started));
             return validation.valid();
