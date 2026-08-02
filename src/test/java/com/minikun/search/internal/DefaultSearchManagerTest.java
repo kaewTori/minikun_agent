@@ -3,14 +3,13 @@ package com.minikun.search.internal;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import com.minikun.pcs.model.KnowledgeContext;
 import com.minikun.search.SearchProvider;
 import com.minikun.search.SearchProviderUnavailableException;
 import com.minikun.search.model.SearchProviderResponse;
 import com.minikun.search.model.SearchRequest;
-import com.minikun.search.model.SearchResponse;
 import com.minikun.search.model.SearchResult;
 import com.minikun.search.model.SearchSource;
-import com.minikun.search.model.SearchStatus;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -26,21 +25,19 @@ class DefaultSearchManagerTest {
     @Test
     void returnsSuccessForProviderResults() {
         SearchProvider provider = request -> new SearchProviderResponse(List.of(result()));
-        DefaultSearchManager manager = new DefaultSearchManager(provider, CLOCK, 0);
+        DefaultSearchManager manager = manager(provider, 0);
 
-        SearchResponse response = manager.search(request());
+        KnowledgeContext response = manager.search(request());
 
-        assertEquals(SearchStatus.SUCCESS, response.status());
-        assertEquals(1, response.results().size());
-        assertEquals(0, response.metadata().retryCount());
+        assertEquals("Title (https://example.com/result): Content", response.content());
     }
 
     @Test
     void returnsNoResultsForAnEmptyProviderResponse() {
         SearchProvider provider = request -> new SearchProviderResponse(List.of());
-        DefaultSearchManager manager = new DefaultSearchManager(provider, CLOCK, 0);
+        DefaultSearchManager manager = manager(provider, 0);
 
-        assertEquals(SearchStatus.NO_RESULTS, manager.search(request()).status());
+        assertEquals("", manager.search(request()).content());
     }
 
     @Test
@@ -52,12 +49,12 @@ class DefaultSearchManagerTest {
             }
             return new SearchProviderResponse(List.of(result()));
         };
-        DefaultSearchManager manager = new DefaultSearchManager(provider, CLOCK, 1);
+        DefaultSearchManager manager = manager(provider, 1);
 
-        SearchResponse response = manager.search(request());
+        KnowledgeContext response = manager.search(request());
 
         assertEquals(2, calls.get());
-        assertEquals(1, response.metadata().retryCount());
+        assertEquals("Title (https://example.com/result): Content", response.content());
     }
 
     @Test
@@ -65,12 +62,22 @@ class DefaultSearchManagerTest {
         SearchProvider provider = request -> {
             throw new AssertionError("provider must not be called");
         };
-        DefaultSearchManager manager = new DefaultSearchManager(provider, CLOCK, 1);
+        DefaultSearchManager manager = manager(provider, 1);
         SearchRequest request = new SearchRequest(
                 UUID.randomUUID(), "query", 10, Instant.parse("2026-08-01T23:59:59Z"));
 
         assertThrows(com.minikun.search.SearchTimeoutException.class,
                 () -> manager.search(request));
+    }
+
+    private static DefaultSearchManager manager(SearchProvider provider, int maxRetries) {
+        return new DefaultSearchManager(
+                provider,
+                CLOCK,
+                maxRetries,
+                new SearchDeduplicator(),
+                new SearchBudgeter(4000),
+                new SearchFormatter());
     }
 
     private static SearchRequest request() {

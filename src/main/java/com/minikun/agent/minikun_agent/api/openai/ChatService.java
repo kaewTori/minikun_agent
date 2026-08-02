@@ -39,12 +39,8 @@ import com.minikun.pcs.model.KnowledgeContext;
 import com.minikun.pcs.model.PromptMessage;
 import com.minikun.pcs.model.RuntimeContext;
 import com.minikun.search.SearchDecisionService;
-import com.minikun.search.SearchFormatter;
 import com.minikun.search.SearchService;
-import com.minikun.search.internal.SearchBudgeter;
-import com.minikun.search.internal.SearchDeduplicator;
 import com.minikun.search.model.SearchRequest;
-import com.minikun.search.model.SearchResponse;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -66,9 +62,6 @@ public class ChatService {
     private final PromptComposer promptComposer;
     private final SearchService searchService;
     private final SearchDecisionService searchDecisionService;
-    private final SearchDeduplicator searchDeduplicator;
-    private final SearchBudgeter searchBudgeter;
-    private final SearchFormatter searchFormatter;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Value("${spring.ai.ollama.chat.options.model:hf.co/llmfan46/gemma-4-E4B-it-ultra-uncensored-heretic-GGUF:Q5_K_M}")
@@ -260,10 +253,7 @@ public class ChatService {
                     decision.query(),
                     10,
                     Instant.now().plus(searchTimeout));
-            SearchResponse response = searchService.search(searchRequest);
-            SearchResponse deduplicated = searchDeduplicator.deduplicate(response);
-            SearchResponse budgeted = searchBudgeter.budget(deduplicated);
-            KnowledgeContext searchKnowledge = searchFormatter.format(budgeted);
+            KnowledgeContext searchKnowledge = searchService.search(searchRequest);
             return combineKnowledge(memoryKnowledge, searchKnowledge);
         } catch (RuntimeException exception) {
             log.warn("Search failed; continuing without search knowledge", exception);

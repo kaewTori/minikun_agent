@@ -5,6 +5,7 @@ import com.minikun.search.SearchManager;
 import com.minikun.search.SearchProvider;
 import com.minikun.search.SearchRetryExhaustedException;
 import com.minikun.search.SearchTimeoutException;
+import com.minikun.pcs.model.KnowledgeContext;
 import com.minikun.search.model.SearchMetadata;
 import com.minikun.search.model.SearchProviderResponse;
 import com.minikun.search.model.SearchRequest;
@@ -19,10 +20,22 @@ public final class DefaultSearchManager implements SearchManager {
     private final SearchProvider provider;
     private final Clock clock;
     private final int maxRetries;
+    private final SearchDeduplicator deduplicator;
+    private final SearchBudgeter budgeter;
+    private final SearchFormatter formatter;
 
-    public DefaultSearchManager(SearchProvider provider, Clock clock, int maxRetries) {
+    public DefaultSearchManager(
+            SearchProvider provider,
+            Clock clock,
+            int maxRetries,
+            SearchDeduplicator deduplicator,
+            SearchBudgeter budgeter,
+            SearchFormatter formatter) {
         this.provider = Objects.requireNonNull(provider, "provider must not be null");
         this.clock = Objects.requireNonNull(clock, "clock must not be null");
+        this.deduplicator = Objects.requireNonNull(deduplicator, "deduplicator must not be null");
+        this.budgeter = Objects.requireNonNull(budgeter, "budgeter must not be null");
+        this.formatter = Objects.requireNonNull(formatter, "formatter must not be null");
         if (maxRetries < 0) {
             throw new IllegalArgumentException("max retries must not be negative");
         }
@@ -30,7 +43,7 @@ public final class DefaultSearchManager implements SearchManager {
     }
 
     @Override
-    public SearchResponse search(SearchRequest request) {
+    public KnowledgeContext search(SearchRequest request) {
         Objects.requireNonNull(request, "request must not be null");
         Instant started = clock.instant();
         Execution execution = execute(request);
@@ -39,7 +52,9 @@ public final class DefaultSearchManager implements SearchManager {
                 ? SearchStatus.NO_RESULTS
                 : SearchStatus.SUCCESS;
         SearchMetadata metadata = new SearchMetadata(duration, false, false, execution.retryCount());
-        return new SearchResponse(request.requestId(), status, execution.response().results(), metadata);
+        SearchResponse response = new SearchResponse(
+            request.requestId(), status, execution.response().results(), metadata);
+        return formatter.format(budgeter.budget(deduplicator.deduplicate(response)));
     }
 
     private Execution execute(SearchRequest request) {

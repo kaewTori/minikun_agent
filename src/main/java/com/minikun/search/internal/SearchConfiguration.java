@@ -4,7 +4,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.minikun.search.SearchManager;
 import com.minikun.search.SearchProvider;
 import com.minikun.search.SearchDecisionService;
-import com.minikun.search.SearchFormatter;
 import java.net.http.HttpClient;
 import java.time.Clock;
 import java.time.Duration;
@@ -38,8 +37,12 @@ public class SearchConfiguration {
     SearchManager searchManager(
             SearchProvider provider,
             Clock memoryClock,
-            @Value("${minikun.search.max-retries:1}") int maxRetries) {
-        return new DefaultSearchManager(provider, memoryClock, maxRetries);
+            @Value("${minikun.search.max-retries:1}") int maxRetries,
+            SearchDeduplicator deduplicator,
+            SearchBudgeter budgeter,
+            SearchFormatter formatter) {
+        return new DefaultSearchManager(
+                provider, memoryClock, maxRetries, deduplicator, budgeter, formatter);
     }
 
     @Bean

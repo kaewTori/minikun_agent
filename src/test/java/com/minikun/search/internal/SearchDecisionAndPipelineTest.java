@@ -7,7 +7,6 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.minikun.pcs.model.KnowledgeContext;
-import com.minikun.search.SearchFormatter;
 import com.minikun.search.model.SearchMetadata;
 import com.minikun.search.model.SearchResponse;
 import com.minikun.search.model.SearchResult;

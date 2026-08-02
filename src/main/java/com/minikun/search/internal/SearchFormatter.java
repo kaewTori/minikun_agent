@@ -1,10 +1,10 @@
-package com.minikun.search;
+package com.minikun.search.internal;
 
 import com.minikun.pcs.model.KnowledgeContext;
 import com.minikun.search.model.SearchResponse;
 
-public final class SearchFormatter {
-    public KnowledgeContext format(SearchResponse response) {
+final class SearchFormatter {
+    KnowledgeContext format(SearchResponse response) {
         if (response == null || response.results().isEmpty()) {
             return new KnowledgeContext("");
         }
