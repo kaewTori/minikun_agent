@@ -27,6 +27,10 @@ import com.minikun.agent.minikun_agent.api.openai.dto.EmbeddingResponse;
 import com.minikun.agent.minikun_agent.conversation.ChatMessage;
 import com.minikun.agent.minikun_agent.conversation.ConversationId;
 import com.minikun.agent.minikun_agent.conversation.ConversationMemoryService;
+import com.minikun.commands.CommandCatalog;
+import com.minikun.commands.CommandFormatter;
+import com.minikun.diagnostics.DiagnosticsFormatter;
+import com.minikun.diagnostics.DiagnosticsService;
 import com.minikun.memory.MemoryAnalyzer;
 import com.minikun.memory.MemoryRecallService;
 import com.minikun.memory.MemoryService;
@@ -64,6 +68,10 @@ public class ChatService {
     private final PromptComposer promptComposer;
     private final SearchService searchService;
     private final SearchDecisionService searchDecisionService;
+    private final DiagnosticsService diagnosticsService;
+    private final DiagnosticsFormatter diagnosticsFormatter;
+    private final CommandCatalog commandCatalog;
+    private final CommandFormatter commandFormatter;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Value("${spring.ai.ollama.chat.options.model:hf.co/llmfan46/gemma-4-E4B-it-ultra-uncensored-heretic-GGUF:Q5_K_M}")
@@ -79,10 +87,14 @@ public class ChatService {
     private java.time.Duration searchTimeout;
 
     public ChatCompletionResponse chatCompletion(ChatCompletionRequest request, ConversationId conversationId) {
+        ChatMessage userMessage = userMessage(request);
+        var commandResponse = commandResponse(request, userMessage);
+        if (commandResponse != null) {
+            return commandResponse;
+        }
         String model = modelName(request.model(), configuredChatModel);
         ChatTransactionLogger.Transaction transaction = transactionLogger.start(
             "chatcmpl-" + UUID.randomUUID(), model, false, request.messages().size());
-        ChatMessage userMessage = userMessage(request);
         boolean persistConversation = shouldPersistConversation(request);
         List<ChatMessage> history = conversationMemoryService.load(conversationId);
         try {
@@ -113,13 +125,17 @@ public class ChatService {
     }
 
     public Flux<String> chatCompletionStream(ChatCompletionRequest request, ConversationId conversationId) {
+        ChatMessage userMessage = userMessage(request);
+        String command = commandOutput(userMessage);
+        if (command != null) {
+            return commandStream(command, request);
+        }
         String model = modelName(request.model(), configuredChatModel);
         String requestId = "chatcmpl-" + UUID.randomUUID();
         ChatTransactionLogger.Transaction transaction = transactionLogger.start(
             requestId, model, true, request.messages().size());
         String id = requestId;
         long created = Instant.now().getEpochSecond();
-        ChatMessage userMessage = userMessage(request);
         boolean persistConversation = shouldPersistConversation(request);
         List<ChatMessage> history = conversationMemoryService.load(conversationId);
         if (persistConversation) {
@@ -156,6 +172,47 @@ public class ChatService {
                 .doOnError(transaction::failed)
                 .doOnCancel(transaction::cancelled);
     }
+
+            private ChatCompletionResponse commandResponse(ChatCompletionRequest request, ChatMessage userMessage) {
+            String content = commandOutput(userMessage);
+            if (content == null) {
+                return null;
+            }
+            String model = modelName(request.model(), configuredChatModel);
+            return new ChatCompletionResponse(
+                "chatcmpl-" + UUID.randomUUID(), "chat.completion", Instant.now().getEpochSecond(),
+                model,
+                List.of(new ChatCompletionResponse.Choice(
+                    0,
+                    new com.minikun.agent.minikun_agent.api.openai.dto.Message("assistant", content),
+                    "stop")),
+                new ChatCompletionResponse.Usage(0, 0, 0));
+            }
+
+            private String commandOutput(ChatMessage userMessage) {
+            return commandCatalog.findExact(userMessage.content())
+                .map(command -> switch (command.type()) {
+                    case DIAGNOSTICS -> diagnosticsFormatter.format(diagnosticsService.summarize());
+                    case HELP -> commandFormatter.format(commandCatalog);
+                })
+                .orElse(null);
+            }
+
+            private Flux<String> commandStream(String content, ChatCompletionRequest request) {
+            String id = "chatcmpl-" + UUID.randomUUID();
+            long created = Instant.now().getEpochSecond();
+            String model = modelName(request.model(), configuredChatModel);
+            return Flux.just(
+                data(new ChatCompletionResponse.StreamChunk(
+                    id, "chat.completion.chunk", created, model,
+                    List.of(new ChatCompletionResponse.StreamChoice(
+                        0, new ChatCompletionResponse.Delta("assistant", content), null)))),
+                data(new ChatCompletionResponse.StreamChunk(
+                    id, "chat.completion.chunk", created, model,
+                    List.of(new ChatCompletionResponse.StreamChoice(
+                        0, new ChatCompletionResponse.Delta(null, null), "stop")))),
+                "[DONE]");
+            }
 
     private String streamChunk(ChatResponse response, String id, long created, String model) {
         String content = response.getResult().getOutput().getText();
