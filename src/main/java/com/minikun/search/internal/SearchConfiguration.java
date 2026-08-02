@@ -4,12 +4,15 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.minikun.search.SearchManager;
 import com.minikun.search.SearchProvider;
 import com.minikun.search.SearchDecisionService;
+import com.minikun.search.SearchCache;
+import com.minikun.search.SearchService;
 import java.net.http.HttpClient;
 import java.time.Clock;
 import java.time.Duration;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 
@@ -43,6 +46,23 @@ public class SearchConfiguration {
             SearchFormatter formatter) {
         return new DefaultSearchManager(
                 provider, memoryClock, maxRetries, deduplicator, budgeter, formatter);
+    }
+
+    @Bean
+    SearchCache searchCache(
+            StringRedisTemplate redis,
+            ObjectMapper objectMapper,
+            @Value("${minikun.search.cache.ttl:PT5M}") Duration ttl) {
+        return new ValkeySearchCache(redis, objectMapper, ttl);
+    }
+
+    @Bean
+    SearchService searchService(
+            SearchManager manager,
+            SearchCache cache,
+            @Value("${minikun.search.enabled:true}") boolean searchEnabled,
+            @Value("${minikun.search.cache.enabled:true}") boolean cacheEnabled) {
+        return new DefaultSearchService(manager, cache, searchEnabled, cacheEnabled);
     }
 
     @Bean

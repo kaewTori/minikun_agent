@@ -22,7 +22,9 @@ class MemoryRecallServiceTest {
                 MemoryCategory.PROFILE,
                 MemorySource.LLM_EXTRACTION,
                 "Lives in Bangkok",
-                Instant.parse("2026-08-01T00:00:00Z"));
+                Instant.parse("2026-08-01T00:00:00Z"),
+                0.95,
+                "user stated directly");
         MemoryRepository repository = new MemoryRepository() {
             @Override
             public boolean save(Memory value, String fingerprint, String conversationId) {

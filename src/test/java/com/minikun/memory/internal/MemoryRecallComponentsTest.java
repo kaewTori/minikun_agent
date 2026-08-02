@@ -37,12 +37,12 @@ class MemoryRecallComponentsTest {
                 "Learn Java", Instant.now());
 
         assertEquals("", new MemoryFormatter(20).format(List.of()).content());
-        assertEquals("PROFILE: Lives in Bangkok", new MemoryFormatter(30)
+        assertEquals("PROFILE: Lives in Bangkok (confidence=0.9, reason=user stated directly)", new MemoryFormatter(100)
                 .format(List.of(first, second)).content());
     }
 
     private Memory memory(String id, MemoryCategory category, String content, Instant createdAt) {
         return new Memory(new MemoryId(UUID.fromString(id)), category, MemorySource.LLM_EXTRACTION,
-                content, createdAt);
+                content, createdAt, 0.9, "user stated directly");
     }
 }

@@ -30,7 +30,7 @@ public class MemoryService {
         return candidates.stream().map(candidate -> {
             Memory memory = new Memory(
                     MemoryId.generate(), candidate.category(), MemorySource.LLM_EXTRACTION,
-                    candidate.content().trim(), Instant.now(clock));
+                    candidate.content().trim(), Instant.now(clock), candidate.confidence(), candidate.reason().trim());
             return repository.save(memory, fingerprint(conversation, candidate), conversation.conversationId())
                     ? memory : null;
         }).filter(java.util.Objects::nonNull).toList();

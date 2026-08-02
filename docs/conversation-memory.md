@@ -42,6 +42,8 @@ Before either model call, `ChatService` asks `MemoryRecallService` for long-term
 
 Recall failures are handled by `ChatService`: a warning is logged and the request continues without a Knowledge section. `MemoryRepository` only retrieves persisted rows; it does not apply selection rules. The KnowledgeContext character budget and maximum memory count are configurable with `MINIKUN_MEMORY_RECALL_MAXIMUM_CHARACTERS` and `MINIKUN_MEMORY_RECALL_MAXIMUM_COUNT`.
 
+Each persisted long-term memory also retains the extraction `confidence` and `reason`. Recall includes both fields in each Knowledge entry so the model can distinguish the remembered fact from the evidence for keeping it. Existing rows created before these columns existed receive the migration defaults `confidence=0.0` and `reason=legacy persisted memory`.
+
 Loading history before appending the current user message prevents the current message from appearing twice in the composed conversation section and as the separate PCS `USER` message.
 
 ## Storage and windowing

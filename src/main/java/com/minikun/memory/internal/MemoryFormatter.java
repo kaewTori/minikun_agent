@@ -22,7 +22,10 @@ final class MemoryFormatter {
 
         StringBuilder content = new StringBuilder();
         for (Memory memory : memories) {
-            String entry = memory.category().name() + ": " + memory.content();
+                String entry = memory.category().name()
+                    + ": " + memory.content()
+                    + " (confidence=" + memory.confidence()
+                    + ", reason=" + memory.reason() + ")";
             int separatorLength = content.isEmpty() ? 0 : 1;
             if (content.length() + separatorLength + entry.length() > maximumCharacters) {
                 break;

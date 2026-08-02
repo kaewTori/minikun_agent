@@ -37,5 +37,7 @@ class MemoryServiceTest {
         assertEquals(1, first.size());
         assertEquals(0, second.size());
         assertEquals(Instant.parse("2026-08-01T00:00:00Z"), first.getFirst().createdAt());
+        assertEquals(1.0, first.getFirst().confidence());
+        assertEquals("explicit", first.getFirst().reason());
     }
 }
