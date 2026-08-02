@@ -4,6 +4,10 @@
               value="${CHAT_TRANSACTION_LOG_PATH:-logs/transactions.log}" />
     <property name="CHAT_TRANSACTION_LOG_MAX_HISTORY"
               value="${CHAT_TRANSACTION_LOG_MAX_HISTORY:-5}" />
+    <property name="APPLICATION_LOG_PATH"
+              value="${APPLICATION_LOG_PATH:-logs/application.log}" />
+    <property name="APPLICATION_LOG_MAX_HISTORY"
+              value="${APPLICATION_LOG_MAX_HISTORY:-14}" />
 
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
@@ -23,6 +27,18 @@
         </rollingPolicy>
     </appender>
 
+    <appender name="APPLICATION_FILE"
+              class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${APPLICATION_LOG_PATH}</file>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX,Asia/Bangkok} %-5level [%thread] %logger{36} - %msg%n</pattern>
+        </encoder>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>${APPLICATION_LOG_PATH}.%d{yyyy-MM-dd,Asia/Bangkok}</fileNamePattern>
+            <maxHistory>${APPLICATION_LOG_MAX_HISTORY}</maxHistory>
+        </rollingPolicy>
+    </appender>
+
     <logger name="com.minikun.agent.minikun_agent.api.openai.ChatTransactionLogger"
             level="INFO"
             additivity="false">
@@ -31,5 +47,6 @@
 
     <root level="INFO">
         <appender-ref ref="CONSOLE" />
+        <appender-ref ref="APPLICATION_FILE" />
     </root>
 </configuration>
