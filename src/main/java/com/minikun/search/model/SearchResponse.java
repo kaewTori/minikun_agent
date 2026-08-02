@@ -18,8 +18,5 @@ public record SearchResponse(
         if (status == SearchStatus.NO_RESULTS && !results.isEmpty()) {
             throw new IllegalArgumentException("no-results response must not contain results");
         }
-        if (status == SearchStatus.SUCCESS && results.isEmpty()) {
-            throw new IllegalArgumentException("successful response must contain results");
-        }
     }
 }
