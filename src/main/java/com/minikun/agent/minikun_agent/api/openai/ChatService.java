@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
+import java.util.Map;
 
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.messages.Message;
@@ -45,6 +46,7 @@ import com.minikun.search.model.SearchRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
+import org.slf4j.MDC;
 
 @Service
 @RequiredArgsConstructor
@@ -87,7 +89,8 @@ public class ChatService {
         if (persistConversation) {
             conversationMemoryService.append(conversationId, userMessage);
         }
-        KnowledgeContext knowledge = knowledgeFor(userMessage.content());
+        KnowledgeContext knowledge = knowledgeFor(
+            userMessage.content(), transaction.requestId(), conversationId.value());
         var response = chatModel.call(promptFor(request, history, knowledge));
         String content = response.getResult().getOutput().getText();
         if (persistConversation) {
@@ -124,7 +127,8 @@ public class ChatService {
         }
         StringBuilder assistantContent = new StringBuilder();
 
-        KnowledgeContext knowledge = knowledgeFor(userMessage.content());
+        KnowledgeContext knowledge = knowledgeFor(
+            userMessage.content(), transaction.requestId(), conversationId.value());
         Flux<String> chunks = chatModel.stream(promptFor(request, history, knowledge))
             .doOnNext(response -> appendAssistantText(assistantContent, response))
                 .map(response -> streamChunk(response, id, created, model))
@@ -250,14 +254,38 @@ public class ChatService {
         }
     }
 
+    private KnowledgeContext knowledgeFor(
+            String query, String requestId, String conversationId) {
+        Map<String, String> previous = null;
+        boolean scoped = false;
+        try {
+            previous = MDC.getCopyOfContextMap();
+            if (requestId != null) {
+                MDC.put("request_id", requestId);
+            }
+            if (conversationId != null) {
+                MDC.put("conversation_id", conversationId);
+            }
+            scoped = true;
+        } catch (RuntimeException ignored) {
+            restoreMdc(previous);
+        }
+        try {
+            return knowledgeFor(query);
+        } finally {
+            if (scoped) {
+                restoreMdc(previous);
+            }
+        }
+    }
+
     private KnowledgeContext knowledgeFor(String query) {
         KnowledgeContext memoryKnowledge = recallKnowledge();
-        if (!searchEnabled) {
+        if (!searchEnabled || isInternalTitleRequest(query)) {
             return memoryKnowledge;
         }
 
         var decision = searchDecisionService.decide(query);
-        log.info("Search decision shouldSearch={} query={}", decision.shouldSearch(), decision.query());
         if (!decision.shouldSearch()) {
             return memoryKnowledge;
         }
@@ -269,12 +297,24 @@ public class ChatService {
                     10,
                     Instant.now().plus(searchTimeout));
             KnowledgeContext searchKnowledge = searchService.search(searchRequest);
-                    log.info("Search completed query={} knowledgeCharacters={}",
-                        decision.query(), searchKnowledge == null ? 0 : searchKnowledge.content().length());
+                    log.info("Search completed knowledgeCharacters={}",
+                        searchKnowledge == null ? 0 : searchKnowledge.content().length());
             return combineKnowledge(memoryKnowledge, searchKnowledge);
         } catch (RuntimeException exception) {
             log.warn("Search failed; continuing without search knowledge", exception);
             return memoryKnowledge;
+        }
+    }
+
+    private void restoreMdc(Map<String, String> previous) {
+        try {
+            if (previous == null) {
+                MDC.clear();
+            } else {
+                MDC.setContextMap(previous);
+            }
+        } catch (RuntimeException ignored) {
+            // MDC must not affect search execution.
         }
     }
 
@@ -355,10 +395,17 @@ public class ChatService {
         return request.messages().stream()
                 .map(com.minikun.agent.minikun_agent.api.openai.dto.Message::content)
                 .filter(this::hasText)
-                .map(String::toLowerCase)
-                .noneMatch(content -> content.contains("generate a concise title summarizing the chat history")
-                        || content.contains("your entire response must consist solely of the json object")
-                        || content.contains("### task:\n") && content.contains("### chat history:"));
+                .noneMatch(this::isInternalTitleRequest);
+    }
+
+    private boolean isInternalTitleRequest(String content) {
+        if (!hasText(content)) {
+            return false;
+        }
+        String normalized = content.toLowerCase();
+        return normalized.contains("generate a concise title summarizing the chat history")
+                || normalized.contains("your entire response must consist solely of the json object")
+                || normalized.contains("### task:\n") && normalized.contains("### chat history:");
     }
 
     private String modelName(String requestedModel, String configuredModel) {

@@ -56,6 +56,39 @@ class MemoryAnalyzerTest {
             new MemoryAnalyzer(client, MemoryPolicy.defaults()).analyze(conversation));
         }
 
+        @Test
+        void rejectsConversationSpecificFoodPreferencesAndGenericProjectTopics() {
+        CompletedConversation conversation = new CompletedConversation(
+            "conversation-specific", List.of(
+                new CompletedConversation.Message("user", "เราอยากกินราเมงแบบเข้ม ๆ ซุปทงคตสึ ไรงี้"),
+                new CompletedConversation.Message("user", "ผู้ใช้กำลังทำโปรเจคเกี่ยวกับ AI")));
+        MemoryExtractionClient client = ignored -> List.of(
+            new CandidateMemory(MemoryCategory.PREFERENCE, "ผู้ใช้บอกว่าราคาไม่เกี่ยง บรรยากาศอะไรก็ได้", 0.9,
+                "ผู้ใช้บอกว่าราคาไม่เกี่ยง บรรยากาศอะไรก็ได้"),
+            new CandidateMemory(MemoryCategory.PREFERENCE, "ราเมงแบบเข้ม ๆ ซุปทงคตสึ", 0.8,
+                "ผู้ใช้บอกว่าอยากกินราเมง"),
+            new CandidateMemory(MemoryCategory.GOAL, "เราอยากกินราเมงแบบเข้ม ๆ ซุปทงคตสึ ไรงี้", 0.9,
+                "ผู้ใช้บอกว่าอยากกินราเมง"),
+            new CandidateMemory(MemoryCategory.PROJECT, "ผู้ใช้กำลังทำโปรเจคเกี่ยวกับ AI", 0.8,
+                "ผู้ใช้กำลังทำโปรเจคเกี่ยวกับ AI"));
+
+        assertEquals(List.of(), new MemoryAnalyzer(client, MemoryPolicy.defaults()).analyze(conversation));
+        }
+
+        @Test
+        void acceptsSpecificDurableProject() {
+        CompletedConversation conversation = new CompletedConversation(
+            "conversation-project", List.of(
+                new CompletedConversation.Message("user",
+                    "ฉันกำลังทำโปรเจค Minikun Agent สำหรับระบบ long-term memory")));
+        MemoryExtractionClient client = ignored -> List.of(
+            new CandidateMemory(MemoryCategory.PROJECT,
+                "กำลังทำโปรเจค Minikun Agent สำหรับระบบ long-term memory", 0.9,
+                "ผู้ใช้ระบุชื่อและขอบเขตของโปรเจค"));
+
+        assertEquals(1, new MemoryAnalyzer(client, MemoryPolicy.defaults()).analyze(conversation).size());
+        }
+
     @Test
     void propagatesExtractionFailure() {
         MemoryException failure = new MemoryException("llm unavailable");

@@ -22,12 +22,15 @@ class MemoryPromptBuilderTest {
                         new CompletedConversation.Message("assistant", "Noted."))),
                 Instant.parse("2026-08-02T00:00:00Z"));
 
-        assertTrue(prompt.contains("หน้าที่เดียวของคุณคือค้นหาข้อเท็จจริงที่คงอยู่ระยะยาวและมีหลักฐานจากข้อความของ user เท่านั้น"));
+        assertTrue(prompt.contains("หน้าที่เดียวของคุณคือค้นหาความทรงจำที่คงอยู่ข้ามบทสนทนา มีประโยชน์เมื่อเวลาผ่านไป"));
         assertTrue(prompt.contains("ให้ส่งคืน JSON object เพียงหนึ่ง object เท่านั้น"));
         assertTrue(prompt.contains("ห้ามสรุปจนรายละเอียดหาย"));
         assertTrue(prompt.contains("คำถามไม่ใช่ memory"));
         assertTrue(prompt.contains("โปรเจคที่เราทำอยู่คือโปรเจคอะไรหรอ?"));
         assertTrue(prompt.contains("คำตอบสั้นหรือคำเดี่ยว เช่น \"mac\""));
+        assertTrue(prompt.contains("ถ้าลบบทสนทนานี้ออกแล้ว memory นี้ยังมีประโยชน์ในบทสนทนาอื่นหรือไม่"));
+        assertTrue(prompt.contains("ความต้องการเฉพาะงานหรือเฉพาะมื้อ"));
+        assertTrue(prompt.contains("ผู้ใช้กำลังทำโปรเจคเกี่ยวกับ AI"));
         assertTrue(prompt.contains("confidence ต้องสะท้อนความแข็งแรงของหลักฐานจริง ไม่ใช่ค่าคงที่"));
         assertFalse(prompt.contains("confidence เป็น 0.9 และ reason เป็น \"ผู้ใช้ระบุโดยตรง\""));
         assertTrue(prompt.contains("เลือก category ตามความหมายของข้อความ"));

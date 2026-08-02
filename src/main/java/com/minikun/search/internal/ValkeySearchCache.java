@@ -11,6 +11,8 @@ import java.time.Duration;
 import java.util.HexFormat;
 import java.util.Optional;
 import java.util.Objects;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -22,11 +24,18 @@ public final class ValkeySearchCache implements SearchCache {
     private final StringRedisTemplate redis;
     private final ObjectMapper objectMapper;
     private final Duration ttl;
+    private final MeterRegistry meterRegistry;
 
     public ValkeySearchCache(StringRedisTemplate redis, ObjectMapper objectMapper, Duration ttl) {
+        this(redis, objectMapper, ttl, null);
+    }
+
+    public ValkeySearchCache(
+            StringRedisTemplate redis, ObjectMapper objectMapper, Duration ttl, MeterRegistry meterRegistry) {
         this.redis = Objects.requireNonNull(redis, "redis must not be null");
         this.objectMapper = Objects.requireNonNull(objectMapper, "object mapper must not be null");
         this.ttl = Objects.requireNonNull(ttl, "ttl must not be null");
+        this.meterRegistry = meterRegistry;
         if (ttl.isZero() || ttl.isNegative()) {
             throw new IllegalArgumentException("ttl must be positive");
         }
@@ -37,11 +46,14 @@ public final class ValkeySearchCache implements SearchCache {
         try {
             String value = redis.opsForValue().get(redisKey(key));
             if (value == null) {
+                increment("minikun.search.cache.miss");
                 return Optional.empty();
             }
+            increment("minikun.search.cache.hit");
             return Optional.of(objectMapper.readValue(value, KnowledgeContext.class));
         } catch (Exception exception) {
             LOGGER.warn("Search cache lookup failed; continuing without cache", exception);
+            increment("minikun.search.cache.miss");
             return Optional.empty();
         }
     }
@@ -51,8 +63,17 @@ public final class ValkeySearchCache implements SearchCache {
         try {
             String value = objectMapper.writeValueAsString(context);
             redis.opsForValue().set(redisKey(key), value, ttl);
+            increment("minikun.search.cache.put");
         } catch (Exception exception) {
             LOGGER.warn("Search cache insertion failed; continuing without cache", exception);
+        }
+    }
+
+    private void increment(String name) {
+        try {
+            Counter.builder(name).register(meterRegistry).increment();
+        } catch (RuntimeException ignored) {
+            // Observability must not affect cache behavior.
         }
     }
 

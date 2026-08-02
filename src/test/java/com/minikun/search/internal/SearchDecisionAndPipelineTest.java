@@ -16,6 +16,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
 
 class SearchDecisionAndPipelineTest {
@@ -24,7 +25,8 @@ class SearchDecisionAndPipelineTest {
 
     @Test
     void ruleBasedDecisionIsDeterministicAndConservative() {
-        RuleBasedSearchDecisionService service = new RuleBasedSearchDecisionService();
+        SimpleMeterRegistry registry = new SimpleMeterRegistry();
+        RuleBasedSearchDecisionService service = new RuleBasedSearchDecisionService(registry);
 
         assertTrue(service.decide("What is the latest Java release?").shouldSearch());
         assertTrue(service.decide("ข่าววันนี้เป็นอย่างไร").shouldSearch());
@@ -32,6 +34,7 @@ class SearchDecisionAndPipelineTest {
         assertFalse(service.decide("Explain dependency injection").shouldSearch());
         assertFalse(service.decide(" ").shouldSearch());
         assertEquals("latest Java", service.decide("  latest Java  ").query());
+        assertEquals(6, registry.get("minikun.search.decision.duration").timer().count());
     }
 
     @Test

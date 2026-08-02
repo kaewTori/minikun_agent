@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 
 class DefaultSearchManagerTest {
     private static final Clock CLOCK = Clock.fixed(
@@ -31,6 +32,20 @@ class DefaultSearchManagerTest {
 
         assertEquals("Title (https://example.com/result): Content", response.content());
     }
+
+        @Test
+        void recordsProviderTimerExactlyOnceOnSuccess() {
+        var registry = new SimpleMeterRegistry();
+        SearchProvider provider = request -> new SearchProviderResponse(List.of(result()));
+        DefaultSearchManager manager = new DefaultSearchManager(
+            provider, CLOCK, 0, new SearchDeduplicator(), new SearchBudgeter(4000),
+            new SearchFormatter(), registry);
+
+        manager.search(request());
+
+        assertEquals(1, registry.find("minikun.search.duration").timer().count(),
+            "provider timer must be recorded once");
+        }
 
     @Test
     void returnsNoResultsForAnEmptyProviderResponse() {
@@ -77,7 +92,8 @@ class DefaultSearchManagerTest {
                 maxRetries,
                 new SearchDeduplicator(),
                 new SearchBudgeter(4000),
-                new SearchFormatter());
+                new SearchFormatter(),
+                new SimpleMeterRegistry());
     }
 
     private static SearchRequest request() {

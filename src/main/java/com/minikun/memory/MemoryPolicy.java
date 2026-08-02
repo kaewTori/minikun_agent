@@ -30,6 +30,7 @@ public record MemoryPolicy(
                 && candidate.content().length() <= maximumContentLength
                 && !isTemporary(candidate.content())
                 && !isQuestionOrRequest(candidate.content())
+                && !isConversationSpecific(candidate.content())
                 && hasContextForShortContent(candidate.content(), conversation);
     }
 
@@ -44,6 +45,13 @@ public record MemoryPolicy(
                 || normalized.endsWith("？")
                 || normalized.matches("^(what|why|how|which|who|where|when|can you|could you|please|tell me)\\b.*")
                 || normalized.matches("^(อะไร|อะไรคือ|คืออะไร|ทำไม|อย่างไร|ยังไง|ที่ไหน|เมื่อไหร่|ไหม|หรือยัง|ช่วย|ขอ|แนะนำ|บอก|อธิบาย).*" );
+    }
+
+    private boolean isConversationSpecific(String content) {
+        String normalized = content.strip().toLowerCase(Locale.ROOT);
+        return normalized.matches(".*(อยากกิน|หา(ร้าน|อาหาร)|ร้านอาหาร|เมนู|มื้อ|ซุป|ราเมง|ราคาไม่เกี่ยง|บรรยากาศอะไรก็ได้|อะไรก็ได้).*" )
+                || normalized.matches(".*(for this meal|for this search|restaurant|menu|ramen|food|price|atmosphere).*" )
+                || normalized.matches(".*(โปรเจค|โครงการ|project).*(เกี่ยวกับ ai|เกี่ยวกับเอไอ|about ai|ai project)\\s*$");
     }
 
     private boolean hasContextForShortContent(String content, CompletedConversation conversation) {

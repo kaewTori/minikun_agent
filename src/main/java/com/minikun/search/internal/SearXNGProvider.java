@@ -10,6 +10,8 @@ import com.minikun.search.model.SearchRequest;
 import com.minikun.search.model.SearchResult;
 import com.minikun.search.model.SearchSource;
 import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
@@ -20,8 +22,11 @@ import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.util.UriComponentsBuilder;
 import org.springframework.web.util.UriUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public final class SearXNGProvider implements SearchProvider {
+    private static final Logger LOGGER = LoggerFactory.getLogger(SearXNGProvider.class);
     private final RestClient restClient;
     private final ObjectMapper objectMapper;
     private final Clock clock;
@@ -35,6 +40,9 @@ public final class SearXNGProvider implements SearchProvider {
     @Override
     public SearchProviderResponse search(SearchRequest request) {
         Objects.requireNonNull(request, "request must not be null");
+        Instant started = clock.instant();
+        SearchProviderResponse response = null;
+        RuntimeException failure = null;
         try {
             var uri = UriComponentsBuilder.fromPath("/search")
                     .queryParam("q", UriUtils.encodeQueryParam(request.query(), StandardCharsets.UTF_8))
@@ -47,16 +55,41 @@ public final class SearXNGProvider implements SearchProvider {
                     .accept(MediaType.APPLICATION_JSON)
                     .retrieve()
                     .body(String.class);
-            return new SearchProviderResponse(parseResults(body));
+            response = new SearchProviderResponse(parseResults(body));
+            return response;
         } catch (ResourceAccessException exception) {
+            failure = exception;
             throw new SearchProviderUnavailableException("SearXNG is unavailable", exception);
         } catch (RestClientResponseException exception) {
+            failure = exception;
             throw new SearchProviderUnavailableException(
                     "SearXNG returned HTTP status " + exception.getStatusCode().value(), exception);
         } catch (SearchExecutionException exception) {
+            failure = exception;
             throw exception;
         } catch (RuntimeException exception) {
+            failure = exception;
             throw new SearchExecutionException("SearXNG response could not be processed", exception);
+        } finally {
+            logProviderOutcome(request, response, failure, Duration.between(started, clock.instant()));
+        }
+    }
+
+    private void logProviderOutcome(
+            SearchRequest request,
+            SearchProviderResponse response,
+            RuntimeException failure,
+            Duration duration) {
+        try {
+            if (failure == null) {
+            LOGGER.debug("Search provider=searxng request_id={} duration_ms={} result_count={}",
+                request.requestId(), duration.toMillis(), response.results().size());
+            } else {
+            LOGGER.warn("Search provider=searxng request_id={} duration_ms={} failure_type={}",
+                request.requestId(), duration.toMillis(), failure.getClass().getSimpleName());
+            }
+        } catch (RuntimeException ignored) {
+            // Logging must not affect provider behavior.
         }
     }
 

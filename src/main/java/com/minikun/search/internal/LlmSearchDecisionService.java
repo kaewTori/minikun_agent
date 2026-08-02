@@ -1,26 +1,38 @@
 package com.minikun.search.internal;
 
+import com.minikun.search.SearchDecisionClient;
 import com.minikun.search.SearchDecisionService;
 import com.minikun.search.model.SearchDecision;
 import com.minikun.search.model.SearchDecisionReason;
-import java.util.List;
-import io.micrometer.core.instrument.Counter;
+import java.time.Clock;
+import java.time.LocalDate;
+import com.minikun.search.model.SearchDecisionPrompt;
+import java.util.concurrent.atomic.AtomicLong;
 import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.Timer;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 
-public final class RuleBasedSearchDecisionService implements SearchDecisionService {
-    private static final Logger LOGGER = LoggerFactory.getLogger(RuleBasedSearchDecisionService.class);
+@Slf4j
+public final class LlmSearchDecisionService implements SearchDecisionService {
+    private static final long WARNING_INTERVAL_NANOS = 60_000_000_000L;
     private static final String DECISION_TIMER = "minikun.search.decision.duration";
     private static final String NO_SEARCH_COUNTER = "minikun.search.quality.no_search";
-    private static final List<String> KEYWORDS = List.of(
-            "search", "ค้นหา", "แนะนำ", "ร้าน", "เมนู", "อาหาร", "ราคา", "ที่ไหน", "อยู่ที่ไหน",
-            "ข่าว", "ล่าสุด", "วันนี้", "ปัจจุบัน", "ข้อมูล", "current", "latest", "news", "recommend",
-            "where", "who is", "what is");
-    private final MeterRegistry meterRegistry;
 
-    public RuleBasedSearchDecisionService(MeterRegistry meterRegistry) {
+    private final SearchDecisionClient client;
+    private final SearchDecisionService fallback;
+    private final Clock clock;
+    private final SearchDecisionPromptBuilder promptBuilder;
+    private final MeterRegistry meterRegistry;
+    private final AtomicLong lastWarning = new AtomicLong(Long.MIN_VALUE);
+
+    public LlmSearchDecisionService(
+            SearchDecisionClient client, SearchDecisionService fallback, Clock clock,
+            SearchDecisionPromptBuilder promptBuilder, MeterRegistry meterRegistry) {
+        this.client = client;
+        this.fallback = fallback;
+        this.clock = clock;
+        this.promptBuilder = promptBuilder;
         this.meterRegistry = meterRegistry;
     }
 
@@ -29,17 +41,14 @@ public final class RuleBasedSearchDecisionService implements SearchDecisionServi
         Timer.Sample sample = startTimer();
         SearchDecision decision = null;
         try {
-            if (query == null || query.isBlank()) {
-                decision = new SearchDecision(false, "", SearchDecisionReason.GENERAL_KNOWLEDGE);
-                return decision;
-            }
-            String normalized = query.trim().toLowerCase();
-            boolean shouldSearch = KEYWORDS.stream().anyMatch(normalized::contains);
+            SearchDecisionPrompt prompt = promptBuilder.build(LocalDate.now(clock), query);
+            decision = client.classify(prompt);
+            return decision;
+        } catch (RuntimeException exception) {
+            warnOnce(exception);
+            SearchDecision ruleDecision = fallback.decide(query);
             decision = new SearchDecision(
-                    shouldSearch,
-                    query.trim(),
-                    shouldSearch ? SearchDecisionReason.CURRENT_INFORMATION
-                            : SearchDecisionReason.GENERAL_KNOWLEDGE);
+                    ruleDecision.shouldSearch(), ruleDecision.query(), SearchDecisionReason.RULE_FALLBACK);
             return decision;
         } finally {
             recordDecision(sample);
@@ -61,7 +70,7 @@ public final class RuleBasedSearchDecisionService implements SearchDecisionServi
             return;
         }
         try {
-            sample.stop(meterRegistry.timer(DECISION_TIMER, "mode", "RULE"));
+            sample.stop(meterRegistry.timer(DECISION_TIMER, "mode", "LLM"));
         } catch (RuntimeException ignored) {
             // Observability must not affect decision execution.
         }
@@ -72,7 +81,7 @@ public final class RuleBasedSearchDecisionService implements SearchDecisionServi
             return;
         }
         try {
-            LOGGER.debug("Search decision mode=RULE shouldSearch={} reason={}",
+            log.debug("Search decision mode=LLM shouldSearch={} reason={}",
                     decision.shouldSearch(), decision.reason());
         } catch (RuntimeException ignored) {
             // Logging must not affect decision execution.
@@ -87,6 +96,14 @@ public final class RuleBasedSearchDecisionService implements SearchDecisionServi
             Counter.builder(NO_SEARCH_COUNTER).register(meterRegistry).increment();
         } catch (RuntimeException ignored) {
             // Observability must not affect decision execution.
+        }
+    }
+
+    private void warnOnce(RuntimeException exception) {
+        long now = System.nanoTime();
+        long previous = lastWarning.get();
+        if (now - previous >= WARNING_INTERVAL_NANOS && lastWarning.compareAndSet(previous, now)) {
+            log.warn("LLM search classification failed; using rule fallback", exception);
         }
     }
 }
