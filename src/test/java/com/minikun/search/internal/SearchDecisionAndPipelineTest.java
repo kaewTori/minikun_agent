@@ -28,6 +28,7 @@ class SearchDecisionAndPipelineTest {
 
         assertTrue(service.decide("What is the latest Java release?").shouldSearch());
         assertTrue(service.decide("ข่าววันนี้เป็นอย่างไร").shouldSearch());
+        assertTrue(service.decide("แนะนำร้านราเมง Tonkotsu Classic").shouldSearch());
         assertFalse(service.decide("Explain dependency injection").shouldSearch());
         assertFalse(service.decide(" ").shouldSearch());
         assertEquals("latest Java", service.decide("  latest Java  ").query());

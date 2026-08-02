@@ -56,6 +56,21 @@ class SearXNGProviderTest {
         server.verify();
     }
 
+    @Test
+    void encodesJsonLikeQueriesWithoutUriTemplateExpansion() {
+        RestClient.Builder builder = RestClient.builder().baseUrl("http://searxng.test");
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        SearXNGProvider provider = new SearXNGProvider(builder.build(), new ObjectMapper(), CLOCK);
+        server.expect(requestTo(
+                        "http://searxng.test/search?q=%7B%22title%22:%22Java%22%7D&format=json&number_of_results=5"))
+                .andExpect(method(HttpMethod.GET))
+                .andRespond(withSuccess("{\"results\":[]}", MediaType.APPLICATION_JSON));
+
+        provider.search(request("{\"title\":\"Java\"}", 5));
+
+        server.verify();
+    }
+
     private static SearchRequest request(String query, int limit) {
         return new SearchRequest(
                 UUID.randomUUID(), query, limit, CLOCK.instant().plusSeconds(60));

@@ -17,7 +17,8 @@ public class ConversationIdResolver {
                 httpRequest.getHeader("X-Conversation-Id"),
                 request.conversation_id(),
                 httpRequest.getHeader("X-OpenWebUI-Chat-Id"),
-                httpRequest.getHeader("X-Chat-Id"));
+                httpRequest.getHeader("X-Chat-Id"),
+                httpRequest.getHeader("Chat-Id"));
         return new ConversationId(identifier == null ? UUID.randomUUID().toString() : identifier);
     }
 

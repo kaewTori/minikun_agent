@@ -10,6 +10,7 @@ import com.minikun.search.model.SearchRequest;
 import com.minikun.search.model.SearchResult;
 import com.minikun.search.model.SearchSource;
 import java.time.Clock;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -17,6 +18,8 @@ import org.springframework.http.MediaType;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.client.ResourceAccessException;
+import org.springframework.web.util.UriComponentsBuilder;
+import org.springframework.web.util.UriUtils;
 
 public final class SearXNGProvider implements SearchProvider {
     private final RestClient restClient;
@@ -33,13 +36,14 @@ public final class SearXNGProvider implements SearchProvider {
     public SearchProviderResponse search(SearchRequest request) {
         Objects.requireNonNull(request, "request must not be null");
         try {
+            var uri = UriComponentsBuilder.fromPath("/search")
+                    .queryParam("q", UriUtils.encodeQueryParam(request.query(), StandardCharsets.UTF_8))
+                .queryParam("format", "json")
+                .queryParam("number_of_results", request.resultLimit())
+                    .build(true)
+                .toUri();
             String body = restClient.get()
-                    .uri(uriBuilder -> uriBuilder
-                            .path("/search")
-                            .queryParam("q", request.query())
-                            .queryParam("format", "json")
-                            .queryParam("number_of_results", request.resultLimit())
-                            .build())
+                .uri(uri)
                     .accept(MediaType.APPLICATION_JSON)
                     .retrieve()
                     .body(String.class);

@@ -212,14 +212,28 @@ public class ChatService {
                 .reduce((left, right) -> left + "\n\n" + right)
                 .orElse("");
 
+        String conversationContent = conversation.isBlank()
+            ? requestConversation(request)
+            : conversation;
         PromptRequest promptRequest = new PromptRequest(
                 characterSpecification,
                 new RuntimeContext(runtime),
-                conversation.isBlank() ? null : new ConversationContext(conversation),
+            conversationContent.isBlank() ? null : new ConversationContext(conversationContent),
                 knowledge,
                 List.of(),
                 new com.minikun.pcs.model.UserMessage(userMessage.content()));
         return toSpringPrompt(promptComposer.compose(promptRequest));
+    }
+
+    private String requestConversation(ChatCompletionRequest request) {
+        int currentUserIndex = lastUserMessageIndex(request.messages());
+        return java.util.stream.IntStream.range(0, currentUserIndex)
+                .mapToObj(request.messages()::get)
+                .filter(message -> !"system".equals(message.role()))
+                .filter(message -> hasText(message.content()))
+                .map(message -> message.role() + ": " + message.content())
+                .reduce((left, right) -> left + "\n\n" + right)
+                .orElse("");
     }
 
     private KnowledgeContext recallKnowledge() {
@@ -243,6 +257,7 @@ public class ChatService {
         }
 
         var decision = searchDecisionService.decide(query);
+        log.info("Search decision shouldSearch={} query={}", decision.shouldSearch(), decision.query());
         if (!decision.shouldSearch()) {
             return memoryKnowledge;
         }
@@ -254,6 +269,8 @@ public class ChatService {
                     10,
                     Instant.now().plus(searchTimeout));
             KnowledgeContext searchKnowledge = searchService.search(searchRequest);
+                    log.info("Search completed query={} knowledgeCharacters={}",
+                        decision.query(), searchKnowledge == null ? 0 : searchKnowledge.content().length());
             return combineKnowledge(memoryKnowledge, searchKnowledge);
         } catch (RuntimeException exception) {
             log.warn("Search failed; continuing without search knowledge", exception);
