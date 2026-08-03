@@ -9,6 +9,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
 import com.minikun.memory.model.Memory;
+import com.minikun.memory.model.AcceptedMemory;
 import com.minikun.memory.model.MemoryCategory;
 import com.minikun.memory.model.MemoryId;
 import com.minikun.memory.model.MemorySource;
@@ -27,7 +28,7 @@ class MemoryRecallServiceTest {
                 "user stated directly");
         MemoryRepository repository = new MemoryRepository() {
             @Override
-            public boolean save(Memory value, String fingerprint, String conversationId) {
+            public boolean save(AcceptedMemory value) {
                 return true;
             }
 

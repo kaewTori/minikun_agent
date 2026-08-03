@@ -16,22 +16,23 @@ class ReflectionParserTest {
     void parsesValidResponse() {
         var memories = parser.parse("""
                 {"memories":[{"category":"PROFILE","content":"Uses macOS","confidence":0.9,"reason":"User stated it"}]}
-                """);
+                """, "conversation-1");
 
         assertEquals(1, memories.size());
         assertEquals(MemoryCategory.PROFILE, memories.getFirst().category());
         assertEquals("Uses macOS", memories.getFirst().content());
+        assertEquals("conversation-1", memories.getFirst().conversationId());
     }
 
     @Test
     void rejectsMalformedMissingAdditionalInvalidAndNullFields() {
-        assertThrows(MemoryException.class, () -> parser.parse("not-json"));
-        assertThrows(MemoryException.class, () -> parser.parse("{\"memories\":[{\"category\":\"PROFILE\"}]}"));
+        assertThrows(MemoryException.class, () -> parser.parse("not-json", "conversation-1"));
+        assertThrows(MemoryException.class, () -> parser.parse("{\"memories\":[{\"category\":\"PROFILE\"}]}", "conversation-1"));
         assertThrows(MemoryException.class, () -> parser.parse(
-                "{\"memories\":[{\"category\":\"PROFILE\",\"content\":\"x\",\"confidence\":0.9,\"reason\":\"r\",\"extra\":true}]}"));
+                "{\"memories\":[{\"category\":\"PROFILE\",\"content\":\"x\",\"confidence\":0.9,\"reason\":\"r\",\"extra\":true}]}", "conversation-1"));
         assertThrows(MemoryException.class, () -> parser.parse(
-                "{\"memories\":[{\"category\":\"UNKNOWN\",\"content\":\"x\",\"confidence\":0.9,\"reason\":\"r\"}]}"));
+                "{\"memories\":[{\"category\":\"UNKNOWN\",\"content\":\"x\",\"confidence\":0.9,\"reason\":\"r\"}]}", "conversation-1"));
         assertThrows(MemoryException.class, () -> parser.parse(
-                "{\"memories\":[{\"category\":null,\"content\":\"x\",\"confidence\":0.9,\"reason\":\"r\"}]}"));
+                "{\"memories\":[{\"category\":null,\"content\":\"x\",\"confidence\":0.9,\"reason\":\"r\"}]}", "conversation-1"));
     }
 }

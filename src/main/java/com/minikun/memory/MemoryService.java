@@ -7,6 +7,7 @@ import java.util.List;
 import org.springframework.stereotype.Service;
 
 import com.minikun.memory.model.CandidateMemory;
+import com.minikun.memory.model.AcceptedMemory;
 import com.minikun.memory.model.CompletedConversation;
 import com.minikun.memory.model.Memory;
 import com.minikun.memory.model.MemoryId;
@@ -31,24 +32,12 @@ public class MemoryService {
             Memory memory = new Memory(
                     MemoryId.generate(), candidate.category(), MemorySource.LLM_EXTRACTION,
                     candidate.content().trim(), Instant.now(clock), candidate.confidence(), candidate.reason().trim());
-            return repository.save(memory, fingerprint(conversation, candidate), conversation.conversationId())
+                AcceptedMemory request = new AcceptedMemory(
+                    conversation.conversationId(), candidate.category(), MemorySource.LLM_EXTRACTION,
+                    candidate.content().trim(), candidate.confidence(), candidate.reason().trim());
+                return repository.save(request)
                     ? memory : null;
         }).filter(java.util.Objects::nonNull).toList();
     }
 
-    private String fingerprint(CompletedConversation conversation, CandidateMemory candidate) {
-        try {
-            return java.util.HexFormat.of().formatHex(
-                java.security.MessageDigest.getInstance("SHA-256")
-                    .digest((conversation.conversationId() + "\u0000" + candidate.category()
-                        + "\u0000" + normalize(candidate.content()))
-                        .getBytes(java.nio.charset.StandardCharsets.UTF_8)));
-        } catch (java.security.NoSuchAlgorithmException exception) {
-            throw new MemoryException("SHA-256 fingerprint algorithm is unavailable", exception);
-        }
-    }
-
-    private String normalize(String content) {
-        return content.trim().replaceAll("\\s+", " ").toLowerCase(java.util.Locale.ROOT);
-    }
 }

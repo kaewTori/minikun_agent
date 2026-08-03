@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.minikun.memory.MemoryException;
 import com.minikun.memory.model.MemoryCategory;
+import com.minikun.memory.model.MemoryCandidate;
 
 public final class ReflectionParser {
     private static final List<String> MEMORY_FIELDS = List.of("category", "content", "confidence", "reason");
@@ -16,7 +17,7 @@ public final class ReflectionParser {
         this.objectMapper = objectMapper;
     }
 
-    public List<ReflectionMemory> parse(String response) {
+    public List<MemoryCandidate> parse(String response, String conversationId) {
         try {
             JsonNode root = objectMapper.readTree(response);
             requireObject(root, "response");
@@ -25,7 +26,7 @@ public final class ReflectionParser {
             if (!memories.isArray()) {
                 throw invalid("memories must be an array");
             }
-            List<ReflectionMemory> result = new ArrayList<>();
+            List<MemoryCandidate> result = new ArrayList<>();
             for (JsonNode memory : memories) {
                 requireObject(memory, "memory");
                 requireExactFields(memory, MEMORY_FIELDS, "memory");
@@ -41,7 +42,8 @@ public final class ReflectionParser {
                     throw invalid("confidence must be between 0 and 1");
                 }
                 try {
-                    result.add(new ReflectionMemory(MemoryCategory.valueOf(category), content, confidenceValue, reason));
+                        result.add(new MemoryCandidate(conversationId,
+                            MemoryCategory.valueOf(category), content, confidenceValue, reason));
                 } catch (IllegalArgumentException exception) {
                     throw invalid("invalid memory category", exception);
                 }
@@ -92,11 +94,4 @@ public final class ReflectionParser {
         return new MemoryException(message, cause);
     }
 
-    public record ReflectionMemory(MemoryCategory category, String content, double confidence, String reason) {
-        public ReflectionMemory {
-            if (category == null || content == null || content.isBlank() || reason == null || reason.isBlank()) {
-                throw new IllegalArgumentException("reflection memory fields must be present");
-            }
-        }
-    }
 }

@@ -3,22 +3,13 @@ package com.minikun.memory;
 import java.util.List;
 
 import com.minikun.memory.model.Memory;
+import com.minikun.memory.model.AcceptedMemory;
 
 public interface MemoryRepository {
-    boolean save(Memory memory, String fingerprint, String conversationId);
+    boolean save(AcceptedMemory memory);
 
-    default boolean persist(Memory memory, String conversationId) {
-        try {
-            String fingerprint = java.util.HexFormat.of().formatHex(
-                    java.security.MessageDigest.getInstance("SHA-256").digest(
-                            (conversationId + "\u0000" + memory.category() + "\u0000"
-                                    + memory.content().trim().replaceAll("\\s+", " ")
-                                    .toLowerCase(java.util.Locale.ROOT))
-                                    .getBytes(java.nio.charset.StandardCharsets.UTF_8)));
-            return save(memory, fingerprint, conversationId);
-        } catch (java.security.NoSuchAlgorithmException exception) {
-            throw new IllegalStateException("SHA-256 is unavailable", exception);
-        }
+    default boolean persist(AcceptedMemory memory) {
+        return save(memory);
     }
 
     default List<Memory> findAll() {

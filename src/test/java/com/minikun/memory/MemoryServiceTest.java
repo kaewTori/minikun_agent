@@ -19,7 +19,9 @@ class MemoryServiceTest {
     @Test
     void persistsOnlyNewFingerprintsAndGeneratesJavaIds() {
         List<String> fingerprints = new ArrayList<>();
-        MemoryRepository repository = (memory, fingerprint, conversationId) -> {
+        MemoryRepository repository = request -> {
+            String fingerprint = request.conversationId() + "\u0000" + request.category()
+                    + "\u0000" + request.content().trim().replaceAll("\\s+", " ").toLowerCase();
             if (fingerprints.contains(fingerprint)) {
                 return false;
             }

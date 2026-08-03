@@ -8,6 +8,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import lombok.extern.slf4j.Slf4j;
 
 import com.minikun.memory.MemoryRepository;
+import com.minikun.memory.model.AcceptedMemory;
 import com.minikun.memory.model.Memory;
 import com.minikun.memory.model.MemoryCategory;
 import com.minikun.memory.model.MemoryId;
@@ -22,35 +23,34 @@ final class JdbcMemoryRepository implements MemoryRepository {
     }
 
     @Override
-    public boolean save(Memory memory, String fingerprint, String conversationId) {
-        return insert(memory, fingerprint, conversationId);
+    public boolean save(AcceptedMemory memory) {
+        return insert(memory, fingerprint(memory), memory.conversationId());
     }
 
     @Override
-    public boolean persist(Memory memory, String conversationId) {
-        return insert(memory, fingerprint(memory, conversationId), conversationId);
+    public boolean persist(AcceptedMemory memory) {
+        return save(memory);
     }
 
-    private boolean insert(Memory memory, String fingerprint, String conversationId) {
+    private boolean insert(AcceptedMemory memory, String fingerprint, String conversationId) {
         int updated = jdbcTemplate.update("""
                 INSERT INTO minikun_memory
                     (id, conversation_id, category, source, content, created_at, confidence, reason, fingerprint)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT (fingerprint) DO NOTHING
                 """,
-                memory.id().value(), conversationId, memory.category().name(), memory.source().name(),
-                memory.content(), memory.createdAt().atOffset(ZoneOffset.UTC), memory.confidence(),
+                java.util.UUID.randomUUID(), conversationId, memory.category().name(), memory.source().name(),
+                memory.content(), java.time.Instant.now().atOffset(ZoneOffset.UTC), memory.confidence(),
                 memory.reason(), fingerprint);
-        log.debug("memory_repository_save conversation_id={} memory_id={} inserted={}",
-                conversationId, memory.id().value(), updated);
+        log.debug("memory_repository_save conversation_id={} inserted={}", conversationId, updated);
         return updated > 0;
     }
 
-    private String fingerprint(Memory memory, String conversationId) {
+    private String fingerprint(AcceptedMemory memory) {
         try {
             return java.util.HexFormat.of().formatHex(
                     java.security.MessageDigest.getInstance("SHA-256").digest(
-                            (conversationId + "\u0000" + memory.category() + "\u0000"
+                            (memory.conversationId() + "\u0000" + memory.category() + "\u0000"
                                     + memory.content().trim().replaceAll("\\s+", " ")
                                     .toLowerCase(java.util.Locale.ROOT))
                                     .getBytes(java.nio.charset.StandardCharsets.UTF_8)));
