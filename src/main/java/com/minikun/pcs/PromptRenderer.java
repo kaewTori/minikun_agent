@@ -12,9 +12,9 @@ final class PromptRenderer {
     private PromptRenderer() {
     }
 
-    static Prompt render(PromptRequest request) {
+    static Prompt render(PromptRequest request, List<McsModule> selectedModules) {
         List<String> sections = new ArrayList<>();
-        sections.add(CorePromptFragments.persona(request.character()));
+        sections.add(CorePromptFragments.persona(request.character(), selectedModules));
         sections.add(section("Runtime", request.runtime().content()));
         addOptional(sections, "Conversation", request.conversation() == null ? null : request.conversation().content());
         addOptional(sections, "Knowledge", request.knowledge() == null ? null : request.knowledge().content());

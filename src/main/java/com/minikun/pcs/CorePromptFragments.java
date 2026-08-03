@@ -9,6 +9,12 @@ public final class CorePromptFragments {
     }
 
     public static String persona(CharacterSpecification specification) {
+        return persona(specification, McsModule.orderedFrom(specification));
+    }
+
+    public static String persona(CharacterSpecification specification, List<McsModule> modules) {
+        java.util.Objects.requireNonNull(specification, "specification");
+        modules = List.copyOf(java.util.Objects.requireNonNull(modules, "modules"));
         StringBuilder character = new StringBuilder("[Character]");
         append(character, "name", specification.name());
         append(character, "version", specification.version());
@@ -18,15 +24,9 @@ public final class CorePromptFragments {
         append(character, "role", specification.role());
         append(character, "relationship", specification.relationship());
         append(character, "defaultMode", specification.defaultMode());
-        appendStatements(character, "identity", specification.identity().statements());
-        appendStatements(character, "personality", specification.personality().statements());
-        appendStatements(character, "values", specification.values().statements());
-        appendStatements(character, "communication", specification.communication().statements());
-        appendStatements(character, "behavior", specification.behavior().statements());
-        appendStatements(character, "reasoning", specification.reasoning().statements());
-        appendStatements(character, "interests", specification.interests().statements());
-        appendStatements(character, "boundaries", specification.boundaries().statements());
-        appendStatements(character, "catchphrases", specification.catchphrases().statements());
+        for (McsModule module : modules) {
+            appendStatements(character, module.name(), module.statements());
+        }
         return character.toString();
     }
 

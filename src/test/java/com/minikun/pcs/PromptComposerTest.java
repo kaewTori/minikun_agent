@@ -2,6 +2,7 @@ package com.minikun.pcs;
 
 import com.minikun.character.CharacterLoader;
 import com.minikun.character.model.CharacterSpecification;
+import com.minikun.character.model.LoadingPolicy;
 import com.minikun.pcs.model.CapabilityInstruction;
 import com.minikun.pcs.model.ConversationContext;
 import com.minikun.pcs.model.KnowledgeContext;
@@ -13,8 +14,11 @@ import org.junit.jupiter.api.Test;
 
 import java.nio.file.Path;
 import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -73,6 +77,23 @@ class PromptComposerTest {
                 () -> request.capabilities().add(new CapabilityInstruction("later", "instruction")));
     }
 
+        @Test
+        void compositionRendersOnlySelectedModulesAndExposesMatchingDiagnostics() {
+        CharacterSpecification character = characterWithPolicies(Map.of("identity", LoadingPolicy.DYNAMIC));
+        PromptComposer composer = new PromptComposer(new McsSelector(Map.of(
+            "identity", (module, context) -> McsSelectionDecision.skipped("test", "Strategy not matched"))));
+
+        PromptCompositionResult result = composer.composeWithDiagnostics(new PromptRequest(
+            character, new RuntimeContext("now"), null, null, List.of(), new UserMessage("hello")));
+        String system = result.prompt().messages().get(0).content();
+
+        assertTrue(!system.contains("\nidentity:"));
+        assertTrue(system.contains("\npersonality:"));
+        assertEquals(9, result.selectionDiagnostics().size());
+        assertFalse(result.selectionDiagnostics().get(0).selected());
+        assertTrue(result.selectionDiagnostics().stream().skip(1).allMatch(McsSelectionDiagnostic::selected));
+        }
+
     private PromptRequest request() {
         return new PromptRequest(character(), new RuntimeContext("2026-08-01"),
             new ConversationContext("Previous turn"), new KnowledgeContext("Retrieved fact"),
@@ -82,5 +103,16 @@ class PromptComposerTest {
 
     private CharacterSpecification character() {
         return new CharacterLoader(MCS_ROOT).load();
+    }
+
+    private CharacterSpecification characterWithPolicies(Map<String, LoadingPolicy> overrides) {
+        CharacterSpecification source = character();
+        Map<String, LoadingPolicy> policies = new LinkedHashMap<>(source.loadingPolicies());
+        policies.putAll(overrides);
+        return new CharacterSpecification(source.name(), source.version(), source.description(),
+                source.primaryLanguage(), source.fallbackLanguage(), source.role(), source.relationship(),
+                source.defaultMode(), source.metadata(), policies, source.identity(), source.personality(),
+                source.values(), source.communication(), source.behavior(), source.reasoning(), source.interests(),
+                source.boundaries(), source.catchphrases());
     }
 }

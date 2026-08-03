@@ -4,7 +4,21 @@ import com.minikun.pcs.model.UserMessage;
 import com.minikun.pcs.model.Prompt;
 
 public final class PromptComposer {
+    private final McsSelector selector;
+
+    public PromptComposer() {
+        this(new McsSelector());
+    }
+
+    public PromptComposer(McsSelector selector) {
+        this.selector = java.util.Objects.requireNonNull(selector, "selector");
+    }
+
     public Prompt compose(PromptRequest request) {
+        return composeWithDiagnostics(request).prompt();
+    }
+
+    public PromptCompositionResult composeWithDiagnostics(PromptRequest request) {
         if (request == null) {
             throw new PromptException("request must not be null");
         }
@@ -18,7 +32,12 @@ public final class PromptComposer {
         if (userMessage == null || isBlank(userMessage.content())) {
             throw new PromptException("user message must not be blank");
         }
-        return PromptRenderer.render(request);
+        McsSelectionContext context = new McsSelectionContext(
+            userMessage.content(),
+            request.conversation() == null ? "" : request.conversation().content());
+        McsSelectionResult selection = selector.select(request.character(), context);
+        return new PromptCompositionResult(
+            PromptRenderer.render(request, selection.selectedModules()), selection.diagnostics());
     }
 
     private boolean isBlank(String value) {
