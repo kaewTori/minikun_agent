@@ -30,7 +30,10 @@ import com.minikun.agent.minikun_agent.conversation.ConversationMemoryService;
 import com.minikun.commands.CommandCatalog;
 import com.minikun.commands.CommandFormatter;
 import com.minikun.diagnostics.DiagnosticsFormatter;
+import com.minikun.diagnostics.DiagnosticsPrompt;
+import com.minikun.diagnostics.DiagnosticsPromptBuilder;
 import com.minikun.diagnostics.DiagnosticsService;
+import com.minikun.diagnostics.DiagnosticsSummary;
 import com.minikun.memory.MemoryAnalyzer;
 import com.minikun.memory.MemoryRecallService;
 import com.minikun.memory.MemoryService;
@@ -70,6 +73,7 @@ public class ChatService {
     private final SearchDecisionService searchDecisionService;
     private final DiagnosticsService diagnosticsService;
     private final DiagnosticsFormatter diagnosticsFormatter;
+    private final DiagnosticsPromptBuilder diagnosticsPromptBuilder;
     private final CommandCatalog commandCatalog;
     private final CommandFormatter commandFormatter;
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -85,6 +89,9 @@ public class ChatService {
 
     @Value("${minikun.search.timeout:10s}")
     private java.time.Duration searchTimeout;
+
+    @Value("${minikun.diagnostics.conversational.enabled:false}")
+    private boolean diagnosticsConversationalEnabled;
 
     public ChatCompletionResponse chatCompletion(ChatCompletionRequest request, ConversationId conversationId) {
         ChatMessage userMessage = userMessage(request);
@@ -174,10 +181,14 @@ public class ChatService {
     }
 
             private ChatCompletionResponse commandResponse(ChatCompletionRequest request, ChatMessage userMessage) {
-            String content = commandOutput(userMessage);
-            if (content == null) {
+            var command = commandCatalog.findExact(userMessage.content());
+            if (command.isEmpty()) {
                 return null;
             }
+            if (command.get().type() == com.minikun.commands.CommandType.DIAGNOSTICS) {
+                return diagnosticsResponse(request, userMessage);
+            }
+            String content = commandFormatter.format(commandCatalog);
             String model = modelName(request.model(), configuredChatModel);
             return new ChatCompletionResponse(
                 "chatcmpl-" + UUID.randomUUID(), "chat.completion", Instant.now().getEpochSecond(),
@@ -189,6 +200,24 @@ public class ChatService {
                 new ChatCompletionResponse.Usage(0, 0, 0));
             }
 
+            private ChatCompletionResponse diagnosticsResponse(
+                    ChatCompletionRequest request, ChatMessage userMessage) {
+            DiagnosticsSummary summary = diagnosticsService.summarize();
+            if (!diagnosticsConversationalEnabled) {
+                return responseForContent(request, diagnosticsFormatter.format(summary));
+            }
+            try {
+                DiagnosticsPrompt diagnosticsPrompt = diagnosticsPromptBuilder.build(summary, userMessage.content());
+                String content = chatModel.call(toSpringPrompt(diagnosticsPrompt)).getResult().getOutput().getText();
+                if (content == null || content.isBlank()) {
+                    throw new IllegalStateException("Diagnostics LLM returned empty content");
+                }
+                return responseForContent(request, content);
+            } catch (RuntimeException exception) {
+                return responseForContent(request, diagnosticsFormatter.format(summary));
+            }
+            }
+
             private String commandOutput(ChatMessage userMessage) {
             return commandCatalog.findExact(userMessage.content())
                 .map(command -> switch (command.type()) {
@@ -196,6 +225,18 @@ public class ChatService {
                     case HELP -> commandFormatter.format(commandCatalog);
                 })
                 .orElse(null);
+            }
+
+            private ChatCompletionResponse responseForContent(ChatCompletionRequest request, String content) {
+            String model = modelName(request.model(), configuredChatModel);
+            return new ChatCompletionResponse(
+                "chatcmpl-" + UUID.randomUUID(), "chat.completion", Instant.now().getEpochSecond(),
+                model,
+                List.of(new ChatCompletionResponse.Choice(
+                    0,
+                    new com.minikun.agent.minikun_agent.api.openai.dto.Message("assistant", content),
+                    "stop")),
+                new ChatCompletionResponse.Usage(0, 0, 0));
             }
 
             private Flux<String> commandStream(String content, ChatCompletionRequest request) {
@@ -395,6 +436,15 @@ public class ChatService {
                 .toList();
         return new Prompt(messages);
     }
+
+        private Prompt toSpringPrompt(DiagnosticsPrompt diagnosticsPrompt) {
+        String system = diagnosticsPrompt.persona().content()
+            + "\n\n[Diagnostics instructions]\n" + diagnosticsPrompt.instructions()
+            + "\n\n[DiagnosticsSummary]\n" + diagnosticsFormatter.format(diagnosticsPrompt.summary());
+        return new Prompt(List.of(
+            new SystemMessage(system),
+            new UserMessage(diagnosticsPrompt.userRequest())));
+        }
 
     private Message toSpringMessage(PromptMessage message) {
         return switch (message.role()) {

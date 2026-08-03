@@ -9,12 +9,15 @@ import com.minikun.search.internal.SearchConfiguration;
 import com.minikun.commands.CommandCatalog;
 import com.minikun.commands.CommandFormatter;
 import com.minikun.diagnostics.DiagnosticsFormatter;
+import com.minikun.diagnostics.DiagnosticsPromptBuilder;
 import com.minikun.diagnostics.DiagnosticsService;
 import com.minikun.diagnostics.MeterRegistryMetricsReader;
+import com.minikun.pcs.MinikunPersonaProvider;
 
 @SpringBootApplication
 @Import({MemoryConfiguration.class, SearchConfiguration.class, MeterRegistryMetricsReader.class,
-		DiagnosticsService.class, DiagnosticsFormatter.class, CommandCatalog.class, CommandFormatter.class})
+		DiagnosticsService.class, DiagnosticsFormatter.class, DiagnosticsPromptBuilder.class,
+		MinikunPersonaProvider.class, CommandCatalog.class, CommandFormatter.class})
 public class MinikunAgentApplication {
 
 	public static void main(String[] args) {
