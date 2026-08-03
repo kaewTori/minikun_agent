@@ -1,6 +1,6 @@
 # Conversation Memory
 
-The Java service uses Spring AI `ChatMemory` for short-term conversation history. The Rust memory service remains a separate system for future long-term or semantic memory and is not part of this request path.
+The Java service uses Spring AI `ChatMemory` for short-term conversation history and PostgreSQL-backed application memory for persisted knowledge. There is no separate memory service in the request path.
 
 ## Application boundary
 
