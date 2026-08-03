@@ -269,6 +269,7 @@ public class ChatService {
                 .orElse("Current date: " + LocalDate.now());
         String conversation = history.stream()
             .filter(message -> !"system".equals(message.role()))
+            .filter(message -> !isCommandMessage(message.content()))
             .map(message -> message.role() + ": " + message.content())
                 .reduce((left, right) -> left + "\n\n" + right)
                 .orElse("");
@@ -292,6 +293,7 @@ public class ChatService {
                 .mapToObj(request.messages()::get)
                 .filter(message -> !"system".equals(message.role()))
                 .filter(message -> hasText(message.content()))
+                .filter(message -> !isCommandMessage(message.content()))
                 .map(message -> message.role() + ": " + message.content())
                 .reduce((left, right) -> left + "\n\n" + right)
                 .orElse("");
@@ -446,6 +448,10 @@ public class ChatService {
 
     private boolean hasText(String value) {
         return value != null && !value.isBlank();
+    }
+
+    private boolean isCommandMessage(String content) {
+        return hasText(content) && commandCatalog.findExact(content.trim()).isPresent();
     }
 
     private boolean shouldPersistConversation(ChatCompletionRequest request) {
