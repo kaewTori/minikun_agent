@@ -83,8 +83,6 @@ class ChatServiceRuntimeCommandTest {
                 mock(EmbeddingModel.class),
                 transactions,
                 conversation,
-                memoryAnalyzer,
-                memoryService,
                 memoryRecall,
                 character,
                 new PromptComposer(),
@@ -100,7 +98,8 @@ class ChatServiceRuntimeCommandTest {
                 new ModelsService("chat", "embedding", "memory", "llama", ""),
                 new ModelsFormatter(),
                 new CacheService("true", "valkey", Duration.ofMinutes(5)),
-                new CacheFormatter());
+                new CacheFormatter(),
+                mock(ObjectProvider.class));
     }
 
     private ChatCompletionRequest request(String command) {

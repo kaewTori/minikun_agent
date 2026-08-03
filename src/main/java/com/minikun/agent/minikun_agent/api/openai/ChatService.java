@@ -34,9 +34,8 @@ import com.minikun.diagnostics.DiagnosticsPrompt;
 import com.minikun.diagnostics.DiagnosticsPromptBuilder;
 import com.minikun.diagnostics.DiagnosticsService;
 import com.minikun.diagnostics.DiagnosticsSummary;
-import com.minikun.memory.MemoryAnalyzer;
 import com.minikun.memory.MemoryRecallService;
-import com.minikun.memory.MemoryService;
+import com.minikun.memory.ReflectionService;
 import com.minikun.memory.model.CompletedConversation;
 import com.minikun.character.model.CharacterSpecification;
 import com.minikun.pcs.PromptComposer;
@@ -70,8 +69,6 @@ public class ChatService {
     private final EmbeddingModel embeddingModel;
     private final ChatTransactionLogger transactionLogger;
     private final ConversationMemoryService conversationMemoryService;
-    private final MemoryAnalyzer memoryAnalyzer;
-    private final ObjectProvider<MemoryService> memoryService;
     private final ObjectProvider<MemoryRecallService> memoryRecallService;
     private final CharacterSpecification characterSpecification;
     private final PromptComposer promptComposer;
@@ -88,6 +85,7 @@ public class ChatService {
     private final ModelsFormatter modelsFormatter;
     private final CacheService cacheService;
     private final CacheFormatter cacheFormatter;
+    private final ObjectProvider<ReflectionService> reflectionService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Value("${spring.ai.ollama.chat.options.model:hf.co/llmfan46/gemma-4-E4B-it-ultra-uncensored-heretic-GGUF:Q5_K_M}")
@@ -126,7 +124,7 @@ public class ChatService {
         String content = response.getResult().getOutput().getText();
         if (persistConversation) {
             conversationMemoryService.append(conversationId, new ChatMessage("assistant", content));
-            extractMemories(conversationId);
+            reflectOnCompletedConversation(conversationId);
         }
         var choice = new ChatCompletionResponse.Choice(
                 0,
@@ -184,7 +182,7 @@ public class ChatService {
                     if (persistConversation && !assistantContent.isEmpty()) {
                         conversationMemoryService.append(
                                 conversationId, new ChatMessage("assistant", assistantContent.toString()));
-                        extractMemories(conversationId);
+                        reflectOnCompletedConversation(conversationId);
                     }
                     transaction.success();
                 })
@@ -483,25 +481,23 @@ public class ChatService {
         return new ChatMessage("user", request.messages().get(userMessageIndex).content());
     }
 
-    private void extractMemories(ConversationId conversationId) {
+    private CompletedConversation completedConversation(ConversationId conversationId) {
+        return new CompletedConversation(
+                conversationId.value(),
+                conversationMemoryService.load(conversationId).stream()
+                        .map(message -> new CompletedConversation.Message(message.role(), message.content()))
+                        .toList());
+    }
+
+    private void reflectOnCompletedConversation(ConversationId conversationId) {
         try {
-            CompletedConversation conversation = new CompletedConversation(
-                    conversationId.value(),
-                    conversationMemoryService.load(conversationId).stream()
-                            .map(message -> new CompletedConversation.Message(message.role(), message.content()))
-                            .toList());
-            var candidates = memoryAnalyzer.analyze(conversation);
-                var service = memoryService.getIfAvailable();
-                if (service == null) {
-                    log.warn("memory_persistence conversation_id={} skipped=true reason=memory_service_unavailable candidate_count={}",
-                            conversationId.value(), candidates.size());
-                    return;
-                }
-                    var persisted = service.persist(conversation, candidates);
-                    log.info("memory_persistence conversation_id={} candidate_count={} persisted_count={} skipped_count={}",
-                        conversationId.value(), candidates.size(), persisted.size(), candidates.size() - persisted.size());
+            CompletedConversation conversation = completedConversation(conversationId);
+            var service = reflectionService.getIfAvailable();
+            if (service != null) {
+                service.reflect(conversation);
+            }
         } catch (RuntimeException exception) {
-            log.warn("Long-term memory extraction failed for conversation {}", conversationId.value(), exception);
+            log.warn("memory_reflection conversation_id={} success=false", conversationId.value(), exception);
         }
     }
 

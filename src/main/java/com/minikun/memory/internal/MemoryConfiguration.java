@@ -21,6 +21,11 @@ import com.minikun.memory.MemoryPolicy;
 import com.minikun.memory.MemoryRecallService;
 import com.minikun.memory.MemoryRepository;
 import com.minikun.memory.MemoryService;
+import com.minikun.memory.ReflectionService;
+import com.minikun.memory.reflection.ReflectionClient;
+import com.minikun.memory.reflection.ReflectionParser;
+import com.minikun.memory.reflection.ReflectionPromptBuilder;
+import com.minikun.pcs.MinikunPersonaProvider;
 
 @Configuration(proxyBeanMethods = false)
 public class MemoryConfiguration {
@@ -106,5 +111,39 @@ public class MemoryConfiguration {
     @Bean
     MemoryAnalyzer memoryAnalyzer(MemoryExtractionClient extractionClient, MemoryPolicy policy) {
         return new MemoryAnalyzer(extractionClient, policy);
+    }
+
+    @Bean
+    @ConditionalOnProperty(name = "minikun.memory.reflection.enabled", havingValue = "true")
+    ReflectionPromptBuilder reflectionPromptBuilder(
+            @Qualifier("memoryObjectMapper") ObjectMapper objectMapper,
+            MinikunPersonaProvider personaProvider) {
+        return new ReflectionPromptBuilder(objectMapper, personaProvider);
+    }
+
+    @Bean
+    @ConditionalOnProperty(name = "minikun.memory.reflection.enabled", havingValue = "true")
+    ReflectionParser reflectionParser(@Qualifier("memoryObjectMapper") ObjectMapper objectMapper) {
+        return new ReflectionParser(objectMapper);
+    }
+
+    @Bean
+    @ConditionalOnProperty(name = "minikun.memory.reflection.enabled", havingValue = "true")
+    ReflectionClient reflectionClient(
+            @Value("${minikun.memory.reflection.url:http://127.0.0.1:11434/api/chat}") String url,
+            @Value("${minikun.memory.reflection.model:main-model}") String model,
+            @Value("${minikun.memory.reflection.timeout:150s}") Duration timeout) {
+        var httpClient = java.net.http.HttpClient.newBuilder().connectTimeout(timeout).build();
+        var requestFactory = new JdkClientHttpRequestFactory(httpClient);
+        requestFactory.setReadTimeout(timeout);
+        return new ReflectionHttpClient(RestClient.builder().baseUrl(url)
+                .requestFactory(requestFactory).build(), model);
+    }
+
+    @Bean
+    @ConditionalOnProperty(name = "minikun.memory.reflection.enabled", havingValue = "true")
+    ReflectionService reflectionService(ReflectionPromptBuilder promptBuilder, ReflectionClient client,
+            ReflectionParser parser, MemoryRepository repository, Clock memoryClock) {
+        return new ReflectionService(promptBuilder, client, parser, repository, memoryClock);
     }
 }

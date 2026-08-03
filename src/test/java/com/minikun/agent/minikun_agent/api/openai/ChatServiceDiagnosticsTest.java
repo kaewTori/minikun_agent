@@ -36,9 +36,7 @@ import com.minikun.diagnostics.DiagnosticsFormatter;
 import com.minikun.diagnostics.DiagnosticsPromptBuilder;
 import com.minikun.diagnostics.DiagnosticsService;
 import com.minikun.diagnostics.DiagnosticsSummary;
-import com.minikun.memory.MemoryAnalyzer;
 import com.minikun.memory.MemoryRecallService;
-import com.minikun.memory.MemoryService;
 import com.minikun.pcs.MinikunPersonaProvider;
 import com.minikun.pcs.PromptComposer;
 import com.minikun.search.SearchDecisionService;
@@ -145,8 +143,6 @@ class ChatServiceDiagnosticsTest {
                 mock(EmbeddingModel.class),
                 mock(ChatTransactionLogger.class),
                 mock(ConversationMemoryService.class),
-                mock(MemoryAnalyzer.class),
-                mock(ObjectProvider.class),
                 mock(ObjectProvider.class),
                 character,
                 new PromptComposer(),
@@ -162,7 +158,8 @@ class ChatServiceDiagnosticsTest {
                 mock(ModelsService.class),
                 mock(ModelsFormatter.class),
                 mock(CacheService.class),
-                mock(CacheFormatter.class));
+                mock(CacheFormatter.class),
+                mock(ObjectProvider.class));
     }
 
     private void assertTrueInOrder(String text, String... sections) {

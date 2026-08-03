@@ -23,6 +23,15 @@ final class JdbcMemoryRepository implements MemoryRepository {
 
     @Override
     public boolean save(Memory memory, String fingerprint, String conversationId) {
+        return insert(memory, fingerprint, conversationId);
+    }
+
+    @Override
+    public boolean persist(Memory memory, String conversationId) {
+        return insert(memory, fingerprint(memory, conversationId), conversationId);
+    }
+
+    private boolean insert(Memory memory, String fingerprint, String conversationId) {
         int updated = jdbcTemplate.update("""
                 INSERT INTO minikun_memory
                     (id, conversation_id, category, source, content, created_at, confidence, reason, fingerprint)
@@ -35,6 +44,19 @@ final class JdbcMemoryRepository implements MemoryRepository {
         log.debug("memory_repository_save conversation_id={} memory_id={} inserted={}",
                 conversationId, memory.id().value(), updated);
         return updated > 0;
+    }
+
+    private String fingerprint(Memory memory, String conversationId) {
+        try {
+            return java.util.HexFormat.of().formatHex(
+                    java.security.MessageDigest.getInstance("SHA-256").digest(
+                            (conversationId + "\u0000" + memory.category() + "\u0000"
+                                    + memory.content().trim().replaceAll("\\s+", " ")
+                                    .toLowerCase(java.util.Locale.ROOT))
+                                    .getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        } catch (java.security.NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("SHA-256 is unavailable", exception);
+        }
     }
 
     @Override
