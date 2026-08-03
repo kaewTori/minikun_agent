@@ -58,6 +58,7 @@ public final class McsSelector {
                 "reasoning", "interests", "boundaries", "catchphrases")) {
             defaults.put(module, strategy);
         }
+        defaults.put("interests", new InterestsSelectionStrategy());
         return defaults;
     }
 }

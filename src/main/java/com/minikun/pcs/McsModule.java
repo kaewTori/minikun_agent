@@ -7,11 +7,17 @@ import java.util.List;
 import java.util.Objects;
 import java.util.ArrayList;
 
-public record McsModule(String name, LoadingPolicy loadingPolicy, List<String> statements) {
+public record McsModule(String name, LoadingPolicy loadingPolicy, List<String> statements,
+    java.util.Optional<McsSelectionMetadata> selectionMetadata) {
     public McsModule {
         name = requireText(name, "name");
         loadingPolicy = Objects.requireNonNull(loadingPolicy, "loadingPolicy");
         statements = List.copyOf(Objects.requireNonNull(statements, "statements"));
+        selectionMetadata = Objects.requireNonNull(selectionMetadata, "selectionMetadata");
+    }
+
+    public McsModule(String name, LoadingPolicy loadingPolicy, List<String> statements) {
+        this(name, loadingPolicy, statements, java.util.Optional.empty());
     }
 
     public static List<McsModule> orderedFrom(CharacterSpecification specification) {
@@ -37,7 +43,8 @@ public record McsModule(String name, LoadingPolicy loadingPolicy, List<String> s
             default -> throw new IllegalArgumentException("Unknown MCS module: " + name);
         };
         return new McsModule(name,
-                specification.loadingPolicies().getOrDefault(name, LoadingPolicy.ALWAYS), statements);
+            specification.loadingPolicies().getOrDefault(name, LoadingPolicy.ALWAYS), statements,
+            java.util.Optional.ofNullable(specification.selectionMetadata().get(name)));
     }
 
     private static String requireText(String value, String field) {

@@ -85,23 +85,33 @@ class PromptComposerTest {
     }
 
     @Test
-    void compatibilitySelectionPreservesPromptWhenPoliciesBecomeDynamic() {
+        void nonInterestCompatibilitySelectionPreservesPromptWhenPoliciesBecomeDynamic() {
+        Map<String, LoadingPolicy> policies = character().loadingPolicies().keySet().stream()
+            .collect(java.util.stream.Collectors.toMap(
+                name -> name, name -> LoadingPolicy.DYNAMIC,
+                (left, right) -> left, LinkedHashMap::new));
+        policies.put("interests", LoadingPolicy.ALWAYS);
         CharacterSpecification dynamicCharacter = characterWithPolicies(
-                character().loadingPolicies().keySet().stream()
-                        .collect(java.util.stream.Collectors.toMap(
-                                name -> name, name -> LoadingPolicy.DYNAMIC,
-                                (left, right) -> left, LinkedHashMap::new)));
+            policies);
         PromptRequest dynamicRequest = new PromptRequest(dynamicCharacter, new RuntimeContext("2026-08-01"),
                 new ConversationContext("Previous turn"), new KnowledgeContext("Retrieved fact"),
                 List.of(new CapabilityInstruction("search", "Use retrieved sources")),
                 new UserMessage("Answer this"));
 
-        assertEquals(new PromptComposer().compose(request()), new PromptComposer().compose(dynamicRequest));
+        PromptRequest baselineRequest = new PromptRequest(
+            characterWithPolicies(Map.of("interests", LoadingPolicy.ALWAYS)),
+            new RuntimeContext("2026-08-01"), new ConversationContext("Previous turn"),
+            new KnowledgeContext("Retrieved fact"),
+            List.of(new CapabilityInstruction("search", "Use retrieved sources")),
+            new UserMessage("Answer this"));
+        assertEquals(new PromptComposer().compose(baselineRequest), new PromptComposer().compose(dynamicRequest));
     }
 
         @Test
         void compositionRendersOnlySelectedModulesAndExposesMatchingDiagnostics() {
-        CharacterSpecification character = characterWithPolicies(Map.of("identity", LoadingPolicy.DYNAMIC));
+        CharacterSpecification character = characterWithPolicies(Map.of(
+            "identity", LoadingPolicy.DYNAMIC,
+            "interests", LoadingPolicy.ALWAYS));
         PromptComposer composer = new PromptComposer(new McsSelector(Map.of(
             "identity", (module, context) -> McsSelectionDecision.skipped("test", "Strategy not matched"))));
 
@@ -117,6 +127,32 @@ class PromptComposerTest {
         assertEquals(result.selectionDiagnostics().stream().map(McsSelectionDiagnostic::module).toList(),
             result.selectionDecisions().stream().map(decision -> decision.module().name()).toList());
         }
+
+    @Test
+    void interestsIsRenderedWhenConfiguredMetadataMatches() {
+        PromptCompositionResult result = new PromptComposer().composeWithDiagnostics(new PromptRequest(
+                character(), new RuntimeContext("now"), null, null, List.of(),
+                new UserMessage("Tell me about programming")));
+
+        String system = result.prompt().messages().get(0).content();
+        assertTrue(system.contains("\ninterests:"));
+        assertTrue(result.selectionDiagnostics().stream()
+                .anyMatch(diagnostic -> diagnostic.module().equals("interests") && diagnostic.selected()));
+    }
+
+    @Test
+    void interestsIsOmittedWhenConfiguredMetadataDoesNotMatch() {
+        PromptCompositionResult result = new PromptComposer().composeWithDiagnostics(new PromptRequest(
+                character(), new RuntimeContext("now"), null, null, List.of(),
+                new UserMessage("Tell me about cooking")));
+
+        String system = result.prompt().messages().get(0).content();
+        assertTrue(!system.contains("\ninterests:"));
+        assertTrue(result.selectionDiagnostics().stream()
+                .anyMatch(diagnostic -> diagnostic.module().equals("interests") && !diagnostic.selected()));
+        assertTrue(system.contains("\nidentity:"));
+        assertTrue(system.contains("\ncatchphrases:"));
+    }
 
     private PromptRequest request() {
         return new PromptRequest(character(), new RuntimeContext("2026-08-01"),
@@ -135,7 +171,7 @@ class PromptComposerTest {
         policies.putAll(overrides);
         return new CharacterSpecification(source.name(), source.version(), source.description(),
                 source.primaryLanguage(), source.fallbackLanguage(), source.role(), source.relationship(),
-                source.defaultMode(), source.metadata(), policies, source.identity(), source.personality(),
+                source.defaultMode(), source.metadata(), policies, source.selectionMetadata(), source.identity(), source.personality(),
                 source.values(), source.communication(), source.behavior(), source.reasoning(), source.interests(),
                 source.boundaries(), source.catchphrases());
     }

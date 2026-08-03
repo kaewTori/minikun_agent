@@ -13,12 +13,14 @@ import com.minikun.character.model.Personality;
 import com.minikun.character.model.Reasoning;
 import com.minikun.character.model.Values;
 import com.minikun.character.model.LoadingPolicy;
+import com.minikun.pcs.McsSelectionMetadata;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.Map;
 import java.util.LinkedHashMap;
+import java.util.ArrayList;
 
 final class CharacterAssembler {
     private final MarkdownSectionParser sections;
@@ -45,6 +47,7 @@ final class CharacterAssembler {
                 ManifestParser.text(manifest, "/runtime/default_mode"),
                 characterMetadata,
                 loadingPolicies(manifest),
+                selectionMetadata(metadata),
                 new Identity(read(files, "identity.md")),
                 new Personality(read(files, "personality.md")),
                 new Values(read(files, "values.md")),
@@ -54,6 +57,25 @@ final class CharacterAssembler {
                 new Interests(read(files, "interests.md")),
                 new Boundaries(read(files, "boundaries.md")),
                 new Catchphrases(read(files, "catchphrases.md")));
+    }
+
+    private Map<String, McsSelectionMetadata> selectionMetadata(JsonNode metadata) {
+        Map<String, McsSelectionMetadata> result = new LinkedHashMap<>();
+        if (metadata == null || metadata.isNull()) {
+            return result;
+        }
+        JsonNode terms = metadata.at("/selection/interests/literalTerms");
+        if (!terms.isArray()) {
+            return result;
+        }
+        List<String> literalTerms = new ArrayList<>();
+        terms.elements().forEachRemaining(term -> {
+            if (term.isTextual() && !term.asText().isBlank()) {
+                literalTerms.add(term.asText());
+            }
+        });
+        result.put("interests", new McsSelectionMetadata(literalTerms));
+        return result;
     }
 
     private Map<String, LoadingPolicy> loadingPolicies(JsonNode manifest) {

@@ -16,6 +16,7 @@ public record CharacterSpecification(
         String defaultMode,
         CharacterMetadata metadata,
         Map<String, LoadingPolicy> loadingPolicies,
+        Map<String, com.minikun.pcs.McsSelectionMetadata> selectionMetadata,
         Identity identity,
         Personality personality,
         Values values,
@@ -37,6 +38,8 @@ public record CharacterSpecification(
         metadata = Objects.requireNonNull(metadata, "metadata");
         loadingPolicies = Collections.unmodifiableMap(
             new LinkedHashMap<>(Objects.requireNonNull(loadingPolicies, "loadingPolicies")));
+        selectionMetadata = Collections.unmodifiableMap(
+            new LinkedHashMap<>(Objects.requireNonNull(selectionMetadata, "selectionMetadata")));
         identity = Objects.requireNonNull(identity, "identity");
         personality = Objects.requireNonNull(personality, "personality");
         values = Objects.requireNonNull(values, "values");
@@ -46,6 +49,31 @@ public record CharacterSpecification(
         interests = Objects.requireNonNull(interests, "interests");
         boundaries = Objects.requireNonNull(boundaries, "boundaries");
         catchphrases = Objects.requireNonNull(catchphrases, "catchphrases");
+    }
+
+    public CharacterSpecification(
+            String name,
+            String version,
+            String description,
+            String primaryLanguage,
+            String fallbackLanguage,
+            String role,
+            String relationship,
+            String defaultMode,
+            CharacterMetadata metadata,
+            Map<String, LoadingPolicy> loadingPolicies,
+            Identity identity,
+            Personality personality,
+            Values values,
+            Communication communication,
+            Behavior behavior,
+            Reasoning reasoning,
+            Interests interests,
+            Boundaries boundaries,
+            Catchphrases catchphrases) {
+        this(name, version, description, primaryLanguage, fallbackLanguage, role, relationship, defaultMode,
+                metadata, loadingPolicies, Map.of(), identity, personality, values, communication, behavior,
+                reasoning, interests, boundaries, catchphrases);
     }
 
     private static String requireText(String value, String field) {

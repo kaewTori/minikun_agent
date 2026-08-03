@@ -21,7 +21,8 @@ class McsSelectorTest {
     void alwaysModulesAreSelectedAndDynamicModulesAreEvaluatedIndependently() {
         CharacterSpecification character = characterWithPolicies(Map.of(
                 "identity", LoadingPolicy.ALWAYS,
-                "personality", LoadingPolicy.DYNAMIC));
+                "personality", LoadingPolicy.DYNAMIC,
+                "interests", LoadingPolicy.ALWAYS));
         McsSelector selector = new McsSelector(Map.of(
                 "personality", (module, context) -> McsSelectionDecision.selected("test", "Strategy matched")));
 
@@ -65,7 +66,7 @@ class McsSelectorTest {
 
     @Test
     void modulesAndDecisionsFollowConfiguredManifestOrder() {
-        CharacterSpecification character = characterWithPolicies(Map.of());
+                CharacterSpecification character = characterWithPolicies(Map.of("interests", LoadingPolicy.ALWAYS));
 
         McsSelectionResult result = new McsSelector().select(character,
                 new McsSelectionContext("hello", "history"));
@@ -89,7 +90,9 @@ class McsSelectorTest {
                 new McsSelectionContext("unrelated", "history"));
 
         assertEquals(9, result.decisions().size());
-        assertTrue(result.decisions().stream().allMatch(McsSelectionDecision::selected));
+        assertEquals(8, result.selectedModules().size());
+        assertFalse(result.selectedModules().stream()
+                .anyMatch(module -> module.name().equals("interests")));
         assertEquals(LoadingPolicy.DYNAMIC, result.decisions().get(0).loadingPolicy());
         assertEquals("identity", result.decisions().get(0).module().name());
         assertEquals(LoadingPolicy.DYNAMIC, result.decisions().get(1).loadingPolicy());
@@ -102,7 +105,7 @@ class McsSelectorTest {
         policies.putAll(overrides);
         return new CharacterSpecification(source.name(), source.version(), source.description(),
                 source.primaryLanguage(), source.fallbackLanguage(), source.role(), source.relationship(),
-                source.defaultMode(), source.metadata(), policies, source.identity(), source.personality(),
+                source.defaultMode(), source.metadata(), policies, source.selectionMetadata(), source.identity(), source.personality(),
                 source.values(), source.communication(), source.behavior(), source.reasoning(), source.interests(),
                 source.boundaries(), source.catchphrases());
     }

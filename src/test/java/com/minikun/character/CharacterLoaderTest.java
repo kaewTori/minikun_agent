@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -33,6 +34,16 @@ class CharacterLoaderTest {
         assertThrows(UnsupportedOperationException.class,
                 () -> specification.values().statements().add("new value"));
     }
+
+        @Test
+        void loadsImmutableSelectionMetadataSeparatelyFromInterestStatements() {
+        CharacterSpecification specification = new CharacterLoader(MCS_ROOT).load();
+
+        assertEquals(List.of("Programming", "Artificial Intelligence", "Linux"),
+            specification.selectionMetadata().get("interests").literalTerms().subList(0, 3));
+        assertThrows(UnsupportedOperationException.class,
+            () -> specification.selectionMetadata().get("interests").literalTerms().add("later"));
+        }
 
     @Test
     void exposesLoadingPoliciesFromManifest() {
