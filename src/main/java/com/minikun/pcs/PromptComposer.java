@@ -37,7 +37,7 @@ public final class PromptComposer {
             request.conversation() == null ? "" : request.conversation().content());
         McsSelectionResult selection = selector.select(request.character(), context);
         return new PromptCompositionResult(
-            PromptRenderer.render(request, selection.selectedModules()), selection.diagnostics());
+            PromptRenderer.render(request, selection.selectedModules()), selection.decisions());
     }
 
     private boolean isBlank(String value) {

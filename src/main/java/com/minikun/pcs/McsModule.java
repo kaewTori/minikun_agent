@@ -5,6 +5,7 @@ import com.minikun.character.model.LoadingPolicy;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.ArrayList;
 
 public record McsModule(String name, LoadingPolicy loadingPolicy, List<String> statements) {
     public McsModule {
@@ -15,19 +16,26 @@ public record McsModule(String name, LoadingPolicy loadingPolicy, List<String> s
 
     public static List<McsModule> orderedFrom(CharacterSpecification specification) {
         Objects.requireNonNull(specification, "specification");
-        return List.of(
-                module(specification, "identity", specification.identity().statements()),
-                module(specification, "personality", specification.personality().statements()),
-                module(specification, "values", specification.values().statements()),
-                module(specification, "communication", specification.communication().statements()),
-                module(specification, "behavior", specification.behavior().statements()),
-                module(specification, "reasoning", specification.reasoning().statements()),
-                module(specification, "interests", specification.interests().statements()),
-                module(specification, "boundaries", specification.boundaries().statements()),
-                module(specification, "catchphrases", specification.catchphrases().statements()));
+        List<McsModule> modules = new ArrayList<>();
+        for (String name : specification.loadingPolicies().keySet()) {
+            modules.add(module(specification, name));
+        }
+        return List.copyOf(modules);
     }
 
-    private static McsModule module(CharacterSpecification specification, String name, List<String> statements) {
+    private static McsModule module(CharacterSpecification specification, String name) {
+        List<String> statements = switch (name) {
+            case "identity" -> specification.identity().statements();
+            case "personality" -> specification.personality().statements();
+            case "values" -> specification.values().statements();
+            case "communication" -> specification.communication().statements();
+            case "behavior" -> specification.behavior().statements();
+            case "reasoning" -> specification.reasoning().statements();
+            case "interests" -> specification.interests().statements();
+            case "boundaries" -> specification.boundaries().statements();
+            case "catchphrases" -> specification.catchphrases().statements();
+            default -> throw new IllegalArgumentException("Unknown MCS module: " + name);
+        };
         return new McsModule(name,
                 specification.loadingPolicies().getOrDefault(name, LoadingPolicy.ALWAYS), statements);
     }

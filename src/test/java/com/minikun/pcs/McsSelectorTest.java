@@ -63,6 +63,39 @@ class McsSelectorTest {
                 new McsSelectionContext("Discuss identity", "Earlier context")));
     }
 
+    @Test
+    void modulesAndDecisionsFollowConfiguredManifestOrder() {
+        CharacterSpecification character = characterWithPolicies(Map.of());
+
+        McsSelectionResult result = new McsSelector().select(character,
+                new McsSelectionContext("hello", "history"));
+        List<String> configuredOrder = List.copyOf(character.loadingPolicies().keySet());
+
+        assertEquals(configuredOrder, result.decisions().stream()
+                .map(decision -> decision.module().name()).toList());
+        assertEquals(configuredOrder, result.selectedModules().stream()
+                .map(McsModule::name).toList());
+        assertEquals(configuredOrder, result.diagnostics().stream()
+                .map(McsSelectionDiagnostic::module).toList());
+    }
+
+    @Test
+    void defaultDynamicStrategySelectsEveryModuleAndRecordsPolicy() {
+        CharacterSpecification character = characterWithPolicies(Map.of(
+                "identity", LoadingPolicy.DYNAMIC,
+                "personality", LoadingPolicy.DYNAMIC));
+
+        McsSelectionResult result = new McsSelector().select(character,
+                new McsSelectionContext("unrelated", "history"));
+
+        assertEquals(9, result.decisions().size());
+        assertTrue(result.decisions().stream().allMatch(McsSelectionDecision::selected));
+        assertEquals(LoadingPolicy.DYNAMIC, result.decisions().get(0).loadingPolicy());
+        assertEquals("identity", result.decisions().get(0).module().name());
+        assertEquals(LoadingPolicy.DYNAMIC, result.decisions().get(1).loadingPolicy());
+        assertEquals("reference", result.decisions().get(1).selector());
+    }
+
     private CharacterSpecification characterWithPolicies(Map<String, LoadingPolicy> overrides) {
         CharacterSpecification source = new CharacterLoader(MCS_ROOT).load();
         Map<String, LoadingPolicy> policies = new LinkedHashMap<>(source.loadingPolicies());

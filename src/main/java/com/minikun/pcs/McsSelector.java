@@ -31,17 +31,12 @@ public final class McsSelector {
         Objects.requireNonNull(specification, "specification");
         Objects.requireNonNull(context, "context");
 
-        List<McsModule> selected = new java.util.ArrayList<>();
-        List<McsSelectionDiagnostic> diagnostics = new java.util.ArrayList<>();
+        List<McsSelectionDecision> decisions = new java.util.ArrayList<>();
         for (McsModule module : McsModule.orderedFrom(specification)) {
-            McsSelectionDecision decision = decisionFor(module, context);
-            diagnostics.add(new McsSelectionDiagnostic(module.name(), module.loadingPolicy(),
-                    decision.selected(), decision.selector(), decision.reason()));
-            if (decision.selected()) {
-                selected.add(module);
-            }
+            McsSelectionDecision decision = decisionFor(module, context).forModule(module);
+            decisions.add(decision);
         }
-        return new McsSelectionResult(selected, diagnostics);
+        return new McsSelectionResult(decisions);
     }
 
     private McsSelectionDecision decisionFor(McsModule module, McsSelectionContext context) {
@@ -57,7 +52,7 @@ public final class McsSelector {
     }
 
     private static Map<String, McsSelectionStrategy> defaultStrategies() {
-        McsSelectionStrategy strategy = new ModuleNameMentionStrategy();
+        McsSelectionStrategy strategy = new SelectAllStrategy();
         Map<String, McsSelectionStrategy> defaults = new LinkedHashMap<>();
         for (String module : List.of("identity", "personality", "values", "communication", "behavior",
                 "reasoning", "interests", "boundaries", "catchphrases")) {

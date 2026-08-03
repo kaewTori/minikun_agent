@@ -77,6 +77,28 @@ class PromptComposerTest {
                 () -> request.capabilities().add(new CapabilityInstruction("later", "instruction")));
     }
 
+    @Test
+    void composeDelegatesToTheDiagnosticsCompositionResult() {
+        PromptComposer composer = new PromptComposer();
+
+        assertEquals(composer.compose(request()), composer.composeWithDiagnostics(request()).prompt());
+    }
+
+    @Test
+    void compatibilitySelectionPreservesPromptWhenPoliciesBecomeDynamic() {
+        CharacterSpecification dynamicCharacter = characterWithPolicies(
+                character().loadingPolicies().keySet().stream()
+                        .collect(java.util.stream.Collectors.toMap(
+                                name -> name, name -> LoadingPolicy.DYNAMIC,
+                                (left, right) -> left, LinkedHashMap::new)));
+        PromptRequest dynamicRequest = new PromptRequest(dynamicCharacter, new RuntimeContext("2026-08-01"),
+                new ConversationContext("Previous turn"), new KnowledgeContext("Retrieved fact"),
+                List.of(new CapabilityInstruction("search", "Use retrieved sources")),
+                new UserMessage("Answer this"));
+
+        assertEquals(new PromptComposer().compose(request()), new PromptComposer().compose(dynamicRequest));
+    }
+
         @Test
         void compositionRendersOnlySelectedModulesAndExposesMatchingDiagnostics() {
         CharacterSpecification character = characterWithPolicies(Map.of("identity", LoadingPolicy.DYNAMIC));
@@ -92,6 +114,8 @@ class PromptComposerTest {
         assertEquals(9, result.selectionDiagnostics().size());
         assertFalse(result.selectionDiagnostics().get(0).selected());
         assertTrue(result.selectionDiagnostics().stream().skip(1).allMatch(McsSelectionDiagnostic::selected));
+        assertEquals(result.selectionDiagnostics().stream().map(McsSelectionDiagnostic::module).toList(),
+            result.selectionDecisions().stream().map(decision -> decision.module().name()).toList());
         }
 
     private PromptRequest request() {

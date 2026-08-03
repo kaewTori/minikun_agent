@@ -1,6 +1,8 @@
 package com.minikun.character.model;
 
 import java.util.Objects;
+import java.util.LinkedHashMap;
+import java.util.Collections;
 import java.util.Map;
 
 public record CharacterSpecification(
@@ -33,7 +35,8 @@ public record CharacterSpecification(
         relationship = Objects.requireNonNullElse(relationship, "");
         defaultMode = Objects.requireNonNullElse(defaultMode, "");
         metadata = Objects.requireNonNull(metadata, "metadata");
-        loadingPolicies = Map.copyOf(Objects.requireNonNull(loadingPolicies, "loadingPolicies"));
+        loadingPolicies = Collections.unmodifiableMap(
+            new LinkedHashMap<>(Objects.requireNonNull(loadingPolicies, "loadingPolicies")));
         identity = Objects.requireNonNull(identity, "identity");
         personality = Objects.requireNonNull(personality, "personality");
         values = Objects.requireNonNull(values, "values");
