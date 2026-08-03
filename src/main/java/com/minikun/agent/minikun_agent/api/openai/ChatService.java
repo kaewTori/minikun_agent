@@ -49,6 +49,12 @@ import com.minikun.pcs.model.RuntimeContext;
 import com.minikun.search.SearchDecisionService;
 import com.minikun.search.SearchService;
 import com.minikun.search.model.SearchRequest;
+import com.minikun.runtime.CacheFormatter;
+import com.minikun.runtime.CacheService;
+import com.minikun.runtime.ModelsFormatter;
+import com.minikun.runtime.ModelsService;
+import com.minikun.runtime.VersionFormatter;
+import com.minikun.runtime.VersionService;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -76,6 +82,12 @@ public class ChatService {
     private final DiagnosticsPromptBuilder diagnosticsPromptBuilder;
     private final CommandCatalog commandCatalog;
     private final CommandFormatter commandFormatter;
+    private final VersionService versionService;
+    private final VersionFormatter versionFormatter;
+    private final ModelsService modelsService;
+    private final ModelsFormatter modelsFormatter;
+    private final CacheService cacheService;
+    private final CacheFormatter cacheFormatter;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Value("${spring.ai.ollama.chat.options.model:hf.co/llmfan46/gemma-4-E4B-it-ultra-uncensored-heretic-GGUF:Q5_K_M}")
@@ -188,7 +200,10 @@ public class ChatService {
             if (command.get().type() == com.minikun.commands.CommandType.DIAGNOSTICS) {
                 return diagnosticsResponse(request, userMessage);
             }
-            String content = commandFormatter.format(commandCatalog);
+            String content = commandOutput(userMessage);
+            if (content == null) {
+                return null;
+            }
             String model = modelName(request.model(), configuredChatModel);
             return new ChatCompletionResponse(
                 "chatcmpl-" + UUID.randomUUID(), "chat.completion", Instant.now().getEpochSecond(),
@@ -223,6 +238,9 @@ public class ChatService {
                 .map(command -> switch (command.type()) {
                     case DIAGNOSTICS -> diagnosticsFormatter.format(diagnosticsService.summarize());
                     case HELP -> commandFormatter.format(commandCatalog);
+                    case VERSION -> versionFormatter.format(versionService.snapshot());
+                    case MODELS -> modelsFormatter.format(modelsService.snapshot());
+                    case CACHE -> cacheFormatter.format(cacheService.snapshot());
                 })
                 .orElse(null);
             }

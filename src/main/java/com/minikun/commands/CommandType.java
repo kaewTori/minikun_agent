@@ -2,5 +2,8 @@ package com.minikun.commands;
 
 public enum CommandType {
     DIAGNOSTICS,
-    HELP
+    HELP,
+    VERSION,
+    MODELS,
+    CACHE
 }

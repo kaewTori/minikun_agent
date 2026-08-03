@@ -43,6 +43,12 @@ import com.minikun.pcs.MinikunPersonaProvider;
 import com.minikun.pcs.PromptComposer;
 import com.minikun.search.SearchDecisionService;
 import com.minikun.search.SearchService;
+import com.minikun.runtime.CacheFormatter;
+import com.minikun.runtime.CacheService;
+import com.minikun.runtime.ModelsFormatter;
+import com.minikun.runtime.ModelsService;
+import com.minikun.runtime.VersionFormatter;
+import com.minikun.runtime.VersionService;
 
 class ChatServiceDiagnosticsTest {
     private static final Path MCS_ROOT = Path.of("../../config/minikun-agent/mcs");
@@ -150,7 +156,13 @@ class ChatServiceDiagnosticsTest {
                 new DiagnosticsFormatter(),
                 builder,
                 new CommandCatalog(),
-                new CommandFormatter());
+                new CommandFormatter(),
+                mock(VersionService.class),
+                mock(VersionFormatter.class),
+                mock(ModelsService.class),
+                mock(ModelsFormatter.class),
+                mock(CacheService.class),
+                mock(CacheFormatter.class));
     }
 
     private void assertTrueInOrder(String text, String... sections) {

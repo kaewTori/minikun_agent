@@ -13,7 +13,10 @@ public final class CommandCatalog {
 
     private final List<CommandDescriptor> commands = List.of(
             new CommandDescriptor(CommandType.DIAGNOSTICS, "/diagnostics", "Show current Search runtime metrics", true),
-            new CommandDescriptor(CommandType.HELP, "/help", "Show supported slash commands", true));
+            new CommandDescriptor(CommandType.HELP, "/help", "Show supported slash commands", true),
+            new CommandDescriptor(CommandType.VERSION, "/version", "Show application and runtime versions", true),
+            new CommandDescriptor(CommandType.MODELS, "/models", "Show configured model information", true),
+            new CommandDescriptor(CommandType.CACHE, "/cache", "Show configured cache information", true));
     private final Map<String, CommandDescriptor> commandsByName = commands.stream()
             .collect(Collectors.toUnmodifiableMap(CommandDescriptor::name, Function.identity()));
 
