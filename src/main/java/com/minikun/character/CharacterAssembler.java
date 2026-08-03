@@ -12,11 +12,13 @@ import com.minikun.character.model.Interests;
 import com.minikun.character.model.Personality;
 import com.minikun.character.model.Reasoning;
 import com.minikun.character.model.Values;
+import com.minikun.character.model.LoadingPolicy;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.Map;
+import java.util.LinkedHashMap;
 
 final class CharacterAssembler {
     private final MarkdownSectionParser sections;
@@ -42,6 +44,7 @@ final class CharacterAssembler {
                 ManifestParser.text(manifest, "/persona/relationship"),
                 ManifestParser.text(manifest, "/runtime/default_mode"),
                 characterMetadata,
+                loadingPolicies(manifest),
                 new Identity(read(files, "identity.md")),
                 new Personality(read(files, "personality.md")),
                 new Values(read(files, "values.md")),
@@ -51,6 +54,21 @@ final class CharacterAssembler {
                 new Interests(read(files, "interests.md")),
                 new Boundaries(read(files, "boundaries.md")),
                 new Catchphrases(read(files, "catchphrases.md")));
+    }
+
+    private Map<String, LoadingPolicy> loadingPolicies(JsonNode manifest) {
+        Map<String, LoadingPolicy> policies = new LinkedHashMap<>();
+        if (!manifest.has("modules")) {
+            for (String section : CharacterValidator.SECTION_NAMES) {
+                policies.put(section, LoadingPolicy.ALWAYS);
+            }
+            return policies;
+        }
+        for (String section : CharacterValidator.SECTION_NAMES) {
+            JsonNode value = manifest.at("/modules/" + section + "/loadingPolicy");
+            policies.put(section, LoadingPolicy.valueOf(value.asText()));
+        }
+        return policies;
     }
 
     private List<String> read(Map<String, String> files, String name) {
