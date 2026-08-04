@@ -2,6 +2,9 @@ package com.minikun.pcs;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 
@@ -36,5 +39,27 @@ class SelectionContextFactoryTest {
         assertEquals(first, second);
         assertEquals(first.hashCode(), second.hashCode());
         assertEquals(first.toString(), second.toString());
+    }
+
+    @Test
+    void delegatesExactlyOnceAndTransportsTheExactProducedSignal() {
+        InterestSelectionSignals produced = new InterestSelectionSignals(true);
+        AtomicInteger invocationCount = new AtomicInteger();
+        AtomicReference<String> message = new AtomicReference<>();
+        AtomicReference<String> history = new AtomicReference<>();
+        InterestSelectionSignalProducer producer = (currentMessage, conversationHistory) -> {
+            invocationCount.incrementAndGet();
+            message.set(currentMessage);
+            history.set(conversationHistory);
+            return produced;
+        };
+
+        McsSelectionContext context = new SelectionContextFactory(producer)
+                .create(null, null);
+
+        assertEquals(1, invocationCount.get());
+        assertEquals("", message.get());
+        assertEquals("", history.get());
+        assertSame(produced, context.interestSelectionSignals());
     }
 }

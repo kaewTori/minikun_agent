@@ -12,8 +12,12 @@ public final class PromptComposer {
     }
 
     public PromptComposer(McsSelector selector) {
+        this(selector, new SelectionContextFactory());
+    }
+
+    public PromptComposer(McsSelector selector, SelectionContextFactory contextFactory) {
         this.selector = java.util.Objects.requireNonNull(selector, "selector");
-        this.contextFactory = new SelectionContextFactory();
+        this.contextFactory = java.util.Objects.requireNonNull(contextFactory, "contextFactory");
     }
 
     public Prompt compose(PromptRequest request) {

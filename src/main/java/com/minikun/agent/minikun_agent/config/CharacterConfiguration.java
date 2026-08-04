@@ -10,6 +10,9 @@ import com.minikun.pcs.ModuleSelectionStrategyRegistry;
 import com.minikun.pcs.SelectAllStrategy;
 import com.minikun.pcs.SectionKind;
 import com.minikun.pcs.PromptComposer;
+import com.minikun.pcs.InterestSelectionSignalProducer;
+import com.minikun.pcs.NoOpInterestSelectionSignalProducer;
+import com.minikun.pcs.SelectionContextFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -20,8 +23,19 @@ import java.util.Map;
 @Configuration
 public class CharacterConfiguration {
     @Bean
-    PromptComposer promptComposer(McsSelector selector) {
-        return new PromptComposer(selector);
+    PromptComposer promptComposer(McsSelector selector, SelectionContextFactory contextFactory) {
+        return new PromptComposer(selector, contextFactory);
+    }
+
+    @Bean
+    InterestSelectionSignalProducer interestSelectionSignalProducer() {
+        return new NoOpInterestSelectionSignalProducer();
+    }
+
+    @Bean
+    SelectionContextFactory selectionContextFactory(
+            InterestSelectionSignalProducer signalProducer) {
+        return new SelectionContextFactory(signalProducer);
     }
 
     @Bean

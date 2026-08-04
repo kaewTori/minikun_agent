@@ -7,6 +7,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -54,6 +55,33 @@ class SelectionContextArchitectureTest {
             assertTrue(directConstructionSites.equals(List.of("SelectionContextFactory.java")),
                     "unexpected production construction sites: " + directConstructionSites);
         }
+    }
+
+    @Test
+    void onlyProducerImplementationsConstructInterestSelectionSignals() throws Exception {
+        try (var paths = Files.walk(MAIN_SOURCE)) {
+            List<String> directConstructionSites = paths
+                    .filter(path -> path.toString().endsWith(".java"))
+                    .filter(path -> !path.getFileName().toString().equals("InterestSelectionSignals.java"))
+                    .filter(path -> {
+                        try {
+                            return Files.readString(path).contains("new InterestSelectionSignals");
+                        } catch (Exception exception) {
+                            throw new IllegalStateException(exception);
+                        }
+                    })
+                    .map(path -> path.getFileName().toString())
+                    .toList();
+
+            assertTrue(directConstructionSites.isEmpty(),
+                    "unexpected signal construction sites: " + directConstructionSites);
+        }
+    }
+
+    @Test
+    void factoryDependsOnTheProducerContractOnly() throws Exception {
+        assertEquals(InterestSelectionSignalProducer.class,
+                SelectionContextFactory.class.getDeclaredField("signalProducer").getType());
     }
 
     @Test
