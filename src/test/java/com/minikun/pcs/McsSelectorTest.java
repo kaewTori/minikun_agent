@@ -90,9 +90,11 @@ class McsSelectorTest {
                 new McsSelectionContext("unrelated", "history"));
 
         assertEquals(9, result.decisions().size());
-        assertEquals(8, result.selectedModules().size());
+        assertEquals(7, result.selectedModules().size());
         assertFalse(result.selectedModules().stream()
                 .anyMatch(module -> module.name().equals("interests")));
+        assertFalse(result.selectedModules().stream()
+                .anyMatch(module -> module.name().equals("catchphrases")));
         assertEquals(LoadingPolicy.DYNAMIC, result.decisions().get(0).loadingPolicy());
         assertEquals("identity", result.decisions().get(0).module().name());
         assertEquals(LoadingPolicy.DYNAMIC, result.decisions().get(1).loadingPolicy());

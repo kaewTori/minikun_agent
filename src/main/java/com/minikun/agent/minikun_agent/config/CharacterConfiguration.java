@@ -4,6 +4,8 @@ import com.minikun.character.CharacterLoader;
 import com.minikun.character.model.CharacterSpecification;
 import com.minikun.pcs.McsSelector;
 import com.minikun.pcs.InterestsSelectionStrategy;
+import com.minikun.pcs.CatchphrasesSelectionStrategy;
+import com.minikun.pcs.LiteralTermMatcher;
 import com.minikun.pcs.ModuleSelectionStrategyRegistry;
 import com.minikun.pcs.SelectAllStrategy;
 import com.minikun.pcs.SectionKind;
@@ -34,15 +36,28 @@ public class CharacterConfiguration {
 
     @Bean
     InterestsSelectionStrategy interestsSelectionStrategy() {
-        return new InterestsSelectionStrategy();
+        return new InterestsSelectionStrategy(literalTermMatcher());
+    }
+
+    @Bean
+    CatchphrasesSelectionStrategy catchphrasesSelectionStrategy() {
+        return new CatchphrasesSelectionStrategy(literalTermMatcher());
+    }
+
+    @Bean
+    LiteralTermMatcher literalTermMatcher() {
+        return new LiteralTermMatcher();
     }
 
     @Bean
     ModuleSelectionStrategyRegistry moduleSelectionStrategyRegistry(
             SelectAllStrategy fallback,
-            InterestsSelectionStrategy interests) {
+            InterestsSelectionStrategy interests,
+            CatchphrasesSelectionStrategy catchphrases) {
         return ModuleSelectionStrategyRegistry.of(
-                Map.of(SectionKind.INTERESTS, interests), fallback);
+                Map.of(
+                        SectionKind.INTERESTS, interests,
+                        SectionKind.CATCHPHRASES, catchphrases), fallback);
     }
 
     @Bean

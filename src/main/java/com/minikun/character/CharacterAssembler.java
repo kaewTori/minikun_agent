@@ -64,17 +64,24 @@ final class CharacterAssembler {
         if (metadata == null || metadata.isNull()) {
             return result;
         }
-        JsonNode terms = metadata.at("/selection/interests/literalTerms");
-        if (!terms.isArray()) {
+        JsonNode selection = metadata.get("selection");
+        if (selection == null || !selection.isObject()) {
             return result;
         }
-        List<String> literalTerms = new ArrayList<>();
-        terms.elements().forEachRemaining(term -> {
-            if (term.isTextual() && !term.asText().isBlank()) {
-                literalTerms.add(term.asText());
+        selection.fields().forEachRemaining(entry -> {
+            JsonNode moduleMetadata = entry.getValue();
+            JsonNode terms = moduleMetadata == null ? null : moduleMetadata.get("literalTerms");
+            if (terms == null || !terms.isArray()) {
+                return;
             }
+            List<String> literalTerms = new ArrayList<>();
+            terms.elements().forEachRemaining(term -> {
+                if (term.isTextual() && !term.asText().isBlank()) {
+                    literalTerms.add(term.asText());
+                }
+            });
+            result.put(entry.getKey(), new McsSelectionMetadata(literalTerms));
         });
-        result.put("interests", new McsSelectionMetadata(literalTerms));
         return result;
     }
 

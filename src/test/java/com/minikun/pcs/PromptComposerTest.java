@@ -151,7 +151,21 @@ class PromptComposerTest {
         assertTrue(result.selectionDiagnostics().stream()
                 .anyMatch(diagnostic -> diagnostic.module().equals("interests") && !diagnostic.selected()));
         assertTrue(system.contains("\nidentity:"));
+        assertTrue(result.selectionDiagnostics().stream()
+            .anyMatch(diagnostic -> diagnostic.module().equals("catchphrases") && !diagnostic.selected()));
+        assertTrue(!system.contains("\ncatchphrases:"));
+    }
+
+    @Test
+    void catchphrasesIsRenderedWhenConfiguredMetadataMatches() {
+        PromptCompositionResult result = new PromptComposer().composeWithDiagnostics(new PromptRequest(
+                character(), new RuntimeContext("now"), null, null, List.of(),
+                new UserMessage("Let's plan this")));
+        String system = result.prompt().messages().get(0).content();
+
         assertTrue(system.contains("\ncatchphrases:"));
+        assertTrue(result.selectionDiagnostics().stream()
+                .anyMatch(diagnostic -> diagnostic.module().equals("catchphrases") && diagnostic.selected()));
     }
 
     private PromptRequest request() {

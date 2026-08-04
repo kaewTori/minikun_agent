@@ -41,8 +41,12 @@ class CharacterLoaderTest {
 
         assertEquals(List.of("Programming", "Artificial Intelligence", "Linux"),
             specification.selectionMetadata().get("interests").literalTerms().subList(0, 3));
+        assertEquals(List.of("hello", "plan", "explain"),
+            specification.selectionMetadata().get("catchphrases").literalTerms());
         assertThrows(UnsupportedOperationException.class,
             () -> specification.selectionMetadata().get("interests").literalTerms().add("later"));
+        assertThrows(UnsupportedOperationException.class,
+            () -> specification.selectionMetadata().get("catchphrases").literalTerms().add("later"));
         }
 
     @Test
@@ -50,7 +54,7 @@ class CharacterLoaderTest {
         CharacterSpecification specification = new CharacterLoader(MCS_ROOT).load();
 
         assertEquals(LoadingPolicy.ALWAYS, specification.loadingPolicies().get("identity"));
-        assertEquals(LoadingPolicy.ALWAYS, specification.loadingPolicies().get("catchphrases"));
+        assertEquals(LoadingPolicy.DYNAMIC, specification.loadingPolicies().get("catchphrases"));
         assertEquals(9, specification.loadingPolicies().size());
     }
 

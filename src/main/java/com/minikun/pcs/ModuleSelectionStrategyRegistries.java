@@ -9,8 +9,11 @@ public final class ModuleSelectionStrategyRegistries {
     }
 
     public static ModuleSelectionStrategyRegistry defaultRegistry() {
+        LiteralTermMatcher matcher = new LiteralTermMatcher();
         return ModuleSelectionStrategyRegistry.of(
-                Map.of(SectionKind.INTERESTS, new InterestsSelectionStrategy()),
+            Map.of(
+                SectionKind.INTERESTS, new InterestsSelectionStrategy(matcher),
+                SectionKind.CATCHPHRASES, new CatchphrasesSelectionStrategy(matcher)),
                 new SelectAllStrategy());
     }
 
