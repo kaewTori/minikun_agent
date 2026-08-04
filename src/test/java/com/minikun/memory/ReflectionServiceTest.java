@@ -2,20 +2,19 @@ package com.minikun.memory;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.List;
 
 import org.junit.jupiter.api.Test;
 
-import com.minikun.memory.model.AcceptedMemory;
 import com.minikun.memory.model.CompletedConversation;
-import com.minikun.memory.model.MemoryCategory;
-import com.minikun.memory.model.MemoryCandidate;
-import com.minikun.memory.model.MemorySource;
 import com.minikun.memory.reflection.ReflectionClient;
 import com.minikun.memory.reflection.ReflectionParser;
 import com.minikun.memory.reflection.ReflectionPrompt;
@@ -24,94 +23,68 @@ import com.minikun.memory.reflection.ReflectionPromptBuilder;
 class ReflectionServiceTest {
     private static final CompletedConversation CONVERSATION = new CompletedConversation(
             "conversation-1", List.of(new CompletedConversation.Message("user", "I use macOS")));
+    private static final Clock CLOCK = Clock.fixed(
+            Instant.parse("2026-08-05T00:00:00Z"), ZoneOffset.UTC);
 
     @Test
-    void persistsAcceptedCandidatesInOrderAndPreservesContext() {
+    void buildsPromptAndInvokesClientExactlyOnce() {
         ReflectionPromptBuilder builder = mock(ReflectionPromptBuilder.class);
         ReflectionClient client = mock(ReflectionClient.class);
         ReflectionParser parser = mock(ReflectionParser.class);
-        ReflectionDecisionService decisionService = mock(ReflectionDecisionService.class);
-        MemoryRepository repository = mock(MemoryRepository.class);
         ReflectionPrompt prompt = new ReflectionPrompt(CONVERSATION, "prompt");
-        MemoryCandidate first = new MemoryCandidate("conversation-1", MemoryCategory.PROFILE,
-                "Uses macOS", 0.9, "User stated it");
-        MemoryCandidate second = new MemoryCandidate("conversation-1", MemoryCategory.SKILL,
-                "Writes Java", 0.8, "User stated it");
-        AcceptedMemory acceptedFirst = new AcceptedMemory("conversation-1", MemoryCategory.PROFILE,
-                MemorySource.LLM_EXTRACTION, "Uses macOS", 0.9, "User stated it");
-        AcceptedMemory acceptedSecond = new AcceptedMemory("conversation-1", MemoryCategory.SKILL,
-                MemorySource.LLM_EXTRACTION, "Writes Java", 0.8, "User stated it");
-        when(builder.build(any(), any())).thenReturn(prompt);
-        when(client.reflect(prompt)).thenReturn("response");
-        when(parser.parse("response", "conversation-1")).thenReturn(List.of(first, second));
-        when(decisionService.decide(List.of(first, second))).thenReturn(List.of(acceptedFirst, acceptedSecond));
+        when(builder.build(CONVERSATION, LocalDate.of(2026, 8, 5))).thenReturn(prompt);
+        when(client.reflect(prompt)).thenReturn("opaque raw output");
+        when(parser.parse("opaque raw output", CONVERSATION)).thenReturn(List.of());
 
-        new ReflectionService(builder, client, parser, decisionService, repository, Clock.systemUTC())
-                .reflect(CONVERSATION);
+        new ReflectionService(builder, client, parser, CLOCK).reflect(CONVERSATION);
 
-        var order = org.mockito.ArgumentCaptor.forClass(AcceptedMemory.class);
-        verify(repository, org.mockito.Mockito.times(2)).persist(order.capture());
-        org.junit.jupiter.api.Assertions.assertEquals(List.of(acceptedFirst, acceptedSecond), order.getAllValues());
-        org.junit.jupiter.api.Assertions.assertEquals("conversation-1", order.getAllValues().getFirst().conversationId());
+        verify(builder).build(CONVERSATION, LocalDate.of(2026, 8, 5));
+        verify(client).reflect(prompt);
+        verify(parser).parse("opaque raw output", CONVERSATION);
     }
 
     @Test
-    void skipsRejectedCandidates() {
+    void discardsRawClientOutputWithoutInterpretation() {
         ReflectionPromptBuilder builder = mock(ReflectionPromptBuilder.class);
         ReflectionClient client = mock(ReflectionClient.class);
         ReflectionParser parser = mock(ReflectionParser.class);
-        ReflectionDecisionService decisionService = mock(ReflectionDecisionService.class);
-        MemoryRepository repository = mock(MemoryRepository.class);
         ReflectionPrompt prompt = new ReflectionPrompt(CONVERSATION, "prompt");
-        MemoryCandidate candidate = new MemoryCandidate("conversation-1", MemoryCategory.PROFILE,
-                "Uses macOS", 0.9, "User stated it");
         when(builder.build(any(), any())).thenReturn(prompt);
-        when(client.reflect(prompt)).thenReturn("response");
-        when(parser.parse("response", "conversation-1")).thenReturn(List.of(candidate));
-        when(decisionService.decide(List.of(candidate))).thenReturn(List.of());
+        when(client.reflect(prompt)).thenReturn("not JSON and intentionally opaque");
+        when(parser.parse("not JSON and intentionally opaque", CONVERSATION))
+            .thenThrow(new MemoryException("invalid reflection"));
 
-        new ReflectionService(builder, client, parser, decisionService, repository, Clock.systemUTC()).reflect(CONVERSATION);
+        new ReflectionService(builder, client, parser, CLOCK).reflect(CONVERSATION);
 
-        verify(repository, never()).persist(any(AcceptedMemory.class));
+        verify(client).reflect(prompt);
+        verify(parser).parse("not JSON and intentionally opaque", CONVERSATION);
     }
 
     @Test
-    void doesNotPersistWhenParsingFails() {
+    void doesNotPropagateClientFailure() {
         ReflectionPromptBuilder builder = mock(ReflectionPromptBuilder.class);
         ReflectionClient client = mock(ReflectionClient.class);
         ReflectionParser parser = mock(ReflectionParser.class);
-        ReflectionDecisionService decisionService = mock(ReflectionDecisionService.class);
-        MemoryRepository repository = mock(MemoryRepository.class);
         ReflectionPrompt prompt = new ReflectionPrompt(CONVERSATION, "prompt");
         when(builder.build(any(), any())).thenReturn(prompt);
-        when(client.reflect(prompt)).thenReturn("invalid");
-        when(parser.parse("invalid", "conversation-1")).thenThrow(new MemoryException("invalid response"));
+        when(client.reflect(prompt)).thenThrow(new MemoryException("transport unavailable"));
 
-        new ReflectionService(builder, client, parser, decisionService, repository, Clock.systemUTC()).reflect(CONVERSATION);
+        new ReflectionService(builder, client, parser, CLOCK).reflect(CONVERSATION);
 
-        verify(repository, never()).persist(any(AcceptedMemory.class));
+        verify(client).reflect(prompt);
+        verifyNoInteractions(parser);
     }
 
     @Test
-    void doesNotPropagateRepositoryFailures() {
+    void doesNotInvokeClientWhenPromptConstructionFails() {
         ReflectionPromptBuilder builder = mock(ReflectionPromptBuilder.class);
         ReflectionClient client = mock(ReflectionClient.class);
         ReflectionParser parser = mock(ReflectionParser.class);
-        ReflectionDecisionService decisionService = mock(ReflectionDecisionService.class);
-        MemoryRepository repository = mock(MemoryRepository.class);
-        ReflectionPrompt prompt = new ReflectionPrompt(CONVERSATION, "prompt");
-        MemoryCandidate candidate = new MemoryCandidate("conversation-1", MemoryCategory.PROFILE,
-                "Uses macOS", 0.9, "User stated it");
-        AcceptedMemory accepted = new AcceptedMemory("conversation-1", MemoryCategory.PROFILE,
-                MemorySource.LLM_EXTRACTION, "Uses macOS", 0.9, "User stated it");
-        when(builder.build(any(), any())).thenReturn(prompt);
-        when(client.reflect(prompt)).thenReturn("response");
-        when(parser.parse("response", "conversation-1")).thenReturn(List.of(candidate));
-        when(decisionService.decide(List.of(candidate))).thenReturn(List.of(accepted));
-        when(repository.persist(accepted)).thenThrow(new IllegalStateException("database unavailable"));
+        when(builder.build(any(), any())).thenThrow(new IllegalStateException("prompt failure"));
 
-        new ReflectionService(builder, client, parser, decisionService, repository, Clock.systemUTC()).reflect(CONVERSATION);
+        new ReflectionService(builder, client, parser, CLOCK).reflect(CONVERSATION);
 
-        verify(repository).persist(accepted);
+        verifyNoInteractions(client);
+        verifyNoInteractions(parser);
     }
 }

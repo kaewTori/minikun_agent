@@ -28,10 +28,12 @@ public final class ReflectionPromptBuilder {
 
                     [Reflection instructions]
                     Extract only durable, user-confirmed memories from the conversation.
-                    Return one JSON object with exactly the top-level key `memories`.
-                    Each memory must contain exactly `category`, `content`, `confidence`, and `reason`.
+                    Return exactly one JSON array and no surrounding text.
+                    Each array element must contain exactly `category`, `content`, `confidence`, and `reason`.
+                    `category` must be one of `PREFERENCE`, `GOAL`, `PROFILE`, `SKILL`, or `PROJECT`.
+                    `confidence` must be a finite number from 0.0 to 1.0.
                     Do not infer facts, inspect stored memories, or include assistant claims as user facts.
-                    If there are no durable memories, return {"memories":[]}.
+                    If there are no durable memories, return [].
 
                     Current date: %s
 

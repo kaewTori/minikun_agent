@@ -11,18 +11,16 @@ import com.minikun.memory.reflection.ReflectionPrompt;
 
 final class ReflectionHttpClient implements ReflectionClient {
     private final RestClient restClient;
-    private final String model;
 
-    ReflectionHttpClient(RestClient restClient, String model) {
+    ReflectionHttpClient(RestClient restClient) {
         this.restClient = restClient;
-        this.model = model;
     }
 
     @Override
     public String reflect(ReflectionPrompt prompt) {
         Response response = restClient.post()
                 .contentType(MediaType.APPLICATION_JSON)
-                .body(new Request(model, List.of(new Message("user", prompt.content())), false,
+                .body(new Request(List.of(new Message("user", prompt.content())), false,
                         384, 0.0, new ResponseFormat("json_object")))
                 .retrieve()
                 .body(Response.class);
@@ -34,7 +32,7 @@ final class ReflectionHttpClient implements ReflectionClient {
         return response.choices().getFirst().message().content();
     }
 
-    private record Request(String model, List<Message> messages, boolean stream, int max_tokens,
+    private record Request(List<Message> messages, boolean stream, int max_tokens,
             double temperature, ResponseFormat response_format) {
     }
 

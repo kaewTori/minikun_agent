@@ -3,9 +3,11 @@ package com.minikun.memory.reflection;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.minikun.memory.MemoryException;
+import com.minikun.memory.model.CompletedConversation;
 import com.minikun.memory.model.MemoryCategory;
 import com.minikun.memory.model.MemoryCandidate;
 
@@ -17,17 +19,16 @@ public final class ReflectionParser {
         this.objectMapper = objectMapper;
     }
 
-    public List<MemoryCandidate> parse(String response, String conversationId) {
+    public List<MemoryCandidate> parse(String response, CompletedConversation conversation) {
         try {
-            JsonNode root = objectMapper.readTree(response);
-            requireObject(root, "response");
-            requireExactFields(root, List.of("memories"), "response");
-            JsonNode memories = required(root, "memories");
-            if (!memories.isArray()) {
-                throw invalid("memories must be an array");
+            JsonNode root = objectMapper.reader()
+                    .with(DeserializationFeature.FAIL_ON_READING_DUP_TREE_KEY)
+                    .readTree(response);
+            if (root == null || !root.isArray()) {
+                throw invalid("response must be an array");
             }
             List<MemoryCandidate> result = new ArrayList<>();
-            for (JsonNode memory : memories) {
+            for (JsonNode memory : root) {
                 requireObject(memory, "memory");
                 requireExactFields(memory, MEMORY_FIELDS, "memory");
                 String category = requiredText(memory, "category");
@@ -42,7 +43,7 @@ public final class ReflectionParser {
                     throw invalid("confidence must be between 0 and 1");
                 }
                 try {
-                        result.add(new MemoryCandidate(conversationId,
+                    result.add(new MemoryCandidate(conversation.conversationId(),
                             MemoryCategory.valueOf(category), content, confidenceValue, reason));
                 } catch (IllegalArgumentException exception) {
                     throw invalid("invalid memory category", exception);

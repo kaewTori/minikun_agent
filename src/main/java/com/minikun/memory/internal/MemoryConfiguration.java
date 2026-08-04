@@ -22,7 +22,6 @@ import com.minikun.memory.MemoryRecallService;
 import com.minikun.memory.MemoryRepository;
 import com.minikun.memory.MemoryService;
 import com.minikun.memory.ReflectionService;
-import com.minikun.memory.ReflectionDecisionService;
 import com.minikun.memory.reflection.ReflectionClient;
 import com.minikun.memory.reflection.ReflectionParser;
 import com.minikun.memory.reflection.ReflectionPromptBuilder;
@@ -115,7 +114,6 @@ public class MemoryConfiguration {
     }
 
     @Bean
-    @ConditionalOnProperty(name = "minikun.memory.reflection.enabled", havingValue = "true")
     ReflectionPromptBuilder reflectionPromptBuilder(
             @Qualifier("memoryObjectMapper") ObjectMapper objectMapper,
             MinikunPersonaProvider personaProvider) {
@@ -123,35 +121,33 @@ public class MemoryConfiguration {
     }
 
     @Bean
-    @ConditionalOnProperty(name = "minikun.memory.reflection.enabled", havingValue = "true")
     ReflectionParser reflectionParser(@Qualifier("memoryObjectMapper") ObjectMapper objectMapper) {
         return new ReflectionParser(objectMapper);
     }
 
     @Bean
-    @ConditionalOnProperty(name = "minikun.memory.reflection.enabled", havingValue = "true")
     ReflectionClient reflectionClient(
-            @Value("${minikun.memory.reflection.url:http://127.0.0.1:11434/api/chat}") String url,
-            @Value("${minikun.memory.reflection.model:main-model}") String model,
-            @Value("${minikun.memory.reflection.timeout:150s}") Duration timeout) {
-        var httpClient = java.net.http.HttpClient.newBuilder().connectTimeout(timeout).build();
+            @Value("${minikun.memory.reflection.endpoint:http://flip3:8080/v1/chat/completions}") String endpoint,
+            @Value("${minikun.memory.reflection.connect-timeout:PT500MS}") String connectTimeout,
+            @Value("${minikun.memory.reflection.read-timeout:PT5S}") String readTimeout) {
+        var httpClient = java.net.http.HttpClient.newBuilder()
+                .connectTimeout(parseReflectionDuration(connectTimeout)).build();
         var requestFactory = new JdkClientHttpRequestFactory(httpClient);
-        requestFactory.setReadTimeout(timeout);
-        return new ReflectionHttpClient(RestClient.builder().baseUrl(url)
-                .requestFactory(requestFactory).build(), model);
+        requestFactory.setReadTimeout(parseReflectionDuration(readTimeout));
+        return new ReflectionHttpClient(RestClient.builder().baseUrl(endpoint)
+                .requestFactory(requestFactory).build());
+    }
+
+    private Duration parseReflectionDuration(String value) {
+        if (value.endsWith("MS")) {
+            return Duration.ofMillis(Long.parseLong(value.substring(2, value.length() - 2)));
+        }
+        return Duration.parse(value);
     }
 
     @Bean
-    @ConditionalOnProperty(name = "minikun.memory.reflection.enabled", havingValue = "true")
-    ReflectionDecisionService reflectionDecisionService() {
-        return new ReflectionDecisionService();
-    }
-
-    @Bean
-    @ConditionalOnProperty(name = "minikun.memory.reflection.enabled", havingValue = "true")
     ReflectionService reflectionService(ReflectionPromptBuilder promptBuilder, ReflectionClient client,
-            ReflectionParser parser, ReflectionDecisionService decisionService,
-            MemoryRepository repository, Clock memoryClock) {
-        return new ReflectionService(promptBuilder, client, parser, decisionService, repository, memoryClock);
+            ReflectionParser parser, Clock memoryClock) {
+        return new ReflectionService(promptBuilder, client, parser, memoryClock);
     }
 }

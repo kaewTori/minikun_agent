@@ -103,6 +103,9 @@ public class ChatService {
     @Value("${minikun.diagnostics.conversational.enabled:false}")
     private boolean diagnosticsConversationalEnabled;
 
+    @Value("${minikun.memory.reflection.enabled:false}")
+    private boolean reflectionEnabled;
+
     public ChatCompletionResponse chatCompletion(ChatCompletionRequest request, ConversationId conversationId) {
         ChatMessage userMessage = userMessage(request);
         var commandResponse = commandResponse(request, userMessage);
@@ -490,6 +493,9 @@ public class ChatService {
     }
 
     private void reflectOnCompletedConversation(ConversationId conversationId) {
+        if (!reflectionEnabled) {
+            return;
+        }
         try {
             CompletedConversation conversation = completedConversation(conversationId);
             var service = reflectionService.getIfAvailable();
