@@ -5,10 +5,10 @@ import java.util.Objects;
 public record AcceptedMemory(
         String conversationId,
         MemoryCategory category,
-        MemorySource source,
         String content,
         double confidence,
-        String reason) {
+    String reason,
+    MemorySource source) {
     public AcceptedMemory {
         Objects.requireNonNull(conversationId, "conversation id must not be null");
         Objects.requireNonNull(category, "category must not be null");

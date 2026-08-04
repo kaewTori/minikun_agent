@@ -23,10 +23,10 @@ class ReflectionDecisionServiceTest {
         List<AcceptedMemory> accepted = service.decide(List.of(first, second));
 
         assertEquals(List.of(
-                new AcceptedMemory("conversation-1", MemoryCategory.PROFILE, MemorySource.LLM_EXTRACTION,
-                        "Uses macOS", 0.9, "stated"),
-                new AcceptedMemory("conversation-1", MemoryCategory.SKILL, MemorySource.LLM_EXTRACTION,
-                        "Writes Java", 0.8, "stated")), accepted);
+            new AcceptedMemory("conversation-1", MemoryCategory.PROFILE,
+                "Uses macOS", 0.9, "stated", MemorySource.LLM_EXTRACTION),
+            new AcceptedMemory("conversation-1", MemoryCategory.SKILL,
+                "Writes Java", 0.8, "stated", MemorySource.LLM_EXTRACTION)), accepted);
     }
 
     @Test
@@ -64,8 +64,8 @@ class ReflectionDecisionServiceTest {
 
         assertEquals(first, second);
         assertThrows(UnsupportedOperationException.class, () -> first.add(
-                new AcceptedMemory("conversation-1", MemoryCategory.SKILL, MemorySource.LLM_EXTRACTION,
-                        "Writes Java", 0.8, "stated")));
+            new AcceptedMemory("conversation-1", MemoryCategory.SKILL,
+                "Writes Java", 0.8, "stated", MemorySource.LLM_EXTRACTION)));
     }
 
     private MemoryCandidate candidate(MemoryCategory category, String content, double confidence) {

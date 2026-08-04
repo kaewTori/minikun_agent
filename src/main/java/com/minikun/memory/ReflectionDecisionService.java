@@ -7,23 +7,13 @@ import com.minikun.memory.model.MemoryCandidate;
 import com.minikun.memory.model.MemorySource;
 
 public final class ReflectionDecisionService {
-    private final MemorySource source;
-
-    public ReflectionDecisionService() {
-        this(MemorySource.LLM_EXTRACTION);
-    }
-
-    public ReflectionDecisionService(MemorySource source) {
-        this.source = java.util.Objects.requireNonNull(source, "source must not be null");
-    }
-
     public List<AcceptedMemory> decide(List<MemoryCandidate> candidates) {
         java.util.Objects.requireNonNull(candidates, "candidates must not be null");
         return candidates.stream()
                 .filter(this::valid)
                 .map(candidate -> new AcceptedMemory(
-                        candidate.conversationId(), candidate.category(), source,
-                        candidate.content(), candidate.confidence(), candidate.reason()))
+                        candidate.conversationId(), candidate.category(), candidate.content(),
+                    candidate.confidence(), candidate.reason(), MemorySource.LLM_EXTRACTION))
                 .toList();
     }
 

@@ -22,6 +22,7 @@ import com.minikun.memory.MemoryRecallService;
 import com.minikun.memory.MemoryRepository;
 import com.minikun.memory.MemoryService;
 import com.minikun.memory.ReflectionService;
+import com.minikun.memory.ReflectionDecisionService;
 import com.minikun.memory.reflection.ReflectionClient;
 import com.minikun.memory.reflection.ReflectionParser;
 import com.minikun.memory.reflection.ReflectionPromptBuilder;
@@ -69,8 +70,15 @@ public class MemoryConfiguration {
 
     @Bean
     @ConditionalOnBean(MemoryRepository.class)
-    MemoryService memoryService(MemoryRepository repository, Clock memoryClock) {
-        return new MemoryService(repository, memoryClock);
+    ReflectionDecisionService reflectionDecisionService() {
+        return new ReflectionDecisionService();
+    }
+
+    @Bean
+    @ConditionalOnBean(MemoryRepository.class)
+    MemoryService memoryService(MemoryRepository repository, ReflectionDecisionService decisionService,
+            Clock memoryClock) {
+        return new MemoryService(repository, decisionService, memoryClock);
     }
 
     @Bean
@@ -146,8 +154,10 @@ public class MemoryConfiguration {
     }
 
     @Bean
+    @ConditionalOnBean(MemoryRepository.class)
     ReflectionService reflectionService(ReflectionPromptBuilder promptBuilder, ReflectionClient client,
-            ReflectionParser parser, Clock memoryClock) {
-        return new ReflectionService(promptBuilder, client, parser, memoryClock);
+            ReflectionParser parser, ReflectionDecisionService decisionService,
+            MemoryRepository repository, Clock memoryClock) {
+        return new ReflectionService(promptBuilder, client, parser, decisionService, repository, memoryClock);
     }
 }

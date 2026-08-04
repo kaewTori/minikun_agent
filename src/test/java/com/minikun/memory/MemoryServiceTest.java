@@ -29,6 +29,7 @@ class MemoryServiceTest {
             return true;
         };
         MemoryService service = new MemoryService(repository,
+            new ReflectionDecisionService(),
                 Clock.fixed(Instant.parse("2026-08-01T00:00:00Z"), ZoneOffset.UTC));
         CompletedConversation conversation = new CompletedConversation("conversation-1", List.of());
         CandidateMemory candidate = new CandidateMemory(MemoryCategory.PROFILE, "Lives in Bangkok", 1.0, "explicit");

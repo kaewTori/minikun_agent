@@ -16,25 +16,29 @@ import com.minikun.memory.model.MemorySource;
 @Service
 public class MemoryService {
     private final MemoryRepository repository;
+    private final ReflectionDecisionService decisionService;
     private final Clock clock;
 
-    public MemoryService(MemoryRepository repository) {
-        this(repository, Clock.systemUTC());
+    public MemoryService(MemoryRepository repository, ReflectionDecisionService decisionService) {
+        this(repository, decisionService, Clock.systemUTC());
     }
 
-    public MemoryService(MemoryRepository repository, Clock clock) {
+    public MemoryService(MemoryRepository repository, ReflectionDecisionService decisionService, Clock clock) {
         this.repository = repository;
+        this.decisionService = decisionService;
         this.clock = clock;
     }
 
     public List<Memory> persist(CompletedConversation conversation, List<CandidateMemory> candidates) {
-        return candidates.stream().map(candidate -> {
+        List<AcceptedMemory> accepted = decisionService.decide(candidates.stream()
+            .map(candidate -> new com.minikun.memory.model.MemoryCandidate(
+                conversation.conversationId(), candidate.category(), candidate.content().trim(),
+                candidate.confidence(), candidate.reason().trim()))
+            .toList());
+        return accepted.stream().map(request -> {
             Memory memory = new Memory(
-                    MemoryId.generate(), candidate.category(), MemorySource.LLM_EXTRACTION,
-                    candidate.content().trim(), Instant.now(clock), candidate.confidence(), candidate.reason().trim());
-                AcceptedMemory request = new AcceptedMemory(
-                    conversation.conversationId(), candidate.category(), MemorySource.LLM_EXTRACTION,
-                    candidate.content().trim(), candidate.confidence(), candidate.reason().trim());
+                MemoryId.generate(), request.category(), request.source(),
+                request.content(), Instant.now(clock), request.confidence(), request.reason());
                 return repository.save(request)
                     ? memory : null;
         }).filter(java.util.Objects::nonNull).toList();
