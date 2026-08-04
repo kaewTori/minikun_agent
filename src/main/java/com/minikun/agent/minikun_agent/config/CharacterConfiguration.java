@@ -3,12 +3,17 @@ package com.minikun.agent.minikun_agent.config;
 import com.minikun.character.CharacterLoader;
 import com.minikun.character.model.CharacterSpecification;
 import com.minikun.pcs.McsSelector;
+import com.minikun.pcs.InterestsSelectionStrategy;
+import com.minikun.pcs.ModuleSelectionStrategyRegistry;
+import com.minikun.pcs.SelectAllStrategy;
+import com.minikun.pcs.SectionKind;
 import com.minikun.pcs.PromptComposer;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import java.nio.file.Path;
+import java.util.Map;
 
 @Configuration
 public class CharacterConfiguration {
@@ -18,8 +23,26 @@ public class CharacterConfiguration {
     }
 
     @Bean
-    McsSelector mcsSelector() {
-        return new McsSelector();
+    McsSelector mcsSelector(ModuleSelectionStrategyRegistry strategyRegistry) {
+        return new McsSelector(strategyRegistry);
+    }
+
+    @Bean
+    SelectAllStrategy selectAllStrategy() {
+        return new SelectAllStrategy();
+    }
+
+    @Bean
+    InterestsSelectionStrategy interestsSelectionStrategy() {
+        return new InterestsSelectionStrategy();
+    }
+
+    @Bean
+    ModuleSelectionStrategyRegistry moduleSelectionStrategyRegistry(
+            SelectAllStrategy fallback,
+            InterestsSelectionStrategy interests) {
+        return ModuleSelectionStrategyRegistry.of(
+                Map.of(SectionKind.INTERESTS, interests), fallback);
     }
 
     @Bean

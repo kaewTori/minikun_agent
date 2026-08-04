@@ -20,6 +20,10 @@ public record McsModule(String name, LoadingPolicy loadingPolicy, List<String> s
         this(name, loadingPolicy, statements, java.util.Optional.empty());
     }
 
+    public SectionKind sectionKind() {
+        return SectionKind.fromModuleName(name);
+    }
+
     public static List<McsModule> orderedFrom(CharacterSpecification specification) {
         Objects.requireNonNull(specification, "specification");
         List<McsModule> modules = new ArrayList<>();
