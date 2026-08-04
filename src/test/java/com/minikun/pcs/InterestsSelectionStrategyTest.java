@@ -44,6 +44,52 @@ class InterestsSelectionStrategyTest {
     }
 
     @Test
+    void selectsFromInterestSignalAfterLiteralMatchingFails() {
+        McsSelectionContext context = new McsSelectionContext(
+                "unrelated", "also unrelated",
+                ConversationAttributes.EMPTY, RuntimeAttributes.EMPTY,
+                MemorySelectionSignals.EMPTY, new InterestSelectionSignals(true));
+
+        McsSelectionDecision decision = strategy.select(interests, context);
+
+        assertTrue(decision.selected());
+        assertEquals(InterestsSelectionStrategy.NAME, decision.selector());
+        assertEquals("Interest selection signal matched", decision.reason());
+    }
+
+    @Test
+    void literalMatchTakesPrecedenceOverInterestSignal() {
+        McsSelectionContext context = new McsSelectionContext(
+                "Linux", "",
+                ConversationAttributes.EMPTY, RuntimeAttributes.EMPTY,
+                MemorySelectionSignals.EMPTY, new InterestSelectionSignals(true));
+
+        McsSelectionDecision decision = strategy.select(interests, context);
+
+        assertTrue(decision.selected());
+        assertEquals("Interest matched", decision.reason());
+    }
+
+    @Test
+    void emptyInterestSignalPreservesExistingSkipReason() {
+        McsSelectionDecision decision = strategy.select(interests,
+                new McsSelectionContext("unrelated", "also unrelated"));
+
+        assertFalse(decision.selected());
+        assertEquals("No matching interest", decision.reason());
+    }
+
+    @Test
+    void signalDrivenSelectionIsDeterministic() {
+        McsSelectionContext context = new McsSelectionContext(
+                "unrelated", "also unrelated",
+                ConversationAttributes.EMPTY, RuntimeAttributes.EMPTY,
+                MemorySelectionSignals.EMPTY, new InterestSelectionSignals(true));
+
+        assertEquals(strategy.select(interests, context), strategy.select(interests, context));
+    }
+
+    @Test
     void repeatedEvaluationIsDeterministicAndMetadataIsImmutable() {
         McsSelectionContext context = new McsSelectionContext("Talk about Linux", "Earlier");
 

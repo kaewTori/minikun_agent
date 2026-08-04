@@ -7,11 +7,12 @@ public record McsSelectionContext(
         String conversationHistory,
         ConversationAttributes conversationAttributes,
     RuntimeAttributes runtimeAttributes,
-    MemorySelectionSignals memorySelectionSignals) {
+    MemorySelectionSignals memorySelectionSignals,
+    InterestSelectionSignals interestSelectionSignals) {
     public McsSelectionContext(String currentUserMessage, String conversationHistory) {
         this(currentUserMessage, conversationHistory,
         ConversationAttributes.EMPTY, RuntimeAttributes.EMPTY,
-        MemorySelectionSignals.EMPTY);
+        MemorySelectionSignals.EMPTY, InterestSelectionSignals.EMPTY);
     }
 
     public McsSelectionContext(
@@ -20,7 +21,17 @@ public record McsSelectionContext(
         ConversationAttributes conversationAttributes,
         RuntimeAttributes runtimeAttributes) {
     this(currentUserMessage, conversationHistory, conversationAttributes, runtimeAttributes,
-        MemorySelectionSignals.EMPTY);
+        MemorySelectionSignals.EMPTY, InterestSelectionSignals.EMPTY);
+    }
+
+    public McsSelectionContext(
+        String currentUserMessage,
+        String conversationHistory,
+        ConversationAttributes conversationAttributes,
+        RuntimeAttributes runtimeAttributes,
+        MemorySelectionSignals memorySelectionSignals) {
+    this(currentUserMessage, conversationHistory, conversationAttributes, runtimeAttributes,
+        memorySelectionSignals, InterestSelectionSignals.EMPTY);
     }
 
     public McsSelectionContext {
@@ -31,5 +42,7 @@ public record McsSelectionContext(
         runtimeAttributes = Objects.requireNonNullElse(runtimeAttributes, RuntimeAttributes.EMPTY);
         memorySelectionSignals = Objects.requireNonNullElse(
             memorySelectionSignals, MemorySelectionSignals.EMPTY);
+        interestSelectionSignals = Objects.requireNonNullElse(
+            interestSelectionSignals, InterestSelectionSignals.EMPTY);
     }
 }

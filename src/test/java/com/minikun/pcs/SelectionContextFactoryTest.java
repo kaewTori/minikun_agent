@@ -17,6 +17,7 @@ class SelectionContextFactoryTest {
         assertSame(ConversationAttributes.EMPTY, context.conversationAttributes());
         assertSame(RuntimeAttributes.EMPTY, context.runtimeAttributes());
         assertSame(MemorySelectionSignals.EMPTY, context.memorySelectionSignals());
+        assertSame(InterestSelectionSignals.EMPTY, context.interestSelectionSignals());
     }
 
     @Test

@@ -9,6 +9,7 @@ public final class SelectionContextFactory {
                 Objects.requireNonNullElse(conversationHistory, ""),
                 ConversationAttributes.EMPTY,
                 RuntimeAttributes.EMPTY,
-                MemorySelectionSignals.EMPTY);
+                MemorySelectionSignals.EMPTY,
+                InterestSelectionSignals.EMPTY);
     }
 }
