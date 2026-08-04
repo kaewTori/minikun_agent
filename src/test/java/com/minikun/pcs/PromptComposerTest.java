@@ -16,9 +16,11 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -82,6 +84,22 @@ class PromptComposerTest {
         PromptComposer composer = new PromptComposer();
 
         assertEquals(composer.compose(request()), composer.composeWithDiagnostics(request()).prompt());
+    }
+
+    @Test
+    void composerSuppliesCanonicalEmptyMemorySelectionSignals() {
+        AtomicReference<McsSelectionContext> capturedContext = new AtomicReference<>();
+        CharacterSpecification character = characterWithPolicies(Map.of("identity", LoadingPolicy.DYNAMIC));
+        PromptComposer composer = new PromptComposer(new McsSelector(Map.of(
+                "identity", (module, context) -> {
+                    capturedContext.set(context);
+                    return McsSelectionDecision.selected("test", "selected");
+                })));
+
+        composer.compose(new PromptRequest(character, new RuntimeContext("now"), null, null,
+                List.of(), new UserMessage("hello")));
+
+        assertSame(MemorySelectionSignals.EMPTY, capturedContext.get().memorySelectionSignals());
     }
 
     @Test

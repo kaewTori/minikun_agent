@@ -17,27 +17,46 @@ class McsSelectionContextTest {
         assertEquals("history", context.conversationHistory());
         assertSame(ConversationAttributes.EMPTY, context.conversationAttributes());
         assertSame(RuntimeAttributes.EMPTY, context.runtimeAttributes());
+        assertSame(MemorySelectionSignals.EMPTY, context.memorySelectionSignals());
+        }
+
+        @Test
+        void fourArgumentCompatibilityConstructorUsesTheFullConstructorDefaults() {
+        ConversationAttributes conversation = new ConversationAttributes("conversation-1", 3, true);
+        RuntimeAttributes runtime = new RuntimeAttributes(true, true, ResponseMode.DEFAULT);
+
+        McsSelectionContext compatibility = new McsSelectionContext(
+            "message", "history", conversation, runtime);
+        McsSelectionContext full = new McsSelectionContext(
+            "message", "history", conversation, runtime, MemorySelectionSignals.EMPTY);
+
+        assertEquals(full, compatibility);
+        assertSame(MemorySelectionSignals.EMPTY, compatibility.memorySelectionSignals());
     }
 
     @Test
     void fullConstructorRetainsAllRuntimeObservations() {
         ConversationAttributes conversation = new ConversationAttributes("conversation-1", 3, true);
         RuntimeAttributes runtime = new RuntimeAttributes(true, true, ResponseMode.DEFAULT);
+        MemorySelectionSignals memory = new MemorySelectionSignals(true, 2, true);
 
-        McsSelectionContext context = new McsSelectionContext("message", "history", conversation, runtime);
+        McsSelectionContext context = new McsSelectionContext(
+            "message", "history", conversation, runtime, memory);
 
         assertEquals(conversation, context.conversationAttributes());
         assertEquals(runtime, context.runtimeAttributes());
+        assertEquals(memory, context.memorySelectionSignals());
     }
 
     @Test
     void nullValuesUseEmptyContextDefaults() {
-        McsSelectionContext context = new McsSelectionContext(null, null, null, null);
+        McsSelectionContext context = new McsSelectionContext(null, null, null, null, null);
 
         assertEquals("", context.currentUserMessage());
         assertEquals("", context.conversationHistory());
         assertEquals(ConversationAttributes.EMPTY, context.conversationAttributes());
         assertEquals(RuntimeAttributes.EMPTY, context.runtimeAttributes());
+        assertSame(MemorySelectionSignals.EMPTY, context.memorySelectionSignals());
     }
 
     @Test
