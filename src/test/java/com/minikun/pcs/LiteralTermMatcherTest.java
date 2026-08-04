@@ -49,4 +49,14 @@ class LiteralTermMatcherTest {
         assertTrue(matcher.matches(Optional.of(new McsSelectionMetadata(List.of("plan"))), context));
         assertTrue(matcher.matches(Optional.of(new McsSelectionMetadata(List.of("plan"))), context));
     }
+
+        @Test
+        void ignoresAdditionalContextAttributes() {
+                McsSelectionContext context = new McsSelectionContext(
+                                "unrelated", "also unrelated",
+                                new ConversationAttributes("conversation-1", 10, false),
+                                new RuntimeAttributes(true, true, ResponseMode.DEFAULT));
+
+                assertFalse(matcher.matches(Optional.of(new McsSelectionMetadata(List.of("plan"))), context));
+        }
 }

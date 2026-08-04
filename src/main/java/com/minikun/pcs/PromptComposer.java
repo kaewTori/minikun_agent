@@ -34,7 +34,9 @@ public final class PromptComposer {
         }
         McsSelectionContext context = new McsSelectionContext(
             userMessage.content(),
-            request.conversation() == null ? "" : request.conversation().content());
+            request.conversation() == null ? "" : request.conversation().content(),
+            ConversationAttributes.EMPTY,
+            RuntimeAttributes.EMPTY);
         McsSelectionResult selection = selector.select(request.character(), context);
         return new PromptCompositionResult(
             PromptRenderer.render(request, selection.selectedModules()), selection.decisions());
