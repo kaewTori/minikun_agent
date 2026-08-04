@@ -5,6 +5,7 @@ import com.minikun.pcs.model.Prompt;
 
 public final class PromptComposer {
     private final McsSelector selector;
+    private final SelectionContextFactory contextFactory;
 
     public PromptComposer() {
         this(new McsSelector());
@@ -12,6 +13,7 @@ public final class PromptComposer {
 
     public PromptComposer(McsSelector selector) {
         this.selector = java.util.Objects.requireNonNull(selector, "selector");
+        this.contextFactory = new SelectionContextFactory();
     }
 
     public Prompt compose(PromptRequest request) {
@@ -32,12 +34,9 @@ public final class PromptComposer {
         if (userMessage == null || isBlank(userMessage.content())) {
             throw new PromptException("user message must not be blank");
         }
-        McsSelectionContext context = new McsSelectionContext(
+        McsSelectionContext context = contextFactory.create(
             userMessage.content(),
-            request.conversation() == null ? "" : request.conversation().content(),
-            ConversationAttributes.EMPTY,
-            RuntimeAttributes.EMPTY,
-            MemorySelectionSignals.EMPTY);
+            request.conversation() == null ? "" : request.conversation().content());
         McsSelectionResult selection = selector.select(request.character(), context);
         return new PromptCompositionResult(
             PromptRenderer.render(request, selection.selectedModules()), selection.decisions());
