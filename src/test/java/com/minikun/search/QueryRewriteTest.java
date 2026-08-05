@@ -34,11 +34,52 @@ class QueryRewriteTest {
     }
 
     @Test
+    void structuralNormalizationRemovesSupportedZeroWidthCharacters() {
+        String input = "\uFEFFfoo\u200B\u200C\u200D\u2060bar\uFEFF";
+
+        SearchQuery result = new DefaultSearchQueryRewriteService().rewrite(input);
+
+        assertEquals(input, result.originalQuery());
+        assertEquals("foobar", result.rewrittenQuery());
+    }
+
+    @Test
+    void structuralNormalizationMapsOnlyFullWidthAsciiVariants() {
+        String input = "Ａ１（test）！ ①";
+
+        SearchQuery result = new DefaultSearchQueryRewriteService().rewrite(input);
+
+        assertEquals("A1(test)! ①", result.rewrittenQuery());
+    }
+
+    @Test
+    void structuralNormalizationComposesWithWhitespaceNormalization() {
+        String input = "\uFEFF \tＡ\u200B  \u2060（test）\u3000";
+
+        SearchQuery result = new DefaultSearchQueryRewriteService().rewrite(input);
+
+        assertEquals(input, result.originalQuery());
+        assertEquals("A (test)", result.rewrittenQuery());
+    }
+
+    @Test
     void normalizationDoesNotApplyUnicodeNormalizationForms() {
         String decomposed = "e\u0301";
         SearchQuery result = new DefaultSearchQueryRewriteService().rewrite("  " + decomposed + "  ");
 
         assertEquals(decomposed, result.rewrittenQuery());
+    }
+
+    @Test
+    void structuralNormalizationIsIdempotent() {
+        DefaultSearchQueryRewriteService service = new DefaultSearchQueryRewriteService();
+        String input = "\uFEFF  Ａ\u200B  query\u2060  " ;
+
+        String first = service.rewrite(input).rewrittenQuery();
+        String second = service.rewrite(first).rewrittenQuery();
+
+        assertEquals("A query", first);
+        assertEquals(first, second);
     }
 
     @Test

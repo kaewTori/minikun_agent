@@ -49,10 +49,11 @@ class MinikunAgentApplicationTests {
 
 	@Test
 	void contextWiresDeterministicQueryRewriteService() {
-		SearchQuery result = searchQueryRewriteService.rewrite("\tLatest\u2003News  ");
+		String input = "\uFEFF\tＡ\u2003News  ";
+		SearchQuery result = searchQueryRewriteService.rewrite(input);
 
-		org.junit.jupiter.api.Assertions.assertEquals("\tLatest\u2003News  ", result.originalQuery());
-		org.junit.jupiter.api.Assertions.assertEquals("Latest News", result.rewrittenQuery());
+		org.junit.jupiter.api.Assertions.assertEquals(input, result.originalQuery());
+		org.junit.jupiter.api.Assertions.assertEquals("A News", result.rewrittenQuery());
 	}
 
 	@Test

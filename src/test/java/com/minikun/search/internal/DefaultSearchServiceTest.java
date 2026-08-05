@@ -117,6 +117,29 @@ class DefaultSearchServiceTest {
     }
 
     @Test
+    void structuralRewriteReachesManagerCacheAndMetrics() {
+        SimpleMeterRegistry registry = new SimpleMeterRegistry();
+        KnowledgeContext live = new KnowledgeContext("live");
+        RecordingCache cache = new RecordingCache(Optional.empty());
+        SearchRequest request = new SearchRequest(
+                UUID.randomUUID(), "\uFEFF\tＡ\u200B  News  ", 10,
+                Instant.parse("2026-08-02T00:01:00Z"));
+        SearchManager manager = searchRequest -> {
+            assertEquals("A News", searchRequest.query());
+            return live;
+        };
+
+        KnowledgeContext result = new DefaultSearchService(
+                manager, cache, true, true, new DefaultSearchQueryRewriteService(), registry)
+                .search(request);
+
+        assertSame(live, result);
+        assertEquals(SearchCacheKey.from("A News", request.resultLimit()), cache.storedKey);
+        assertEquals(1.0, registry.get("minikun.search.rewrite.requests").counter().count());
+        assertEquals(1.0, registry.get("minikun.search.rewrite.changed").counter().count());
+    }
+
+    @Test
     void disabledSearchDoesNotInvokeRewrite() {
         AtomicInteger rewriteCalls = new AtomicInteger();
         SearchQueryRewriteService rewriteService = query -> {
