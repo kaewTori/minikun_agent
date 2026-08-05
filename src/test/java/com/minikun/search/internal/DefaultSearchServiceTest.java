@@ -155,6 +155,23 @@ class DefaultSearchServiceTest {
     }
 
     @Test
+    void disabledSearchDoesNotInvokeExpansion() {
+        AtomicInteger expansionCalls = new AtomicInteger();
+        SearchQueryExpansionService expansionService = query -> {
+            expansionCalls.incrementAndGet();
+            return new ExpandedSearchQuery(query.originalQuery(), query.rewrittenQuery(),
+                    List.of(query.rewrittenQuery()));
+        };
+
+        new DefaultSearchService(
+                request -> KnowledgeContext.empty(), new RecordingCache(Optional.empty()),
+                false, true, new DefaultSearchQueryRewriteService(), expansionService,
+                new SimpleMeterRegistry()).search(REQUEST);
+
+        assertEquals(0, expansionCalls.get());
+    }
+
+    @Test
     void rewriteMetricsCountRequestsAndOnlyChangedQueries() {
         SimpleMeterRegistry registry = new SimpleMeterRegistry();
         SearchQueryRewriteService rewriteService = query -> new SearchQuery(query, "canonical query");

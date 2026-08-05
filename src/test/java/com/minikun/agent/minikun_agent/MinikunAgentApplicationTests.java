@@ -7,7 +7,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.minikun.search.SearchDecisionService;
+import com.minikun.search.SearchQueryExpansionService;
 import com.minikun.search.SearchQueryRewriteService;
+import com.minikun.search.internal.RuleBasedSearchQueryExpansionService;
+import com.minikun.search.model.ExpandedSearchQuery;
 import com.minikun.search.model.SearchQuery;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.util.Set;
@@ -43,6 +46,9 @@ class MinikunAgentApplicationTests {
 	@Autowired
 	private SearchQueryRewriteService searchQueryRewriteService;
 
+	@Autowired
+	private SearchQueryExpansionService searchQueryExpansionService;
+
 	@Test
 	void contextLoads() {
 	}
@@ -54,6 +60,18 @@ class MinikunAgentApplicationTests {
 
 		org.junit.jupiter.api.Assertions.assertEquals(input, result.originalQuery());
 		org.junit.jupiter.api.Assertions.assertEquals("A News", result.rewrittenQuery());
+	}
+
+	@Test
+	void contextWiresIdentityExpansionPipeline() {
+		org.junit.jupiter.api.Assertions.assertInstanceOf(
+				RuleBasedSearchQueryExpansionService.class, searchQueryExpansionService);
+
+		ExpandedSearchQuery result =
+				searchQueryExpansionService.expand(new SearchQuery("original", "canonical"));
+
+		org.junit.jupiter.api.Assertions.assertEquals(
+				java.util.List.of("canonical"), result.expandedQueries());
 	}
 
 	@Test

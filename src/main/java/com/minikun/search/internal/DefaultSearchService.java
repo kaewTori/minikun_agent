@@ -53,7 +53,7 @@ public final class DefaultSearchService implements SearchService {
             SearchManager manager, SearchCache cache, boolean searchEnabled, boolean cacheEnabled,
             SearchQueryRewriteService queryRewriteService, MeterRegistry meterRegistry) {
         this(manager, cache, searchEnabled, cacheEnabled, queryRewriteService,
-                new DefaultSearchQueryExpansionService(), meterRegistry);
+                new RuleBasedSearchQueryExpansionService(List.of(new IdentityExpansionRule())), meterRegistry);
     }
 
     public DefaultSearchService(

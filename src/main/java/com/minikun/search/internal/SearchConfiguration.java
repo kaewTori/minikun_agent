@@ -12,6 +12,7 @@ import com.minikun.search.SearchService;
 import java.net.http.HttpClient;
 import java.time.Clock;
 import java.time.Duration;
+import java.util.List;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -83,7 +84,7 @@ public class SearchConfiguration {
 
     @Bean
     SearchQueryExpansionService searchQueryExpansionService() {
-        return new DefaultSearchQueryExpansionService();
+        return new RuleBasedSearchQueryExpansionService(List.of(new IdentityExpansionRule()));
     }
 
     @Bean
