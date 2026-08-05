@@ -7,6 +7,9 @@ import org.springframework.jdbc.core.JdbcTemplate;
 
 import lombok.extern.slf4j.Slf4j;
 
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
+
 import com.minikun.memory.MemoryRepository;
 import com.minikun.memory.model.AcceptedMemory;
 import com.minikun.memory.model.Memory;
@@ -16,15 +19,38 @@ import com.minikun.memory.model.MemorySource;
 
 @Slf4j
 final class JdbcMemoryRepository implements MemoryRepository {
+    private static final String PERSIST_SUCCESS = "minikun.memory.reflection.persist.success";
+    private static final String PERSIST_CONFLICT = "minikun.memory.reflection.persist.conflict";
+    private static final String PERSIST_FAILURE = "minikun.memory.reflection.persist.failure";
     private final JdbcTemplate jdbcTemplate;
+    private final MeterRegistry meterRegistry;
 
     JdbcMemoryRepository(JdbcTemplate jdbcTemplate) {
+        this(jdbcTemplate, null);
+    }
+
+    JdbcMemoryRepository(JdbcTemplate jdbcTemplate, MeterRegistry meterRegistry) {
         this.jdbcTemplate = jdbcTemplate;
+        this.meterRegistry = meterRegistry;
     }
 
     @Override
     public boolean save(AcceptedMemory memory) {
-        return insert(memory, fingerprint(memory), memory.conversationId());
+        try {
+            boolean inserted = insert(memory, fingerprint(memory), memory.conversationId());
+            increment(inserted ? PERSIST_SUCCESS : PERSIST_CONFLICT);
+            return inserted;
+        } catch (RuntimeException exception) {
+            increment(PERSIST_FAILURE);
+            throw exception;
+        }
+    }
+
+    private void increment(String name) {
+        try {
+            Counter.builder(name).register(meterRegistry).increment();
+        } catch (RuntimeException ignored) {
+        }
     }
 
     @Override

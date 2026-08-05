@@ -27,6 +27,7 @@ import com.minikun.memory.reflection.ReflectionClient;
 import com.minikun.memory.reflection.ReflectionParser;
 import com.minikun.memory.reflection.ReflectionPromptBuilder;
 import com.minikun.pcs.MinikunPersonaProvider;
+import io.micrometer.core.instrument.MeterRegistry;
 
 @Configuration(proxyBeanMethods = false)
 public class MemoryConfiguration {
@@ -64,14 +65,14 @@ public class MemoryConfiguration {
 
     @Bean
     @ConditionalOnProperty(name = "minikun.memory.persistence.enabled", havingValue = "true", matchIfMissing = true)
-    MemoryRepository memoryRepository(JdbcTemplate jdbcTemplate) {
-        return new JdbcMemoryRepository(jdbcTemplate);
+    MemoryRepository memoryRepository(JdbcTemplate jdbcTemplate, MeterRegistry meterRegistry) {
+        return new JdbcMemoryRepository(jdbcTemplate, meterRegistry);
     }
 
     @Bean
     @ConditionalOnBean(MemoryRepository.class)
-    ReflectionDecisionService reflectionDecisionService() {
-        return new ReflectionDecisionService();
+    ReflectionDecisionService reflectionDecisionService(MeterRegistry meterRegistry) {
+        return new ReflectionDecisionService(meterRegistry);
     }
 
     @Bean
@@ -129,8 +130,9 @@ public class MemoryConfiguration {
     }
 
     @Bean
-    ReflectionParser reflectionParser(@Qualifier("memoryObjectMapper") ObjectMapper objectMapper) {
-        return new ReflectionParser(objectMapper);
+    ReflectionParser reflectionParser(@Qualifier("memoryObjectMapper") ObjectMapper objectMapper,
+            MeterRegistry meterRegistry) {
+        return new ReflectionParser(objectMapper, meterRegistry);
     }
 
     @Bean
@@ -157,7 +159,8 @@ public class MemoryConfiguration {
     @ConditionalOnBean(MemoryRepository.class)
     ReflectionService reflectionService(ReflectionPromptBuilder promptBuilder, ReflectionClient client,
             ReflectionParser parser, ReflectionDecisionService decisionService,
-            MemoryRepository repository, Clock memoryClock) {
-        return new ReflectionService(promptBuilder, client, parser, decisionService, repository, memoryClock);
+            MemoryRepository repository, Clock memoryClock, MeterRegistry meterRegistry) {
+        return new ReflectionService(promptBuilder, client, parser, decisionService, repository, memoryClock,
+                meterRegistry);
     }
 }

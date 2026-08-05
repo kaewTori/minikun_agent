@@ -6,6 +6,8 @@ import java.util.List;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import com.minikun.memory.MemoryException;
 import com.minikun.memory.model.CompletedConversation;
 import com.minikun.memory.model.MemoryCategory;
@@ -13,10 +15,17 @@ import com.minikun.memory.model.MemoryCandidate;
 
 public final class ReflectionParser {
     private static final List<String> MEMORY_FIELDS = List.of("category", "content", "confidence", "reason");
+    private static final String PARSED = "minikun.memory.reflection.candidates.parsed";
     private final ObjectMapper objectMapper;
+    private final MeterRegistry meterRegistry;
 
     public ReflectionParser(ObjectMapper objectMapper) {
+        this(objectMapper, null);
+    }
+
+    public ReflectionParser(ObjectMapper objectMapper, MeterRegistry meterRegistry) {
         this.objectMapper = objectMapper;
+        this.meterRegistry = meterRegistry;
     }
 
     public List<MemoryCandidate> parse(String response, CompletedConversation conversation) {
@@ -49,11 +58,20 @@ public final class ReflectionParser {
                     throw invalid("invalid memory category", exception);
                 }
             }
-            return List.copyOf(result);
+            List<MemoryCandidate> parsed = List.copyOf(result);
+            incrementParsed(parsed.size());
+            return parsed;
         } catch (MemoryException exception) {
             throw exception;
         } catch (Exception exception) {
             throw new MemoryException("reflection response is not valid JSON", exception);
+        }
+    }
+
+    private void incrementParsed(int count) {
+        try {
+            Counter.builder(PARSED).register(meterRegistry).increment(count);
+        } catch (RuntimeException ignored) {
         }
     }
 

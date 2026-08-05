@@ -7,6 +7,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.doThrow;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -15,6 +16,8 @@ import java.time.ZoneOffset;
 import java.util.List;
 
 import org.junit.jupiter.api.Test;
+
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 
 import com.minikun.memory.model.CompletedConversation;
 import com.minikun.memory.model.AcceptedMemory;
@@ -156,5 +159,41 @@ class ReflectionServiceTest {
 
         verify(repository).save(first);
         verify(repository).save(second);
+        }
+
+        @Test
+        void repositoryFailureIsStickyAndTimerStopsOnce() {
+        ReflectionPromptBuilder builder = mock(ReflectionPromptBuilder.class);
+        ReflectionClient client = mock(ReflectionClient.class);
+        ReflectionParser parser = mock(ReflectionParser.class);
+        ReflectionDecisionService decisionService = mock(ReflectionDecisionService.class);
+        MemoryRepository repository = mock(MemoryRepository.class);
+        SimpleMeterRegistry registry = new SimpleMeterRegistry();
+        ReflectionPrompt prompt = new ReflectionPrompt(CONVERSATION, "prompt");
+        var first = new AcceptedMemory("conversation-1", MemoryCategory.PROFILE,
+            "Uses macOS", 0.9, "stated", MemorySource.LLM_EXTRACTION);
+        var second = new AcceptedMemory("conversation-1", MemoryCategory.SKILL,
+            "Writes Java", 0.8, "stated", MemorySource.LLM_EXTRACTION);
+        when(builder.build(any(), any())).thenReturn(prompt);
+        when(client.reflect(prompt)).thenReturn("raw");
+        when(parser.parse("raw", CONVERSATION)).thenReturn(List.of());
+        when(decisionService.decide(List.of())).thenReturn(List.of(first, second));
+        doThrow(new MemoryException("repository unavailable")).when(repository).save(first);
+        when(repository.save(second)).thenReturn(true);
+
+        new ReflectionService(builder, client, parser, decisionService, repository, CLOCK, registry)
+            .reflect(CONVERSATION);
+
+        verify(repository).save(first);
+        verify(repository).save(second);
+        assertEquals(1.0, registry.get("minikun.memory.reflection.requests").counter().count());
+        assertEquals(1.0, registry.get("minikun.memory.reflection.failures")
+            .tag("failure_type", "repository").counter().count());
+        assertEquals(1.0, registry.get("minikun.memory.reflection.outcomes")
+            .tag("result", "persistence_failure").counter().count());
+        assertEquals(0, registry.find("minikun.memory.reflection.outcomes")
+            .tag("result", "success").counters().size());
+        assertEquals(1L, registry.get("minikun.memory.reflection.duration")
+            .tag("result", "persistence_failure").timer().count());
         }
 }
