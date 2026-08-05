@@ -149,11 +149,13 @@ class DefaultSearchServiceTest {
     void identityRewriteDoesNotIncrementChangedMetric() {
         SimpleMeterRegistry registry = new SimpleMeterRegistry();
         SearchManager manager = request -> new KnowledgeContext("live");
+        SearchRequest normalizedRequest = new SearchRequest(
+            UUID.randomUUID(), "Latest News", 10, Instant.parse("2026-08-02T00:01:00Z"));
 
         new DefaultSearchService(
                 manager, new RecordingCache(Optional.empty()), true, false,
                 new com.minikun.search.internal.DefaultSearchQueryRewriteService(), registry)
-                .search(REQUEST);
+            .search(normalizedRequest);
 
         assertEquals(1.0, registry.get("minikun.search.rewrite.requests").counter().count());
         assertNull(registry.find("minikun.search.rewrite.changed").counter());
@@ -188,7 +190,7 @@ class DefaultSearchServiceTest {
                 new DefaultSearchQueryRewriteService(), expansionService, registry).search(REQUEST);
 
         assertEquals(1, expansionCalls.get());
-        assertEquals(List.of(REQUEST.query(), "alternate"), receivedQueries);
+        assertEquals(List.of("Latest News", "alternate"), receivedQueries);
         assertEquals(1.0, registry.get("minikun.search.expand.requests").counter().count());
         assertEquals(1.0, registry.get("minikun.search.expand.changed").counter().count());
     }

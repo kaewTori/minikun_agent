@@ -7,6 +7,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.minikun.search.SearchDecisionService;
+import com.minikun.search.SearchQueryRewriteService;
+import com.minikun.search.model.SearchQuery;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
@@ -38,8 +40,19 @@ class MinikunAgentApplicationTests {
 	@Autowired
 	private SearchDecisionService searchDecisionService;
 
+	@Autowired
+	private SearchQueryRewriteService searchQueryRewriteService;
+
 	@Test
 	void contextLoads() {
+	}
+
+	@Test
+	void contextWiresDeterministicQueryRewriteService() {
+		SearchQuery result = searchQueryRewriteService.rewrite("\tLatest\u2003News  ");
+
+		org.junit.jupiter.api.Assertions.assertEquals("\tLatest\u2003News  ", result.originalQuery());
+		org.junit.jupiter.api.Assertions.assertEquals("Latest News", result.rewrittenQuery());
 	}
 
 	@Test
