@@ -1,6 +1,7 @@
 package com.minikun.search.internal;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -8,11 +9,14 @@ import com.minikun.pcs.model.KnowledgeContext;
 import com.minikun.search.SearchCache;
 import com.minikun.search.SearchCacheKey;
 import com.minikun.search.SearchManager;
+import com.minikun.search.SearchQueryRewriteService;
 import com.minikun.search.model.SearchRequest;
+import com.minikun.search.model.SearchQuery;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
 
 class DefaultSearchServiceTest {
@@ -85,6 +89,74 @@ class DefaultSearchServiceTest {
     }
 
     @Test
+    void rewriteRunsOnceAndManagerAndCacheUseRewrittenQuery() {
+        KnowledgeContext live = new KnowledgeContext("live");
+        RecordingCache cache = new RecordingCache(Optional.empty());
+        AtomicInteger rewriteCalls = new AtomicInteger();
+        SearchQueryRewriteService rewriteService = query -> {
+            rewriteCalls.incrementAndGet();
+            return new SearchQuery(query, "canonical query");
+        };
+        AtomicInteger managerCalls = new AtomicInteger();
+        SearchManager manager = request -> {
+            managerCalls.incrementAndGet();
+            assertEquals("canonical query", request.query());
+            return live;
+        };
+
+        KnowledgeContext result = new DefaultSearchService(
+                manager, cache, true, true, rewriteService, new SimpleMeterRegistry()).search(REQUEST);
+
+        assertSame(live, result);
+        assertEquals(1, rewriteCalls.get());
+        assertEquals(1, managerCalls.get());
+        assertEquals(SearchCacheKey.from("canonical query", REQUEST.resultLimit()), cache.storedKey);
+    }
+
+    @Test
+    void disabledSearchDoesNotInvokeRewrite() {
+        AtomicInteger rewriteCalls = new AtomicInteger();
+        SearchQueryRewriteService rewriteService = query -> {
+            rewriteCalls.incrementAndGet();
+            return new SearchQuery(query, query);
+        };
+
+        new DefaultSearchService(
+                request -> KnowledgeContext.empty(), new RecordingCache(Optional.empty()),
+                false, true, rewriteService, new SimpleMeterRegistry()).search(REQUEST);
+
+        assertEquals(0, rewriteCalls.get());
+    }
+
+    @Test
+    void rewriteMetricsCountRequestsAndOnlyChangedQueries() {
+        SimpleMeterRegistry registry = new SimpleMeterRegistry();
+        SearchQueryRewriteService rewriteService = query -> new SearchQuery(query, "canonical query");
+        SearchManager manager = request -> new KnowledgeContext("live");
+
+        new DefaultSearchService(
+                manager, new RecordingCache(Optional.empty()), true, false,
+                rewriteService, registry).search(REQUEST);
+
+        assertEquals(1.0, registry.get("minikun.search.rewrite.requests").counter().count());
+        assertEquals(1.0, registry.get("minikun.search.rewrite.changed").counter().count());
+    }
+
+    @Test
+    void identityRewriteDoesNotIncrementChangedMetric() {
+        SimpleMeterRegistry registry = new SimpleMeterRegistry();
+        SearchManager manager = request -> new KnowledgeContext("live");
+
+        new DefaultSearchService(
+                manager, new RecordingCache(Optional.empty()), true, false,
+                new com.minikun.search.internal.DefaultSearchQueryRewriteService(), registry)
+                .search(REQUEST);
+
+        assertEquals(1.0, registry.get("minikun.search.rewrite.requests").counter().count());
+        assertNull(registry.find("minikun.search.rewrite.changed").counter());
+    }
+
+    @Test
     void knowledgeContextSerializationIsDeterministic() throws Exception {
         ObjectMapper mapper = new ObjectMapper();
 
@@ -98,6 +170,7 @@ class DefaultSearchServiceTest {
         private int getCalls;
         private int putCalls;
         private KnowledgeContext stored;
+        private SearchCacheKey storedKey;
 
         private RecordingCache(Optional<KnowledgeContext> value) {
             this.value = value;
@@ -112,6 +185,7 @@ class DefaultSearchServiceTest {
         @Override
         public void put(SearchCacheKey key, KnowledgeContext context) {
             putCalls++;
+            storedKey = key;
             stored = context;
         }
     }

@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.minikun.search.SearchDecisionClient;
 import com.minikun.search.SearchManager;
 import com.minikun.search.SearchProvider;
+import com.minikun.search.SearchQueryRewriteService;
 import com.minikun.search.SearchDecisionService;
 import com.minikun.search.SearchCache;
 import com.minikun.search.SearchService;
@@ -64,10 +65,17 @@ public class SearchConfiguration {
     SearchService searchService(
             SearchManager manager,
             SearchCache cache,
+            SearchQueryRewriteService queryRewriteService,
             @Value("${minikun.search.enabled:true}") boolean searchEnabled,
             @Value("${minikun.search.cache.enabled:true}") boolean cacheEnabled,
             MeterRegistry meterRegistry) {
-        return new DefaultSearchService(manager, cache, searchEnabled, cacheEnabled, meterRegistry);
+        return new DefaultSearchService(
+                manager, cache, searchEnabled, cacheEnabled, queryRewriteService, meterRegistry);
+    }
+
+    @Bean
+    SearchQueryRewriteService searchQueryRewriteService() {
+        return new DefaultSearchQueryRewriteService();
     }
 
     @Bean
