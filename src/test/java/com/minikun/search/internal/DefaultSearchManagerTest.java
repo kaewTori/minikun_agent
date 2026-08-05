@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import com.minikun.pcs.model.KnowledgeContext;
 import com.minikun.search.SearchProvider;
 import com.minikun.search.SearchProviderUnavailableException;
+import com.minikun.search.model.ExpandedSearchQuery;
 import com.minikun.search.model.SearchProviderResponse;
 import com.minikun.search.model.SearchRequest;
 import com.minikun.search.model.SearchResult;
@@ -85,6 +86,28 @@ class DefaultSearchManagerTest {
                 () -> manager.search(request));
     }
 
+            @Test
+            void executesExpandedQueriesSequentiallyAndAppendsProviderResults() {
+            List<String> executedQueries = new java.util.ArrayList<>();
+            SearchProvider provider = request -> {
+                executedQueries.add(request.query());
+                return new SearchProviderResponse(List.of(result(request.query())));
+            };
+            DefaultSearchManager manager = manager(provider, 0);
+            SearchRequest request = request();
+            ExpandedSearchQuery expanded = new ExpandedSearchQuery(
+                "original", "query", List.of("query", "alternate", "third"));
+
+            KnowledgeContext response = manager.search(request, expanded);
+
+            assertEquals(List.of("query", "alternate", "third"), executedQueries);
+            assertEquals(
+                "Title query (https://example.com/query): Content query\n"
+                    + "Title alternate (https://example.com/alternate): Content alternate\n"
+                    + "Title third (https://example.com/third): Content third",
+                response.content());
+            }
+
     private static DefaultSearchManager manager(SearchProvider provider, int maxRetries) {
         return new DefaultSearchManager(
                 provider,
@@ -103,8 +126,15 @@ class DefaultSearchManagerTest {
 
     private static SearchResult result() {
         SearchSource source = new SearchSource(
-                "searxng", "https://example.com/result", CLOCK.instant());
+            "searxng", "https://example.com/result", CLOCK.instant());
         return new SearchResult(
-                "Title", "https://example.com/result", "Content", source, 1);
+            "Title", "https://example.com/result", "Content", source, 1);
+        }
+
+        private static SearchResult result(String query) {
+        SearchSource source = new SearchSource(
+            "searxng", "https://example.com/" + query, CLOCK.instant());
+        return new SearchResult(
+            "Title " + query, "https://example.com/" + query, "Content " + query, source, 1);
     }
 }

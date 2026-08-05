@@ -10,10 +10,14 @@ import com.minikun.search.model.SearchMetadata;
 import com.minikun.search.model.SearchProviderResponse;
 import com.minikun.search.model.SearchRequest;
 import com.minikun.search.model.SearchResponse;
+import com.minikun.search.model.SearchResult;
 import com.minikun.search.model.SearchStatus;
+import com.minikun.search.model.ExpandedSearchQuery;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -69,20 +73,35 @@ public final class DefaultSearchManager implements SearchManager {
     @Override
     public KnowledgeContext search(SearchRequest request) {
         Objects.requireNonNull(request, "request must not be null");
+        return search(request, new ExpandedSearchQuery(
+                request.query(), request.query(), List.of(request.query())));
+    }
+
+    @Override
+    public KnowledgeContext search(SearchRequest request, ExpandedSearchQuery expandedQuery) {
+        Objects.requireNonNull(request, "request must not be null");
+        Objects.requireNonNull(expandedQuery, "expanded query must not be null");
         Timer.Sample sample = startTimer();
         Instant started = clock.instant();
-        SearchProviderResponse providerResponse = null;
+        List<SearchResult> providerResults = new ArrayList<>();
         RuntimeException failure = null;
         try {
-            Execution execution = execute(request);
-            providerResponse = execution.response();
+            int retryCount = 0;
+            for (String query : expandedQuery.expandedQueries()) {
+                SearchRequest expandedRequest = new SearchRequest(
+                        request.requestId(), query, request.resultLimit(), request.deadline());
+                Execution execution = execute(expandedRequest);
+                providerResults.addAll(execution.response().results());
+                retryCount += execution.retryCount();
+            }
             Duration duration = Duration.between(started, clock.instant());
-            SearchStatus status = execution.response().results().isEmpty()
+            SearchProviderResponse providerResponse = new SearchProviderResponse(providerResults);
+            SearchStatus status = providerResponse.results().isEmpty()
                     ? SearchStatus.NO_RESULTS
                     : SearchStatus.SUCCESS;
-            SearchMetadata metadata = new SearchMetadata(duration, false, false, execution.retryCount());
+            SearchMetadata metadata = new SearchMetadata(duration, false, false, retryCount);
             SearchResponse response = new SearchResponse(
-                request.requestId(), status, execution.response().results(), metadata);
+                request.requestId(), status, providerResponse.results(), metadata);
             KnowledgeContext result = formatter.format(budgeter.budget(deduplicator.deduplicate(response)));
             recordQuality(result);
             return result;
@@ -92,7 +111,7 @@ public final class DefaultSearchManager implements SearchManager {
             throw exception;
         } finally {
             recordTimer(sample);
-            logExecution(request, providerResponse, failure, Duration.between(started, clock.instant()));
+            logExecution(request, failure, providerResults.size(), Duration.between(started, clock.instant()));
         }
     }
 
@@ -147,14 +166,14 @@ public final class DefaultSearchManager implements SearchManager {
 
     private void logExecution(
             SearchRequest request,
-            SearchProviderResponse response,
             RuntimeException failure,
+            int resultCount,
             Duration duration) {
         try {
             LOGGER.debug(
                 "Search manager execution provider={} request_id={} duration_ms={} result_count={} timeout={} fail_open={}",
                     providerName(), request.requestId(), duration.toMillis(),
-                    response == null ? 0 : response.results().size(),
+                    resultCount,
                 failure instanceof SearchTimeoutException, failure != null);
         } catch (RuntimeException ignored) {
             // Logging must not affect search execution.

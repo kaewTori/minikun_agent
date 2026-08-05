@@ -9,11 +9,14 @@ import com.minikun.pcs.model.KnowledgeContext;
 import com.minikun.search.SearchCache;
 import com.minikun.search.SearchCacheKey;
 import com.minikun.search.SearchManager;
+import com.minikun.search.SearchQueryExpansionService;
 import com.minikun.search.SearchQueryRewriteService;
+import com.minikun.search.model.ExpandedSearchQuery;
 import com.minikun.search.model.SearchRequest;
 import com.minikun.search.model.SearchQuery;
 import java.time.Instant;
 import java.util.Optional;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -154,6 +157,40 @@ class DefaultSearchServiceTest {
 
         assertEquals(1.0, registry.get("minikun.search.rewrite.requests").counter().count());
         assertNull(registry.find("minikun.search.rewrite.changed").counter());
+    }
+
+    @Test
+    void expansionRunsOnceManagerReceivesExpandedQueriesAndMetricsDescribeChange() {
+        SimpleMeterRegistry registry = new SimpleMeterRegistry();
+        AtomicInteger expansionCalls = new AtomicInteger();
+        List<String> receivedQueries = new java.util.ArrayList<>();
+        SearchQueryExpansionService expansionService = query -> {
+            expansionCalls.incrementAndGet();
+            return new ExpandedSearchQuery(
+                    query.originalQuery(), query.rewrittenQuery(),
+                    List.of(query.rewrittenQuery(), "alternate"));
+        };
+        SearchManager manager = new SearchManager() {
+            @Override
+            public KnowledgeContext search(SearchRequest request) {
+                return new KnowledgeContext("legacy");
+            }
+
+            @Override
+            public KnowledgeContext search(SearchRequest request, ExpandedSearchQuery expandedQuery) {
+                receivedQueries.addAll(expandedQuery.expandedQueries());
+                return new KnowledgeContext("live");
+            }
+        };
+
+        new DefaultSearchService(
+                manager, new RecordingCache(Optional.empty()), true, false,
+                new DefaultSearchQueryRewriteService(), expansionService, registry).search(REQUEST);
+
+        assertEquals(1, expansionCalls.get());
+        assertEquals(List.of(REQUEST.query(), "alternate"), receivedQueries);
+        assertEquals(1.0, registry.get("minikun.search.expand.requests").counter().count());
+        assertEquals(1.0, registry.get("minikun.search.expand.changed").counter().count());
     }
 
     @Test
