@@ -1,4 +1,4 @@
-package com.minikun.search.internal;
+package com.minikun.search.dictionary;
 
 import com.minikun.search.AliasDictionary;
 import java.util.ArrayList;

@@ -4,7 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-import com.minikun.search.internal.ImmutableAliasDictionary;
+import com.minikun.search.dictionary.ImmutableAliasDictionary;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 

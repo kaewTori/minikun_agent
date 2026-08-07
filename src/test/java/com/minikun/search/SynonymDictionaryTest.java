@@ -5,7 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-import com.minikun.search.internal.ImmutableSynonymDictionary;
+import com.minikun.search.dictionary.ImmutableSynonymDictionary;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
