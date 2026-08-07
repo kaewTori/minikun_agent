@@ -15,8 +15,22 @@ public record PromptRequest(
         ConversationContext conversation,
         KnowledgeContext knowledge,
         List<CapabilityInstruction> capabilities,
-        UserMessage userMessage) {
+        UserMessage userMessage,
+        SearchSelectionSignals searchSelectionSignals) {
+    public PromptRequest(
+            CharacterSpecification character,
+            RuntimeContext runtime,
+            ConversationContext conversation,
+            KnowledgeContext knowledge,
+            List<CapabilityInstruction> capabilities,
+            UserMessage userMessage) {
+        this(character, runtime, conversation, knowledge, capabilities, userMessage,
+                SearchSelectionSignals.EMPTY);
+    }
+
     public PromptRequest {
         capabilities = capabilities == null ? List.of() : List.copyOf(capabilities);
+        searchSelectionSignals = searchSelectionSignals == null
+                ? SearchSelectionSignals.EMPTY : searchSelectionSignals;
     }
 }

@@ -148,6 +148,7 @@ class ChatServiceDiagnosticsTest {
                 new PromptComposer(),
                 mock(SearchService.class),
                 mock(SearchDecisionService.class),
+                new com.minikun.search.SearchSelectionSignalMapper(),
                 diagnosticsService,
                 new DiagnosticsFormatter(),
                 builder,

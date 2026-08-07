@@ -41,12 +41,15 @@ import com.minikun.character.model.CharacterSpecification;
 import com.minikun.pcs.PromptComposer;
 import com.minikun.pcs.PromptException;
 import com.minikun.pcs.PromptRequest;
+import com.minikun.pcs.SearchSelectionSignals;
 import com.minikun.pcs.model.ConversationContext;
 import com.minikun.pcs.model.KnowledgeContext;
 import com.minikun.pcs.model.PromptMessage;
 import com.minikun.pcs.model.RuntimeContext;
 import com.minikun.search.SearchDecisionService;
 import com.minikun.search.SearchService;
+import com.minikun.search.SearchSelectionSignalMapper;
+import com.minikun.search.model.SearchDecision;
 import com.minikun.search.model.SearchRequest;
 import com.minikun.runtime.CacheFormatter;
 import com.minikun.runtime.CacheService;
@@ -74,6 +77,7 @@ public class ChatService {
     private final PromptComposer promptComposer;
     private final SearchService searchService;
     private final SearchDecisionService searchDecisionService;
+    private final SearchSelectionSignalMapper searchSelectionSignalMapper;
     private final DiagnosticsService diagnosticsService;
     private final DiagnosticsFormatter diagnosticsFormatter;
     private final DiagnosticsPromptBuilder diagnosticsPromptBuilder;
@@ -128,11 +132,11 @@ public class ChatService {
             logDuration("conversation_memory_append_user", started, transaction.requestId());
         }
         started = System.nanoTime();
-        KnowledgeContext knowledge = knowledgeFor(
+        KnowledgeSelection knowledgeSelection = knowledgeFor(
             userMessage.content(), transaction.requestId(), conversationId.value());
         logDuration("knowledge", started, transaction.requestId());
         started = System.nanoTime();
-        Prompt prompt = promptFor(request, history, knowledge);
+        Prompt prompt = promptFor(request, history, knowledgeSelection);
         logDuration("prompt", started, transaction.requestId());
         started = System.nanoTime();
         var response = chatModel.call(prompt);
@@ -180,9 +184,9 @@ public class ChatService {
         }
         StringBuilder assistantContent = new StringBuilder();
 
-        KnowledgeContext knowledge = knowledgeFor(
+        KnowledgeSelection knowledgeSelection = knowledgeFor(
             userMessage.content(), transaction.requestId(), conversationId.value());
-        Flux<String> chunks = chatModel.stream(promptFor(request, history, knowledge))
+        Flux<String> chunks = chatModel.stream(promptFor(request, history, knowledgeSelection))
             .doOnNext(response -> appendAssistantText(assistantContent, response))
                 .map(response -> streamChunk(response, id, created, model))
                 .filter(chunk -> !chunk.isBlank());
@@ -339,7 +343,7 @@ public class ChatService {
     private Prompt promptFor(
             ChatCompletionRequest request,
             List<ChatMessage> history,
-            KnowledgeContext knowledge) {
+            KnowledgeSelection knowledgeSelection) {
         var userMessage = userMessage(request);
         String runtime = request.messages().stream()
                 .filter(message -> "system".equals(message.role()))
@@ -361,9 +365,10 @@ public class ChatService {
                 characterSpecification,
                 new RuntimeContext(runtime),
             conversationContent.isBlank() ? null : new ConversationContext(conversationContent),
-                knowledge,
+                knowledgeSelection.knowledge(),
                 List.of(),
-                new com.minikun.pcs.model.UserMessage(userMessage.content()));
+                new com.minikun.pcs.model.UserMessage(userMessage.content()),
+                knowledgeSelection.searchSignals());
         return toSpringPrompt(promptComposer.compose(promptRequest));
     }
 
@@ -393,7 +398,7 @@ public class ChatService {
         }
     }
 
-    private KnowledgeContext knowledgeFor(
+    private KnowledgeSelection knowledgeFor(
             String query, String requestId, String conversationId) {
         Map<String, String> previous = null;
         boolean scoped = false;
@@ -418,19 +423,20 @@ public class ChatService {
         }
     }
 
-    private KnowledgeContext knowledgeFor(String query) {
+    private KnowledgeSelection knowledgeFor(String query) {
         long started = System.nanoTime();
         KnowledgeContext memoryKnowledge = recallKnowledge();
         logDuration("memory_recall", started, null);
         if (!searchEnabled || isInternalTitleRequest(query)) {
-            return memoryKnowledge;
+            return new KnowledgeSelection(memoryKnowledge, SearchSelectionSignals.EMPTY);
         }
 
         started = System.nanoTime();
-        var decision = searchDecisionService.decide(query);
+        SearchDecision decision = searchDecisionService.decide(query);
         logDuration("search_decision", started, null);
+        SearchSelectionSignals searchSignals = searchSelectionSignalMapper.map(decision);
         if (!decision.shouldSearch()) {
-            return memoryKnowledge;
+            return new KnowledgeSelection(memoryKnowledge, searchSignals);
         }
 
         try {
@@ -444,12 +450,18 @@ public class ChatService {
             logDuration("search", started, null);
                     log.info("Search completed knowledgeCharacters={}",
                         searchKnowledge == null ? 0 : searchKnowledge.content().length());
-            return combineKnowledge(memoryKnowledge, searchKnowledge);
+                return new KnowledgeSelection(
+                    combineKnowledge(memoryKnowledge, searchKnowledge), searchSignals);
         } catch (RuntimeException exception) {
             log.warn("Search failed; continuing without search knowledge", exception);
-            return memoryKnowledge;
+                return new KnowledgeSelection(memoryKnowledge, searchSignals);
         }
     }
+
+            private record KnowledgeSelection(
+                KnowledgeContext knowledge,
+                SearchSelectionSignals searchSignals) {
+            }
 
     private void restoreMdc(Map<String, String> previous) {
         try {

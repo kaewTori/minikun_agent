@@ -21,4 +21,9 @@ public final class CompositeInterestSelectionSignalProducer
     public InterestSelectionSignals produce(String currentMessage, String conversationHistory) {
         return producers.get(0).produce(currentMessage, conversationHistory);
     }
+
+    @Override
+    public InterestSelectionSignals produce(SearchSelectionSignals signals) {
+        return producers.get(0).produce(signals);
+    }
 }

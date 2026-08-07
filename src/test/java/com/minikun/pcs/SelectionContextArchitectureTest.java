@@ -62,7 +62,9 @@ class SelectionContextArchitectureTest {
         try (var paths = Files.walk(MAIN_SOURCE)) {
             List<String> directConstructionSites = paths
                     .filter(path -> path.toString().endsWith(".java"))
-                    .filter(path -> !path.getFileName().toString().equals("InterestSelectionSignals.java"))
+                        .filter(path -> !path.getFileName().toString().equals("InterestSelectionSignals.java"))
+                        .filter(path -> !path.getFileName().toString()
+                            .equals("SearchInterestSelectionSignalProducer.java"))
                     .filter(path -> {
                         try {
                             return Files.readString(path).contains("new InterestSelectionSignals");

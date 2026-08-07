@@ -23,5 +23,20 @@ public final class SelectionContextFactory {
                 RuntimeAttributes.EMPTY,
                 MemorySelectionSignals.EMPTY,
                 signalProducer.produce(normalizedMessage, normalizedHistory));
+        }
+
+        public McsSelectionContext create(
+            String currentUserMessage,
+            String conversationHistory,
+            SearchSelectionSignals searchSignals) {
+        String normalizedMessage = Objects.requireNonNullElse(currentUserMessage, "");
+        String normalizedHistory = Objects.requireNonNullElse(conversationHistory, "");
+        return new McsSelectionContext(
+                normalizedMessage,
+                normalizedHistory,
+                ConversationAttributes.EMPTY,
+                RuntimeAttributes.EMPTY,
+                MemorySelectionSignals.EMPTY,
+                signalProducer.produce(Objects.requireNonNull(searchSignals, "searchSignals")));
     }
 }

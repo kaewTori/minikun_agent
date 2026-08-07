@@ -88,6 +88,7 @@ class ChatServiceRuntimeCommandTest {
                 new PromptComposer(),
                 search,
                 decision,
+                new com.minikun.search.SearchSelectionSignalMapper(),
                 mock(DiagnosticsService.class),
                 new DiagnosticsFormatter(),
                 new DiagnosticsPromptBuilder(new MinikunPersonaProvider(character)),

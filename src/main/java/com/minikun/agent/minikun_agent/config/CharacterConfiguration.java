@@ -13,7 +13,9 @@ import com.minikun.pcs.SectionKind;
 import com.minikun.pcs.PromptComposer;
 import com.minikun.pcs.InterestSelectionSignalProducer;
 import com.minikun.pcs.NoOpInterestSelectionSignalProducer;
+import com.minikun.pcs.SearchInterestSelectionSignalProducer;
 import com.minikun.pcs.SelectionContextFactory;
+import com.minikun.search.SearchSelectionSignalMapper;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -36,10 +38,20 @@ public class CharacterConfiguration {
     }
 
     @Bean
+    SearchSelectionSignalMapper searchSelectionSignalMapper() {
+        return new SearchSelectionSignalMapper();
+    }
+
+    @Bean
+    SearchInterestSelectionSignalProducer searchInterestSelectionSignalProducer() {
+        return new SearchInterestSelectionSignalProducer();
+    }
+
+    @Bean
     @Primary
     CompositeInterestSelectionSignalProducer compositeInterestSelectionSignalProducer(
-            NoOpInterestSelectionSignalProducer noOpProducer) {
-        return new CompositeInterestSelectionSignalProducer(List.of(noOpProducer));
+            SearchInterestSelectionSignalProducer searchProducer) {
+        return new CompositeInterestSelectionSignalProducer(List.of(searchProducer));
     }
 
     @Bean

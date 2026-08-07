@@ -78,6 +78,12 @@ class MinikunAgentApplicationTests {
 				com.minikun.pcs.NoOpInterestSelectionSignalProducer.class,
 				applicationContext.getBean("noOpInterestSelectionSignalProducer"));
 		org.junit.jupiter.api.Assertions.assertInstanceOf(
+				com.minikun.search.SearchSelectionSignalMapper.class,
+				applicationContext.getBean("searchSelectionSignalMapper"));
+		org.junit.jupiter.api.Assertions.assertInstanceOf(
+				com.minikun.pcs.SearchInterestSelectionSignalProducer.class,
+				applicationContext.getBean("searchInterestSelectionSignalProducer"));
+		org.junit.jupiter.api.Assertions.assertInstanceOf(
 				com.minikun.pcs.CompositeInterestSelectionSignalProducer.class,
 				applicationContext.getBean(com.minikun.pcs.InterestSelectionSignalProducer.class));
 	}
