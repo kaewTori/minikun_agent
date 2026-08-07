@@ -6,11 +6,15 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.minikun.search.AcronymDictionary;
+import com.minikun.search.AliasDictionary;
 import com.minikun.search.SearchDecisionService;
 import com.minikun.search.SearchQueryExpansionService;
 import com.minikun.search.SearchQueryRewriteService;
 import com.minikun.search.SynonymDictionary;
 import com.minikun.search.internal.ImmutableSynonymDictionary;
+import com.minikun.search.internal.ImmutableAcronymDictionary;
+import com.minikun.search.internal.ImmutableAliasDictionary;
 import com.minikun.search.internal.RuleBasedSearchQueryExpansionService;
 import com.minikun.search.model.ExpandedSearchQuery;
 import com.minikun.search.model.SearchQuery;
@@ -54,6 +58,12 @@ class MinikunAgentApplicationTests {
 	@Autowired
 	private SynonymDictionary synonymDictionary;
 
+	@Autowired
+	private AcronymDictionary acronymDictionary;
+
+	@Autowired
+	private AliasDictionary aliasDictionary;
+
 	@Test
 	void contextLoads() {
 	}
@@ -80,6 +90,31 @@ class MinikunAgentApplicationTests {
 		org.junit.jupiter.api.Assertions.assertEquals(
 				java.util.List.of("latest Java", "current Java", "Java platform"),
 				result.expandedQueries());
+	}
+
+	@Test
+	void contextWiresAcronymDictionaryAfterSynonymRule() {
+		org.junit.jupiter.api.Assertions.assertInstanceOf(
+				ImmutableAcronymDictionary.class, acronymDictionary);
+
+		ExpandedSearchQuery result =
+				searchQueryExpansionService.expand(new SearchQuery("original", "CI"));
+
+		org.junit.jupiter.api.Assertions.assertEquals(
+				java.util.List.of("CI", "Continuous Integration", "CI pipeline"),
+				result.expandedQueries());
+	}
+
+	@Test
+	void contextWiresAliasDictionaryAfterAcronymRule() {
+		org.junit.jupiter.api.Assertions.assertInstanceOf(
+				ImmutableAliasDictionary.class, aliasDictionary);
+
+		ExpandedSearchQuery result =
+				searchQueryExpansionService.expand(new SearchQuery("original", "postgres"));
+
+		org.junit.jupiter.api.Assertions.assertEquals(
+				java.util.List.of("postgres", "postgresql"), result.expandedQueries());
 	}
 
 	@Test

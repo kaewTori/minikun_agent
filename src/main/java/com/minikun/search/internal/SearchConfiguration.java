@@ -1,6 +1,8 @@
 package com.minikun.search.internal;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.minikun.search.AliasDictionary;
+import com.minikun.search.AcronymDictionary;
 import com.minikun.search.SearchDecisionClient;
 import com.minikun.search.SearchManager;
 import com.minikun.search.SearchProvider;
@@ -89,10 +91,25 @@ public class SearchConfiguration {
     }
 
     @Bean
-    SearchQueryExpansionService searchQueryExpansionService(SynonymDictionary synonymDictionary) {
+    AcronymDictionary acronymDictionary() {
+        return new ImmutableAcronymDictionary();
+    }
+
+    @Bean
+    AliasDictionary aliasDictionary() {
+        return new ImmutableAliasDictionary();
+    }
+
+    @Bean
+    SearchQueryExpansionService searchQueryExpansionService(
+            SynonymDictionary synonymDictionary,
+            AcronymDictionary acronymDictionary,
+            AliasDictionary aliasDictionary) {
         return new RuleBasedSearchQueryExpansionService(List.of(
                 new IdentityExpansionRule(),
-                new SynonymExpansionRule(synonymDictionary)));
+                new SynonymExpansionRule(synonymDictionary),
+                new AcronymExpansionRule(acronymDictionary),
+                new AliasExpansionRule(aliasDictionary)));
     }
 
     @Bean

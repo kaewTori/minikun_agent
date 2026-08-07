@@ -267,6 +267,38 @@ class DefaultSearchServiceTest {
     }
 
     @Test
+    void canonicalSynonymAndAcronymQueriesReachManagerAndCacheInOrder() {
+        KnowledgeContext live = new KnowledgeContext("live");
+        RecordingCache cache = new RecordingCache(Optional.empty());
+        List<String> receivedQueries = new java.util.ArrayList<>();
+        SearchManager manager = new SearchManager() {
+            @Override
+            public KnowledgeContext search(SearchRequest request) {
+                return new KnowledgeContext("legacy");
+            }
+
+            @Override
+            public KnowledgeContext search(SearchRequest request, ExpandedSearchQuery expandedQuery) {
+                receivedQueries.addAll(expandedQuery.expandedQueries());
+                return live;
+            }
+        };
+        SearchQueryExpansionService expansionService = query -> new ExpandedSearchQuery(
+                query.originalQuery(), query.rewrittenQuery(),
+                List.of(query.rewrittenQuery(), "synonym", "acronym"));
+
+        assertSame(live, new DefaultSearchService(
+                manager, cache, true, true, new DefaultSearchQueryRewriteService(),
+                expansionService, new SimpleMeterRegistry()).search(REQUEST));
+
+        assertEquals(List.of("Latest News", "synonym", "acronym"), receivedQueries);
+        assertEquals(List.of(
+                SearchCacheKey.from("Latest News", REQUEST.resultLimit()),
+                SearchCacheKey.from("synonym", REQUEST.resultLimit()),
+                SearchCacheKey.from("acronym", REQUEST.resultLimit())), cache.storedKeys);
+    }
+
+    @Test
     void freshExpansionCopiesDoNotIncrementChangedMetric() {
         SimpleMeterRegistry registry = new SimpleMeterRegistry();
         SearchQueryExpansionService expansionService = query -> new ExpandedSearchQuery(
