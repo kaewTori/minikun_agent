@@ -21,6 +21,7 @@ import com.minikun.search.model.SearchQuery;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
+import org.springframework.context.ApplicationContext;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -47,6 +48,9 @@ class MinikunAgentApplicationTests {
 	private MeterRegistry meterRegistry;
 
 	@Autowired
+	private ApplicationContext applicationContext;
+
+	@Autowired
 	private SearchDecisionService searchDecisionService;
 
 	@Autowired
@@ -66,6 +70,16 @@ class MinikunAgentApplicationTests {
 
 	@Test
 	void contextLoads() {
+	}
+
+	@Test
+	void contextWiresCompositeInterestSignalProducerAsPrimaryProducer() {
+		org.junit.jupiter.api.Assertions.assertInstanceOf(
+				com.minikun.pcs.NoOpInterestSelectionSignalProducer.class,
+				applicationContext.getBean("noOpInterestSelectionSignalProducer"));
+		org.junit.jupiter.api.Assertions.assertInstanceOf(
+				com.minikun.pcs.CompositeInterestSelectionSignalProducer.class,
+				applicationContext.getBean(com.minikun.pcs.InterestSelectionSignalProducer.class));
 	}
 
 	@Test

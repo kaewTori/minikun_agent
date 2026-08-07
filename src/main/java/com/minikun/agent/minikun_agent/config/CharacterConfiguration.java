@@ -5,6 +5,7 @@ import com.minikun.character.model.CharacterSpecification;
 import com.minikun.pcs.McsSelector;
 import com.minikun.pcs.InterestsSelectionStrategy;
 import com.minikun.pcs.CatchphrasesSelectionStrategy;
+import com.minikun.pcs.CompositeInterestSelectionSignalProducer;
 import com.minikun.pcs.LiteralTermMatcher;
 import com.minikun.pcs.ModuleSelectionStrategyRegistry;
 import com.minikun.pcs.SelectAllStrategy;
@@ -16,8 +17,10 @@ import com.minikun.pcs.SelectionContextFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Map;
 
 @Configuration
@@ -28,8 +31,15 @@ public class CharacterConfiguration {
     }
 
     @Bean
-    InterestSelectionSignalProducer interestSelectionSignalProducer() {
+    NoOpInterestSelectionSignalProducer noOpInterestSelectionSignalProducer() {
         return new NoOpInterestSelectionSignalProducer();
+    }
+
+    @Bean
+    @Primary
+    CompositeInterestSelectionSignalProducer compositeInterestSelectionSignalProducer(
+            NoOpInterestSelectionSignalProducer noOpProducer) {
+        return new CompositeInterestSelectionSignalProducer(List.of(noOpProducer));
     }
 
     @Bean
