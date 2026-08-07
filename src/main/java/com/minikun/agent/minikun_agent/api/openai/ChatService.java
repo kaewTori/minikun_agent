@@ -107,27 +107,44 @@ public class ChatService {
     private boolean reflectionEnabled;
 
     public ChatCompletionResponse chatCompletion(ChatCompletionRequest request, ConversationId conversationId) {
+        long requestStarted = System.nanoTime();
         ChatMessage userMessage = userMessage(request);
         var commandResponse = commandResponse(request, userMessage);
         if (commandResponse != null) {
+            logDuration("command", requestStarted, null);
             return commandResponse;
         }
         String model = modelName(request.model(), configuredChatModel);
         ChatTransactionLogger.Transaction transaction = transactionLogger.start(
             "chatcmpl-" + UUID.randomUUID(), model, false, request.messages().size());
         boolean persistConversation = shouldPersistConversation(request);
+        long started = System.nanoTime();
         List<ChatMessage> history = conversationMemoryService.load(conversationId);
+        logDuration("conversation_memory_load", started, transaction.requestId());
         try {
         if (persistConversation) {
+            started = System.nanoTime();
             conversationMemoryService.append(conversationId, userMessage);
+            logDuration("conversation_memory_append_user", started, transaction.requestId());
         }
+        started = System.nanoTime();
         KnowledgeContext knowledge = knowledgeFor(
             userMessage.content(), transaction.requestId(), conversationId.value());
-        var response = chatModel.call(promptFor(request, history, knowledge));
+        logDuration("knowledge", started, transaction.requestId());
+        started = System.nanoTime();
+        Prompt prompt = promptFor(request, history, knowledge);
+        logDuration("prompt", started, transaction.requestId());
+        started = System.nanoTime();
+        var response = chatModel.call(prompt);
+        logDuration("chat_model", started, transaction.requestId());
         String content = response.getResult().getOutput().getText();
         if (persistConversation) {
+            started = System.nanoTime();
             conversationMemoryService.append(conversationId, new ChatMessage("assistant", content));
+            logDuration("conversation_memory_append_assistant", started, transaction.requestId());
+            started = System.nanoTime();
             reflectOnCompletedConversation(conversationId);
+            logDuration("memory_reflection", started, transaction.requestId());
         }
         var choice = new ChatCompletionResponse.Choice(
                 0,
@@ -300,12 +317,15 @@ public class ChatService {
     }
 
     public EmbeddingResponse embeddings(EmbeddingRequest request) {
+        long started = System.nanoTime();
         List<EmbeddingResponse.Data> data = java.util.stream.IntStream.range(0, request.texts().size())
             .mapToObj(index -> new EmbeddingResponse.Data(
                 "embedding", toFloatList(embeddingModel.embed(request.texts().get(index))), index))
                 .toList();
-        return new EmbeddingResponse("list", data, modelName(request.model(), configuredEmbeddingModel),
+        EmbeddingResponse result = new EmbeddingResponse("list", data, modelName(request.model(), configuredEmbeddingModel),
                 new EmbeddingResponse.Usage(0, 0));
+        logDuration("embedding_model", started, null);
+        return result;
     }
 
     private List<Float> toFloatList(float[] vector) {
@@ -399,23 +419,29 @@ public class ChatService {
     }
 
     private KnowledgeContext knowledgeFor(String query) {
+        long started = System.nanoTime();
         KnowledgeContext memoryKnowledge = recallKnowledge();
+        logDuration("memory_recall", started, null);
         if (!searchEnabled || isInternalTitleRequest(query)) {
             return memoryKnowledge;
         }
 
+        started = System.nanoTime();
         var decision = searchDecisionService.decide(query);
+        logDuration("search_decision", started, null);
         if (!decision.shouldSearch()) {
             return memoryKnowledge;
         }
 
         try {
+            started = System.nanoTime();
             SearchRequest searchRequest = new SearchRequest(
                     UUID.randomUUID(),
                     decision.query(),
                     10,
                     Instant.now().plus(searchTimeout));
             KnowledgeContext searchKnowledge = searchService.search(searchRequest);
+            logDuration("search", started, null);
                     log.info("Search completed knowledgeCharacters={}",
                         searchKnowledge == null ? 0 : searchKnowledge.content().length());
             return combineKnowledge(memoryKnowledge, searchKnowledge);
@@ -539,6 +565,12 @@ public class ChatService {
         return normalized.contains("generate a concise title summarizing the chat history")
                 || normalized.contains("your entire response must consist solely of the json object")
                 || normalized.contains("### task:\n") && normalized.contains("### chat history:");
+    }
+
+    private void logDuration(String process, long started, String requestId) {
+        log.info("process={} request_id={} duration_ms={}", process,
+                requestId == null ? "-" : requestId,
+                (System.nanoTime() - started) / 1_000_000);
     }
 
     private String modelName(String requestedModel, String configuredModel) {

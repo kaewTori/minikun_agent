@@ -3,6 +3,9 @@ package com.minikun.pcs;
 import com.minikun.pcs.model.UserMessage;
 import com.minikun.pcs.model.Prompt;
 
+import lombok.extern.slf4j.Slf4j;
+
+@Slf4j
 public final class PromptComposer {
     private final McsSelector selector;
     private final SelectionContextFactory contextFactory;
@@ -25,6 +28,7 @@ public final class PromptComposer {
     }
 
     public PromptCompositionResult composeWithDiagnostics(PromptRequest request) {
+        long started = System.nanoTime();
         if (request == null) {
             throw new PromptException("request must not be null");
         }
@@ -38,12 +42,24 @@ public final class PromptComposer {
         if (userMessage == null || isBlank(userMessage.content())) {
             throw new PromptException("user message must not be blank");
         }
+        long contextStarted = System.nanoTime();
         McsSelectionContext context = contextFactory.create(
             userMessage.content(),
             request.conversation() == null ? "" : request.conversation().content());
+        logDuration("selection_context", contextStarted);
+        long selectionStarted = System.nanoTime();
         McsSelectionResult selection = selector.select(request.character(), context);
-        return new PromptCompositionResult(
+        logDuration("module_selection", selectionStarted);
+        long renderStarted = System.nanoTime();
+        PromptCompositionResult result = new PromptCompositionResult(
             PromptRenderer.render(request, selection.selectedModules()), selection.decisions());
+        logDuration("prompt_render", renderStarted);
+        logDuration("prompt_composition", started);
+        return result;
+    }
+
+    private void logDuration(String process, long started) {
+        log.info("process={} duration_ms={}", process, (System.nanoTime() - started) / 1_000_000);
     }
 
     private boolean isBlank(String value) {

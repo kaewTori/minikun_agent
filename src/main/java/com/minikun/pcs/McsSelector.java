@@ -7,6 +7,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
+import lombok.extern.slf4j.Slf4j;
+
+@Slf4j
 public final class McsSelector {
     private static final String POLICY_SELECTOR = "loading-policy";
     private final ModuleSelectionStrategyRegistry strategyRegistry;
@@ -29,8 +32,11 @@ public final class McsSelector {
 
         List<McsSelectionDecision> decisions = new java.util.ArrayList<>();
         for (McsModule module : McsModule.orderedFrom(specification)) {
+            long started = System.nanoTime();
             McsSelectionDecision decision = decisionFor(module, context).forModule(module);
             decisions.add(decision);
+            log.info("process=module_selection module={} selected={} duration_ms={}",
+                    module.name(), decision.selected(), (System.nanoTime() - started) / 1_000_000);
         }
         return new McsSelectionResult(decisions);
     }
