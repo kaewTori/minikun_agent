@@ -236,6 +236,55 @@ class DefaultSearchServiceTest {
     }
 
     @Test
+    void canonicalAndSynonymQueriesReachManagerAndCache() {
+        KnowledgeContext live = new KnowledgeContext("live");
+        RecordingCache cache = new RecordingCache(Optional.empty());
+        List<String> receivedQueries = new java.util.ArrayList<>();
+        SearchManager manager = new SearchManager() {
+            @Override
+            public KnowledgeContext search(SearchRequest request) {
+                return new KnowledgeContext("legacy");
+            }
+
+            @Override
+            public KnowledgeContext search(SearchRequest request, ExpandedSearchQuery expandedQuery) {
+                receivedQueries.addAll(expandedQuery.expandedQueries());
+                return live;
+            }
+        };
+        SearchQueryExpansionService expansionService = query -> new ExpandedSearchQuery(
+                query.originalQuery(), query.rewrittenQuery(),
+                List.of(query.rewrittenQuery(), "synonym"));
+
+        assertSame(live, new DefaultSearchService(
+                manager, cache, true, true, new DefaultSearchQueryRewriteService(),
+                expansionService, new SimpleMeterRegistry()).search(REQUEST));
+
+        assertEquals(List.of("Latest News", "synonym"), receivedQueries);
+        assertEquals(List.of(
+                SearchCacheKey.from("Latest News", REQUEST.resultLimit()),
+                SearchCacheKey.from("synonym", REQUEST.resultLimit())), cache.storedKeys);
+    }
+
+    @Test
+    void freshExpansionCopiesDoNotIncrementChangedMetric() {
+        SimpleMeterRegistry registry = new SimpleMeterRegistry();
+        SearchQueryExpansionService expansionService = query -> new ExpandedSearchQuery(
+                new String(query.originalQuery()), new String(query.rewrittenQuery()),
+                List.of(new String(query.rewrittenQuery())));
+
+        new DefaultSearchService(
+                request -> new KnowledgeContext("live"), new RecordingCache(Optional.empty()),
+                true, false, new DefaultSearchQueryRewriteService(), expansionService, registry)
+                .search(new SearchRequest(
+                        UUID.randomUUID(), "Latest News", 10,
+                        Instant.parse("2026-08-02T00:01:00Z")));
+
+        assertEquals(1.0, registry.get("minikun.search.expand.requests").counter().count());
+        assertNull(registry.find("minikun.search.expand.changed").counter());
+    }
+
+    @Test
     void knowledgeContextSerializationIsDeterministic() throws Exception {
         ObjectMapper mapper = new ObjectMapper();
 
@@ -250,6 +299,7 @@ class DefaultSearchServiceTest {
         private int putCalls;
         private KnowledgeContext stored;
         private SearchCacheKey storedKey;
+        private final List<SearchCacheKey> storedKeys = new java.util.ArrayList<>();
 
         private RecordingCache(Optional<KnowledgeContext> value) {
             this.value = value;
@@ -265,6 +315,7 @@ class DefaultSearchServiceTest {
         public void put(SearchCacheKey key, KnowledgeContext context) {
             putCalls++;
             storedKey = key;
+            storedKeys.add(key);
             stored = context;
         }
     }

@@ -9,6 +9,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.minikun.search.SearchDecisionService;
 import com.minikun.search.SearchQueryExpansionService;
 import com.minikun.search.SearchQueryRewriteService;
+import com.minikun.search.SynonymDictionary;
+import com.minikun.search.internal.ImmutableSynonymDictionary;
 import com.minikun.search.internal.RuleBasedSearchQueryExpansionService;
 import com.minikun.search.model.ExpandedSearchQuery;
 import com.minikun.search.model.SearchQuery;
@@ -49,6 +51,9 @@ class MinikunAgentApplicationTests {
 	@Autowired
 	private SearchQueryExpansionService searchQueryExpansionService;
 
+	@Autowired
+	private SynonymDictionary synonymDictionary;
+
 	@Test
 	void contextLoads() {
 	}
@@ -63,15 +68,18 @@ class MinikunAgentApplicationTests {
 	}
 
 	@Test
-	void contextWiresIdentityExpansionPipeline() {
+	void contextWiresImmutableOrderedSynonymExpansionPipeline() {
 		org.junit.jupiter.api.Assertions.assertInstanceOf(
 				RuleBasedSearchQueryExpansionService.class, searchQueryExpansionService);
+		org.junit.jupiter.api.Assertions.assertInstanceOf(
+				ImmutableSynonymDictionary.class, synonymDictionary);
 
 		ExpandedSearchQuery result =
-				searchQueryExpansionService.expand(new SearchQuery("original", "canonical"));
+				searchQueryExpansionService.expand(new SearchQuery("original", "latest Java"));
 
 		org.junit.jupiter.api.Assertions.assertEquals(
-				java.util.List.of("canonical"), result.expandedQueries());
+				java.util.List.of("latest Java", "current Java", "Java platform"),
+				result.expandedQueries());
 	}
 
 	@Test

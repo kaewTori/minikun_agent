@@ -9,6 +9,7 @@ import com.minikun.search.SearchQueryRewriteService;
 import com.minikun.search.SearchDecisionService;
 import com.minikun.search.SearchCache;
 import com.minikun.search.SearchService;
+import com.minikun.search.SynonymDictionary;
 import java.net.http.HttpClient;
 import java.time.Clock;
 import java.time.Duration;
@@ -83,8 +84,15 @@ public class SearchConfiguration {
     }
 
     @Bean
-    SearchQueryExpansionService searchQueryExpansionService() {
-        return new RuleBasedSearchQueryExpansionService(List.of(new IdentityExpansionRule()));
+    SynonymDictionary synonymDictionary() {
+        return new ImmutableSynonymDictionary();
+    }
+
+    @Bean
+    SearchQueryExpansionService searchQueryExpansionService(SynonymDictionary synonymDictionary) {
+        return new RuleBasedSearchQueryExpansionService(List.of(
+                new IdentityExpansionRule(),
+                new SynonymExpansionRule(synonymDictionary)));
     }
 
     @Bean
