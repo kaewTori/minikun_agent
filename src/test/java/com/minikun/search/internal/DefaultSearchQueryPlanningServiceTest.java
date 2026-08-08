@@ -40,6 +40,16 @@ class DefaultSearchQueryPlanningServiceTest {
     }
 
     @Test
+    void usesAllLanguageForMixedThaiAndEnglishQuery() {
+        SearchQueryPlan plan = planner.plan(
+                "ค้นหา Spring Boot latest version",
+                new SearchDecision(true, "ค้นหา Spring Boot latest version",
+                        SearchDecisionReason.CURRENT_INFORMATION));
+
+        assertEquals("all", plan.language());
+    }
+
+    @Test
     void failsClosedWhenDecisionDoesNotRequestSearch() {
         SearchQueryPlan plan = planner.plan("ช่วยค้นหาข่าว", new SearchDecision(false, "ช่วยค้นหาข่าว"));
 

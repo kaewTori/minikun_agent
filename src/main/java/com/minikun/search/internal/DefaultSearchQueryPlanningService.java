@@ -147,7 +147,7 @@ public final class DefaultSearchQueryPlanningService implements SearchQueryPlann
         boolean thai = value.codePoints().anyMatch(codePoint -> codePoint >= 0x0E00 && codePoint <= 0x0E7F);
         boolean latin = value.codePoints().anyMatch(codePoint -> (codePoint >= 'a' && codePoint <= 'z')
                 || (codePoint >= 'A' && codePoint <= 'Z'));
-        return thai && latin ? "th,en" : thai ? "th" : latin ? "en" : "all";
+        return thai && latin ? "all" : thai ? "th" : latin ? "en" : "all";
     }
 
     private String detectTimeRange(String value) {
