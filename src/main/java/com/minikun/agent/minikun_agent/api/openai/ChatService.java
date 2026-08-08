@@ -198,6 +198,7 @@ public class ChatService {
         ChatMessage userMessage = userMessage(request);
         var commandResponse = commandResponse(request, userMessage);
         if (commandResponse != null) {
+            log.info("process=command event=completed");
             return commandResponse;
         }
         String model = modelName(request.model(), configuredChatModel);
@@ -205,14 +206,16 @@ public class ChatService {
             "chatcmpl-" + UUID.randomUUID(), model, false, request.messages().size());
         boolean persistConversation = shouldPersistConversation(request);
         List<ChatMessage> history = conversationMemoryService.load(conversationId);
+        log.info("process=conversation_history event=loaded messages={}", history.size());
         try {
         if (persistConversation) {
             conversationMemoryService.append(conversationId, userMessage);
+            log.info("process=conversation event=user_message_persisted");
         }
         KnowledgePipelineSelection knowledgeSelection;
         try {
             knowledgeSelection = knowledgeFor(
-                userMessage.content(), transaction.requestId(), conversationId, request.owner_id(),
+                userMessage.content(), transaction.requestId(), conversationId, memoryOwnerId(request, conversationId),
                 hasConversationContext(history, request));
         } catch (BrowserContentException exception) {
             String content = browserFailureMessage(userMessage.content(), exception);
@@ -223,11 +226,13 @@ public class ChatService {
             return responseForContent(request, content);
         }
         Prompt prompt = promptFor(request, history, knowledgeSelection);
+        log.info("process=prompt event=composed");
         var response = callChatModel(prompt, "chat_model", transaction.requestId());
         String content = response.getResult().getOutput().getText();
         if (persistConversation) {
             conversationMemoryService.append(conversationId, new ChatMessage("assistant", content));
-            reflectOnCompletedConversation(request.owner_id(), conversationId);
+            log.info("process=conversation event=assistant_message_persisted");
+            reflectOnCompletedConversation(memoryOwnerId(request, conversationId), conversationId);
         }
         var choice = new ChatCompletionResponse.Choice(
                 0,
@@ -258,15 +263,17 @@ public class ChatService {
         long created = Instant.now().getEpochSecond();
         boolean persistConversation = shouldPersistConversation(request);
         List<ChatMessage> history = conversationMemoryService.load(conversationId);
+        log.info("process=conversation_history event=loaded messages={} stream=true", history.size());
         if (persistConversation) {
             conversationMemoryService.append(conversationId, userMessage);
+            log.info("process=conversation event=user_message_persisted stream=true");
         }
         StringBuilder assistantContent = new StringBuilder();
 
         KnowledgePipelineSelection knowledgeSelection;
         try {
             knowledgeSelection = knowledgeFor(
-                userMessage.content(), transaction.requestId(), conversationId, request.owner_id(),
+                userMessage.content(), transaction.requestId(), conversationId, memoryOwnerId(request, conversationId),
                 hasConversationContext(history, request));
         } catch (BrowserContentException exception) {
             String content = browserFailureMessage(userMessage.content(), exception);
@@ -277,13 +284,18 @@ public class ChatService {
             return commandStream(content, request);
         }
         long modelStarted = System.nanoTime();
+            String traceId = MDC.get("trace_id");
+        log.info("process=prompt event=composed stream=true");
         Flux<String> chunks = chatModel.stream(promptFor(request, history, knowledgeSelection))
             .doOnNext(response -> appendAssistantText(assistantContent, response))
                 .map(response -> streamChunk(response, id, created, model))
             .filter(chunk -> !chunk.isBlank())
-            .doOnComplete(() -> logModelDuration("chat_model_stream", modelStarted, requestId))
-            .doOnError(exception -> logModelDuration("chat_model_stream", modelStarted, requestId))
-            .doOnCancel(() -> logModelDuration("chat_model_stream", modelStarted, requestId));
+                .doOnComplete(() -> withTrace(traceId,
+                    () -> logModelDuration("chat_model_stream", modelStarted, requestId)))
+                .doOnError(exception -> withTrace(traceId,
+                    () -> logModelDuration("chat_model_stream", modelStarted, requestId)))
+                .doOnCancel(() -> withTrace(traceId,
+                    () -> logModelDuration("chat_model_stream", modelStarted, requestId)));
 
         return Flux.concat(
                 Flux.just(data(new ChatCompletionResponse.StreamChunk(
@@ -300,12 +312,13 @@ public class ChatService {
                     if (persistConversation && !assistantContent.isEmpty()) {
                         conversationMemoryService.append(
                                 conversationId, new ChatMessage("assistant", assistantContent.toString()));
-                        reflectOnCompletedConversation(request.owner_id(), conversationId);
+                                log.info("process=conversation event=assistant_message_persisted stream=true");
+                        reflectOnCompletedConversation(memoryOwnerId(request, conversationId), conversationId);
                     }
-                    transaction.success();
+                    withTrace(traceId, transaction::success);
                 })
-                .doOnError(transaction::failed)
-                .doOnCancel(transaction::cancelled);
+                .doOnError(exception -> withTrace(traceId, () -> transaction.failed(exception)))
+                .doOnCancel(() -> withTrace(traceId, transaction::cancelled));
     }
 
             private ChatCompletionResponse commandResponse(ChatCompletionRequest request, ChatMessage userMessage) {
@@ -494,11 +507,21 @@ public class ChatService {
         try {
                 KnowledgeContext knowledge = service.recall(new MemoryScope(ownerId, conversationId),
                     configuredMemoryRetrievalLimit);
+            log.info("process=memory_recall event=completed candidates={}",
+                knowledge == null ? 0 : knowledge.candidates().size());
             return knowledge == null ? new KnowledgeContext("") : knowledge;
         } catch (RuntimeException exception) {
             log.warn("Long-term memory recall failed; continuing without knowledge", exception);
             return new KnowledgeContext("");
         }
+    }
+
+    private String memoryOwnerId(ChatCompletionRequest request, ConversationId conversationId) {
+        String requestedOwnerId = request.owner_id();
+        if (requestedOwnerId != null && !requestedOwnerId.isBlank()) {
+            return requestedOwnerId;
+        }
+        return "default";
     }
 
     private KnowledgePipelineSelection knowledgeFor(
@@ -529,15 +552,21 @@ public class ChatService {
 
     private KnowledgePipelineSelection knowledgeFor(String query, boolean conversationContextAvailable,
             ConversationId conversationId, String ownerId) {
+        log.info("process=knowledge_pipeline event=start");
         KnowledgeContext memoryKnowledge = recallKnowledge(conversationId, ownerId);
         List<KnowledgeCandidate> browserCandidates = browserContentService == null
                 ? List.of() : browserContentService.read(query);
+        log.info("process=browser event=completed candidates={}", browserCandidates.size());
         if (!searchEnabled || isInternalTitleRequest(query)) {
+            log.info("process=search event=skipped enabled={} internal_request={}",
+                searchEnabled, isInternalTitleRequest(query));
             return selectionWithContext(query, conversationContextAvailable, memoryKnowledge,
                     null, false, null, browserCandidates, SearchSelectionSignals.EMPTY);
         }
 
         SearchDecision decision = searchDecisionService.decide(query);
+        log.info("process=search_decision event=completed should_search={} reason={}",
+            decision.shouldSearch(), decision.reason());
         SearchQueryPlan plan = searchQueryPlanningEnabled
                 ? searchQueryPlanningService.plan(query, decision)
                 : new SearchQueryPlan(decision.shouldSearch(), query,
@@ -546,8 +575,11 @@ public class ChatService {
         SearchDecision plannedDecision = plan.shouldSearch()
                 ? new SearchDecision(true, plan.primaryQuery(), decision.reason())
                 : decision;
+        log.info("process=search_query_plan event=completed should_search={} alternates={}",
+            plan.shouldSearch(), plan.alternateQueries().size());
         SearchSelectionSignals searchSignals = searchSelectionSignalMapper.map(decision);
         if (!plan.shouldSearch()) {
+            log.info("process=search event=skipped reason=query_plan");
             return selectionWithContext(query, conversationContextAvailable, memoryKnowledge,
                     plannedDecision, false, null, browserCandidates, searchSignals);
         }
@@ -590,6 +622,8 @@ public class ChatService {
                 SearchSelectionSignals searchSignals) {
             KnowledgeSelection selection = selectKnowledge(
                     query, memoryKnowledge, searchKnowledge, browserCandidates);
+            log.info("process=knowledge_selection event=completed selected={} fallback={}",
+                selection.selectedCandidates().size(), selection.rankingFallback());
             return new KnowledgePipelineSelection(
                 selection,
                 consolidate(selection),
@@ -622,6 +656,8 @@ public class ChatService {
                 SearchSelectionSignals searchSignals) {
             KnowledgeSelection selection = selectKnowledge(
                     query, memoryKnowledge, searchKnowledge, browserCandidates);
+            log.info("process=knowledge_selection event=completed selected={} fallback={}",
+                selection.selectedCandidates().size(), selection.rankingFallback());
             return new KnowledgePipelineSelection(
                 selection,
                 consolidate(selection),
@@ -826,6 +862,20 @@ public class ChatService {
         log.info("model_call={} request_id={} duration_ms={}", process,
                 requestId == null ? "-" : requestId,
                 (System.nanoTime() - started) / 1_000_000);
+    }
+
+    private void withTrace(String traceId, Runnable action) {
+        Map<String, String> previous = MDC.getCopyOfContextMap();
+        try {
+            if (traceId == null || traceId.isBlank() || "-".equals(traceId)) {
+                MDC.remove("trace_id");
+            } else {
+                MDC.put("trace_id", traceId);
+            }
+            action.run();
+        } finally {
+            restoreMdc(previous);
+        }
     }
 
     private String modelName(String requestedModel, String configuredModel) {

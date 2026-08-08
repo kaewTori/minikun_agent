@@ -126,7 +126,7 @@ Actuator ที่เปิดให้เข้าถึงคือ `/actuator
 | `SPRING_AI_CHAT_MEMORY_MAX_MESSAGES` | `20` | จำนวนข้อความ short-term memory สูงสุด |
 | `MINIKUN_MEMORY_RECALL_MAXIMUM_COUNT` | `10` | จำนวน long-term memories ที่เรียกคืนสูงสุด |
 | `MINIKUN_MEMORY_RECALL_MAXIMUM_CHARACTERS` | `4000` | ขนาด Knowledge context สูงสุด |
-| `MINIKUN_MEMORY_REFLECTION_ENABLED` | `false` | เปิด memory reflection หลังจบ conversation |
+| `MINIKUN_MEMORY_REFLECTION_ENABLED` | `true` | เปิด memory reflection หลังจบ conversation |
 | `MINIKUN_DIAGNOSTICS_CONVERSATIONAL_ENABLED` | `false` | เปิด diagnostics แบบ conversational |
 
 ดูค่าทั้งหมดและ default เพิ่มเติมได้ที่ [`application.properties`](src/main/resources/application.properties)

@@ -8,6 +8,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.concurrent.atomic.AtomicLong;
 
 import org.springframework.stereotype.Component;
+import org.slf4j.MDC;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -21,7 +22,13 @@ public class ChatTransactionLogger {
     private final AtomicLong sequence = new AtomicLong();
 
     public Transaction start(String requestId, String model, boolean stream, int messageCount) {
-        return new Transaction(requestId, model, stream, messageCount, Instant.now(), sequence.incrementAndGet());
+        return new Transaction(requestId, model, stream, messageCount, Instant.now(), sequence.incrementAndGet(),
+                traceId());
+    }
+
+    private String traceId() {
+        String traceId = MDC.get("trace_id");
+        return traceId == null ? "-" : traceId;
     }
 
     public final class Transaction {
@@ -30,17 +37,19 @@ public class ChatTransactionLogger {
         private final boolean stream;
         private final int messageCount;
         private final Instant startedAt;
+        private final String traceId;
         @SuppressWarnings("unused")
         private final long sequence;
 
         private Transaction(String requestId, String model, boolean stream, int messageCount,
-                Instant startedAt, long sequence) {
+            Instant startedAt, long sequence, String traceId) {
             this.requestId = requestId;
             this.model = model;
             this.stream = stream;
             this.messageCount = messageCount;
             this.startedAt = startedAt;
             this.sequence = sequence;
+            this.traceId = traceId;
         }
 
         public String requestId() {
@@ -78,8 +87,8 @@ public class ChatTransactionLogger {
         private void write(String status, String detail) {
             OffsetDateTime now = OffsetDateTime.now(LOG_OFFSET);
             long durationMillis = Duration.between(startedAt, now.toInstant()).toMillis();
-            log.info("time={} id={} model={} stream={} messages={} status={} duration_ms={}{}",
-                    now.format(LOG_TIME_FORMAT), requestId, model, stream, messageCount,
+            log.info("time={} trace_id={} id={} model={} stream={} messages={} status={} duration_ms={}{}",
+                    now.format(LOG_TIME_FORMAT), traceId, requestId, model, stream, messageCount,
                     status, durationMillis, detail == null ? "" : " detail=" + detail);
         }
     }

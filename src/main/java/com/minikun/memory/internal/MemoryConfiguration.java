@@ -142,7 +142,7 @@ public class MemoryConfiguration {
     ReflectionClient reflectionClient(
             @Value("${minikun.memory.reflection.endpoint:http://flip3:8080/v1/chat/completions}") String endpoint,
             @Value("${minikun.memory.reflection.connect-timeout:PT500MS}") String connectTimeout,
-            @Value("${minikun.memory.reflection.read-timeout:PT5S}") String readTimeout) {
+            @Value("${minikun.memory.reflection.read-timeout:PT120S}") String readTimeout) {
         var httpClient = java.net.http.HttpClient.newBuilder()
                 .connectTimeout(parseReflectionDuration(connectTimeout)).build();
         var requestFactory = new JdkClientHttpRequestFactory(httpClient);

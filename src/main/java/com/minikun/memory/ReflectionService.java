@@ -97,6 +97,9 @@ public class ReflectionService {
                 }
             }
         } catch (RuntimeException exception) {
+            outcome = "failure";
+            incrementFailure("unexpected");
+            log.warn("memory_reflection failed before persistence", exception);
         } finally {
             Duration duration = Duration.ofNanos(System.nanoTime() - startedNanos);
             recordOutcome(outcome);

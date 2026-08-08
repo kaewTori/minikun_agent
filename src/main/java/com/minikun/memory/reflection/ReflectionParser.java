@@ -33,11 +33,9 @@ public final class ReflectionParser {
             JsonNode root = objectMapper.reader()
                     .with(DeserializationFeature.FAIL_ON_READING_DUP_TREE_KEY)
                     .readTree(response);
-            if (root == null || !root.isArray()) {
-                throw invalid("response must be an array");
-            }
+            JsonNode memories = memoriesNode(root);
             List<MemoryCandidate> result = new ArrayList<>();
-            for (JsonNode memory : root) {
+            for (JsonNode memory : memories) {
                 requireObject(memory, "memory");
                 requireExactFields(memory, MEMORY_FIELDS, "memory");
                 String category = requiredText(memory, "category");
@@ -66,6 +64,17 @@ public final class ReflectionParser {
         } catch (Exception exception) {
             throw new MemoryException("reflection response is not valid JSON", exception);
         }
+    }
+
+    private JsonNode memoriesNode(JsonNode root) {
+        if (root != null && root.isArray()) {
+            return root;
+        }
+        if (root != null && root.isObject() && root.size() == 1
+                && root.get("memories") != null && root.get("memories").isArray()) {
+            return root.get("memories");
+        }
+        throw invalid("response must be an array or an object containing a memories array");
     }
 
     private void incrementParsed(int count) {

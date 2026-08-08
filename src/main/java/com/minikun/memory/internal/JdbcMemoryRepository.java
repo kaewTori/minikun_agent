@@ -94,10 +94,10 @@ final class JdbcMemoryRepository implements MemoryRepository {
         if (limit < 0) {
             throw new IllegalArgumentException("memory retrieval limit must not be negative");
         }
-        return jdbcTemplate.query("""
+        List<Memory> memories = jdbcTemplate.query("""
                 SELECT owner_id, id, category, source, content, created_at, confidence, reason
                 FROM minikun_memory
-                WHERE owner_id = ? AND conversation_id = ?
+            WHERE owner_id = ? OR owner_id IS NULL
                 ORDER BY created_at DESC, id
                 LIMIT ?
                 """, (resultSet, rowNumber) -> new Memory(
@@ -109,6 +109,9 @@ final class JdbcMemoryRepository implements MemoryRepository {
                 resultSet.getTimestamp("created_at").toInstant(),
                 resultSet.getDouble("confidence"),
                 resultSet.getString("reason")),
-                scope.ownerId(), scope.conversationId().value(), limit);
+                scope.ownerId(), limit);
+            log.info("memory_repository_find owner_id={} conversation_id={} rows={}",
+                scope.ownerId(), scope.conversationId().value(), memories.size());
+            return memories;
     }
 }

@@ -30,6 +30,16 @@ class ReflectionParserTest {
         assertEquals("conversation-1", memories.getFirst().conversationId());
     }
 
+        @Test
+        void parsesObjectResponseFromJsonObjectMode() {
+                var memories = parser.parse("""
+                                {"memories":[{"category":"PROFILE","content":"Uses macOS","confidence":0.9,"reason":"User stated it"}]}
+                                """, CONVERSATION);
+
+                assertEquals(1, memories.size());
+                assertEquals(MemoryCategory.PROFILE, memories.getFirst().category());
+        }
+
     @Test
     void preservesCardinalityAndOrder() {
         var memories = parser.parse("""
@@ -78,7 +88,7 @@ class ReflectionParserTest {
     }
 
     @Test
-    void rejectsWrongTypesDuplicateFieldsInvalidConfidenceAndNonArrayRoots() {
+        void rejectsWrongTypesDuplicateFieldsInvalidConfidenceAndInvalidRoots() {
         assertThrows(MemoryException.class, () -> parser.parse(
                 "[{\"category\":\"PROFILE\",\"content\":\"x\",\"confidence\":\"0.9\",\"reason\":\"r\"}]", CONVERSATION));
         assertThrows(MemoryException.class, () -> parser.parse(
@@ -91,7 +101,7 @@ class ReflectionParserTest {
                 "[{\"category\":\"PROFILE\",\"content\":\"x\",\"confidence\":-0.1,\"reason\":\"r\"}]", CONVERSATION));
         assertThrows(MemoryException.class, () -> parser.parse(
                 "[{\"category\":\"PROFILE\",\"content\":\"x\",\"confidence\":1.1,\"reason\":\"r\"}]", CONVERSATION));
-        assertThrows(MemoryException.class, () -> parser.parse("{\"memories\":[]}", CONVERSATION));
+        assertThrows(MemoryException.class, () -> parser.parse("{\"other\":[]}", CONVERSATION));
         assertThrows(MemoryException.class, () -> parser.parse("42", CONVERSATION));
     }
 
