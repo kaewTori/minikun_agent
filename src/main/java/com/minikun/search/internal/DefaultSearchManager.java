@@ -89,7 +89,8 @@ public final class DefaultSearchManager implements SearchManager {
             int retryCount = 0;
             for (String query : expandedQuery.expandedQueries()) {
                 SearchRequest expandedRequest = new SearchRequest(
-                        request.requestId(), query, request.resultLimit(), request.deadline());
+                        request.requestId(), query, request.resultLimit(), request.deadline(),
+                        request.options(), List.of());
                 Execution execution = execute(expandedRequest);
                 providerResults.addAll(execution.response().results());
                 retryCount += execution.retryCount();
@@ -102,7 +103,9 @@ public final class DefaultSearchManager implements SearchManager {
             SearchMetadata metadata = new SearchMetadata(duration, false, false, retryCount);
             SearchResponse response = new SearchResponse(
                 request.requestId(), status, providerResponse.results(), metadata);
-            KnowledgeContext result = formatter.format(budgeter.budget(deduplicator.deduplicate(response)));
+            SearchResponse deduplicated = deduplicator.deduplicate(response);
+            SearchResponse ranked = new SearchRanker().rank(deduplicated, request.query(), request.options());
+            KnowledgeContext result = formatter.format(budgeter.budget(ranked));
             recordQuality(result);
             return result;
         } catch (RuntimeException exception) {

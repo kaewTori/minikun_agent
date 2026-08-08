@@ -37,23 +37,26 @@ public final class DefaultSearchService implements SearchService {
     private final SearchQueryRewriteService queryRewriteService;
     private final SearchQueryExpansionService queryExpansionService;
     private final MeterRegistry meterRegistry;
+    private final String providerVersion;
 
     public DefaultSearchService(
             SearchManager manager, SearchCache cache, boolean searchEnabled, boolean cacheEnabled) {
-        this(manager, cache, searchEnabled, cacheEnabled, new DefaultSearchQueryRewriteService(), null);
+        this(manager, cache, searchEnabled, cacheEnabled, new DefaultSearchQueryRewriteService(),
+                new RuleBasedSearchQueryExpansionService(List.of(new IdentityExpansionRule())), null, "v1");
     }
 
     public DefaultSearchService(
             SearchManager manager, SearchCache cache, boolean searchEnabled, boolean cacheEnabled,
             MeterRegistry meterRegistry) {
-        this(manager, cache, searchEnabled, cacheEnabled, new DefaultSearchQueryRewriteService(), meterRegistry);
+        this(manager, cache, searchEnabled, cacheEnabled, new DefaultSearchQueryRewriteService(),
+                new RuleBasedSearchQueryExpansionService(List.of(new IdentityExpansionRule())), meterRegistry, "v1");
         }
 
         public DefaultSearchService(
             SearchManager manager, SearchCache cache, boolean searchEnabled, boolean cacheEnabled,
             SearchQueryRewriteService queryRewriteService, MeterRegistry meterRegistry) {
         this(manager, cache, searchEnabled, cacheEnabled, queryRewriteService,
-                new RuleBasedSearchQueryExpansionService(List.of(new IdentityExpansionRule())), meterRegistry);
+                new RuleBasedSearchQueryExpansionService(List.of(new IdentityExpansionRule())), meterRegistry, "v1");
     }
 
     public DefaultSearchService(
@@ -61,6 +64,15 @@ public final class DefaultSearchService implements SearchService {
             SearchQueryRewriteService queryRewriteService,
             SearchQueryExpansionService queryExpansionService,
             MeterRegistry meterRegistry) {
+        this(manager, cache, searchEnabled, cacheEnabled, queryRewriteService, queryExpansionService,
+                meterRegistry, "v1");
+    }
+
+    public DefaultSearchService(
+            SearchManager manager, SearchCache cache, boolean searchEnabled, boolean cacheEnabled,
+            SearchQueryRewriteService queryRewriteService,
+            SearchQueryExpansionService queryExpansionService,
+            MeterRegistry meterRegistry, String providerVersion) {
         this.manager = Objects.requireNonNull(manager, "manager must not be null");
         this.cache = Objects.requireNonNull(cache, "cache must not be null");
         this.searchEnabled = searchEnabled;
@@ -70,6 +82,7 @@ public final class DefaultSearchService implements SearchService {
         this.queryExpansionService = Objects.requireNonNull(
             queryExpansionService, "query expansion service must not be null");
         this.meterRegistry = meterRegistry;
+        this.providerVersion = Objects.requireNonNullElse(providerVersion, "v1");
     }
 
     @Override
@@ -87,16 +100,25 @@ public final class DefaultSearchService implements SearchService {
             if (!searchQuery.originalQuery().equals(searchQuery.rewrittenQuery())) {
                 increment(REWRITE_CHANGED_COUNTER);
             }
-                ExpandedSearchQuery expandedSearchQuery = queryExpansionService.expand(searchQuery);
+            ExpandedSearchQuery expandedSearchQuery = queryExpansionService.expand(searchQuery);
+            if (!request.alternateQueries().isEmpty()) {
+                java.util.LinkedHashSet<String> queries = new java.util.LinkedHashSet<>(
+                        expandedSearchQuery.expandedQueries());
+                queries.addAll(request.alternateQueries());
+                expandedSearchQuery = new ExpandedSearchQuery(
+                        expandedSearchQuery.originalQuery(), expandedSearchQuery.rewrittenQuery(),
+                        List.copyOf(queries));
+            }
                 increment(EXPAND_REQUEST_COUNTER);
                 if (!expandedSearchQuery.expandedQueries().equals(List.of(expandedSearchQuery.rewrittenQuery()))) {
                 increment(EXPAND_CHANGED_COUNTER);
                 }
             SearchRequest rewrittenRequest = new SearchRequest(
                     request.requestId(), expandedSearchQuery.rewrittenQuery(),
-                    request.resultLimit(), request.deadline());
+                    request.resultLimit(), request.deadline(), request.options(),
+                    request.alternateQueries());
                 List<SearchCacheKey> keys = expandedSearchQuery.expandedQueries().stream()
-                        .map(query -> SearchCacheKey.from(query, request.resultLimit()))
+                        .map(query -> SearchCacheKey.from(query, request.resultLimit(), request.options(), providerVersion))
                         .toList();
             if (cacheEnabled) {
                     List<KnowledgeContext> cachedContexts = new ArrayList<>();

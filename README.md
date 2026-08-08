@@ -13,6 +13,8 @@
 - ประกอบ prompt ผ่าน Provider Composition System (PCS)
 - ค้นเว็บผ่าน SearXNG พร้อม cache บน Valkey
 - เลือกว่าจะค้นเว็บหรือไม่ผ่าน rule/LLM decision mode
+- วางแผน query แบบ deterministic สำหรับตัด conversational wrapper และสร้าง core query ภาษาไทย/อังกฤษ
+- ส่ง language/category/time-range/safe-search options ไปยัง SearXNG พร้อม ranking และ URL deduplication
 - Actuator health และ metrics
 - คำสั่ง runtime และ diagnostics ที่จัดการในระดับ application
 
@@ -112,6 +114,10 @@ Actuator ที่เปิดให้เข้าถึงคือ `/actuator
 | `MINIKUN_SEARCH_ENABLED` | `true` | เปิด/ปิด web search |
 | `MINIKUN_SEARCH_CACHE_ENABLED` | `true` | เปิด/ปิด search cache |
 | `MINIKUN_SEARCH_CACHE_TTL` | `PT5M` | อายุ search cache |
+| `MINIKUN_SEARCH_SAFESEARCH` | `true` | ส่ง safe-search option ให้ SearXNG |
+| `MINIKUN_SEARCH_QUERY_PLANNING_ENABLED` | `true` | เปิด query planning และ core keyword extraction |
+| `MINIKUN_SEARCH_QUERY_PLANNING_MAX_ALTERNATES` | `2` | จำนวน alternate queries สูงสุด |
+| `MINIKUN_SEARCH_CACHE_PROVIDER_VERSION` | `v1` | version ของ provider ที่รวมใน cache key |
 | `SPRING_AI_CHAT_MEMORY_MAX_MESSAGES` | `20` | จำนวนข้อความ short-term memory สูงสุด |
 | `MINIKUN_MEMORY_RECALL_MAXIMUM_COUNT` | `10` | จำนวน long-term memories ที่เรียกคืนสูงสุด |
 | `MINIKUN_MEMORY_RECALL_MAXIMUM_CHARACTERS` | `4000` | ขนาด Knowledge context สูงสุด |

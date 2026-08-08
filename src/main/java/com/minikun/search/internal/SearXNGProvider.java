@@ -44,10 +44,15 @@ public final class SearXNGProvider implements SearchProvider {
         SearchProviderResponse response = null;
         RuntimeException failure = null;
         try {
-            var uri = UriComponentsBuilder.fromPath("/search")
+                var uri = UriComponentsBuilder.fromPath("/search")
                     .queryParam("q", UriUtils.encodeQueryParam(request.query(), StandardCharsets.UTF_8))
                 .queryParam("format", "json")
                 .queryParam("number_of_results", request.resultLimit())
+                    .queryParamIfPresent("language", optional(request.options().language()))
+                    .queryParamIfPresent("categories", optional(request.options().category()))
+                    .queryParamIfPresent("time_range", optional(request.options().timeRange()))
+                    .queryParamIfPresent("safesearch", request.options().safeSearch()
+                            ? java.util.Optional.of("1") : java.util.Optional.empty())
                     .build(true)
                 .toUri();
             String body = restClient.get()
@@ -73,6 +78,10 @@ public final class SearXNGProvider implements SearchProvider {
         } finally {
             logProviderOutcome(request, response, failure, Duration.between(started, clock.instant()));
         }
+    }
+
+    private java.util.Optional<String> optional(String value) {
+        return value == null || value.isBlank() ? java.util.Optional.empty() : java.util.Optional.of(value);
     }
 
     private void logProviderOutcome(

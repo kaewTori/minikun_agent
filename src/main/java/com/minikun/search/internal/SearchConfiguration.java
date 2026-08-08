@@ -7,6 +7,7 @@ import com.minikun.search.SearchDecisionClient;
 import com.minikun.search.SearchManager;
 import com.minikun.search.SearchProvider;
 import com.minikun.search.SearchQueryExpansionService;
+import com.minikun.search.SearchQueryPlanningService;
 import com.minikun.search.SearchQueryRewriteService;
 import com.minikun.search.SearchDecisionService;
 import com.minikun.search.SearchCache;
@@ -78,15 +79,23 @@ public class SearchConfiguration {
             SearchQueryExpansionService queryExpansionService,
             @Value("${minikun.search.enabled:true}") boolean searchEnabled,
             @Value("${minikun.search.cache.enabled:true}") boolean cacheEnabled,
-            MeterRegistry meterRegistry) {
+            MeterRegistry meterRegistry,
+            @Value("${minikun.search.cache.provider-version:v1}") String providerVersion) {
         return new DefaultSearchService(
             manager, cache, searchEnabled, cacheEnabled,
-            queryRewriteService, queryExpansionService, meterRegistry);
+            queryRewriteService, queryExpansionService, meterRegistry, providerVersion);
     }
 
     @Bean
     SearchQueryRewriteService searchQueryRewriteService() {
         return new DefaultSearchQueryRewriteService();
+    }
+
+    @Bean
+    SearchQueryPlanningService searchQueryPlanningService(
+            MeterRegistry meterRegistry,
+            @Value("${minikun.search.query-planning.max-alternates:2}") int maxAlternates) {
+        return new DefaultSearchQueryPlanningService(meterRegistry, maxAlternates);
     }
 
     @Bean

@@ -31,7 +31,14 @@ public final class SearchDeduplicator {
     private String normalizeUrl(String value) {
         try {
             URI uri = URI.create(value.trim());
-            return new URI(uri.getScheme(), uri.getAuthority(), uri.getPath(), uri.getQuery(), null)
+            String query = uri.getQuery();
+            if (query != null) {
+                query = java.util.Arrays.stream(query.split("&"))
+                        .filter(part -> !part.toLowerCase(Locale.ROOT).startsWith("utm_"))
+                        .filter(part -> !part.toLowerCase(Locale.ROOT).startsWith("fbclid="))
+                        .collect(java.util.stream.Collectors.joining("&"));
+            }
+            return new URI(uri.getScheme(), uri.getAuthority(), uri.getPath(), query, null)
                     .toString().toLowerCase(Locale.ROOT);
         } catch (Exception exception) {
             return normalize(value);

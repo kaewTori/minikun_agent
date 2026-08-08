@@ -56,11 +56,14 @@ import com.minikun.pcs.model.KnowledgeContext;
 import com.minikun.pcs.model.PromptMessage;
 import com.minikun.pcs.model.RuntimeContext;
 import com.minikun.search.SearchDecisionService;
+import com.minikun.search.SearchQueryPlanningService;
 import com.minikun.search.SearchContextAwarenessService;
 import com.minikun.search.SearchService;
 import com.minikun.search.SearchSelectionSignalMapper;
 import com.minikun.search.model.SearchDecision;
 import com.minikun.search.model.SearchRequest;
+import com.minikun.search.model.SearchOptions;
+import com.minikun.search.model.SearchQueryPlan;
 import com.minikun.runtime.CacheFormatter;
 import com.minikun.runtime.CacheService;
 import com.minikun.runtime.ModelsFormatter;
@@ -87,6 +90,7 @@ public class ChatService {
     private final PromptComposer promptComposer;
     private final SearchService searchService;
     private final SearchDecisionService searchDecisionService;
+    private final SearchQueryPlanningService searchQueryPlanningService;
     private final SearchContextAwarenessService searchContextAwarenessService;
     private final KnowledgeSelectionService knowledgeSelectionService;
     private final KnowledgeConsolidationService knowledgeConsolidationService;
@@ -138,6 +142,7 @@ public class ChatService {
                 promptComposer,
                 searchService,
                 searchDecisionService,
+                new com.minikun.search.internal.DefaultSearchQueryPlanningService(),
                 new com.minikun.search.internal.DefaultSearchContextAwarenessService(),
                 new com.minikun.pcs.DefaultKnowledgeSelectionService(),
                 new com.minikun.pcs.DefaultKnowledgeConsolidationService(),
@@ -176,6 +181,12 @@ public class ChatService {
 
     @Value("${minikun.memory.retrieval.max-candidates:10}")
     private int configuredMemoryRetrievalLimit;
+
+    @Value("${minikun.search.safesearch:true}")
+    private boolean searchSafeSearch;
+
+    @Value("${minikun.search.query-planning.enabled:true}")
+    private boolean searchQueryPlanningEnabled;
 
     public ChatCompletionResponse chatCompletion(ChatCompletionRequest request, ConversationId conversationId) {
         ChatMessage userMessage = userMessage(request);
@@ -499,10 +510,18 @@ public class ChatService {
         }
 
         SearchDecision decision = searchDecisionService.decide(query);
+        SearchQueryPlan plan = searchQueryPlanningEnabled
+                ? searchQueryPlanningService.plan(query, decision)
+                : new SearchQueryPlan(decision.shouldSearch(), query,
+                        decision.shouldSearch() ? decision.query() : "", List.of(), List.of(),
+                        "all", "general", "", 1.0, "query_planning_disabled");
+        SearchDecision plannedDecision = plan.shouldSearch()
+                ? new SearchDecision(true, plan.primaryQuery(), decision.reason())
+                : decision;
         SearchSelectionSignals searchSignals = searchSelectionSignalMapper.map(decision);
-        if (!decision.shouldSearch()) {
+        if (!plan.shouldSearch()) {
             return selectionWithContext(query, conversationContextAvailable, memoryKnowledge,
-                    decision, false, null, searchSignals);
+                    plannedDecision, false, null, searchSignals);
         }
 
         KnowledgeContext searchKnowledge = null;
@@ -511,19 +530,25 @@ public class ChatService {
             searchAttempted = true;
             SearchRequest searchRequest = new SearchRequest(
                     UUID.randomUUID(),
-                    decision.query(),
+                    plan.primaryQuery(),
                     10,
-                    Instant.now().plus(searchTimeout));
+                    Instant.now().plus(searchTimeout),
+                    new SearchOptions(plan.language(), categoryFor(plan.intent()), plan.timeRange(), searchSafeSearch),
+                    plan.alternateQueries());
             searchKnowledge = searchService.search(searchRequest);
                 log.info("Search completed knowledgeCharacters={}",
                     searchKnowledge == null ? 0 : searchKnowledge.content().length());
                 return pipelineSelection(query, conversationContextAvailable, memoryKnowledge,
-                    decision, searchAttempted, searchKnowledge, searchSignals);
+                    plannedDecision, searchAttempted, searchKnowledge, searchSignals);
         } catch (RuntimeException exception) {
             log.warn("Search failed; continuing without search knowledge", exception);
                 return pipelineSelection(query, conversationContextAvailable, memoryKnowledge,
-                    decision, searchAttempted, null, searchSignals);
+                    plannedDecision, searchAttempted, null, searchSignals);
         }
+    }
+
+    private String categoryFor(String intent) {
+        return "current_information".equals(intent) ? "news" : "";
     }
 
             private KnowledgePipelineSelection selectionWithContext(
