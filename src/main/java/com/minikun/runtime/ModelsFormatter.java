@@ -9,7 +9,6 @@ public final class ModelsFormatter {
                 + "Chat: " + RuntimeFormatter.value(info.chatModel()) + '\n'
                 + "Embedding: " + RuntimeFormatter.value(info.embeddingModel()) + '\n'
                 + "Memory: " + RuntimeFormatter.value(info.memoryModel()) + '\n'
-                + "Memory llama.cpp: " + RuntimeFormatter.value(info.memoryLlamaCppModel()) + '\n'
                 + "Search decision: " + RuntimeFormatter.value(info.searchDecisionModel()) + '\n';
     }
 }

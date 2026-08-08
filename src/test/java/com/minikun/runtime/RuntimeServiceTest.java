@@ -13,7 +13,7 @@ import org.springframework.boot.info.BuildProperties;
 class RuntimeServiceTest {
     @Test
     void modelsSnapshotIsImmutableAndConfigurationOnly() {
-        ModelsService service = new ModelsService("chat", "embedding", "memory", "llama", "");
+        ModelsService service = new ModelsService("chat", "embedding", "memory", "");
 
         ModelsInfo first = service.snapshot();
         ModelsInfo second = service.snapshot();

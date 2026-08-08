@@ -96,7 +96,7 @@ class ChatServiceRuntimeCommandTest {
                 new CommandFormatter(),
                 new VersionService((ObjectProvider) buildProperties, "1.0.0"),
                 new VersionFormatter(),
-                new ModelsService("chat", "embedding", "memory", "llama", ""),
+                new ModelsService("chat", "embedding", "memory", ""),
                 new ModelsFormatter(),
                 new CacheService("true", "valkey", Duration.ofMinutes(5)),
                 new CacheFormatter(),

@@ -29,14 +29,13 @@ class RuntimeFormatterTest {
     void keepsModelsFieldOrderStable() {
         String output = new ModelsFormatter().format(new ModelsInfo(
                 RuntimeValue.configured("chat"), RuntimeValue.notConfigured(),
-                RuntimeValue.configured("memory"), RuntimeValue.unavailable(),
+                RuntimeValue.configured("memory"),
                 RuntimeValue.notConfigured()));
 
         assertEquals("Models\n"
                 + "Chat: chat\n"
                 + "Embedding: Not configured\n"
                 + "Memory: memory\n"
-                + "Memory llama.cpp: Unavailable\n"
                 + "Search decision: Not configured\n", output);
     }
 
