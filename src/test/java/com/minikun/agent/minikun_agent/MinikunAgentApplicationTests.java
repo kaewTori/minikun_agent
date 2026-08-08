@@ -9,6 +9,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.minikun.search.AcronymDictionary;
 import com.minikun.search.AliasDictionary;
 import com.minikun.search.SearchDecisionService;
+import com.minikun.search.SearchContextAwarenessService;
 import com.minikun.search.SearchQueryExpansionService;
 import com.minikun.search.SearchQueryRewriteService;
 import com.minikun.search.SynonymDictionary;
@@ -54,6 +55,9 @@ class MinikunAgentApplicationTests {
 	private SearchDecisionService searchDecisionService;
 
 	@Autowired
+	private SearchContextAwarenessService searchContextAwarenessService;
+
+	@Autowired
 	private SearchQueryRewriteService searchQueryRewriteService;
 
 	@Autowired
@@ -70,6 +74,13 @@ class MinikunAgentApplicationTests {
 
 	@Test
 	void contextLoads() {
+	}
+
+	@Test
+	void contextWiresDeterministicSearchContextAwarenessService() {
+		org.junit.jupiter.api.Assertions.assertInstanceOf(
+				com.minikun.search.internal.DefaultSearchContextAwarenessService.class,
+				searchContextAwarenessService);
 	}
 
 	@Test

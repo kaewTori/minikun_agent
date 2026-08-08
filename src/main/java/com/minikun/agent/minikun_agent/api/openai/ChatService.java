@@ -15,6 +15,7 @@ import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -41,12 +42,14 @@ import com.minikun.character.model.CharacterSpecification;
 import com.minikun.pcs.PromptComposer;
 import com.minikun.pcs.PromptException;
 import com.minikun.pcs.PromptRequest;
+import com.minikun.pcs.SearchContext;
 import com.minikun.pcs.SearchSelectionSignals;
 import com.minikun.pcs.model.ConversationContext;
 import com.minikun.pcs.model.KnowledgeContext;
 import com.minikun.pcs.model.PromptMessage;
 import com.minikun.pcs.model.RuntimeContext;
 import com.minikun.search.SearchDecisionService;
+import com.minikun.search.SearchContextAwarenessService;
 import com.minikun.search.SearchService;
 import com.minikun.search.SearchSelectionSignalMapper;
 import com.minikun.search.model.SearchDecision;
@@ -64,7 +67,7 @@ import reactor.core.publisher.Flux;
 import org.slf4j.MDC;
 
 @Service
-@RequiredArgsConstructor
+@RequiredArgsConstructor(onConstructor_ = @Autowired)
 @Slf4j
 public class ChatService {
 
@@ -77,6 +80,7 @@ public class ChatService {
     private final PromptComposer promptComposer;
     private final SearchService searchService;
     private final SearchDecisionService searchDecisionService;
+    private final SearchContextAwarenessService searchContextAwarenessService;
     private final SearchSelectionSignalMapper searchSelectionSignalMapper;
     private final DiagnosticsService diagnosticsService;
     private final DiagnosticsFormatter diagnosticsFormatter;
@@ -91,6 +95,55 @@ public class ChatService {
     private final CacheFormatter cacheFormatter;
     private final ObjectProvider<ReflectionService> reflectionService;
     private final ObjectMapper objectMapper = new ObjectMapper();
+
+    public ChatService(
+            ChatModel chatModel,
+            EmbeddingModel embeddingModel,
+            ChatTransactionLogger transactionLogger,
+            ConversationMemoryService conversationMemoryService,
+            ObjectProvider<MemoryRecallService> memoryRecallService,
+            CharacterSpecification characterSpecification,
+            PromptComposer promptComposer,
+            SearchService searchService,
+            SearchDecisionService searchDecisionService,
+            SearchSelectionSignalMapper searchSelectionSignalMapper,
+            DiagnosticsService diagnosticsService,
+            DiagnosticsFormatter diagnosticsFormatter,
+            DiagnosticsPromptBuilder diagnosticsPromptBuilder,
+            CommandCatalog commandCatalog,
+            CommandFormatter commandFormatter,
+            VersionService versionService,
+            VersionFormatter versionFormatter,
+            ModelsService modelsService,
+            ModelsFormatter modelsFormatter,
+            CacheService cacheService,
+            CacheFormatter cacheFormatter,
+            ObjectProvider<ReflectionService> reflectionService) {
+        this(
+                chatModel,
+                embeddingModel,
+                transactionLogger,
+                conversationMemoryService,
+                memoryRecallService,
+                characterSpecification,
+                promptComposer,
+                searchService,
+                searchDecisionService,
+                new com.minikun.search.internal.DefaultSearchContextAwarenessService(),
+                searchSelectionSignalMapper,
+                diagnosticsService,
+                diagnosticsFormatter,
+                diagnosticsPromptBuilder,
+                commandCatalog,
+                commandFormatter,
+                versionService,
+                versionFormatter,
+                modelsService,
+                modelsFormatter,
+                cacheService,
+                cacheFormatter,
+                reflectionService);
+    }
 
     @Value("${spring.ai.ollama.chat.options.model:hf.co/llmfan46/gemma-4-E4B-it-ultra-uncensored-heretic-GGUF:Q5_K_M}")
     private String configuredChatModel;
@@ -133,7 +186,8 @@ public class ChatService {
         }
         started = System.nanoTime();
         KnowledgeSelection knowledgeSelection = knowledgeFor(
-            userMessage.content(), transaction.requestId(), conversationId.value());
+            userMessage.content(), transaction.requestId(), conversationId.value(),
+            hasConversationContext(history, request));
         logDuration("knowledge", started, transaction.requestId());
         started = System.nanoTime();
         Prompt prompt = promptFor(request, history, knowledgeSelection);
@@ -185,7 +239,8 @@ public class ChatService {
         StringBuilder assistantContent = new StringBuilder();
 
         KnowledgeSelection knowledgeSelection = knowledgeFor(
-            userMessage.content(), transaction.requestId(), conversationId.value());
+            userMessage.content(), transaction.requestId(), conversationId.value(),
+            hasConversationContext(history, request));
         Flux<String> chunks = chatModel.stream(promptFor(request, history, knowledgeSelection))
             .doOnNext(response -> appendAssistantText(assistantContent, response))
                 .map(response -> streamChunk(response, id, created, model))
@@ -368,7 +423,8 @@ public class ChatService {
                 knowledgeSelection.knowledge(),
                 List.of(),
                 new com.minikun.pcs.model.UserMessage(userMessage.content()),
-                knowledgeSelection.searchSignals());
+                knowledgeSelection.searchSignals(),
+                knowledgeSelection.searchContext());
         return toSpringPrompt(promptComposer.compose(promptRequest));
     }
 
@@ -399,7 +455,8 @@ public class ChatService {
     }
 
     private KnowledgeSelection knowledgeFor(
-            String query, String requestId, String conversationId) {
+            String query, String requestId, String conversationId,
+            boolean conversationContextAvailable) {
         Map<String, String> previous = null;
         boolean scoped = false;
         try {
@@ -415,7 +472,7 @@ public class ChatService {
             restoreMdc(previous);
         }
         try {
-            return knowledgeFor(query);
+            return knowledgeFor(query, conversationContextAvailable);
         } finally {
             if (scoped) {
                 restoreMdc(previous);
@@ -423,12 +480,13 @@ public class ChatService {
         }
     }
 
-    private KnowledgeSelection knowledgeFor(String query) {
+    private KnowledgeSelection knowledgeFor(String query, boolean conversationContextAvailable) {
         long started = System.nanoTime();
         KnowledgeContext memoryKnowledge = recallKnowledge();
         logDuration("memory_recall", started, null);
         if (!searchEnabled || isInternalTitleRequest(query)) {
-            return new KnowledgeSelection(memoryKnowledge, SearchSelectionSignals.EMPTY);
+            return selectionWithContext(query, conversationContextAvailable, memoryKnowledge,
+                    null, false, null, SearchSelectionSignals.EMPTY);
         }
 
         started = System.nanoTime();
@@ -436,31 +494,70 @@ public class ChatService {
         logDuration("search_decision", started, null);
         SearchSelectionSignals searchSignals = searchSelectionSignalMapper.map(decision);
         if (!decision.shouldSearch()) {
-            return new KnowledgeSelection(memoryKnowledge, searchSignals);
+            return selectionWithContext(query, conversationContextAvailable, memoryKnowledge,
+                    decision, false, null, searchSignals);
         }
 
+        KnowledgeContext searchKnowledge = null;
+        boolean searchAttempted = false;
         try {
             started = System.nanoTime();
+            searchAttempted = true;
             SearchRequest searchRequest = new SearchRequest(
                     UUID.randomUUID(),
                     decision.query(),
                     10,
                     Instant.now().plus(searchTimeout));
-            KnowledgeContext searchKnowledge = searchService.search(searchRequest);
+            searchKnowledge = searchService.search(searchRequest);
             logDuration("search", started, null);
                     log.info("Search completed knowledgeCharacters={}",
                         searchKnowledge == null ? 0 : searchKnowledge.content().length());
                 return new KnowledgeSelection(
-                    combineKnowledge(memoryKnowledge, searchKnowledge), searchSignals);
+                    combineKnowledge(memoryKnowledge, searchKnowledge), searchSignals,
+                    searchContextAwarenessService.observe(
+                        query, conversationContextAvailable, memoryKnowledge, decision,
+                        searchAttempted, searchKnowledge));
         } catch (RuntimeException exception) {
             log.warn("Search failed; continuing without search knowledge", exception);
-                return new KnowledgeSelection(memoryKnowledge, searchSignals);
+                return new KnowledgeSelection(
+                    memoryKnowledge, searchSignals,
+                    searchContextAwarenessService.observe(
+                        query, conversationContextAvailable, memoryKnowledge, decision,
+                        searchAttempted, searchKnowledge));
         }
     }
 
+            private KnowledgeSelection selectionWithContext(
+                String query,
+                boolean conversationContextAvailable,
+                KnowledgeContext memoryKnowledge,
+                SearchDecision decision,
+                boolean searchAttempted,
+                KnowledgeContext searchKnowledge,
+                SearchSelectionSignals searchSignals) {
+            return new KnowledgeSelection(
+                combineKnowledge(memoryKnowledge, searchKnowledge),
+                searchSignals,
+                searchContextAwarenessService.observe(
+                    query, conversationContextAvailable, memoryKnowledge, decision,
+                    searchAttempted, searchKnowledge));
+            }
+
             private record KnowledgeSelection(
                 KnowledgeContext knowledge,
-                SearchSelectionSignals searchSignals) {
+                SearchSelectionSignals searchSignals,
+                SearchContext searchContext) {
+            }
+
+            private boolean hasConversationContext(
+                List<ChatMessage> history, ChatCompletionRequest request) {
+            boolean hasHistory = history.stream()
+                .anyMatch(message -> !isCommandMessage(message.content()));
+            long requestConversationMessages = request.messages().stream()
+                .filter(message -> !"system".equals(message.role()))
+                .filter(message -> hasText(message.content()))
+                .count();
+            return hasHistory || requestConversationMessages > 1;
             }
 
     private void restoreMdc(Map<String, String> previous) {

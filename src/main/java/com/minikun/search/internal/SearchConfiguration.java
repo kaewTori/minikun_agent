@@ -10,6 +10,7 @@ import com.minikun.search.SearchQueryExpansionService;
 import com.minikun.search.SearchQueryRewriteService;
 import com.minikun.search.SearchDecisionService;
 import com.minikun.search.SearchCache;
+import com.minikun.search.SearchContextAwarenessService;
 import com.minikun.search.SearchService;
 import com.minikun.search.SynonymDictionary;
 import com.minikun.search.dictionary.ImmutableAcronymDictionary;
@@ -86,6 +87,11 @@ public class SearchConfiguration {
     @Bean
     SearchQueryRewriteService searchQueryRewriteService() {
         return new DefaultSearchQueryRewriteService();
+    }
+
+    @Bean
+    SearchContextAwarenessService searchContextAwarenessService() {
+        return new DefaultSearchContextAwarenessService();
     }
 
     @Bean

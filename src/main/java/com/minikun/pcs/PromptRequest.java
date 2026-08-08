@@ -16,7 +16,8 @@ public record PromptRequest(
         KnowledgeContext knowledge,
         List<CapabilityInstruction> capabilities,
         UserMessage userMessage,
-        SearchSelectionSignals searchSelectionSignals) {
+        SearchSelectionSignals searchSelectionSignals,
+        SearchContext searchContext) {
     public PromptRequest(
             CharacterSpecification character,
             RuntimeContext runtime,
@@ -25,12 +26,25 @@ public record PromptRequest(
             List<CapabilityInstruction> capabilities,
             UserMessage userMessage) {
         this(character, runtime, conversation, knowledge, capabilities, userMessage,
-                SearchSelectionSignals.EMPTY);
+            SearchSelectionSignals.EMPTY, SearchContext.EMPTY);
+        }
+
+        public PromptRequest(
+            CharacterSpecification character,
+            RuntimeContext runtime,
+            ConversationContext conversation,
+            KnowledgeContext knowledge,
+            List<CapabilityInstruction> capabilities,
+            UserMessage userMessage,
+            SearchSelectionSignals searchSelectionSignals) {
+        this(character, runtime, conversation, knowledge, capabilities, userMessage,
+            searchSelectionSignals, SearchContext.EMPTY);
     }
 
     public PromptRequest {
         capabilities = capabilities == null ? List.of() : List.copyOf(capabilities);
         searchSelectionSignals = searchSelectionSignals == null
                 ? SearchSelectionSignals.EMPTY : searchSelectionSignals;
+        searchContext = searchContext == null ? SearchContext.EMPTY : searchContext;
     }
 }

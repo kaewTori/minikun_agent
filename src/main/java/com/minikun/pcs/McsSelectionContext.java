@@ -8,7 +8,8 @@ public record McsSelectionContext(
         ConversationAttributes conversationAttributes,
     RuntimeAttributes runtimeAttributes,
     MemorySelectionSignals memorySelectionSignals,
-    InterestSelectionSignals interestSelectionSignals) {
+    InterestSelectionSignals interestSelectionSignals,
+    SearchContext searchContext) {
     public McsSelectionContext(String currentUserMessage, String conversationHistory) {
         this(currentUserMessage, conversationHistory,
         ConversationAttributes.EMPTY, RuntimeAttributes.EMPTY,
@@ -21,7 +22,7 @@ public record McsSelectionContext(
         ConversationAttributes conversationAttributes,
         RuntimeAttributes runtimeAttributes) {
     this(currentUserMessage, conversationHistory, conversationAttributes, runtimeAttributes,
-        MemorySelectionSignals.EMPTY, InterestSelectionSignals.EMPTY);
+    MemorySelectionSignals.EMPTY, InterestSelectionSignals.EMPTY, SearchContext.EMPTY);
     }
 
     public McsSelectionContext(
@@ -31,7 +32,18 @@ public record McsSelectionContext(
         RuntimeAttributes runtimeAttributes,
         MemorySelectionSignals memorySelectionSignals) {
     this(currentUserMessage, conversationHistory, conversationAttributes, runtimeAttributes,
-        memorySelectionSignals, InterestSelectionSignals.EMPTY);
+        memorySelectionSignals, InterestSelectionSignals.EMPTY, SearchContext.EMPTY);
+    }
+
+    public McsSelectionContext(
+        String currentUserMessage,
+        String conversationHistory,
+        ConversationAttributes conversationAttributes,
+        RuntimeAttributes runtimeAttributes,
+        MemorySelectionSignals memorySelectionSignals,
+        InterestSelectionSignals interestSelectionSignals) {
+    this(currentUserMessage, conversationHistory, conversationAttributes, runtimeAttributes,
+        memorySelectionSignals, interestSelectionSignals, SearchContext.EMPTY);
     }
 
     public McsSelectionContext {
@@ -44,5 +56,6 @@ public record McsSelectionContext(
             memorySelectionSignals, MemorySelectionSignals.EMPTY);
         interestSelectionSignals = Objects.requireNonNullElse(
             interestSelectionSignals, InterestSelectionSignals.EMPTY);
+        searchContext = Objects.requireNonNullElse(searchContext, SearchContext.EMPTY);
     }
 }

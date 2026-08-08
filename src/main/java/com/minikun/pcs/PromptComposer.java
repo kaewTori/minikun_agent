@@ -46,7 +46,8 @@ public final class PromptComposer {
         McsSelectionContext context = contextFactory.create(
             userMessage.content(),
             request.conversation() == null ? "" : request.conversation().content(),
-            request.searchSelectionSignals());
+            request.searchSelectionSignals(),
+            request.searchContext());
         logDuration("selection_context", contextStarted);
         long selectionStarted = System.nanoTime();
         McsSelectionResult selection = selector.select(request.character(), context);
