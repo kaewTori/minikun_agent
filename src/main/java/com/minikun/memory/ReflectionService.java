@@ -70,6 +70,9 @@ public class ReflectionService {
             } catch (RuntimeException exception) {
                 outcome = "parser_failure";
                 incrementFailure("parser");
+                log.warn("memory_reflection parser_failure conversation_id={} response_length={} reason={}",
+                        conversation == null ? null : conversation.conversationId(),
+                        response == null ? 0 : response.length(), exception.getMessage());
                 return;
             }
             List<AcceptedMemory> accepted;

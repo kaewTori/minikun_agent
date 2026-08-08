@@ -33,7 +33,7 @@ public final class ReflectionPromptBuilder {
                     `category` must be one of `PREFERENCE`, `GOAL`, `PROFILE`, `SKILL`, or `PROJECT`.
                     `confidence` must be a finite number from 0.0 to 1.0.
                     Do not infer facts, inspect stored memories, or include assistant claims as user facts.
-                    If there are no durable memories, return [].
+                    If there are no durable memories, return {"memories":[]}.
 
                     Current date: %s
 

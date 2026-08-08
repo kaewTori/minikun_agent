@@ -3,6 +3,7 @@ package com.minikun.agent.minikun_agent.api.openai;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.Map;
 
@@ -792,12 +793,60 @@ public class ChatService {
         return new ChatMessage("user", request.messages().get(userMessageIndex).content());
     }
 
-    private CompletedConversation completedConversation(String ownerId, ConversationId conversationId) {
-        return new CompletedConversation(
-                ownerId, conversationId.value(),
-                conversationMemoryService.load(conversationId).stream()
-                        .map(message -> new CompletedConversation.Message(message.role(), message.content()))
-                        .toList());
+    private Optional<CompletedConversation> completedConversation(String ownerId, ConversationId conversationId) {
+        List<ChatMessage> messages = conversationMemoryService.load(conversationId);
+        int assistantIndex = latestAssistantIndex(messages);
+        if (assistantIndex < 0 || hasConversationMessageAfter(messages, assistantIndex)) {
+            return Optional.empty();
+        }
+
+        int firstUserIndex = assistantIndex - 1;
+        while (firstUserIndex >= 0 && isUserMessage(messages.get(firstUserIndex))) {
+            firstUserIndex--;
+        }
+        firstUserIndex++;
+        if (firstUserIndex > assistantIndex - 1) {
+            return Optional.empty();
+        }
+
+        List<CompletedConversation.Message> snapshot = messages.subList(firstUserIndex, assistantIndex + 1).stream()
+                .filter(message -> !isSystemMessage(message))
+                .map(message -> new CompletedConversation.Message(message.role(), message.content()))
+                .toList();
+        return Optional.of(new CompletedConversation(ownerId, conversationId.value(), snapshot));
+    }
+
+    private int latestAssistantIndex(List<ChatMessage> messages) {
+        for (int index = messages.size() - 1; index >= 0; index--) {
+            if (isAssistantMessage(messages.get(index))) {
+                return index;
+            }
+            if (isUserMessage(messages.get(index))) {
+                return -1;
+            }
+        }
+        return -1;
+    }
+
+    private boolean hasConversationMessageAfter(List<ChatMessage> messages, int assistantIndex) {
+        for (int index = assistantIndex + 1; index < messages.size(); index++) {
+            if (!isSystemMessage(messages.get(index))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean isUserMessage(ChatMessage message) {
+        return "user".equalsIgnoreCase(message.role());
+    }
+
+    private boolean isAssistantMessage(ChatMessage message) {
+        return "assistant".equalsIgnoreCase(message.role());
+    }
+
+    private boolean isSystemMessage(ChatMessage message) {
+        return "system".equalsIgnoreCase(message.role());
     }
 
     private void reflectOnCompletedConversation(String ownerId, ConversationId conversationId) {
@@ -805,10 +854,13 @@ public class ChatService {
             return;
         }
         try {
-            CompletedConversation conversation = completedConversation(ownerId, conversationId);
+            Optional<CompletedConversation> conversation = completedConversation(ownerId, conversationId);
+            if (conversation.isEmpty()) {
+                return;
+            }
             var service = reflectionService.getIfAvailable();
             if (service != null) {
-                service.reflect(conversation);
+                service.reflect(conversation.get());
             }
         } catch (RuntimeException exception) {
             log.warn("memory_reflection conversation_id={} success=false", conversationId.value(), exception);

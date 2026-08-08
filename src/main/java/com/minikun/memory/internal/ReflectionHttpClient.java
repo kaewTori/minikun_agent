@@ -26,7 +26,8 @@ final class ReflectionHttpClient implements ReflectionClient {
                 .body(Response.class);
         if (response == null || response.choices() == null || response.choices().isEmpty()
                 || response.choices().getFirst().message() == null
-                || response.choices().getFirst().message().content() == null) {
+                || response.choices().getFirst().message().content() == null
+                || response.choices().getFirst().message().content().isBlank()) {
             throw new MemoryException("reflection client returned an empty response");
         }
         return response.choices().getFirst().message().content();

@@ -58,6 +58,20 @@ class ReflectionHttpClientTest {
         server.verify();
     }
 
+        @Test
+        void rejectsBlankMessageContent() {
+                RestClient.Builder builder = RestClient.builder().baseUrl("http://flip3.test");
+                MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+                ReflectionHttpClient client = new ReflectionHttpClient(builder.build());
+                server.expect(requestTo("http://flip3.test"))
+                                .andRespond(withSuccess(
+                                                "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"  \"}}]}",
+                                                MediaType.APPLICATION_JSON));
+
+                assertThrows(MemoryException.class, () -> client.reflect(PROMPT));
+                server.verify();
+        }
+
     @Test
     void propagatesTransportFailure() {
         RestClient.Builder builder = RestClient.builder().baseUrl("http://flip3.test");
