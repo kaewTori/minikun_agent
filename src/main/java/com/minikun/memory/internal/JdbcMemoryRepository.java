@@ -11,6 +11,7 @@ import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 
 import com.minikun.memory.MemoryRepository;
+import com.minikun.memory.MemoryScope;
 import com.minikun.memory.model.AcceptedMemory;
 import com.minikun.memory.model.Memory;
 import com.minikun.memory.model.MemoryCategory;
@@ -36,6 +37,9 @@ final class JdbcMemoryRepository implements MemoryRepository {
 
     @Override
     public boolean save(AcceptedMemory memory) {
+        if (memory.ownerId() == null) {
+            throw new IllegalArgumentException("owner id is required for persisted memory");
+        }
         try {
             boolean inserted = insert(memory, fingerprint(memory), memory.conversationId());
             increment(inserted ? PERSIST_SUCCESS : PERSIST_CONFLICT);
@@ -61,11 +65,11 @@ final class JdbcMemoryRepository implements MemoryRepository {
     private boolean insert(AcceptedMemory memory, String fingerprint, String conversationId) {
         int updated = jdbcTemplate.update("""
                 INSERT INTO minikun_memory
-                    (id, conversation_id, category, source, content, created_at, confidence, reason, fingerprint)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    (id, owner_id, conversation_id, category, source, content, created_at, confidence, reason, fingerprint)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT (fingerprint) DO NOTHING
                 """,
-                java.util.UUID.randomUUID(), conversationId, memory.category().name(), memory.source().name(),
+                java.util.UUID.randomUUID(), memory.ownerId(), conversationId, memory.category().name(), memory.source().name(),
                 memory.content(), java.time.Instant.now().atOffset(ZoneOffset.UTC), memory.confidence(),
                 memory.reason(), fingerprint);
         log.debug("memory_repository_save conversation_id={} inserted={}", conversationId, updated);
@@ -86,17 +90,25 @@ final class JdbcMemoryRepository implements MemoryRepository {
     }
 
     @Override
-    public List<Memory> findAll() {
+    public List<Memory> find(MemoryScope scope, int limit) {
+        if (limit < 0) {
+            throw new IllegalArgumentException("memory retrieval limit must not be negative");
+        }
         return jdbcTemplate.query("""
-                SELECT id, category, source, content, created_at, confidence, reason
+                SELECT owner_id, id, category, source, content, created_at, confidence, reason
                 FROM minikun_memory
+                WHERE owner_id = ? AND conversation_id = ?
+                ORDER BY created_at DESC, id
+                LIMIT ?
                 """, (resultSet, rowNumber) -> new Memory(
+                resultSet.getString("owner_id"),
                 new MemoryId(resultSet.getObject("id", java.util.UUID.class)),
                 MemoryCategory.valueOf(resultSet.getString("category")),
                 MemorySource.valueOf(resultSet.getString("source")),
                 resultSet.getString("content"),
                 resultSet.getTimestamp("created_at").toInstant(),
                 resultSet.getDouble("confidence"),
-                resultSet.getString("reason")));
+                resultSet.getString("reason")),
+                scope.ownerId(), scope.conversationId().value(), limit);
     }
 }

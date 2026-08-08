@@ -23,11 +23,15 @@ public final class ReflectionDecisionService {
     }
 
     public List<AcceptedMemory> decide(List<MemoryCandidate> candidates) {
+        return decide(candidates, null);
+    }
+
+    public List<AcceptedMemory> decide(List<MemoryCandidate> candidates, String ownerId) {
         java.util.Objects.requireNonNull(candidates, "candidates must not be null");
         List<AcceptedMemory> accepted = candidates.stream()
                 .filter(this::valid)
                 .map(candidate -> new AcceptedMemory(
-                        candidate.conversationId(), candidate.category(), candidate.content(),
+                    ownerId, candidate.conversationId(), candidate.category(), candidate.content(),
                     candidate.confidence(), candidate.reason(), MemorySource.LLM_EXTRACTION))
                 .toList();
         increment(ACCEPTED, accepted.size());

@@ -3,8 +3,15 @@ package com.minikun.memory.model;
 import java.util.List;
 import java.util.Objects;
 
-public record CompletedConversation(String conversationId, List<Message> messages) {
+public record CompletedConversation(String ownerId, String conversationId, List<Message> messages) {
+    public CompletedConversation(String conversationId, List<Message> messages) {
+        this(null, conversationId, messages);
+    }
+
     public CompletedConversation {
+        if (ownerId != null && (ownerId.isBlank() || "*".equals(ownerId))) {
+            throw new IllegalArgumentException("owner id must not be blank or wildcard");
+        }
         Objects.requireNonNull(conversationId, "conversation id must not be null");
         Objects.requireNonNull(messages, "messages must not be null");
         if (conversationId.isBlank()) {

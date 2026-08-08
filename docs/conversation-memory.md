@@ -38,9 +38,15 @@ For a non-streaming chat request:
 
 Streaming requests follow the same history and user-message ordering. Assistant chunks are accumulated and appended once when the stream completes successfully.
 
-Before either model call, `ChatService` asks `MemoryRecallService` for long-term knowledge. The recall path reads persisted memories from PostgreSQL, applies deterministic recent-first ordering and a maximum count in `MemorySelector`, and converts the selected records to a bounded `KnowledgeContext` through `MemoryFormatter`. It does not use an LLM, embeddings, semantic search, or vector storage. Recall covers all categories and all conversations in this version; `conversation_id` remains persistence provenance rather than a recall filter.
+Before either model call, `ChatService` asks `MemoryRecallService` for long-term knowledge using the explicit request `owner_id` and resolved `ConversationId`. `MemoryScope` requires both values; absent owner identity fails closed with an empty memory context. The JDBC repository applies both predicates, deterministic recent-first ordering, and `LIMIT` before returning rows. `minikun.memory.retrieval.max-candidates` is the application-owned retrieval bound and is separate from formatter character budgets and Knowledge Selection limits.
 
-Recall failures are handled by `ChatService`: a warning is logged and the request continues without a Knowledge section. `MemoryRepository` only retrieves persisted rows; it does not apply selection rules. The KnowledgeContext character budget and maximum memory count are configurable with `MINIKUN_MEMORY_RECALL_MAXIMUM_CHARACTERS` and `MINIKUN_MEMORY_RECALL_MAXIMUM_COUNT`.
+Recall failures are handled by `ChatService`: a warning is logged and the request continues without a Knowledge section. Owner-less legacy rows remain stored but are excluded by the scoped `owner_id = ?` predicate; they are never assigned an owner automatically. Memory selection and formatting remain downstream of persistence and do not perform semantic ranking.
+
+Retrieval roadmap:
+
+- Phase 1: owner and conversation metadata, indexed scoped queries, deterministic bounded retrieval.
+- Phase 2: keyword or other deterministic relevance, not implemented here.
+- Phase 3: embedding or semantic retrieval, not implemented here.
 
 Each persisted long-term memory also retains the extraction `confidence` and `reason`. Recall includes both fields in each Knowledge entry so the model can distinguish the remembered fact from the evidence for keeping it. Existing rows created before these columns existed receive the migration defaults `confidence=0.0` and `reason=legacy persisted memory`.
 

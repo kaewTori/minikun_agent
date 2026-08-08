@@ -36,6 +36,7 @@ import com.minikun.diagnostics.DiagnosticsPromptBuilder;
 import com.minikun.diagnostics.DiagnosticsService;
 import com.minikun.diagnostics.DiagnosticsSummary;
 import com.minikun.memory.MemoryRecallService;
+import com.minikun.memory.MemoryScope;
 import com.minikun.memory.ReflectionService;
 import com.minikun.memory.model.CompletedConversation;
 import com.minikun.character.model.CharacterSpecification;
@@ -173,6 +174,9 @@ public class ChatService {
     @Value("${minikun.memory.reflection.enabled:false}")
     private boolean reflectionEnabled;
 
+    @Value("${minikun.memory.retrieval.max-candidates:10}")
+    private int configuredMemoryRetrievalLimit;
+
     public ChatCompletionResponse chatCompletion(ChatCompletionRequest request, ConversationId conversationId) {
         ChatMessage userMessage = userMessage(request);
         var commandResponse = commandResponse(request, userMessage);
@@ -189,14 +193,14 @@ public class ChatService {
             conversationMemoryService.append(conversationId, userMessage);
         }
         KnowledgePipelineSelection knowledgeSelection = knowledgeFor(
-            userMessage.content(), transaction.requestId(), conversationId.value(),
+            userMessage.content(), transaction.requestId(), conversationId, request.owner_id(),
             hasConversationContext(history, request));
         Prompt prompt = promptFor(request, history, knowledgeSelection);
         var response = callChatModel(prompt, "chat_model", transaction.requestId());
         String content = response.getResult().getOutput().getText();
         if (persistConversation) {
             conversationMemoryService.append(conversationId, new ChatMessage("assistant", content));
-            reflectOnCompletedConversation(conversationId);
+            reflectOnCompletedConversation(request.owner_id(), conversationId);
         }
         var choice = new ChatCompletionResponse.Choice(
                 0,
@@ -233,7 +237,7 @@ public class ChatService {
         StringBuilder assistantContent = new StringBuilder();
 
         KnowledgePipelineSelection knowledgeSelection = knowledgeFor(
-            userMessage.content(), transaction.requestId(), conversationId.value(),
+            userMessage.content(), transaction.requestId(), conversationId, request.owner_id(),
             hasConversationContext(history, request));
         long modelStarted = System.nanoTime();
         Flux<String> chunks = chatModel.stream(promptFor(request, history, knowledgeSelection))
@@ -259,7 +263,7 @@ public class ChatService {
                     if (persistConversation && !assistantContent.isEmpty()) {
                         conversationMemoryService.append(
                                 conversationId, new ChatMessage("assistant", assistantContent.toString()));
-                        reflectOnCompletedConversation(conversationId);
+                        reflectOnCompletedConversation(request.owner_id(), conversationId);
                     }
                     transaction.success();
                 })
@@ -442,13 +446,17 @@ public class ChatService {
                 .orElse("");
     }
 
-    private KnowledgeContext recallKnowledge() {
+    private KnowledgeContext recallKnowledge(ConversationId conversationId, String ownerId) {
+        if (conversationId == null || ownerId == null || ownerId.isBlank()) {
+            return new KnowledgeContext("");
+        }
         MemoryRecallService service = memoryRecallService.getIfAvailable();
         if (service == null) {
             return new KnowledgeContext("");
         }
         try {
-            KnowledgeContext knowledge = service.recall();
+                KnowledgeContext knowledge = service.recall(new MemoryScope(ownerId, conversationId),
+                    configuredMemoryRetrievalLimit);
             return knowledge == null ? new KnowledgeContext("") : knowledge;
         } catch (RuntimeException exception) {
             log.warn("Long-term memory recall failed; continuing without knowledge", exception);
@@ -457,7 +465,7 @@ public class ChatService {
     }
 
     private KnowledgePipelineSelection knowledgeFor(
-            String query, String requestId, String conversationId,
+            String query, String requestId, ConversationId conversationId, String ownerId,
             boolean conversationContextAvailable) {
         Map<String, String> previous = null;
         boolean scoped = false;
@@ -467,14 +475,14 @@ public class ChatService {
                 MDC.put("request_id", requestId);
             }
             if (conversationId != null) {
-                MDC.put("conversation_id", conversationId);
+                MDC.put("conversation_id", conversationId.value());
             }
             scoped = true;
         } catch (RuntimeException ignored) {
             restoreMdc(previous);
         }
         try {
-            return knowledgeFor(query, conversationContextAvailable);
+            return knowledgeFor(query, conversationContextAvailable, conversationId, ownerId);
         } finally {
             if (scoped) {
                 restoreMdc(previous);
@@ -482,8 +490,9 @@ public class ChatService {
         }
     }
 
-    private KnowledgePipelineSelection knowledgeFor(String query, boolean conversationContextAvailable) {
-        KnowledgeContext memoryKnowledge = recallKnowledge();
+    private KnowledgePipelineSelection knowledgeFor(String query, boolean conversationContextAvailable,
+            ConversationId conversationId, String ownerId) {
+        KnowledgeContext memoryKnowledge = recallKnowledge(conversationId, ownerId);
         if (!searchEnabled || isInternalTitleRequest(query)) {
             return selectionWithContext(query, conversationContextAvailable, memoryKnowledge,
                     null, false, null, SearchSelectionSignals.EMPTY);
@@ -662,20 +671,20 @@ public class ChatService {
         return new ChatMessage("user", request.messages().get(userMessageIndex).content());
     }
 
-    private CompletedConversation completedConversation(ConversationId conversationId) {
+    private CompletedConversation completedConversation(String ownerId, ConversationId conversationId) {
         return new CompletedConversation(
-                conversationId.value(),
+                ownerId, conversationId.value(),
                 conversationMemoryService.load(conversationId).stream()
                         .map(message -> new CompletedConversation.Message(message.role(), message.content()))
                         .toList());
     }
 
-    private void reflectOnCompletedConversation(ConversationId conversationId) {
+    private void reflectOnCompletedConversation(String ownerId, ConversationId conversationId) {
         if (!reflectionEnabled) {
             return;
         }
         try {
-            CompletedConversation conversation = completedConversation(conversationId);
+            CompletedConversation conversation = completedConversation(ownerId, conversationId);
             var service = reflectionService.getIfAvailable();
             if (service != null) {
                 service.reflect(conversation);

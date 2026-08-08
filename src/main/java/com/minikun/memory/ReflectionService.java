@@ -74,7 +74,9 @@ public class ReflectionService {
             }
             List<AcceptedMemory> accepted;
             try {
-                accepted = decisionService.decide(candidates);
+                accepted = conversation.ownerId() == null
+                    ? decisionService.decide(candidates)
+                    : decisionService.decide(candidates, conversation.ownerId());
             } catch (RuntimeException exception) {
                 outcome = "decision_failure";
                 incrementFailure("decision");

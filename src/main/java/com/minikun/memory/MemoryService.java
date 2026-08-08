@@ -34,10 +34,10 @@ public class MemoryService {
             .map(candidate -> new com.minikun.memory.model.MemoryCandidate(
                 conversation.conversationId(), candidate.category(), candidate.content().trim(),
                 candidate.confidence(), candidate.reason().trim()))
-            .toList());
+            .toList(), conversation.ownerId());
         return accepted.stream().map(request -> {
             Memory memory = new Memory(
-                MemoryId.generate(), request.category(), request.source(),
+                request.ownerId(), MemoryId.generate(), request.category(), request.source(),
                 request.content(), Instant.now(clock), request.confidence(), request.reason());
                 return repository.save(request)
                     ? memory : null;

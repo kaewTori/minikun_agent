@@ -1,6 +1,7 @@
 package com.minikun.memory;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.function.Function;
 
 import com.minikun.memory.model.Memory;
@@ -16,7 +17,14 @@ public class MemoryRecallService {
         this.pipeline = pipeline;
     }
 
-    public KnowledgeContext recall() {
-        return pipeline.apply(repository.findAll());
+    public KnowledgeContext recall(MemoryScope scope, int limit) {
+        if (limit < 0) {
+            throw new IllegalArgumentException("memory retrieval limit must not be negative");
+        }
+        Objects.requireNonNull(scope, "scope must not be null");
+        if (limit == 0) {
+            return new KnowledgeContext("");
+        }
+        return pipeline.apply(repository.find(scope, limit));
     }
 }

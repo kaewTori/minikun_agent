@@ -10,6 +10,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
@@ -20,6 +21,7 @@ import com.minikun.memory.MemoryExtractionClient;
 import com.minikun.memory.MemoryPolicy;
 import com.minikun.memory.MemoryRecallService;
 import com.minikun.memory.MemoryRepository;
+import com.minikun.memory.MemoryRetrievalProperties;
 import com.minikun.memory.MemoryService;
 import com.minikun.memory.ReflectionService;
 import com.minikun.memory.ReflectionDecisionService;
@@ -30,6 +32,7 @@ import com.minikun.pcs.MinikunPersonaProvider;
 import io.micrometer.core.instrument.MeterRegistry;
 
 @Configuration(proxyBeanMethods = false)
+@EnableConfigurationProperties(MemoryRetrievalProperties.class)
 public class MemoryConfiguration {
     @Bean(name = "memoryObjectMapper")
     ObjectMapper memoryObjectMapper() {
