@@ -8,6 +8,9 @@ import org.springframework.ai.chat.prompt.Prompt;
 import java.util.List;
 import java.util.Objects;
 
+import lombok.extern.slf4j.Slf4j;
+
+@Slf4j
 public final class AiKnowledgeRankingService implements KnowledgeRankingService {
     private static final TypeReference<List<KnowledgeRanking>> RANKING_TYPE = new TypeReference<>() {
     };
@@ -28,7 +31,10 @@ public final class AiKnowledgeRankingService implements KnowledgeRankingService 
     public List<KnowledgeRanking> rank(String userRequest, List<KnowledgeCandidate> candidates) {
         Objects.requireNonNull(candidates, "candidates must not be null");
         String prompt = buildPrompt(Objects.requireNonNullElse(userRequest, ""), candidates);
+        long started = System.nanoTime();
         var response = chatModel.call(new Prompt(new org.springframework.ai.chat.messages.UserMessage(prompt)));
+        log.info("model_call=knowledge_ranking request_id=- duration_ms={}",
+            (System.nanoTime() - started) / 1_000_000);
         if (response == null || response.getResult() == null || response.getResult().getOutput() == null
                 || response.getResult().getOutput().getText() == null) {
             throw new IllegalStateException("ranking model returned no response");

@@ -170,45 +170,29 @@ public class ChatService {
     private boolean reflectionEnabled;
 
     public ChatCompletionResponse chatCompletion(ChatCompletionRequest request, ConversationId conversationId) {
-        long requestStarted = System.nanoTime();
         ChatMessage userMessage = userMessage(request);
         var commandResponse = commandResponse(request, userMessage);
         if (commandResponse != null) {
-            logDuration("command", requestStarted, null);
             return commandResponse;
         }
         String model = modelName(request.model(), configuredChatModel);
         ChatTransactionLogger.Transaction transaction = transactionLogger.start(
             "chatcmpl-" + UUID.randomUUID(), model, false, request.messages().size());
         boolean persistConversation = shouldPersistConversation(request);
-        long started = System.nanoTime();
         List<ChatMessage> history = conversationMemoryService.load(conversationId);
-        logDuration("conversation_memory_load", started, transaction.requestId());
         try {
         if (persistConversation) {
-            started = System.nanoTime();
             conversationMemoryService.append(conversationId, userMessage);
-            logDuration("conversation_memory_append_user", started, transaction.requestId());
         }
-        started = System.nanoTime();
         KnowledgePipelineSelection knowledgeSelection = knowledgeFor(
             userMessage.content(), transaction.requestId(), conversationId.value(),
             hasConversationContext(history, request));
-        logDuration("knowledge", started, transaction.requestId());
-        started = System.nanoTime();
         Prompt prompt = promptFor(request, history, knowledgeSelection);
-        logDuration("prompt", started, transaction.requestId());
-        started = System.nanoTime();
-        var response = chatModel.call(prompt);
-        logDuration("chat_model", started, transaction.requestId());
+        var response = callChatModel(prompt, "chat_model", transaction.requestId());
         String content = response.getResult().getOutput().getText();
         if (persistConversation) {
-            started = System.nanoTime();
             conversationMemoryService.append(conversationId, new ChatMessage("assistant", content));
-            logDuration("conversation_memory_append_assistant", started, transaction.requestId());
-            started = System.nanoTime();
             reflectOnCompletedConversation(conversationId);
-            logDuration("memory_reflection", started, transaction.requestId());
         }
         var choice = new ChatCompletionResponse.Choice(
                 0,
@@ -247,10 +231,14 @@ public class ChatService {
         KnowledgePipelineSelection knowledgeSelection = knowledgeFor(
             userMessage.content(), transaction.requestId(), conversationId.value(),
             hasConversationContext(history, request));
+        long modelStarted = System.nanoTime();
         Flux<String> chunks = chatModel.stream(promptFor(request, history, knowledgeSelection))
             .doOnNext(response -> appendAssistantText(assistantContent, response))
                 .map(response -> streamChunk(response, id, created, model))
-                .filter(chunk -> !chunk.isBlank());
+            .filter(chunk -> !chunk.isBlank())
+            .doOnComplete(() -> logModelDuration("chat_model_stream", modelStarted, requestId))
+            .doOnError(exception -> logModelDuration("chat_model_stream", modelStarted, requestId))
+            .doOnCancel(() -> logModelDuration("chat_model_stream", modelStarted, requestId));
 
         return Flux.concat(
                 Flux.just(data(new ChatCompletionResponse.StreamChunk(
@@ -306,7 +294,9 @@ public class ChatService {
             }
             try {
                 DiagnosticsPrompt diagnosticsPrompt = diagnosticsPromptBuilder.build(summary, userMessage.content());
-                String content = chatModel.call(toSpringPrompt(diagnosticsPrompt)).getResult().getOutput().getText();
+                String content = callChatModel(
+                    toSpringPrompt(diagnosticsPrompt), "chat_model", null)
+                    .getResult().getOutput().getText();
                 if (content == null || content.isBlank()) {
                     throw new IllegalStateException("Diagnostics LLM returned empty content");
                 }
@@ -389,7 +379,7 @@ public class ChatService {
                 .toList();
         EmbeddingResponse result = new EmbeddingResponse("list", data, modelName(request.model(), configuredEmbeddingModel),
                 new EmbeddingResponse.Usage(0, 0));
-        logDuration("embedding_model", started, null);
+        logModelDuration("embedding_model", started, null);
         return result;
     }
 
@@ -488,17 +478,13 @@ public class ChatService {
     }
 
     private KnowledgePipelineSelection knowledgeFor(String query, boolean conversationContextAvailable) {
-        long started = System.nanoTime();
         KnowledgeContext memoryKnowledge = recallKnowledge();
-        logDuration("memory_recall", started, null);
         if (!searchEnabled || isInternalTitleRequest(query)) {
             return selectionWithContext(query, conversationContextAvailable, memoryKnowledge,
                     null, false, null, SearchSelectionSignals.EMPTY);
         }
 
-        started = System.nanoTime();
         SearchDecision decision = searchDecisionService.decide(query);
-        logDuration("search_decision", started, null);
         SearchSelectionSignals searchSignals = searchSelectionSignalMapper.map(decision);
         if (!decision.shouldSearch()) {
             return selectionWithContext(query, conversationContextAvailable, memoryKnowledge,
@@ -508,7 +494,6 @@ public class ChatService {
         KnowledgeContext searchKnowledge = null;
         boolean searchAttempted = false;
         try {
-            started = System.nanoTime();
             searchAttempted = true;
             SearchRequest searchRequest = new SearchRequest(
                     UUID.randomUUID(),
@@ -516,9 +501,8 @@ public class ChatService {
                     10,
                     Instant.now().plus(searchTimeout));
             searchKnowledge = searchService.search(searchRequest);
-            logDuration("search", started, null);
-                    log.info("Search completed knowledgeCharacters={}",
-                        searchKnowledge == null ? 0 : searchKnowledge.content().length());
+                log.info("Search completed knowledgeCharacters={}",
+                    searchKnowledge == null ? 0 : searchKnowledge.content().length());
                 return new KnowledgePipelineSelection(
                     selectKnowledge(query, memoryKnowledge, searchKnowledge), searchSignals,
                     searchContextAwarenessService.observe(
@@ -706,8 +690,17 @@ public class ChatService {
                 || normalized.contains("### task:\n") && normalized.contains("### chat history:");
     }
 
-    private void logDuration(String process, long started, String requestId) {
-        log.info("process={} request_id={} duration_ms={}", process,
+    private ChatResponse callChatModel(Prompt prompt, String process, String requestId) {
+        long started = System.nanoTime();
+        try {
+            return chatModel.call(prompt);
+        } finally {
+            logModelDuration(process, started, requestId);
+        }
+    }
+
+    private void logModelDuration(String process, long started, String requestId) {
+        log.info("model_call={} request_id={} duration_ms={}", process,
                 requestId == null ? "-" : requestId,
                 (System.nanoTime() - started) / 1_000_000);
     }
