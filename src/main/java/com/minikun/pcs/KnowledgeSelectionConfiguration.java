@@ -63,4 +63,10 @@ public class KnowledgeSelectionConfiguration {
         return new DefaultKnowledgeSelectionService(
                 rankingService, policy, relevanceService);
     }
+
+    @Bean
+    @ConditionalOnMissingBean(KnowledgeConsolidationService.class)
+    KnowledgeConsolidationService knowledgeConsolidationService() {
+        return new DefaultKnowledgeConsolidationService();
+    }
 }

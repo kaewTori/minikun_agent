@@ -43,6 +43,8 @@ import com.minikun.pcs.PromptComposer;
 import com.minikun.pcs.PromptException;
 import com.minikun.pcs.PromptRequest;
 import com.minikun.pcs.KnowledgeCandidate;
+import com.minikun.pcs.KnowledgeConsolidation;
+import com.minikun.pcs.KnowledgeConsolidationService;
 import com.minikun.pcs.KnowledgeSelection;
 import com.minikun.pcs.KnowledgeSelectionService;
 import com.minikun.pcs.KnowledgeSource;
@@ -86,6 +88,7 @@ public class ChatService {
     private final SearchDecisionService searchDecisionService;
     private final SearchContextAwarenessService searchContextAwarenessService;
     private final KnowledgeSelectionService knowledgeSelectionService;
+    private final KnowledgeConsolidationService knowledgeConsolidationService;
     private final SearchSelectionSignalMapper searchSelectionSignalMapper;
     private final DiagnosticsService diagnosticsService;
     private final DiagnosticsFormatter diagnosticsFormatter;
@@ -136,6 +139,7 @@ public class ChatService {
                 searchDecisionService,
                 new com.minikun.search.internal.DefaultSearchContextAwarenessService(),
                 new com.minikun.pcs.DefaultKnowledgeSelectionService(),
+                new com.minikun.pcs.DefaultKnowledgeConsolidationService(),
                 searchSelectionSignalMapper,
                 diagnosticsService,
                 diagnosticsFormatter,
@@ -421,7 +425,8 @@ public class ChatService {
                 new com.minikun.pcs.model.UserMessage(userMessage.content()),
                 knowledgeSelection.searchSignals(),
                 knowledgeSelection.searchContext(),
-                knowledgeSelection.selection());
+                knowledgeSelection.selection(),
+                knowledgeSelection.consolidation());
         return toSpringPrompt(promptComposer.compose(promptRequest));
     }
 
@@ -503,18 +508,12 @@ public class ChatService {
             searchKnowledge = searchService.search(searchRequest);
                 log.info("Search completed knowledgeCharacters={}",
                     searchKnowledge == null ? 0 : searchKnowledge.content().length());
-                return new KnowledgePipelineSelection(
-                    selectKnowledge(query, memoryKnowledge, searchKnowledge), searchSignals,
-                    searchContextAwarenessService.observe(
-                        query, conversationContextAvailable, memoryKnowledge, decision,
-                        searchAttempted, searchKnowledge));
+                return pipelineSelection(query, conversationContextAvailable, memoryKnowledge,
+                    decision, searchAttempted, searchKnowledge, searchSignals);
         } catch (RuntimeException exception) {
             log.warn("Search failed; continuing without search knowledge", exception);
-                return new KnowledgePipelineSelection(
-                    selectKnowledge(query, memoryKnowledge, null), searchSignals,
-                    searchContextAwarenessService.observe(
-                        query, conversationContextAvailable, memoryKnowledge, decision,
-                        searchAttempted, searchKnowledge));
+                return pipelineSelection(query, conversationContextAvailable, memoryKnowledge,
+                    decision, searchAttempted, null, searchSignals);
         }
     }
 
@@ -526,8 +525,10 @@ public class ChatService {
                 boolean searchAttempted,
                 KnowledgeContext searchKnowledge,
                 SearchSelectionSignals searchSignals) {
+            KnowledgeSelection selection = selectKnowledge(query, memoryKnowledge, searchKnowledge);
             return new KnowledgePipelineSelection(
-                selectKnowledge(query, memoryKnowledge, searchKnowledge),
+                selection,
+                consolidate(selection),
                 searchSignals,
                 searchContextAwarenessService.observe(
                     query, conversationContextAvailable, memoryKnowledge, decision,
@@ -542,6 +543,33 @@ public class ChatService {
                 query,
                 candidatesFor(memoryKnowledge, KnowledgeSource.MEMORY),
                 candidatesFor(searchKnowledge, KnowledgeSource.SEARCH));
+            }
+
+            private KnowledgePipelineSelection pipelineSelection(
+                String query,
+                boolean conversationContextAvailable,
+                KnowledgeContext memoryKnowledge,
+                SearchDecision decision,
+                boolean searchAttempted,
+                KnowledgeContext searchKnowledge,
+                SearchSelectionSignals searchSignals) {
+            KnowledgeSelection selection = selectKnowledge(query, memoryKnowledge, searchKnowledge);
+            return new KnowledgePipelineSelection(
+                selection,
+                consolidate(selection),
+                searchSignals,
+                searchContextAwarenessService.observe(
+                    query, conversationContextAvailable, memoryKnowledge, decision,
+                    searchAttempted, searchKnowledge));
+            }
+
+            private KnowledgeConsolidation consolidate(KnowledgeSelection selection) {
+            try {
+                return knowledgeConsolidationService.consolidate(selection.selectedCandidates());
+            } catch (RuntimeException exception) {
+                log.warn("Knowledge consolidation failed; continuing without metadata", exception);
+                return KnowledgeConsolidation.EMPTY;
+            }
             }
 
             private List<KnowledgeCandidate> candidatesFor(
@@ -559,6 +587,7 @@ public class ChatService {
 
             private record KnowledgePipelineSelection(
                 KnowledgeSelection selection,
+                KnowledgeConsolidation consolidation,
                 SearchSelectionSignals searchSignals,
                 SearchContext searchContext) {
             }
