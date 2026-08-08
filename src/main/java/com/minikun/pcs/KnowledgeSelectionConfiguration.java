@@ -7,8 +7,10 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.ai.chat.model.ChatModel;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 
 @Configuration(proxyBeanMethods = false)
+@EnableConfigurationProperties(KnowledgeSelectionProperties.class)
 public class KnowledgeSelectionConfiguration {
     @Bean
     KnowledgeRelevancePolicy knowledgeRelevancePolicy(
@@ -49,10 +51,16 @@ public class KnowledgeSelectionConfiguration {
     }
 
     @Bean
+    KnowledgeSelectionPolicy knowledgeSelectionPolicy(KnowledgeSelectionProperties properties) {
+        return properties.toPolicy();
+    }
+
+    @Bean
     KnowledgeSelectionService knowledgeSelectionService(
             KnowledgeRankingService rankingService,
-            KnowledgeRelevanceService relevanceService) {
+            KnowledgeRelevanceService relevanceService,
+            KnowledgeSelectionPolicy policy) {
         return new DefaultKnowledgeSelectionService(
-                rankingService, KnowledgeSelectionPolicy.DEFAULT, relevanceService);
+                rankingService, policy, relevanceService);
     }
 }

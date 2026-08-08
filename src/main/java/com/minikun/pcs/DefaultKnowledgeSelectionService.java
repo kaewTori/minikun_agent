@@ -50,10 +50,10 @@ public final class DefaultKnowledgeSelectionService implements KnowledgeSelectio
         String normalizedRequest = Objects.requireNonNullElse(userRequest, "");
         SourceSelection memory = selectSource(
                 normalizedRequest, copyCandidates(memoryCandidates), KnowledgeSource.MEMORY,
-                policy.memoryTopK());
+                policy.memory());
         SourceSelection search = selectSource(
                 normalizedRequest, copyCandidates(searchCandidates), KnowledgeSource.SEARCH,
-                policy.searchTopK());
+                policy.search());
 
         List<KnowledgeCandidate> selected = new ArrayList<>(memory.candidates().size() + search.candidates().size());
         selected.addAll(memory.candidates());
@@ -65,12 +65,12 @@ public final class DefaultKnowledgeSelectionService implements KnowledgeSelectio
             String userRequest,
             List<KnowledgeCandidate> candidates,
             KnowledgeSource source,
-            int topK) {
-        if (candidates.isEmpty()) {
+            KnowledgeSelectionPolicy.SourcePolicy sourcePolicy) {
+        if (!sourcePolicy.enabled() || candidates.isEmpty()) {
             return new SourceSelection(List.of(), false);
         }
         if (!hasValidSourceCandidates(candidates, source)) {
-            return new SourceSelection(limit(candidates, topK), true);
+            return new SourceSelection(applyPolicy(candidates, sourcePolicy), true);
         }
 
         try {
@@ -79,9 +79,9 @@ public final class DefaultKnowledgeSelectionService implements KnowledgeSelectio
             ranked.sort(HIGHEST_SCORE_FIRST);
             List<KnowledgeCandidate> relevant = applyRelevance(userRequest, ranked, source);
             return new SourceSelection(
-                    limit(relevant, topK), false);
+                    applyPolicy(relevant, sourcePolicy), false);
         } catch (RuntimeException exception) {
-            return new SourceSelection(limit(candidates, topK), true);
+            return new SourceSelection(applyPolicy(candidates, sourcePolicy), true);
         }
     }
 
@@ -181,8 +181,32 @@ public final class DefaultKnowledgeSelectionService implements KnowledgeSelectio
         return candidates == null ? List.of() : List.copyOf(candidates);
     }
 
-    private List<KnowledgeCandidate> limit(List<KnowledgeCandidate> candidates, int topK) {
-        return candidates.subList(0, Math.min(topK, candidates.size()));
+    private List<KnowledgeCandidate> applyPolicy(
+            List<KnowledgeCandidate> candidates,
+            KnowledgeSelectionPolicy.SourcePolicy sourcePolicy) {
+        if (sourcePolicy.maxCandidates() == 0 || sourcePolicy.maxCharacters() == 0) {
+            return List.of();
+        }
+        List<KnowledgeCandidate> selected = new ArrayList<>();
+        boolean unboundedCharacters = sourcePolicy.maxCharacters()
+            == KnowledgeSelectionPolicy.UNBOUNDED;
+        long remainingCharacters = sourcePolicy.maxCharacters();
+        for (KnowledgeCandidate candidate : candidates) {
+            if (selected.size() >= sourcePolicy.maxCandidates()) {
+                break;
+            }
+            int contentLength = candidate.content().length();
+            if (unboundedCharacters || contentLength <= remainingCharacters) {
+                selected.add(candidate);
+                if (!unboundedCharacters) {
+                    remainingCharacters -= contentLength;
+                }
+                if (!unboundedCharacters && remainingCharacters == 0) {
+                    break;
+                }
+            }
+        }
+        return List.copyOf(selected);
     }
 
     private record RankedCandidate(KnowledgeCandidate candidate, double score) {

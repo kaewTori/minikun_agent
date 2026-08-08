@@ -106,6 +106,83 @@ class DefaultKnowledgeSelectionServiceTest {
                 () -> selection.selectedCandidates().clear());
     }
 
+        @Test
+        void sourcePoliciesApplyIndependentCandidateAndCharacterLimits() {
+        KnowledgeSelectionPolicy policy = new KnowledgeSelectionPolicy(
+            new KnowledgeSelectionPolicy.SourcePolicy(true, 2, 10),
+            new KnowledgeSelectionPolicy.SourcePolicy(true, 3, 5));
+        DefaultKnowledgeSelectionService service = new DefaultKnowledgeSelectionService(
+            new DefaultKnowledgeRankingService(), policy);
+
+        KnowledgeSelection selection = service.select("request",
+            List.of(memoryWithContent("M1", "abcde", 0),
+                memoryWithContent("M2", "123456789", 1),
+                memoryWithContent("M3", "xy", 2)),
+            List.of(searchWithContent("S1", "abc", 0),
+                searchWithContent("S2", "1234", 1)));
+
+        assertEquals(List.of("M1", "M3", "S1"), ids(selection));
+        }
+
+        @Test
+        void oversizedCandidateIsSkippedAndLaterCandidateCanFit() {
+        KnowledgeSelectionPolicy policy = new KnowledgeSelectionPolicy(
+            new KnowledgeSelectionPolicy.SourcePolicy(true, 10, 10),
+            new KnowledgeSelectionPolicy.SourcePolicy(false, 10, 10));
+        DefaultKnowledgeSelectionService service = new DefaultKnowledgeSelectionService(
+            new DefaultKnowledgeRankingService(), policy);
+
+        KnowledgeSelection selection = service.select("request",
+            List.of(memoryWithContent("M1", "abcde", 0),
+                memoryWithContent("M2", "12345678901", 1),
+                memoryWithContent("M3", "xy", 2)), List.of());
+
+        assertEquals(List.of("M1", "M3"), ids(selection));
+        assertEquals("abcde\nxy", selection.knowledgeContext().content());
+        }
+
+        @Test
+        void disabledSourceDoesNotInvokeRankingOrRelevance() {
+        AtomicInteger rankingCalls = new AtomicInteger();
+        AtomicInteger relevanceCalls = new AtomicInteger();
+        KnowledgeRankingService ranking = (request, candidates) -> {
+            rankingCalls.incrementAndGet();
+            return candidates.stream()
+                .map(candidate -> new KnowledgeRanking(candidate.candidateId(), 1.0d))
+                .toList();
+        };
+        KnowledgeRelevanceService relevance = (request, candidates) -> {
+            relevanceCalls.incrementAndGet();
+            return candidates.stream()
+                .map(candidate -> new KnowledgeRelevance(candidate.candidateId(), 1.0d,
+                    KnowledgeRelevanceDecision.RELEVANT))
+                .toList();
+        };
+        KnowledgeSelectionPolicy policy = new KnowledgeSelectionPolicy(
+            new KnowledgeSelectionPolicy.SourcePolicy(false, 10, 10),
+            new KnowledgeSelectionPolicy.SourcePolicy(true, 10, 10));
+
+        KnowledgeSelection selection = new DefaultKnowledgeSelectionService(ranking, policy, relevance)
+            .select("request", List.of(memory("M1", 0)), List.of(search("S1", 0)));
+
+        assertEquals(List.of("S1"), ids(selection));
+        assertEquals(1, rankingCalls.get());
+        assertEquals(1, relevanceCalls.get());
+        }
+
+        @Test
+        void zeroLimitSelectsNothingFromThatSource() {
+        KnowledgeSelectionPolicy policy = new KnowledgeSelectionPolicy(
+            new KnowledgeSelectionPolicy.SourcePolicy(true, 0, 10),
+            new KnowledgeSelectionPolicy.SourcePolicy(true, 10, 0));
+
+        KnowledgeSelection selection = new DefaultKnowledgeSelectionService(
+            new DefaultKnowledgeRankingService(), policy)
+            .select("request", List.of(memory("M1", 0)), List.of(search("S1", 0)));
+
+        assertEquals(List.of(), ids(selection));
+        }
+
             @Test
             void relevanceFiltersWithoutReorderingTheRankedCandidates() {
             KnowledgeRelevanceService relevance = (request, candidates) -> List.of(
@@ -183,7 +260,15 @@ class DefaultKnowledgeSelectionServiceTest {
         return new KnowledgeCandidate(id, KnowledgeSource.MEMORY, id + " content", position);
     }
 
+    private KnowledgeCandidate memoryWithContent(String id, String content, int position) {
+        return new KnowledgeCandidate(id, KnowledgeSource.MEMORY, content, position);
+    }
+
     private KnowledgeCandidate search(String id, int position) {
         return new KnowledgeCandidate(id, KnowledgeSource.SEARCH, id + " content", position);
+    }
+
+    private KnowledgeCandidate searchWithContent(String id, String content, int position) {
+        return new KnowledgeCandidate(id, KnowledgeSource.SEARCH, content, position);
     }
 }
