@@ -3,6 +3,8 @@ package com.minikun.memory.internal;
 import java.util.List;
 
 import com.minikun.memory.model.Memory;
+import com.minikun.pcs.KnowledgeCandidate;
+import com.minikun.pcs.KnowledgeSource;
 import com.minikun.pcs.model.KnowledgeContext;
 
 final class MemoryFormatter {
@@ -21,7 +23,9 @@ final class MemoryFormatter {
         }
 
         StringBuilder content = new StringBuilder();
-        for (Memory memory : memories) {
+        List<KnowledgeCandidate> candidates = new java.util.ArrayList<>();
+        for (int index = 0; index < memories.size(); index++) {
+            Memory memory = memories.get(index);
                 String entry = memory.category().name()
                     + ": " + memory.content()
                     + " (confidence=" + memory.confidence()
@@ -34,7 +38,9 @@ final class MemoryFormatter {
                 content.append('\n');
             }
             content.append(entry);
+            candidates.add(new KnowledgeCandidate(
+                    "memory-" + index, KnowledgeSource.MEMORY, entry, index));
         }
-        return new KnowledgeContext(content.toString());
+        return new KnowledgeContext(content.toString(), candidates);
     }
 }

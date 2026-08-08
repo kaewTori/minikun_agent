@@ -17,7 +17,8 @@ public record PromptRequest(
         List<CapabilityInstruction> capabilities,
         UserMessage userMessage,
         SearchSelectionSignals searchSelectionSignals,
-        SearchContext searchContext) {
+        SearchContext searchContext,
+        KnowledgeSelection knowledgeSelection) {
     public PromptRequest(
             CharacterSpecification character,
             RuntimeContext runtime,
@@ -26,7 +27,7 @@ public record PromptRequest(
             List<CapabilityInstruction> capabilities,
             UserMessage userMessage) {
         this(character, runtime, conversation, knowledge, capabilities, userMessage,
-            SearchSelectionSignals.EMPTY, SearchContext.EMPTY);
+            SearchSelectionSignals.EMPTY, SearchContext.EMPTY, KnowledgeSelection.EMPTY);
         }
 
         public PromptRequest(
@@ -38,7 +39,20 @@ public record PromptRequest(
             UserMessage userMessage,
             SearchSelectionSignals searchSelectionSignals) {
         this(character, runtime, conversation, knowledge, capabilities, userMessage,
-            searchSelectionSignals, SearchContext.EMPTY);
+            searchSelectionSignals, SearchContext.EMPTY, KnowledgeSelection.EMPTY);
+    }
+
+    public PromptRequest(
+            CharacterSpecification character,
+            RuntimeContext runtime,
+            ConversationContext conversation,
+            KnowledgeContext knowledge,
+            List<CapabilityInstruction> capabilities,
+            UserMessage userMessage,
+            SearchSelectionSignals searchSelectionSignals,
+            SearchContext searchContext) {
+        this(character, runtime, conversation, knowledge, capabilities, userMessage,
+            searchSelectionSignals, searchContext, KnowledgeSelection.EMPTY);
     }
 
     public PromptRequest {
@@ -46,5 +60,6 @@ public record PromptRequest(
         searchSelectionSignals = searchSelectionSignals == null
                 ? SearchSelectionSignals.EMPTY : searchSelectionSignals;
         searchContext = searchContext == null ? SearchContext.EMPTY : searchContext;
+        knowledgeSelection = knowledgeSelection == null ? KnowledgeSelection.EMPTY : knowledgeSelection;
     }
 }

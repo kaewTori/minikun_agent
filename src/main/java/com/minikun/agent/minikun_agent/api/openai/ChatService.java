@@ -42,6 +42,10 @@ import com.minikun.character.model.CharacterSpecification;
 import com.minikun.pcs.PromptComposer;
 import com.minikun.pcs.PromptException;
 import com.minikun.pcs.PromptRequest;
+import com.minikun.pcs.KnowledgeCandidate;
+import com.minikun.pcs.KnowledgeSelection;
+import com.minikun.pcs.KnowledgeSelectionService;
+import com.minikun.pcs.KnowledgeSource;
 import com.minikun.pcs.SearchContext;
 import com.minikun.pcs.SearchSelectionSignals;
 import com.minikun.pcs.model.ConversationContext;
@@ -81,6 +85,7 @@ public class ChatService {
     private final SearchService searchService;
     private final SearchDecisionService searchDecisionService;
     private final SearchContextAwarenessService searchContextAwarenessService;
+    private final KnowledgeSelectionService knowledgeSelectionService;
     private final SearchSelectionSignalMapper searchSelectionSignalMapper;
     private final DiagnosticsService diagnosticsService;
     private final DiagnosticsFormatter diagnosticsFormatter;
@@ -130,6 +135,7 @@ public class ChatService {
                 searchService,
                 searchDecisionService,
                 new com.minikun.search.internal.DefaultSearchContextAwarenessService(),
+                new com.minikun.pcs.DefaultKnowledgeSelectionService(),
                 searchSelectionSignalMapper,
                 diagnosticsService,
                 diagnosticsFormatter,
@@ -185,7 +191,7 @@ public class ChatService {
             logDuration("conversation_memory_append_user", started, transaction.requestId());
         }
         started = System.nanoTime();
-        KnowledgeSelection knowledgeSelection = knowledgeFor(
+        KnowledgePipelineSelection knowledgeSelection = knowledgeFor(
             userMessage.content(), transaction.requestId(), conversationId.value(),
             hasConversationContext(history, request));
         logDuration("knowledge", started, transaction.requestId());
@@ -238,7 +244,7 @@ public class ChatService {
         }
         StringBuilder assistantContent = new StringBuilder();
 
-        KnowledgeSelection knowledgeSelection = knowledgeFor(
+        KnowledgePipelineSelection knowledgeSelection = knowledgeFor(
             userMessage.content(), transaction.requestId(), conversationId.value(),
             hasConversationContext(history, request));
         Flux<String> chunks = chatModel.stream(promptFor(request, history, knowledgeSelection))
@@ -395,10 +401,10 @@ public class ChatService {
         return values;
     }
 
-    private Prompt promptFor(
+        private Prompt promptFor(
             ChatCompletionRequest request,
             List<ChatMessage> history,
-            KnowledgeSelection knowledgeSelection) {
+            KnowledgePipelineSelection knowledgeSelection) {
         var userMessage = userMessage(request);
         String runtime = request.messages().stream()
                 .filter(message -> "system".equals(message.role()))
@@ -420,11 +426,12 @@ public class ChatService {
                 characterSpecification,
                 new RuntimeContext(runtime),
             conversationContent.isBlank() ? null : new ConversationContext(conversationContent),
-                knowledgeSelection.knowledge(),
+                knowledgeSelection.selection().knowledgeContext(),
                 List.of(),
                 new com.minikun.pcs.model.UserMessage(userMessage.content()),
                 knowledgeSelection.searchSignals(),
-                knowledgeSelection.searchContext());
+                knowledgeSelection.searchContext(),
+                knowledgeSelection.selection());
         return toSpringPrompt(promptComposer.compose(promptRequest));
     }
 
@@ -454,7 +461,7 @@ public class ChatService {
         }
     }
 
-    private KnowledgeSelection knowledgeFor(
+    private KnowledgePipelineSelection knowledgeFor(
             String query, String requestId, String conversationId,
             boolean conversationContextAvailable) {
         Map<String, String> previous = null;
@@ -480,7 +487,7 @@ public class ChatService {
         }
     }
 
-    private KnowledgeSelection knowledgeFor(String query, boolean conversationContextAvailable) {
+    private KnowledgePipelineSelection knowledgeFor(String query, boolean conversationContextAvailable) {
         long started = System.nanoTime();
         KnowledgeContext memoryKnowledge = recallKnowledge();
         logDuration("memory_recall", started, null);
@@ -512,22 +519,22 @@ public class ChatService {
             logDuration("search", started, null);
                     log.info("Search completed knowledgeCharacters={}",
                         searchKnowledge == null ? 0 : searchKnowledge.content().length());
-                return new KnowledgeSelection(
-                    combineKnowledge(memoryKnowledge, searchKnowledge), searchSignals,
+                return new KnowledgePipelineSelection(
+                    selectKnowledge(query, memoryKnowledge, searchKnowledge), searchSignals,
                     searchContextAwarenessService.observe(
                         query, conversationContextAvailable, memoryKnowledge, decision,
                         searchAttempted, searchKnowledge));
         } catch (RuntimeException exception) {
             log.warn("Search failed; continuing without search knowledge", exception);
-                return new KnowledgeSelection(
-                    memoryKnowledge, searchSignals,
+                return new KnowledgePipelineSelection(
+                    selectKnowledge(query, memoryKnowledge, null), searchSignals,
                     searchContextAwarenessService.observe(
                         query, conversationContextAvailable, memoryKnowledge, decision,
                         searchAttempted, searchKnowledge));
         }
     }
 
-            private KnowledgeSelection selectionWithContext(
+            private KnowledgePipelineSelection selectionWithContext(
                 String query,
                 boolean conversationContextAvailable,
                 KnowledgeContext memoryKnowledge,
@@ -535,16 +542,39 @@ public class ChatService {
                 boolean searchAttempted,
                 KnowledgeContext searchKnowledge,
                 SearchSelectionSignals searchSignals) {
-            return new KnowledgeSelection(
-                combineKnowledge(memoryKnowledge, searchKnowledge),
+            return new KnowledgePipelineSelection(
+                selectKnowledge(query, memoryKnowledge, searchKnowledge),
                 searchSignals,
                 searchContextAwarenessService.observe(
                     query, conversationContextAvailable, memoryKnowledge, decision,
                     searchAttempted, searchKnowledge));
             }
 
-            private record KnowledgeSelection(
+            private KnowledgeSelection selectKnowledge(
+                String query,
+                KnowledgeContext memoryKnowledge,
+                KnowledgeContext searchKnowledge) {
+            return knowledgeSelectionService.select(
+                query,
+                candidatesFor(memoryKnowledge, KnowledgeSource.MEMORY),
+                candidatesFor(searchKnowledge, KnowledgeSource.SEARCH));
+            }
+
+            private List<KnowledgeCandidate> candidatesFor(
                 KnowledgeContext knowledge,
+                KnowledgeSource source) {
+            if (knowledge == null || knowledge.content().isBlank()) {
+                return List.of();
+            }
+            if (!knowledge.candidates().isEmpty()) {
+                return knowledge.candidates();
+            }
+            return List.of(new KnowledgeCandidate(
+                source.name().toLowerCase() + "-legacy", source, knowledge.content(), 0));
+            }
+
+            private record KnowledgePipelineSelection(
+                KnowledgeSelection selection,
                 SearchSelectionSignals searchSignals,
                 SearchContext searchContext) {
             }

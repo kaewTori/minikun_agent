@@ -17,7 +17,10 @@ final class PromptRenderer {
         sections.add(CorePromptFragments.persona(request.character(), selectedModules));
         sections.add(section("Runtime", request.runtime().content()));
         addOptional(sections, "Conversation", request.conversation() == null ? null : request.conversation().content());
-        addOptional(sections, "Knowledge", request.knowledge() == null ? null : request.knowledge().content());
+        String knowledge = request.knowledgeSelection().selectedCandidates().isEmpty()
+            ? request.knowledge() == null ? null : request.knowledge().content()
+            : request.knowledgeSelection().knowledgeContext().content();
+        addOptional(sections, "Knowledge", knowledge);
         if (!request.capabilities().isEmpty()) {
             StringBuilder capabilities = new StringBuilder("[Capabilities]");
             for (CapabilityInstruction capability : request.capabilities()) {
