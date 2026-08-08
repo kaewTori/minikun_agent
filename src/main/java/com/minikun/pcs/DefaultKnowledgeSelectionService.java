@@ -15,20 +15,31 @@ public final class DefaultKnowledgeSelectionService implements KnowledgeSelectio
 
     private final KnowledgeRankingService rankingService;
     private final KnowledgeSelectionPolicy policy;
+    private final KnowledgeRelevanceService relevanceService;
 
     public DefaultKnowledgeSelectionService() {
-        this(new DefaultKnowledgeRankingService(), KnowledgeSelectionPolicy.DEFAULT);
+        this(new DefaultKnowledgeRankingService(), KnowledgeSelectionPolicy.DEFAULT,
+                new DefaultKnowledgeRelevanceService());
     }
 
     public DefaultKnowledgeSelectionService(KnowledgeRankingService rankingService) {
-        this(rankingService, KnowledgeSelectionPolicy.DEFAULT);
+        this(rankingService, KnowledgeSelectionPolicy.DEFAULT, new DefaultKnowledgeRelevanceService());
     }
 
     public DefaultKnowledgeSelectionService(
             KnowledgeRankingService rankingService,
             KnowledgeSelectionPolicy policy) {
+        this(rankingService, policy, new DefaultKnowledgeRelevanceService());
+    }
+
+    public DefaultKnowledgeSelectionService(
+            KnowledgeRankingService rankingService,
+            KnowledgeSelectionPolicy policy,
+            KnowledgeRelevanceService relevanceService) {
         this.rankingService = Objects.requireNonNull(rankingService, "ranking service must not be null");
         this.policy = Objects.requireNonNull(policy, "selection policy must not be null");
+        this.relevanceService = Objects.requireNonNull(
+                relevanceService, "relevance service must not be null");
     }
 
     @Override
@@ -66,11 +77,63 @@ public final class DefaultKnowledgeSelectionService implements KnowledgeSelectio
             List<KnowledgeRanking> rankings = rankingService.rank(userRequest, candidates);
             List<RankedCandidate> ranked = validateAndPair(rankings, candidates);
             ranked.sort(HIGHEST_SCORE_FIRST);
+            List<KnowledgeCandidate> relevant = applyRelevance(userRequest, ranked, source);
             return new SourceSelection(
-                    limit(ranked.stream().map(RankedCandidate::candidate).toList(), topK), false);
+                    limit(relevant, topK), false);
         } catch (RuntimeException exception) {
             return new SourceSelection(limit(candidates, topK), true);
         }
+    }
+
+    private List<KnowledgeCandidate> applyRelevance(
+            String userRequest,
+            List<RankedCandidate> ranked,
+            KnowledgeSource source) {
+        List<KnowledgeCandidate> candidates = ranked.stream()
+                .map(RankedCandidate::candidate)
+                .toList();
+        try {
+            List<KnowledgeRelevance> relevance = relevanceService.evaluate(userRequest, candidates);
+            return validateAndFilterRelevance(relevance, candidates, source);
+        } catch (RuntimeException exception) {
+            return candidates;
+        }
+    }
+
+    private List<KnowledgeCandidate> validateAndFilterRelevance(
+            List<KnowledgeRelevance> relevance,
+            List<KnowledgeCandidate> candidates,
+            KnowledgeSource source) {
+        if (relevance == null || relevance.size() != candidates.size()) {
+            throw new IllegalArgumentException("relevance must contain exactly all candidates");
+        }
+        Map<String, KnowledgeCandidate> candidatesById = new HashMap<>();
+        for (KnowledgeCandidate candidate : candidates) {
+            if (candidate.source() != source || candidatesById.put(candidate.candidateId(), candidate) != null) {
+                throw new IllegalArgumentException("relevance candidates must belong to one source");
+            }
+        }
+
+        Set<String> seenIds = new HashSet<>();
+        Map<String, KnowledgeRelevance> relevanceById = new HashMap<>();
+        for (KnowledgeRelevance item : relevance) {
+            if (item == null || !Double.isFinite(item.score())
+                    || item.score() < 0.0d || item.score() > 1.0d
+                    || !seenIds.add(item.candidateId())) {
+                throw new IllegalArgumentException("relevance contains an invalid candidate");
+            }
+            if (!candidatesById.containsKey(item.candidateId())) {
+                throw new IllegalArgumentException("relevance contains an unknown candidate");
+            }
+            relevanceById.put(item.candidateId(), item);
+        }
+        if (seenIds.size() != candidatesById.size()) {
+            throw new IllegalArgumentException("relevance is missing a candidate");
+        }
+        return candidates.stream()
+                .filter(candidate -> relevanceById.get(candidate.candidateId()).decision()
+                        == KnowledgeRelevanceDecision.RELEVANT)
+                .toList();
     }
 
     private List<RankedCandidate> validateAndPair(
