@@ -6,6 +6,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public class KnowledgeSelectionProperties {
     private SourceProperties memory = SourceProperties.unbounded();
     private SourceProperties search = SourceProperties.unbounded();
+    private SourceProperties browser = SourceProperties.unbounded();
 
     public SourceProperties getMemory() {
         return memory;
@@ -23,8 +24,16 @@ public class KnowledgeSelectionProperties {
         this.search = search;
     }
 
+    public SourceProperties getBrowser() {
+        return browser;
+    }
+
+    public void setBrowser(SourceProperties browser) {
+        this.browser = browser;
+    }
+
     public KnowledgeSelectionPolicy toPolicy() {
-        return new KnowledgeSelectionPolicy(memory.toPolicy(), search.toPolicy());
+        return new KnowledgeSelectionPolicy(memory.toPolicy(), search.toPolicy(), browser.toPolicy());
     }
 
     public static class SourceProperties {

@@ -118,6 +118,11 @@ Actuator ที่เปิดให้เข้าถึงคือ `/actuator
 | `MINIKUN_SEARCH_QUERY_PLANNING_ENABLED` | `true` | เปิด query planning และ core keyword extraction |
 | `MINIKUN_SEARCH_QUERY_PLANNING_MAX_ALTERNATES` | `2` | จำนวน alternate queries สูงสุด |
 | `MINIKUN_SEARCH_CACHE_PROVIDER_VERSION` | `v1` | version ของ provider ที่รวมใน cache key |
+| `MINIKUN_BROWSER_ENABLED` | `true` | เปิด/ปิดการอ่าน URL ผ่าน minikun-browser-worker |
+| `MINIKUN_BROWSER_WORKER_URL` | `http://127.0.0.1:3000` | endpoint ของ browser worker |
+| `MINIKUN_BROWSER_WORKER_TOKEN` | ว่าง | Bearer token ที่ตรงกับ `BROWSER_WORKER_TOKEN` ของ worker |
+| `MINIKUN_BROWSER_TIMEOUT` | `20s` | timeout ของการ render แต่ละ URL |
+| `MINIKUN_BROWSER_MAX_URLS` | `5` | จำนวน URL สูงสุดต่อข้อความ |
 | `SPRING_AI_CHAT_MEMORY_MAX_MESSAGES` | `20` | จำนวนข้อความ short-term memory สูงสุด |
 | `MINIKUN_MEMORY_RECALL_MAXIMUM_COUNT` | `10` | จำนวน long-term memories ที่เรียกคืนสูงสุด |
 | `MINIKUN_MEMORY_RECALL_MAXIMUM_CHARACTERS` | `4000` | ขนาด Knowledge context สูงสุด |
@@ -155,6 +160,23 @@ curl -N -X POST http://127.0.0.1:8080/v1/chat/completions \
     "stream": true
   }'
 ```
+
+### อ่านและสรุปลิงก์
+
+เมื่อข้อความล่าสุดมี HTTP/HTTPS URL ระบบจะเรียก `minikun-browser-worker` แบบ synchronous
+แล้วให้โมเดลตอบโดยอ้างอิงจากเนื้อหาที่ render ได้:
+
+```sh
+curl -X POST http://127.0.0.1:8080/v1/chat/completions \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "messages": [{"role": "user", "content": "สรุปบทความนี้ https://example.com/article"}],
+    "stream": false
+  }'
+```
+
+ตั้ง `MINIKUN_BROWSER_WORKER_URL` ให้ agent มองเห็น worker และกำหนด
+`MINIKUN_BROWSER_WORKER_TOKEN` เมื่อ worker เปิดใช้ `BROWSER_WORKER_TOKEN`.
 
 ระบบจะส่ง `X-Conversation-Id` กลับมาใน response หาก request ไม่ได้ระบุ conversation ID ระบบจะสร้าง UUID ใหม่ให้โดยอัตโนมัติ ลำดับการเลือก ID คือ:
 

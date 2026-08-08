@@ -2,20 +2,26 @@ package com.minikun.pcs;
 
 import java.util.Objects;
 
-public record KnowledgeSelectionPolicy(SourcePolicy memory, SourcePolicy search) {
+public record KnowledgeSelectionPolicy(SourcePolicy memory, SourcePolicy search, SourcePolicy browser) {
     public static final int UNBOUNDED = Integer.MAX_VALUE;
     public static final KnowledgeSelectionPolicy DEFAULT = new KnowledgeSelectionPolicy(
+            SourcePolicy.UNBOUNDED,
             SourcePolicy.UNBOUNDED,
             SourcePolicy.UNBOUNDED);
 
     public KnowledgeSelectionPolicy {
         Objects.requireNonNull(memory, "memory policy must not be null");
         Objects.requireNonNull(search, "search policy must not be null");
+        Objects.requireNonNull(browser, "browser policy must not be null");
+    }
+
+    public KnowledgeSelectionPolicy(SourcePolicy memory, SourcePolicy search) {
+        this(memory, search, SourcePolicy.UNBOUNDED);
     }
 
     public KnowledgeSelectionPolicy(int memoryTopK, int searchTopK) {
         this(new SourcePolicy(true, memoryTopK, UNBOUNDED),
-                new SourcePolicy(true, searchTopK, UNBOUNDED));
+                new SourcePolicy(true, searchTopK, UNBOUNDED), SourcePolicy.UNBOUNDED);
     }
 
     public int memoryTopK() {

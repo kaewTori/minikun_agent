@@ -47,6 +47,15 @@ public final class DefaultKnowledgeSelectionService implements KnowledgeSelectio
             String userRequest,
             List<KnowledgeCandidate> memoryCandidates,
             List<KnowledgeCandidate> searchCandidates) {
+        return select(userRequest, memoryCandidates, searchCandidates, List.of());
+    }
+
+    @Override
+    public KnowledgeSelection select(
+            String userRequest,
+            List<KnowledgeCandidate> memoryCandidates,
+            List<KnowledgeCandidate> searchCandidates,
+            List<KnowledgeCandidate> browserCandidates) {
         String normalizedRequest = Objects.requireNonNullElse(userRequest, "");
         SourceSelection memory = selectSource(
                 normalizedRequest, copyCandidates(memoryCandidates), KnowledgeSource.MEMORY,
@@ -54,11 +63,18 @@ public final class DefaultKnowledgeSelectionService implements KnowledgeSelectio
         SourceSelection search = selectSource(
                 normalizedRequest, copyCandidates(searchCandidates), KnowledgeSource.SEARCH,
                 policy.search());
+        // Browser content was explicitly supplied by the user. Keep it all (within its policy)
+        // rather than allowing relevance scoring to omit an input link.
+        SourceSelection browser = new SourceSelection(
+                applyPolicy(copyCandidates(browserCandidates), policy.browser()), false);
 
-        List<KnowledgeCandidate> selected = new ArrayList<>(memory.candidates().size() + search.candidates().size());
+        List<KnowledgeCandidate> selected = new ArrayList<>(
+                memory.candidates().size() + search.candidates().size() + browser.candidates().size());
         selected.addAll(memory.candidates());
         selected.addAll(search.candidates());
-        return new KnowledgeSelection(List.copyOf(selected), memory.fallback() || search.fallback());
+        selected.addAll(browser.candidates());
+        return new KnowledgeSelection(List.copyOf(selected),
+                memory.fallback() || search.fallback() || browser.fallback());
     }
 
     private SourceSelection selectSource(

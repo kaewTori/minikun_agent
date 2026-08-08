@@ -5,6 +5,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Import;
 
 import com.minikun.memory.internal.MemoryConfiguration;
+import com.minikun.browser.BrowserConfiguration;
 import com.minikun.search.internal.SearchConfiguration;
 import com.minikun.commands.CommandCatalog;
 import com.minikun.commands.CommandFormatter;
@@ -22,7 +23,7 @@ import com.minikun.runtime.VersionFormatter;
 import com.minikun.runtime.VersionService;
 
 @SpringBootApplication
-@Import({MemoryConfiguration.class, SearchConfiguration.class, MeterRegistryMetricsReader.class,
+@Import({MemoryConfiguration.class, SearchConfiguration.class, BrowserConfiguration.class, MeterRegistryMetricsReader.class,
 		DiagnosticsService.class, DiagnosticsFormatter.class, DiagnosticsPromptBuilder.class,
 		MinikunPersonaProvider.class, KnowledgeSelectionConfiguration.class,
 		CommandCatalog.class, CommandFormatter.class,
