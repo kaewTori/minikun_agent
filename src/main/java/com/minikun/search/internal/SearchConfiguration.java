@@ -133,9 +133,9 @@ public class SearchConfiguration {
     @Bean
     SearchDecisionClient searchDecisionClient(
             ObjectMapper objectMapper,
-            @Value("${minikun.search.decision.endpoint:http://flip3:8080/v1/chat/completions}") String endpoint,
-            @Value("${minikun.search.decision.connect-timeout:PT500MS}") String connectTimeout,
-            @Value("${minikun.search.decision.read-timeout:PT2S}") String readTimeout) {
+            @Value("${minikun.search.decision.endpoint:}") String endpoint,
+            @Value("${minikun.search.decision.connect-timeout:}") String connectTimeout,
+            @Value("${minikun.search.decision.read-timeout:}") String readTimeout) {
         HttpClient httpClient = HttpClient.newBuilder()
                 .connectTimeout(parseDecisionDuration(connectTimeout))
                 .build();

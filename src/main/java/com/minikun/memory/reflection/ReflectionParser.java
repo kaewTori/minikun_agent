@@ -1,5 +1,7 @@
 package com.minikun.memory.reflection;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -14,6 +16,7 @@ import com.minikun.memory.model.MemoryCategory;
 import com.minikun.memory.model.MemoryCandidate;
 
 public final class ReflectionParser {
+    private static final Logger log = LoggerFactory.getLogger(ReflectionParser.class);
     private static final List<String> MEMORY_FIELDS = List.of("category", "content", "confidence", "reason");
     private static final String PARSED = "minikun.memory.reflection.candidates.parsed";
     private final ObjectMapper objectMapper;
@@ -30,6 +33,9 @@ public final class ReflectionParser {
 
     public List<MemoryCandidate> parse(String response, CompletedConversation conversation) {
         try {
+
+            log.info("response data is {}", response);
+
             JsonNode root = objectMapper.reader()
                     .with(DeserializationFeature.FAIL_ON_READING_DUP_TREE_KEY)
                     .readTree(response);

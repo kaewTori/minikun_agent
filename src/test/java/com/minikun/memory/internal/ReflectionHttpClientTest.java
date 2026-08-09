@@ -36,7 +36,9 @@ class ReflectionHttpClientTest {
                 .andExpect(content().json(
                         "{\"messages\":[{\"role\":\"user\",\"content\":\"reflection instructions\"}],"
                                 + "\"stream\":false,\"max_tokens\":384,\"temperature\":0.0,"
-                                + "\"response_format\":{\"type\":\"json_object\"}}", true))
+                                + "\"response_format\":{\"type\":\"json_object\"},"
+                                + "\"reasoning_format\":\"none\","
+                                + "\"chat_template_kwargs\":{\"enable_thinking\":false}}", true))
                 .andRespond(withSuccess(
                         "{\"choices\":[{\"message\":{\"role\":\"assistant\","
                                 + "\"content\":\"not JSON and intentionally opaque\"}}]}",
@@ -69,6 +71,52 @@ class ReflectionHttpClientTest {
                                                 MediaType.APPLICATION_JSON));
 
                 assertThrows(MemoryException.class, () -> client.reflect(PROMPT));
+                server.verify();
+        }
+
+    @Test
+    void removesLeadingThinkingBlockBeforeReturningContent() {
+        RestClient.Builder builder = RestClient.builder().baseUrl("http://flip3.test");
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        ReflectionHttpClient client = new ReflectionHttpClient(builder.build());
+        server.expect(requestTo("http://flip3.test"))
+                .andRespond(withSuccess(
+                        "{\"choices\":[{\"message\":{\"role\":\"assistant\","
+                                + "\"content\":\"<think>\\n\\n</think>\\n\\n{\\\"memories\\\":[]}\"}}]}",
+                        MediaType.APPLICATION_JSON));
+
+        assertEquals("{\"memories\":[]}", client.reflect(PROMPT));
+        server.verify();
+    }
+
+    @Test
+    void rejectsResponseContainingOnlyThinkingBlock() {
+        RestClient.Builder builder = RestClient.builder().baseUrl("http://flip3.test");
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        ReflectionHttpClient client = new ReflectionHttpClient(builder.build());
+        server.expect(requestTo("http://flip3.test"))
+                .andRespond(withSuccess(
+                        "{\"choices\":[{\"message\":{\"role\":\"assistant\","
+                                + "\"content\":\"<think>thinking only</think>\"}}]}",
+                        MediaType.APPLICATION_JSON));
+
+        assertThrows(MemoryException.class, () -> client.reflect(PROMPT));
+        server.verify();
+    }
+
+        @Test
+        void extractsJsonWhenModelAddsProseBeforeIt() {
+                RestClient.Builder builder = RestClient.builder().baseUrl("http://flip3.test");
+                MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+                ReflectionHttpClient client = new ReflectionHttpClient(builder.build());
+                server.expect(requestTo("http://flip3.test"))
+                                .andRespond(withSuccess(
+                                                "{\"choices\":[{\"message\":{\"role\":\"assistant\","
+                                                                + "\"content\":\"Thinking Process: checked constraints.\\n"
+                                                                + "{\\\"memories\\\":[]}\"}}]}",
+                                                MediaType.APPLICATION_JSON));
+
+                assertEquals("{\"memories\":[]}", client.reflect(PROMPT));
                 server.verify();
         }
 
