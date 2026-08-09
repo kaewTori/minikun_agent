@@ -9,6 +9,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import com.minikun.pcs.model.ImageSource;
+import com.minikun.pcs.model.KnowledgeContext;
+
 class DefaultKnowledgeSelectionServiceTest {
     @Test
     void ranksEachSourceIndependentlyAndKeepsMemoryFirst() {
@@ -104,6 +107,20 @@ class DefaultKnowledgeSelectionServiceTest {
         assertEquals(List.of("M1"), ids(selection));
         assertThrows(UnsupportedOperationException.class,
                 () -> selection.selectedCandidates().clear());
+    }
+
+    @Test
+    void contextAwareSelectionPreservesImagesInKnowledgeContext() {
+        ImageSource memoryImage = new ImageSource("memory-url", "memory title", null, null);
+        ImageSource searchImage = new ImageSource("search-url", "search title", null, null);
+        KnowledgeSelection selection = new DefaultKnowledgeSelectionService()
+                .select("request",
+                        new KnowledgeContext("memory", List.of(memory("M1", 0)), List.of(memoryImage)),
+                        new KnowledgeContext("search", List.of(search("S1", 0)), List.of(searchImage)),
+                        List.of());
+
+        assertEquals(List.of(memoryImage, searchImage), selection.knowledgeContext().images());
+        assertEquals("M1 content\nS1 content", selection.knowledgeContext().content());
     }
 
         @Test

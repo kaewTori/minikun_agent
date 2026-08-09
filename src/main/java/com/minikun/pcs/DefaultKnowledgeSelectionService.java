@@ -9,6 +9,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
+import com.minikun.pcs.model.KnowledgeContext;
+
 public final class DefaultKnowledgeSelectionService implements KnowledgeSelectionService {
     private static final Comparator<RankedCandidate> HIGHEST_SCORE_FIRST =
             Comparator.comparingDouble(RankedCandidate::score).reversed();
@@ -49,6 +51,21 @@ public final class DefaultKnowledgeSelectionService implements KnowledgeSelectio
             List<KnowledgeCandidate> searchCandidates) {
         return select(userRequest, memoryCandidates, searchCandidates, List.of());
     }
+
+        @Override
+        public KnowledgeSelection select(
+            String userRequest,
+            KnowledgeContext memoryKnowledge,
+            KnowledgeContext searchKnowledge,
+            List<KnowledgeCandidate> browserCandidates) {
+        KnowledgeSelection selection = select(
+            userRequest,
+            candidatesFrom(memoryKnowledge, KnowledgeSource.MEMORY),
+            candidatesFrom(searchKnowledge, KnowledgeSource.SEARCH),
+            browserCandidates);
+        return new KnowledgeSelection(selection.selectedCandidates(), selection.rankingFallback(),
+            combineImages(memoryKnowledge, searchKnowledge));
+        }
 
     @Override
     public KnowledgeSelection select(
@@ -195,6 +212,39 @@ public final class DefaultKnowledgeSelectionService implements KnowledgeSelectio
 
     private List<KnowledgeCandidate> copyCandidates(List<KnowledgeCandidate> candidates) {
         return candidates == null ? List.of() : List.copyOf(candidates);
+    }
+
+    private List<KnowledgeCandidate> candidatesFrom(KnowledgeContext knowledge, KnowledgeSource source) {
+        if (knowledge == null || knowledge.content().isBlank()) {
+            return List.of();
+        }
+        if (!knowledge.candidates().isEmpty()) {
+            return knowledge.candidates();
+        }
+        return List.of(new KnowledgeCandidate(
+                source.name().toLowerCase() + "-legacy", source, knowledge.content(), 0));
+    }
+
+    private List<com.minikun.pcs.model.ImageSource> combineImages(
+            KnowledgeContext memoryKnowledge,
+            KnowledgeContext searchKnowledge) {
+        java.util.LinkedHashSet<String> seenUrls = new java.util.LinkedHashSet<>();
+        List<com.minikun.pcs.model.ImageSource> images = new ArrayList<>();
+        List<KnowledgeContext> contexts = new ArrayList<>(2);
+        if (memoryKnowledge != null) {
+            contexts.add(memoryKnowledge);
+        }
+        if (searchKnowledge != null) {
+            contexts.add(searchKnowledge);
+        }
+        for (KnowledgeContext knowledge : contexts) {
+            for (com.minikun.pcs.model.ImageSource image : knowledge.images()) {
+                if (seenUrls.add(image.url().trim())) {
+                    images.add(image);
+                }
+            }
+        }
+        return List.copyOf(images);
     }
 
     private List<KnowledgeCandidate> applyPolicy(

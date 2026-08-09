@@ -24,6 +24,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import com.minikun.agent.minikun_agent.api.openai.dto.ChatCompletionRequest;
 import com.minikun.agent.minikun_agent.api.openai.dto.ChatCompletionResponse;
+import com.minikun.agent.minikun_agent.api.openai.dto.ChatAttachment;
 import com.minikun.agent.minikun_agent.api.openai.dto.EmbeddingRequest;
 import com.minikun.agent.minikun_agent.api.openai.dto.EmbeddingResponse;
 import com.minikun.agent.minikun_agent.conversation.ChatMessage;
@@ -230,7 +231,8 @@ public class ChatService {
                     "stop");
             ChatCompletionResponse result = new ChatCompletionResponse(
                     transaction.requestId(), "chat.completion", Instant.now().getEpochSecond(),
-                    model, List.of(choice), new ChatCompletionResponse.Usage(0, 0, 0));
+                    model, List.of(choice), new ChatCompletionResponse.Usage(0, 0, 0),
+                    context.attachments());
             transaction.success();
             return result;
         } catch (RuntimeException exception) {
@@ -321,7 +323,18 @@ public class ChatService {
         Prompt prompt = promptFor(request, history, knowledgeSelection);
         log.info("process=prompt event=composed{}", streaming ? " stream=true" : "");
         return new ChatExecutionContext(
-                prompt, conversationId, persistConversation, memoryOwnerId(request, conversationId));
+                prompt, conversationId, persistConversation, memoryOwnerId(request, conversationId),
+                attachmentsFor(knowledgeSelection));
+    }
+
+    private List<ChatAttachment> attachmentsFor(KnowledgePipelineSelection knowledgeSelection) {
+        try {
+            return ImageAttachmentSelector.select(
+                    knowledgeSelection.selection().knowledgeContext().images());
+        } catch (RuntimeException exception) {
+            log.warn("Image attachment selection failed; continuing without attachments", exception);
+            return List.of();
+        }
     }
 
     private ChatCompletionResponse commandResponse(ChatCompletionRequest request, ChatMessage userMessage) {
@@ -645,8 +658,8 @@ public class ChatService {
             List<KnowledgeCandidate> browserCandidates) {
         return knowledgeSelectionService.select(
                 query,
-                candidatesFor(memoryKnowledge, KnowledgeSource.MEMORY),
-                candidatesFor(searchKnowledge, KnowledgeSource.SEARCH),
+            memoryKnowledge,
+            searchKnowledge,
                 browserCandidates);
     }
 
@@ -724,7 +737,8 @@ public class ChatService {
             Prompt prompt,
             ConversationId conversationId,
             boolean persistConversation,
-            String ownerId) {
+            String ownerId,
+            List<ChatAttachment> attachments) {
     }
 
     private record KnowledgePipelineSelection(

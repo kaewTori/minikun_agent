@@ -1,6 +1,7 @@
 package com.minikun.agent.minikun_agent.api.openai;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -38,6 +39,10 @@ import com.minikun.diagnostics.DiagnosticsService;
 import com.minikun.memory.MemoryRecallService;
 import com.minikun.pcs.MinikunPersonaProvider;
 import com.minikun.pcs.PromptComposer;
+import com.minikun.pcs.KnowledgeCandidate;
+import com.minikun.pcs.KnowledgeSource;
+import com.minikun.pcs.model.ImageSource;
+import com.minikun.pcs.model.KnowledgeContext;
 import com.minikun.runtime.CacheFormatter;
 import com.minikun.runtime.CacheService;
 import com.minikun.runtime.ModelsFormatter;
@@ -46,6 +51,7 @@ import com.minikun.runtime.VersionFormatter;
 import com.minikun.runtime.VersionService;
 import com.minikun.search.SearchDecisionService;
 import com.minikun.search.SearchService;
+import com.minikun.search.model.SearchDecision;
 
 import reactor.core.publisher.Flux;
 
@@ -120,7 +126,48 @@ class ChatServiceChatOrchestrationTest {
         verify(conversation, org.mockito.Mockito.times(1)).append(any(), any());
     }
 
+            @Test
+            void blockingResponseDeliversImagesWithoutAddingThemToPrompt() throws Exception {
+            ChatModel chatModel = mock(ChatModel.class);
+            ConversationMemoryService conversation = mock(ConversationMemoryService.class);
+            SearchService searchService = mock(SearchService.class);
+            SearchDecisionService decisionService = mock(SearchDecisionService.class);
+            when(conversation.load(any())).thenReturn(List.of());
+            when(chatModel.call(any(Prompt.class))).thenReturn(response("answer"));
+            when(decisionService.decide(any())).thenReturn(new SearchDecision(true, "image query"));
+            ImageSource first = new ImageSource("https://example.com/first.jpg", "First", null, null);
+            ImageSource second = new ImageSource("https://example.com/second.jpg", "Second", null, null);
+            when(searchService.search(any())).thenReturn(new KnowledgeContext(
+                "search text",
+                List.of(new KnowledgeCandidate("search-1", KnowledgeSource.SEARCH, "search text", 0)),
+                List.of(first, second)));
+
+            ChatService service = service(chatModel, conversation, searchService, decisionService);
+            setField(service, "searchEnabled", true);
+            setField(service, "searchTimeout", Duration.ofSeconds(10));
+            setField(service, "searchQueryPlanningEnabled", false);
+
+            var response = service.chatCompletion(request(), new ConversationId("images"));
+
+            assertEquals(List.of(
+                new com.minikun.agent.minikun_agent.api.openai.dto.ChatAttachment("image", first.url(), first.title()),
+                new com.minikun.agent.minikun_agent.api.openai.dto.ChatAttachment("image", second.url(), second.title())),
+                response.attachments());
+            ArgumentCaptor<Prompt> prompt = ArgumentCaptor.forClass(Prompt.class);
+            verify(chatModel).call(prompt.capture());
+            assertFalse(promptText(prompt.getValue()).contains(first.url()));
+            verify(searchService).search(any());
+            }
+
     private ChatService service(ChatModel chatModel, ConversationMemoryService conversation) {
+        return service(chatModel, conversation, mock(SearchService.class), mock(SearchDecisionService.class));
+        }
+
+        private ChatService service(
+            ChatModel chatModel,
+            ConversationMemoryService conversation,
+            SearchService searchService,
+            SearchDecisionService decisionService) {
         CharacterSpecification character = new CharacterLoader(MCS_ROOT).load();
         ObjectProvider<?> buildProperties = mock(ObjectProvider.class);
         return new ChatService(
@@ -131,8 +178,8 @@ class ChatServiceChatOrchestrationTest {
                 mock(ObjectProvider.class),
                 character,
                 new PromptComposer(),
-                mock(SearchService.class),
-                mock(SearchDecisionService.class),
+                searchService,
+                decisionService,
                 new com.minikun.search.SearchSelectionSignalMapper(),
                 mock(DiagnosticsService.class),
                 new DiagnosticsFormatter(),
@@ -146,6 +193,12 @@ class ChatServiceChatOrchestrationTest {
                 new CacheService("true", "valkey", Duration.ofMinutes(5)),
                 new CacheFormatter(),
                 mock(ObjectProvider.class));
+    }
+
+    private void setField(ChatService service, String fieldName, Object value) throws Exception {
+        var field = ChatService.class.getDeclaredField(fieldName);
+        field.setAccessible(true);
+        field.set(service, value);
     }
 
     private ChatResponse response(String text) {
