@@ -3,6 +3,8 @@ package com.minikun.search.internal;
 import com.minikun.pcs.model.KnowledgeContext;
 import com.minikun.pcs.KnowledgeCandidate;
 import com.minikun.pcs.KnowledgeSource;
+import com.minikun.pcs.model.ImageSource;
+import com.minikun.search.model.ImageSearchResult;
 import com.minikun.search.model.SearchResponse;
 
 import java.util.ArrayList;
@@ -21,5 +23,23 @@ final class SearchFormatter {
                 "search-" + index, KnowledgeSource.SEARCH, content, index));
         }
         return KnowledgeContext.fromCandidates(candidates);
+    }
+
+    KnowledgeContext formatImages(List<ImageSearchResult> results, int resultLimit) {
+        if (results == null || results.isEmpty() || resultLimit < 1) {
+            return KnowledgeContext.empty();
+        }
+        List<ImageSource> images = new ArrayList<>();
+        java.util.Set<String> seenUrls = new java.util.HashSet<>();
+        for (ImageSearchResult result : results) {
+            if (seenUrls.add(result.url().trim())) {
+                images.add(new ImageSource(
+                        result.url(), result.title(), result.sourceUrl(), result.description()));
+            }
+            if (images.size() == resultLimit) {
+                break;
+            }
+        }
+        return new KnowledgeContext("", List.of(), images);
     }
 }

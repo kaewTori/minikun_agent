@@ -9,6 +9,7 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.minikun.search.SearchExecutionException;
 import com.minikun.search.model.SearchRequest;
+import com.minikun.search.model.SearchOptions;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -68,6 +69,34 @@ class SearXNGProviderTest {
 
         provider.search(request("{\"title\":\"Java\"}", 5));
 
+        server.verify();
+    }
+
+    @Test
+    void mapsImageResultsAndSkipsEntriesWithoutImageUrls() {
+        RestClient.Builder builder = RestClient.builder().baseUrl("http://searxng.test");
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        SearXNGProvider provider = new SearXNGProvider(builder.build(), new ObjectMapper(), CLOCK);
+        server.expect(requestTo(
+                        "http://searxng.test/search?q=mountains&format=json&number_of_results=5&categories=images"))
+                .andRespond(withSuccess("""
+                        {"results":[
+                          {"img_src":"https://images.example/mountain.jpg","title":"Mountain",\
+                           "url":"https://example.com/mountain","content":"Alpine view"},
+                          {"title":"Malformed","url":"https://example.com/malformed"}
+                        ]}
+                        """, MediaType.APPLICATION_JSON));
+
+        var response = provider.search(new SearchRequest(
+                UUID.randomUUID(), "mountains", 5, CLOCK.instant().plusSeconds(60),
+                new SearchOptions("", SearchOptions.IMAGE_CATEGORY, "", false), java.util.List.of()));
+
+        assertEquals(0, response.results().size());
+        assertEquals(1, response.images().size());
+        assertEquals("https://images.example/mountain.jpg", response.images().getFirst().url());
+        assertEquals("Mountain", response.images().getFirst().title());
+        assertEquals("https://example.com/mountain", response.images().getFirst().sourceUrl());
+        assertEquals("Alpine view", response.images().getFirst().description());
         server.verify();
     }
 

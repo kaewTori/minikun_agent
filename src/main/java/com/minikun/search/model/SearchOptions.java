@@ -8,6 +8,8 @@ public record SearchOptions(
         String category,
         String timeRange,
         boolean safeSearch) {
+    public static final String IMAGE_CATEGORY = "images";
+
     public SearchOptions {
         language = normalize(language);
         category = normalize(category);

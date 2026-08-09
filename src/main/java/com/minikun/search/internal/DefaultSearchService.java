@@ -140,11 +140,7 @@ public final class DefaultSearchService implements SearchService {
                         if (cachedContexts.size() == 1) {
                             return cachedContexts.get(0);
                         }
-                        return new KnowledgeContext(cachedContexts.stream()
-                                .map(KnowledgeContext::content)
-                                .filter(content -> !content.isBlank())
-                                .reduce((left, right) -> left + "\n" + right)
-                                .orElse(""));
+                        return combineCachedContexts(cachedContexts, request);
                 }
             } else {
                 increment(BYPASS_COUNTER);
@@ -164,6 +160,21 @@ public final class DefaultSearchService implements SearchService {
             recordTimer(sample);
         }
     }
+
+            private KnowledgeContext combineCachedContexts(List<KnowledgeContext> contexts, SearchRequest request) {
+        String content = contexts.stream()
+            .map(KnowledgeContext::content)
+            .filter(value -> !value.isBlank())
+            .reduce((left, right) -> left + "\n" + right)
+            .orElse("");
+            java.util.Set<String> seenUrls = new java.util.HashSet<>();
+            List<com.minikun.pcs.model.ImageSource> images = contexts.stream()
+                .flatMap(context -> context.images().stream())
+                .filter(image -> seenUrls.add(image.url().trim()))
+                .limit(request.resultLimit())
+                .toList();
+        return new KnowledgeContext(content, List.of(), images);
+        }
 
     private Timer.Sample startTimer() {
         try {

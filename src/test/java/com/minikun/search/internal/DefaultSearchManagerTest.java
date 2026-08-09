@@ -11,6 +11,8 @@ import com.minikun.search.model.SearchProviderResponse;
 import com.minikun.search.model.SearchRequest;
 import com.minikun.search.model.SearchResult;
 import com.minikun.search.model.SearchSource;
+import com.minikun.search.model.ImageSearchResult;
+import com.minikun.search.model.SearchOptions;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -106,6 +108,24 @@ class DefaultSearchManagerTest {
                     + "Title alternate (https://example.com/alternate): Content alternate\n"
                     + "Title third (https://example.com/third): Content third",
                 response.content());
+            }
+
+            @Test
+            void mapsImagesWithoutEnteringTextKnowledgePathAndAppliesLimit() {
+            SearchProvider provider = request -> new SearchProviderResponse(List.of(), List.of(
+                new ImageSearchResult("https://images.example/one.jpg", "One", "https://one.example", ""),
+                new ImageSearchResult("https://images.example/one.jpg", "Duplicate", "https://duplicate.example", ""),
+                new ImageSearchResult("https://images.example/two.jpg", "Two", "https://two.example", "")));
+            DefaultSearchManager manager = manager(provider, 0);
+            SearchRequest request = new SearchRequest(
+                UUID.randomUUID(), "images", 1, CLOCK.instant().plusSeconds(60),
+                new SearchOptions("", SearchOptions.IMAGE_CATEGORY, "", false), List.of());
+
+            KnowledgeContext response = manager.search(request);
+
+            assertEquals("", response.content());
+            assertEquals(1, response.images().size());
+            assertEquals("https://images.example/one.jpg", response.images().getFirst().url());
             }
 
     private static DefaultSearchManager manager(SearchProvider provider, int maxRetries) {

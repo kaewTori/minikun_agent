@@ -7,8 +7,10 @@ import com.minikun.search.SearchRetryExhaustedException;
 import com.minikun.search.SearchTimeoutException;
 import com.minikun.pcs.model.KnowledgeContext;
 import com.minikun.search.model.SearchMetadata;
+import com.minikun.search.model.ImageSearchResult;
 import com.minikun.search.model.SearchProviderResponse;
 import com.minikun.search.model.SearchRequest;
+import com.minikun.search.model.SearchOptions;
 import com.minikun.search.model.SearchResponse;
 import com.minikun.search.model.SearchResult;
 import com.minikun.search.model.SearchStatus;
@@ -84,6 +86,7 @@ public final class DefaultSearchManager implements SearchManager {
         Timer.Sample sample = startTimer();
         Instant started = clock.instant();
         List<SearchResult> providerResults = new ArrayList<>();
+        List<ImageSearchResult> providerImageResults = new ArrayList<>();
         RuntimeException failure = null;
         try {
             int retryCount = 0;
@@ -93,7 +96,13 @@ public final class DefaultSearchManager implements SearchManager {
                         request.options(), List.of());
                 Execution execution = execute(expandedRequest);
                 providerResults.addAll(execution.response().results());
+                providerImageResults.addAll(execution.response().images());
                 retryCount += execution.retryCount();
+            }
+            if (isImageSearch(request)) {
+                KnowledgeContext result = formatter.formatImages(providerImageResults, request.resultLimit());
+                recordQuality(result);
+                return result;
             }
             Duration duration = Duration.between(started, clock.instant());
             SearchProviderResponse providerResponse = new SearchProviderResponse(providerResults);
@@ -111,6 +120,9 @@ public final class DefaultSearchManager implements SearchManager {
         } catch (RuntimeException exception) {
             failure = exception;
             recordFailure(exception);
+            if (isImageSearch(request)) {
+                return KnowledgeContext.empty();
+            }
             throw exception;
         } finally {
             recordTimer(sample);
@@ -185,6 +197,10 @@ public final class DefaultSearchManager implements SearchManager {
 
     private String providerName() {
         return provider.getClass().getSimpleName();
+    }
+
+    private boolean isImageSearch(SearchRequest request) {
+        return SearchOptions.IMAGE_CATEGORY.equalsIgnoreCase(request.options().category());
     }
 
     private Execution execute(SearchRequest request) {

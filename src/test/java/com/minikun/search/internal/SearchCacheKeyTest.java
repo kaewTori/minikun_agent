@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.minikun.search.SearchCacheKey;
+import com.minikun.search.model.SearchOptions;
 import org.junit.jupiter.api.Test;
 
 class SearchCacheKeyTest {
@@ -22,5 +23,14 @@ class SearchCacheKeyTest {
     void resultLimitChangesTheKey() {
         assertTrue(!ValkeySearchCache.redisKey(SearchCacheKey.from("query", 10))
                 .equals(ValkeySearchCache.redisKey(SearchCacheKey.from("query", 20))));
+    }
+
+    @Test
+    void imageAndTextCategoriesUseDifferentKeys() {
+        SearchCacheKey text = SearchCacheKey.from("query", 10);
+        SearchCacheKey images = SearchCacheKey.from(
+                "query", 10, new SearchOptions("", SearchOptions.IMAGE_CATEGORY, "", false));
+
+        assertTrue(!ValkeySearchCache.redisKey(text).equals(ValkeySearchCache.redisKey(images)));
     }
 }

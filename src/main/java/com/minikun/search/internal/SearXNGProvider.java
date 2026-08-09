@@ -9,6 +9,7 @@ import com.minikun.search.model.SearchProviderResponse;
 import com.minikun.search.model.SearchRequest;
 import com.minikun.search.model.SearchResult;
 import com.minikun.search.model.SearchSource;
+import com.minikun.search.model.ImageSearchResult;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -60,7 +61,10 @@ public final class SearXNGProvider implements SearchProvider {
                     .accept(MediaType.APPLICATION_JSON)
                     .retrieve()
                     .body(String.class);
-            response = new SearchProviderResponse(parseResults(body));
+                response = request.options().category().equalsIgnoreCase(
+                    com.minikun.search.model.SearchOptions.IMAGE_CATEGORY)
+                    ? new SearchProviderResponse(List.of(), parseImageResults(body))
+                    : new SearchProviderResponse(parseResults(body));
             return response;
         } catch (ResourceAccessException exception) {
             failure = exception;
@@ -124,6 +128,36 @@ public final class SearXNGProvider implements SearchProvider {
                 SearchSource source = new SearchSource("searxng", url, clock.instant());
                 mapped.add(new SearchResult(title, url, content, source, position));
                 position++;
+            }
+            return List.copyOf(mapped);
+        } catch (SearchExecutionException exception) {
+            throw exception;
+        } catch (Exception exception) {
+            throw new SearchExecutionException("SearXNG response is not valid JSON", exception);
+        }
+    }
+
+    private List<ImageSearchResult> parseImageResults(String body) {
+        if (body == null || body.isBlank()) {
+            throw new SearchExecutionException("SearXNG returned an empty response");
+        }
+        try {
+            JsonNode results = objectMapper.readTree(body).path("results");
+            if (!results.isArray()) {
+                throw new SearchExecutionException("SearXNG response has no results array");
+            }
+
+            List<ImageSearchResult> mapped = new ArrayList<>();
+            for (JsonNode result : results) {
+                String imageUrl = text(result, "img_src");
+                if (imageUrl.isBlank()) {
+                    continue;
+                }
+                mapped.add(new ImageSearchResult(
+                        imageUrl,
+                        text(result, "title"),
+                        text(result, "url"),
+                        text(result, "content")));
             }
             return List.copyOf(mapped);
         } catch (SearchExecutionException exception) {

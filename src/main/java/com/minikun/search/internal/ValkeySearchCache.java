@@ -79,6 +79,9 @@ public final class ValkeySearchCache implements SearchCache {
 
     static String redisKey(SearchCacheKey key) {
         String material = key.normalizedQuery() + "\u0000" + key.maximumResultCount();
+        if (!"v1|||false".equals(key.optionsFingerprint())) {
+            material += "\u0000" + key.optionsFingerprint();
+        }
         try {
             byte[] digest = MessageDigest.getInstance("SHA-256")
                     .digest(material.getBytes(StandardCharsets.UTF_8));
