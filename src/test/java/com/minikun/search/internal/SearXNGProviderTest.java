@@ -100,6 +100,34 @@ class SearXNGProviderTest {
         server.verify();
     }
 
+        @Test
+        void mapsMissingImageMetadataToEmptyStrings() {
+                RestClient.Builder builder = RestClient.builder().baseUrl("http://searxng.test");
+                MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+                SearXNGProvider provider = new SearXNGProvider(builder.build(), new ObjectMapper(), CLOCK);
+                server.expect(requestTo(
+                                                "http://searxng.test/search?q=mountains&format=json&number_of_results=5&categories=images"))
+                                .andRespond(withSuccess("""
+                                                {"results":[
+                                                  {"img_src":"https://images.example/mountain.jpg"},
+                                                  {"img_src":42},
+                                                  {"img_src":"   "}
+                                                ]}
+                                                """, MediaType.APPLICATION_JSON));
+
+                var response = provider.search(new SearchRequest(
+                                UUID.randomUUID(), "mountains", 5, CLOCK.instant().plusSeconds(60),
+                                new SearchOptions("", SearchOptions.IMAGE_CATEGORY, "", false), java.util.List.of()));
+
+                assertEquals(1, response.images().size());
+                var image = response.images().getFirst();
+                assertEquals("https://images.example/mountain.jpg", image.url());
+                assertEquals("", image.title());
+                assertEquals("", image.sourceUrl());
+                assertEquals("", image.description());
+                server.verify();
+        }
+
     private static SearchRequest request(String query, int limit) {
         return new SearchRequest(
                 UUID.randomUUID(), query, limit, CLOCK.instant().plusSeconds(60));

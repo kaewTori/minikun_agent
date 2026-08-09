@@ -32,9 +32,16 @@ final class SearchFormatter {
         List<ImageSource> images = new ArrayList<>();
         java.util.Set<String> seenUrls = new java.util.HashSet<>();
         for (ImageSearchResult result : results) {
-            if (seenUrls.add(result.url().trim())) {
+            if (result == null || result.url() == null) {
+                continue;
+            }
+            String normalizedUrl = result.url().trim();
+            if (normalizedUrl.isBlank()) {
+                continue;
+            }
+            if (seenUrls.add(normalizedUrl)) {
                 images.add(new ImageSource(
-                        result.url(), result.title(), result.sourceUrl(), result.description()));
+                        normalizedUrl, result.title(), result.sourceUrl(), result.description()));
             }
             if (images.size() == resultLimit) {
                 break;

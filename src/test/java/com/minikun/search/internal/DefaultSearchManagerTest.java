@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.minikun.pcs.model.KnowledgeContext;
+import com.minikun.pcs.model.ImageSource;
 import com.minikun.search.SearchProvider;
 import com.minikun.search.SearchProviderUnavailableException;
 import com.minikun.search.model.ExpandedSearchQuery;
@@ -126,6 +127,55 @@ class DefaultSearchManagerTest {
             assertEquals("", response.content());
             assertEquals(1, response.images().size());
             assertEquals("https://images.example/one.jpg", response.images().getFirst().url());
+            }
+
+            @Test
+            void preservesImageOrderAndDeduplicatesTrimmedUrls() {
+            SearchProvider provider = request -> new SearchProviderResponse(List.of(), List.of(
+                new ImageSearchResult(" https://images.example/a.jpg ", "A", "source-a", "description-a"),
+                new ImageSearchResult("https://images.example/b.jpg", "B", "source-b", "description-b"),
+                new ImageSearchResult("https://images.example/a.jpg", "A duplicate", "source-duplicate", ""),
+                new ImageSearchResult("https://images.example/c.jpg", "C", "source-c", "description-c")));
+            DefaultSearchManager manager = manager(provider, 0);
+            SearchRequest request = new SearchRequest(
+                UUID.randomUUID(), "images", 10, CLOCK.instant().plusSeconds(60),
+                new SearchOptions("", SearchOptions.IMAGE_CATEGORY, "", false), List.of());
+
+            KnowledgeContext response = manager.search(request);
+
+            assertEquals(List.of("https://images.example/a.jpg", "https://images.example/b.jpg",
+                "https://images.example/c.jpg"),
+                response.images().stream().map(ImageSource::url).toList());
+            assertEquals("A", response.images().getFirst().title());
+            assertEquals("source-a", response.images().getFirst().sourceUrl());
+            }
+
+        @Test
+        void skipsNullImageResultsBeforeNormalizingUrls() {
+            SearchFormatter formatter = new SearchFormatter();
+
+            KnowledgeContext response = formatter.formatImages(java.util.Arrays.asList(
+                    null,
+                    new ImageSearchResult(" https://images.example/a.jpg ", "A", "source-a", "description-a")),
+                    10);
+
+            assertEquals(List.of("https://images.example/a.jpg"),
+                    response.images().stream().map(ImageSource::url).toList());
+        }
+
+            @Test
+            void returnsImmutableEmptyImagesWhenImageSearchHasNoValidImages() {
+            SearchProvider provider = request -> new SearchProviderResponse(List.of(result()), List.of());
+            DefaultSearchManager manager = manager(provider, 0);
+            SearchRequest request = new SearchRequest(
+                UUID.randomUUID(), "images", 10, CLOCK.instant().plusSeconds(60),
+                new SearchOptions("", SearchOptions.IMAGE_CATEGORY, "", false), List.of());
+
+            KnowledgeContext response = manager.search(request);
+
+            assertEquals("", response.content());
+            assertEquals(List.of(), response.images());
+            assertThrows(UnsupportedOperationException.class, () -> response.images().clear());
             }
 
     private static DefaultSearchManager manager(SearchProvider provider, int maxRetries) {
