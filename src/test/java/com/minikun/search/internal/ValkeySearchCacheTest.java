@@ -66,6 +66,6 @@ class ValkeySearchCacheTest {
     }
 
     private static String assertSerialized(KnowledgeContext context) {
-        return "{\"content\":\"" + context.content() + "\"}";
+        return "{\"content\":\"" + context.content() + "\",\"images\":[]}";
     }
 }
