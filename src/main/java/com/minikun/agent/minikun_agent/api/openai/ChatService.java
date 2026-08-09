@@ -283,7 +283,9 @@ public class ChatService {
                 Flux.just(data(new ChatCompletionResponse.StreamChunk(
                         id, "chat.completion.chunk", created, model,
                         List.of(new ChatCompletionResponse.StreamChoice(
-                                0, new ChatCompletionResponse.Delta("assistant", ""), null))))),
+                                0, new ChatCompletionResponse.Delta(
+                                        "assistant", "", imageDeltas(context.attachments())), null)),
+                        context.attachments()))),
                 chunks,
                 Flux.just(data(new ChatCompletionResponse.StreamChunk(
                         id, "chat.completion.chunk", created, model,
@@ -430,6 +432,13 @@ public class ChatService {
                 List.of(new ChatCompletionResponse.StreamChoice(
                         0, new ChatCompletionResponse.Delta(null, content), null))));
     }
+
+        private List<ChatCompletionResponse.Image> imageDeltas(List<ChatAttachment> attachments) {
+        return attachments.stream()
+            .map(attachment -> new ChatCompletionResponse.Image(
+                "image_url", new ChatCompletionResponse.ImageUrl(attachment.url())))
+            .toList();
+        }
 
     private String data(ChatCompletionResponse.StreamChunk chunk) {
         try {

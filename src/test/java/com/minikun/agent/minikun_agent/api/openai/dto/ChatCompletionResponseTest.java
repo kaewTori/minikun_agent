@@ -68,6 +68,31 @@ class ChatCompletionResponseTest {
         assertEquals(0, json.get("attachments").size());
     }
 
+    @Test
+    void streamChunkSerializesAttachments() throws Exception {
+        ChatCompletionResponse.StreamChunk chunk = new ChatCompletionResponse.StreamChunk(
+            "id", "chat.completion.chunk", 1L, "model", List.of(),
+            List.of(new ChatAttachment("image", "image-url", "title")));
+
+        JsonNode json = new ObjectMapper().readTree(
+            new ObjectMapper().writeValueAsString(chunk));
+
+        assertEquals("image-url", json.get("attachments").get(0).get("url").asText());
+    }
+
+    @Test
+    void streamDeltaSerializesImagesForOpenWebUi() throws Exception {
+        ChatCompletionResponse.Delta delta = new ChatCompletionResponse.Delta(
+                "assistant", "", List.of(new ChatCompletionResponse.Image(
+                        "image_url", new ChatCompletionResponse.ImageUrl("image-url"))));
+
+        JsonNode json = new ObjectMapper().readTree(
+                new ObjectMapper().writeValueAsString(delta));
+
+        assertEquals("image_url", json.get("images").get(0).get("type").asText());
+        assertEquals("image-url", json.get("images").get(0).get("image_url").get("url").asText());
+    }
+
     private ChatCompletionResponse response() {
         return new ChatCompletionResponse(
                 "response-id", "chat.completion", 42L, "model",

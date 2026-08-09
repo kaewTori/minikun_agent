@@ -34,10 +34,39 @@ public record ChatCompletionResponse(
             String object,
             long created,
             String model,
-            java.util.List<StreamChoice> choices
-    ) {}
+            java.util.List<StreamChoice> choices,
+            java.util.List<ChatAttachment> attachments
+    ) {
+        public StreamChunk(
+                String id,
+                String object,
+                long created,
+                String model,
+                java.util.List<StreamChoice> choices) {
+            this(id, object, created, model, choices, java.util.List.of());
+        }
+
+        public StreamChunk {
+            attachments = attachments == null ? java.util.List.of() : java.util.List.copyOf(attachments);
+        }
+    }
 
     public record StreamChoice(int index, Delta delta, String finish_reason) {}
 
-    public record Delta(String role, String content) {}
+    public record Delta(
+            String role,
+            String content,
+            java.util.List<Image> images) {
+        public Delta(String role, String content) {
+            this(role, content, java.util.List.of());
+        }
+
+        public Delta {
+            images = images == null ? java.util.List.of() : java.util.List.copyOf(images);
+        }
+    }
+
+    public record Image(String type, ImageUrl image_url) {}
+
+    public record ImageUrl(String url) {}
 }
