@@ -331,8 +331,8 @@ public class ChatService {
 
     private List<ChatAttachment> attachmentsFor(KnowledgePipelineSelection knowledgeSelection) {
         try {
-            return ImageAttachmentSelector.select(
-                    knowledgeSelection.selection().knowledgeContext().images());
+            return ImageAttachmentMapper.map(ImageAttachmentSelector.select(
+                    knowledgeSelection.selection().knowledgeContext().images()));
         } catch (RuntimeException exception) {
             log.warn("Image attachment selection failed; continuing without attachments", exception);
             return List.of();

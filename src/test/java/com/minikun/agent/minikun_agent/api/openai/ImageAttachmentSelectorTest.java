@@ -6,25 +6,24 @@ import java.util.List;
 
 import org.junit.jupiter.api.Test;
 
-import com.minikun.agent.minikun_agent.api.openai.dto.ChatAttachment;
 import com.minikun.pcs.model.ImageSource;
 
 class ImageAttachmentSelectorTest {
     @Test
     void preservesOrderDeduplicatesUrlsAndMapsFields() {
-        List<ChatAttachment> attachments = ImageAttachmentSelector.select(List.of(
+        List<ImageSource> attachments = ImageAttachmentSelector.select(List.of(
                 image("first-url", "first title"),
                 image("first-url", "duplicate title"),
                 image("second-url", "second title")));
 
         assertEquals(List.of(
-                new ChatAttachment("image", "first-url", "first title"),
-                new ChatAttachment("image", "second-url", "second title")), attachments);
+                image("first-url", "first title"),
+                image("second-url", "second title")), attachments);
     }
 
     @Test
     void limitsSelectedImages() {
-        List<ChatAttachment> attachments = ImageAttachmentSelector.select(List.of(
+        List<ImageSource> attachments = ImageAttachmentSelector.select(List.of(
                 image("one", "one"), image("two", "two"), image("three", "three"),
                 image("four", "four")));
 
@@ -37,6 +36,17 @@ class ImageAttachmentSelectorTest {
     void emptyOrNullInputProducesEmptyAttachments() {
         assertEquals(List.of(), ImageAttachmentSelector.select(List.of()));
         assertEquals(List.of(), ImageAttachmentSelector.select(null));
+    }
+
+    @Test
+    void trimsUrlsForDeduplicationAndKeepsSelectedSourcesImmutable() {
+        List<ImageSource> selected = ImageAttachmentSelector.select(List.of(
+                image(" first-url ", "first title"), image("first-url", "duplicate title"),
+                image(" ", "blank")));
+
+        assertEquals(List.of(image(" first-url ", "first title")), selected);
+        org.junit.jupiter.api.Assertions.assertThrows(
+                UnsupportedOperationException.class, () -> selected.clear());
     }
 
     private ImageSource image(String url, String title) {

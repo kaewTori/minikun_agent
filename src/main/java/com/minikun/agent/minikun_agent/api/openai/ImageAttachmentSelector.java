@@ -5,7 +5,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
-import com.minikun.agent.minikun_agent.api.openai.dto.ChatAttachment;
 import com.minikun.pcs.model.ImageSource;
 
 final class ImageAttachmentSelector {
@@ -15,18 +14,18 @@ final class ImageAttachmentSelector {
     private ImageAttachmentSelector() {
     }
 
-    static List<ChatAttachment> select(List<ImageSource> images) {
+    static List<ImageSource> select(List<ImageSource> images) {
         if (images == null || images.isEmpty()) {
             return List.of();
         }
         Set<String> seenUrls = new LinkedHashSet<>();
-        List<ChatAttachment> selected = new ArrayList<>(MAX_ATTACHMENTS);
+        List<ImageSource> selected = new ArrayList<>(MAX_ATTACHMENTS);
         for (ImageSource image : images) {
             if (image == null || image.url() == null || image.url().isBlank()
                     || !seenUrls.add(image.url().trim())) {
                 continue;
             }
-            selected.add(new ChatAttachment("image", image.url(), image.title()));
+            selected.add(image);
             if (selected.size() == MAX_ATTACHMENTS) {
                 break;
             }

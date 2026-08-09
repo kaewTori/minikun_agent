@@ -14,6 +14,8 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.ai.chat.messages.AssistantMessage;
@@ -153,10 +155,25 @@ class ChatServiceChatOrchestrationTest {
                 new com.minikun.agent.minikun_agent.api.openai.dto.ChatAttachment("image", first.url(), first.title()),
                 new com.minikun.agent.minikun_agent.api.openai.dto.ChatAttachment("image", second.url(), second.title())),
                 response.attachments());
+            assertEquals("answer", response.choices().get(0).message().content());
             ArgumentCaptor<Prompt> prompt = ArgumentCaptor.forClass(Prompt.class);
             verify(chatModel).call(prompt.capture());
             assertFalse(promptText(prompt.getValue()).contains(first.url()));
+            assertFalse(promptText(prompt.getValue()).contains(first.title()));
+            assertFalse(promptText(prompt.getValue()).contains(second.url()));
+            assertFalse(promptText(prompt.getValue()).contains(second.title()));
             verify(searchService).search(any());
+            verify(chatModel, org.mockito.Mockito.times(1)).call(any(Prompt.class));
+
+            JsonNode serialized = new ObjectMapper().readTree(
+                    new ObjectMapper().writeValueAsString(response));
+            JsonNode attachment = serialized.get("attachments").get(0);
+            assertEquals(2, serialized.get("attachments").size());
+            assertEquals("image", attachment.get("type").asText());
+            assertEquals(first.url(), attachment.get("url").asText());
+            assertEquals(first.title(), attachment.get("title").asText());
+            assertFalse(attachment.has("sourceUrl"));
+            assertFalse(attachment.has("description"));
             }
 
     private ChatService service(ChatModel chatModel, ConversationMemoryService conversation) {
