@@ -57,4 +57,17 @@ class DefaultSearchQueryPlanningServiceTest {
         assertEquals("", plan.primaryQuery());
         assertEquals("search_not_requested", plan.reason());
     }
+
+    @Test
+    void emitsImageIntentOnlyWhenDecisionAlreadyResolvedToImageRequest() {
+        SearchQueryPlan imagePlan = planner.plan(
+                "หารูปแมว",
+                new SearchDecision(true, "หารูปแมว", SearchDecisionReason.IMAGE_REQUEST));
+        SearchQueryPlan unrelatedPlan = planner.plan(
+                "หารูปแมว",
+                new SearchDecision(true, "หารูปแมว", SearchDecisionReason.FACT_LOOKUP));
+
+        assertEquals("images", imagePlan.intent());
+        assertEquals("fact_lookup", unrelatedPlan.intent());
+    }
 }

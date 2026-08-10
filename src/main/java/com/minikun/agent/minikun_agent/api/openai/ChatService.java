@@ -66,6 +66,7 @@ import com.minikun.search.SearchContextAwarenessService;
 import com.minikun.search.SearchService;
 import com.minikun.search.SearchSelectionSignalMapper;
 import com.minikun.search.model.SearchDecision;
+import com.minikun.search.model.SearchDecisionReason;
 import com.minikun.search.model.SearchRequest;
 import com.minikun.search.model.SearchOptions;
 import com.minikun.search.model.SearchQueryPlan;
@@ -620,7 +621,8 @@ public class ChatService {
                     plan.primaryQuery(),
                     10,
                     Instant.now().plus(searchTimeout),
-                    new SearchOptions(plan.language(), categoryFor(plan.intent()), plan.timeRange(), searchSafeSearch),
+                        new SearchOptions(plan.language(), categoryFor(plannedDecision, plan.intent()), plan.timeRange(),
+                            searchSafeSearch),
                     plan.alternateQueries());
             searchKnowledge = searchService.search(searchRequest);
             log.info("Search completed knowledgeCharacters={}",
@@ -634,7 +636,10 @@ public class ChatService {
         }
     }
 
-    private String categoryFor(String intent) {
+    private String categoryFor(SearchDecision decision, String intent) {
+        if (decision.reason() == SearchDecisionReason.IMAGE_REQUEST && "images".equals(intent)) {
+            return SearchOptions.IMAGE_CATEGORY;
+        }
         return "current_information".equals(intent) ? "news" : "";
     }
 

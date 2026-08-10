@@ -99,6 +99,11 @@ public class SearchConfiguration {
     }
 
     @Bean
+    ImageIntentDetector imageIntentDetector() {
+        return new ImageIntentDetector();
+    }
+
+    @Bean
     SearchContextAwarenessService searchContextAwarenessService() {
         return new DefaultSearchContextAwarenessService();
     }
@@ -166,9 +171,10 @@ public class SearchConfiguration {
             Clock memoryClock,
             SearchDecisionPromptBuilder promptBuilder,
             MeterRegistry meterRegistry,
+            ImageIntentDetector imageIntentDetector,
             @Value("${minikun.search.decision.mode:rule}") String mode) {
         SearchDecisionService ruleService = new RuleBasedSearchDecisionService(meterRegistry);
-        return switch (mode) {
+        SearchDecisionService decisionService = switch (mode) {
             case "rule" -> ruleService;
             case "llm" -> new LlmSearchDecisionService(
                     client, new RuleBasedSearchDecisionService(null), memoryClock,
@@ -176,6 +182,7 @@ public class SearchConfiguration {
             default -> throw new IllegalArgumentException(
                     "Unsupported minikun.search.decision.mode: " + mode);
         };
+        return new ImageIntentSearchDecisionService(decisionService, imageIntentDetector);
     }
 
     @Bean

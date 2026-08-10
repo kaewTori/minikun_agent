@@ -2,6 +2,7 @@ package com.minikun.search.internal;
 
 import com.minikun.search.SearchQueryPlanningService;
 import com.minikun.search.model.SearchDecision;
+import com.minikun.search.model.SearchDecisionReason;
 import com.minikun.search.model.SearchQueryPlan;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -63,7 +64,7 @@ public final class DefaultSearchQueryPlanningService implements SearchQueryPlann
             primary = String.join(" ", terms);
         }
         String timeRange = detectTimeRange(primary);
-        String intent = detectIntent(primary, timeRange);
+        String intent = detectIntent(primary, timeRange, decision);
         return new SearchQueryPlan(true, original, primary, alternateQueries(primary, terms).stream()
                 .limit(maxAlternates).toList(), terms,
                 language, intent, timeRange, 0.92, "deterministic_core_query");
@@ -162,7 +163,10 @@ public final class DefaultSearchQueryPlanningService implements SearchQueryPlann
         return "";
     }
 
-    private String detectIntent(String value, String timeRange) {
+    private String detectIntent(String value, String timeRange, SearchDecision decision) {
+        if (decision.reason() == SearchDecisionReason.IMAGE_REQUEST) {
+            return "images";
+        }
         String lower = value.toLowerCase(Locale.ROOT);
         if (!timeRange.isBlank() || lower.contains("ข่าว") || lower.contains("news")) {
             return "current_information";
