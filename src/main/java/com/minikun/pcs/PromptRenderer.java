@@ -6,13 +6,30 @@ import com.minikun.pcs.model.PromptMessage;
 import com.minikun.pcs.model.PromptRole;
 
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
 final class PromptRenderer {
     private PromptRenderer() {
     }
 
     static Prompt render(PromptRequest request, List<McsModule> selectedModules) {
+        return render(request, selectedModules, Optional.empty());
+    }
+
+    static Prompt render(
+            PromptRequest request,
+            List<McsModule> selectedModules,
+            Optional<ContextProcessingResult> processingResult) {
+        if (processingResult.isEmpty()) {
+            return renderUnprocessed(request, selectedModules);
+        }
+        return renderProcessed(request, processingResult.get());
+    }
+
+    private static Prompt renderUnprocessed(PromptRequest request, List<McsModule> selectedModules) {
         List<String> sections = new ArrayList<>();
         sections.add(CorePromptFragments.persona(request.character(), selectedModules));
         sections.add(section("Runtime", request.runtime().content()));
@@ -36,6 +53,51 @@ final class PromptRenderer {
         return new Prompt(List.of(
             new PromptMessage(PromptRole.SYSTEM, String.join("\n\n", sections)),
             new PromptMessage(PromptRole.USER, request.userMessage().content())));
+    }
+
+    private static Prompt renderProcessed(PromptRequest request, ContextProcessingResult processingResult) {
+        Map<ContextBudgetSection, List<String>> contents = new EnumMap<>(ContextBudgetSection.class);
+        for (ContextItem item : processingResult.selectedItems()) {
+            contents.computeIfAbsent(item.section(), ignored -> new ArrayList<>()).add(item.content());
+        }
+        List<String> sections = new ArrayList<>();
+        addProcessedCharacter(sections, contents);
+        addProcessedRequired(sections, "Runtime", ContextBudgetSection.RUNTIME, contents);
+        addProcessedOptional(sections, "Conversation", ContextBudgetSection.CONVERSATION, contents);
+        addProcessedOptional(sections, "Knowledge", ContextBudgetSection.KNOWLEDGE, contents);
+        addProcessedOptional(sections, "Capabilities", ContextBudgetSection.CAPABILITIES, contents);
+        return new Prompt(List.of(
+                new PromptMessage(PromptRole.SYSTEM, String.join("\n\n", sections)),
+                new PromptMessage(PromptRole.USER, request.userMessage().content())));
+    }
+
+    private static void addProcessedCharacter(
+            List<String> sections,
+            Map<ContextBudgetSection, List<String>> contents) {
+        addProcessedRequired(sections, null, ContextBudgetSection.CHARACTER, contents);
+    }
+
+    private static void addProcessedRequired(
+            List<String> sections,
+            String label,
+            ContextBudgetSection section,
+            Map<ContextBudgetSection, List<String>> contents) {
+        List<String> values = contents.get(section);
+        if (values == null || values.isEmpty()) {
+            throw new PromptException("processed context is missing required section: " + section);
+        }
+        sections.add(label == null ? values.get(0) : section(label, values.get(0)));
+    }
+
+    private static void addProcessedOptional(
+            List<String> sections,
+            String label,
+            ContextBudgetSection section,
+            Map<ContextBudgetSection, List<String>> contents) {
+        List<String> values = contents.get(section);
+        if (values != null && !values.isEmpty()) {
+            addOptional(sections, label, String.join("\n", values));
+        }
     }
 
     private static void addOptional(List<String> sections, String label, String content) {

@@ -19,7 +19,8 @@ public record PromptRequest(
         SearchSelectionSignals searchSelectionSignals,
         SearchContext searchContext,
         KnowledgeSelection knowledgeSelection,
-        KnowledgeConsolidation knowledgeConsolidation) {
+        KnowledgeConsolidation knowledgeConsolidation,
+        ContextBudget contextBudget) {
     public PromptRequest(
             CharacterSpecification character,
             RuntimeContext runtime,
@@ -29,7 +30,7 @@ public record PromptRequest(
             UserMessage userMessage) {
         this(character, runtime, conversation, knowledge, capabilities, userMessage,
             SearchSelectionSignals.EMPTY, SearchContext.EMPTY, KnowledgeSelection.EMPTY,
-            KnowledgeConsolidation.EMPTY);
+            KnowledgeConsolidation.EMPTY, null);
         }
 
         public PromptRequest(
@@ -42,7 +43,7 @@ public record PromptRequest(
             SearchSelectionSignals searchSelectionSignals) {
         this(character, runtime, conversation, knowledge, capabilities, userMessage,
             searchSelectionSignals, SearchContext.EMPTY, KnowledgeSelection.EMPTY,
-            KnowledgeConsolidation.EMPTY);
+            KnowledgeConsolidation.EMPTY, null);
     }
 
     public PromptRequest(
@@ -56,7 +57,7 @@ public record PromptRequest(
             SearchContext searchContext) {
         this(character, runtime, conversation, knowledge, capabilities, userMessage,
             searchSelectionSignals, searchContext, KnowledgeSelection.EMPTY,
-            KnowledgeConsolidation.EMPTY);
+            KnowledgeConsolidation.EMPTY, null);
     }
 
         public PromptRequest(
@@ -71,6 +72,21 @@ public record PromptRequest(
             KnowledgeSelection knowledgeSelection) {
         this(character, runtime, conversation, knowledge, capabilities, userMessage,
             searchSelectionSignals, searchContext, knowledgeSelection, KnowledgeConsolidation.EMPTY);
+    }
+
+    public PromptRequest(
+            CharacterSpecification character,
+            RuntimeContext runtime,
+            ConversationContext conversation,
+            KnowledgeContext knowledge,
+            List<CapabilityInstruction> capabilities,
+            UserMessage userMessage,
+            SearchSelectionSignals searchSelectionSignals,
+            SearchContext searchContext,
+            KnowledgeSelection knowledgeSelection,
+            KnowledgeConsolidation knowledgeConsolidation) {
+        this(character, runtime, conversation, knowledge, capabilities, userMessage,
+            searchSelectionSignals, searchContext, knowledgeSelection, knowledgeConsolidation, null);
         }
 
     public PromptRequest {

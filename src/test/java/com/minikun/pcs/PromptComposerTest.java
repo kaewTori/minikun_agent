@@ -16,6 +16,7 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -35,10 +36,11 @@ class PromptComposerTest {
         assertEquals(PromptRole.USER, prompt.messages().get(1).role());
 
         String system = prompt.messages().get(0).content();
-        assertTrue(system.indexOf("[Character]") < system.indexOf("[Runtime]"));
+            assertTrue(system.indexOf("[Character]") < system.indexOf("[Runtime]"));
         assertTrue(system.indexOf("[Runtime]") < system.indexOf("[Conversation]"));
         assertTrue(system.indexOf("[Conversation]") < system.indexOf("[Knowledge]"));
         assertTrue(system.indexOf("[Knowledge]") < system.indexOf("[Capabilities]"));
+            assertTrue(system.indexOf("[Runtime]") < system.indexOf("[Knowledge]"));
         assertEquals("Answer this", prompt.messages().get(1).content());
     }
 
@@ -186,11 +188,93 @@ class PromptComposerTest {
                 .anyMatch(diagnostic -> diagnostic.module().equals("catchphrases") && diagnostic.selected()));
     }
 
+        @Test
+        void processesAssembledContextWithoutChangingSectionOrderOrUserMessage() {
+        PromptRequest request = requestWithBudget(
+            new RuntimeContext(" now   "), new KnowledgeContext("knowledge"),
+            new UserMessage("User  message"), completeBudget(100_000));
+
+        PromptCompositionResult result = new PromptComposer().composeWithDiagnostics(request);
+
+        assertTrue(result.contextProcessingResult().isPresent());
+        assertEquals(Set.of(
+            ContextBudgetSection.CHARACTER,
+            ContextBudgetSection.RUNTIME,
+            ContextBudgetSection.KNOWLEDGE,
+            ContextBudgetSection.USER_MESSAGE),
+            result.contextProcessingResult().orElseThrow().selectedItems().stream()
+                .map(ContextItem::section).collect(java.util.stream.Collectors.toSet()));
+        String system = result.prompt().messages().get(0).content();
+        assertTrue(system.contains("[Character]"));
+        assertTrue(system.contains("[Runtime]"));
+        assertTrue(system.contains("[Knowledge]"));
+        assertTrue(system.indexOf("[Character]") < system.indexOf("[Runtime]"));
+        assertTrue(system.indexOf("[Runtime]") < system.indexOf("[Knowledge]"));
+        assertEquals("User  message", result.prompt().messages().get(1).content());
+        assertTrue(system.contains("[Runtime]\n now"));
+        }
+
+        @Test
+        void optionalKnowledgeCanBeEvictedWhileRequiredContextRemainsVisible() {
+        ContextBudget budget = budgetWithAllocations(100_000, 100_000, 100_000, 100_000, 1, 100_000, 100_000);
+        PromptCompositionResult result = new PromptComposer().composeWithDiagnostics(requestWithBudget(
+            new RuntimeContext("now"), new KnowledgeContext("knowledge that does not fit"),
+            new UserMessage("hello"), budget));
+
+        ContextProcessingResult processing = result.contextProcessingResult().orElseThrow();
+        assertFalse(processing.diagnostics().requiredOverflow());
+        assertTrue(processing.evictions().stream()
+            .anyMatch(eviction -> eviction.item().section() == ContextBudgetSection.KNOWLEDGE));
+        assertTrue(!result.prompt().messages().get(0).content().contains("[Knowledge]"));
+        assertEquals("hello", result.prompt().messages().get(1).content());
+        }
+
+        @Test
+        void requiredOverflowRemainsVisibleAndRequiredSectionsAreNotDropped() {
+        ContextBudget budget = budgetWithAllocations(1, 100_000, 100_000, 100_000, 100_000, 100_000, 100_000);
+        PromptCompositionResult result = new PromptComposer().composeWithDiagnostics(requestWithBudget(
+            new RuntimeContext("now"), null, new UserMessage("hello"), budget));
+
+        ContextProcessingResult processing = result.contextProcessingResult().orElseThrow();
+        assertTrue(processing.diagnostics().requiredOverflow());
+        assertTrue(result.prompt().messages().get(0).content().contains("[Character]"));
+        assertEquals("hello", result.prompt().messages().get(1).content());
+        }
+
     private PromptRequest request() {
         return new PromptRequest(character(), new RuntimeContext("2026-08-01"),
             new ConversationContext("Previous turn"), new KnowledgeContext("Retrieved fact"),
                 List.of(new CapabilityInstruction("search", "Use retrieved sources")),
                 new UserMessage("Answer this"));
+    }
+
+    private PromptRequest requestWithBudget(
+            RuntimeContext runtime,
+            KnowledgeContext knowledge,
+            UserMessage userMessage,
+            ContextBudget budget) {
+        return new PromptRequest(character(), runtime, null, knowledge, List.of(), userMessage,
+                SearchSelectionSignals.EMPTY, SearchContext.EMPTY, KnowledgeSelection.EMPTY,
+                KnowledgeConsolidation.EMPTY, budget);
+    }
+
+    private ContextBudget completeBudget(long amount) {
+        return budgetWithAllocations(amount, amount, amount, amount, amount, amount, amount);
+    }
+
+    private ContextBudget budgetWithAllocations(
+            long character, long runtime, long conversation, long memory,
+            long knowledge, long capabilities, long userMessage) {
+        return new ContextBudget(ContextBudgetUnit.CHARACTERS,
+                character + runtime + conversation + memory + knowledge + capabilities + userMessage,
+                List.of(
+                        new ContextBudgetAllocation(ContextBudgetSection.CHARACTER, character),
+                        new ContextBudgetAllocation(ContextBudgetSection.RUNTIME, runtime),
+                        new ContextBudgetAllocation(ContextBudgetSection.CONVERSATION, conversation),
+                        new ContextBudgetAllocation(ContextBudgetSection.MEMORY, memory),
+                        new ContextBudgetAllocation(ContextBudgetSection.KNOWLEDGE, knowledge),
+                        new ContextBudgetAllocation(ContextBudgetSection.CAPABILITIES, capabilities),
+                        new ContextBudgetAllocation(ContextBudgetSection.USER_MESSAGE, userMessage)));
     }
 
     private CharacterSpecification character() {
