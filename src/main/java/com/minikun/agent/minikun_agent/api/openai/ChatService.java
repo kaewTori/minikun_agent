@@ -67,6 +67,7 @@ import com.minikun.search.SearchContextAwarenessService;
 import com.minikun.search.SearchService;
 import com.minikun.search.SearchSelectionSignalMapper;
 import com.minikun.search.model.SearchDecision;
+import com.minikun.tools.springai.SpringAiToolCallingRuntime;
 import com.minikun.search.model.SearchDecisionReason;
 import com.minikun.search.model.SearchRequest;
 import com.minikun.search.model.SearchOptions;
@@ -115,6 +116,9 @@ public class ChatService {
     private final CacheFormatter cacheFormatter;
     private final ObjectProvider<ReflectionService> reflectionService;
     private final ObjectMapper objectMapper = new ObjectMapper();
+
+    @Autowired(required = false)
+    private SpringAiToolCallingRuntime toolCallingRuntime;
 
     @Autowired
     private BrowserContentService browserContentService;
@@ -189,6 +193,9 @@ public class ChatService {
     @Value("${minikun.memory.reflection.enabled:false}")
     private boolean reflectionEnabled;
 
+    @Value("${minikun.tools.enabled:false}")
+    private boolean toolsEnabled;
+
     @Value("${minikun.memory.retrieval.max-candidates:10}")
     private int configuredMemoryRetrievalLimit;
 
@@ -220,7 +227,7 @@ public class ChatService {
                 transaction.success();
                 return responseForContent(request, content);
             }
-            var response = callChatModel(context.prompt(), "chat_model", transaction.requestId());
+            var response = callModel(context.prompt(), context.conversationId(), transaction.requestId());
             String content = response.getResult().getOutput().getText();
             if (context.persistConversation()) {
                 conversationMemoryService.append(context.conversationId(), new ChatMessage("assistant", content));
@@ -270,7 +277,10 @@ public class ChatService {
         }
         long modelStarted = System.nanoTime();
         String traceId = MDC.get("trace_id");
-        Flux<String> chunks = chatModel.stream(context.prompt())
+        Flux<ChatResponse> modelResponses = toolsEnabled && toolCallingRuntime != null
+            ? Flux.defer(() -> Flux.just(toolCallingRuntime.call(context.prompt(), context.conversationId())))
+            : chatModel.stream(context.prompt());
+        Flux<String> chunks = modelResponses
                 .doOnNext(response -> appendAssistantText(assistantContent, response))
                 .map(response -> streamChunk(response, id, created, model))
                 .filter(chunk -> !chunk.isBlank())
@@ -974,6 +984,18 @@ public class ChatService {
         } finally {
             logModelDuration(process, started, requestId);
         }
+    }
+
+    private ChatResponse callModel(Prompt prompt, ConversationId conversationId, String requestId) {
+        if (toolsEnabled && toolCallingRuntime != null) {
+            long started = System.nanoTime();
+            try {
+                return toolCallingRuntime.call(prompt, conversationId);
+            } finally {
+                logModelDuration("chat_model", started, requestId);
+            }
+        }
+        return callChatModel(prompt, "chat_model", requestId);
     }
 
     private void logModelDuration(String process, long started, String requestId) {
