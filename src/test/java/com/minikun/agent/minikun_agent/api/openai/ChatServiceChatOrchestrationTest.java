@@ -137,12 +137,16 @@ class ChatServiceChatOrchestrationTest {
             when(conversation.load(any())).thenReturn(List.of());
             when(chatModel.call(any(Prompt.class))).thenReturn(response("answer"));
             when(decisionService.decide(any())).thenReturn(new SearchDecision(true, "image query"));
-            ImageSource first = new ImageSource("https://example.com/first.jpg", "First", null, null);
-            ImageSource second = new ImageSource("https://example.com/second.jpg", "Second", null, null);
+            ImageSource first = new ImageSource(
+                    "https://example.com/first.jpg", "First", "https://source.example/first", "first description");
+            ImageSource second = new ImageSource(
+                    "https://example.com/second.jpg", "Second", "https://source.example/second", "second description");
+            ImageSource third = new ImageSource(
+                    "https://example.com/third.jpg", "Third", "https://source.example/third", "third description");
             when(searchService.search(any())).thenReturn(new KnowledgeContext(
                 "search text",
                 List.of(new KnowledgeCandidate("search-1", KnowledgeSource.SEARCH, "search text", 0)),
-                List.of(first, second)));
+                List.of(first, second, third)));
 
             ChatService service = service(chatModel, conversation, searchService, decisionService);
             setField(service, "searchEnabled", true);
@@ -153,28 +157,89 @@ class ChatServiceChatOrchestrationTest {
 
             assertEquals(List.of(
                 new com.minikun.agent.minikun_agent.api.openai.dto.ChatAttachment("image", first.url(), first.title()),
-                new com.minikun.agent.minikun_agent.api.openai.dto.ChatAttachment("image", second.url(), second.title())),
+                new com.minikun.agent.minikun_agent.api.openai.dto.ChatAttachment("image", second.url(), second.title()),
+                new com.minikun.agent.minikun_agent.api.openai.dto.ChatAttachment("image", third.url(), third.title())),
                 response.attachments());
             assertEquals("answer", response.choices().get(0).message().content());
             ArgumentCaptor<Prompt> prompt = ArgumentCaptor.forClass(Prompt.class);
             verify(chatModel).call(prompt.capture());
-            assertFalse(promptText(prompt.getValue()).contains(first.url()));
-            assertFalse(promptText(prompt.getValue()).contains(first.title()));
-            assertFalse(promptText(prompt.getValue()).contains(second.url()));
-            assertFalse(promptText(prompt.getValue()).contains(second.title()));
+            String promptText = promptText(prompt.getValue());
+            assertTrue(promptText.contains("[Capabilities]"));
+            assertTrue(promptText.contains("Retrieved Images"));
+            assertTrue(promptText.contains("will be available to the user as response attachments"));
+            assertTrue(promptText.contains("Count: 3"));
+            assertTrue(promptText.contains("cannot see, inspect, or analyze their visual contents"));
+            assertFalse(promptText.contains(first.url()));
+            assertFalse(promptText.contains(first.title()));
+            assertFalse(promptText.contains(second.url()));
+            assertFalse(promptText.contains(second.title()));
+            assertFalse(promptText.contains(third.url()));
+            assertFalse(promptText.contains(third.title()));
+            assertFalse(promptText.contains(first.sourceUrl()));
+            assertFalse(promptText.contains(second.sourceUrl()));
+            assertFalse(promptText.contains(third.sourceUrl()));
+            assertFalse(promptText.contains(first.description()));
+            assertFalse(promptText.contains(second.description()));
+            assertFalse(promptText.contains(third.description()));
+            assertFalse(promptText.contains("ChatAttachment"));
             verify(searchService).search(any());
             verify(chatModel, org.mockito.Mockito.times(1)).call(any(Prompt.class));
 
             JsonNode serialized = new ObjectMapper().readTree(
                     new ObjectMapper().writeValueAsString(response));
             JsonNode attachment = serialized.get("attachments").get(0);
-            assertEquals(2, serialized.get("attachments").size());
+            assertEquals(3, serialized.get("attachments").size());
             assertEquals("image", attachment.get("type").asText());
             assertEquals(first.url(), attachment.get("url").asText());
             assertEquals(first.title(), attachment.get("title").asText());
             assertFalse(attachment.has("sourceUrl"));
             assertFalse(attachment.has("description"));
             }
+
+    @Test
+    void textOnlyPromptDoesNotAddImageAwareness() {
+        ChatModel chatModel = mock(ChatModel.class);
+        ConversationMemoryService conversation = mock(ConversationMemoryService.class);
+        when(conversation.load(any())).thenReturn(List.of());
+        when(chatModel.call(any(Prompt.class))).thenReturn(response("answer"));
+
+        ChatService service = service(chatModel, conversation);
+
+        service.chatCompletion(request(), new ConversationId("text-only"));
+
+        ArgumentCaptor<Prompt> prompt = ArgumentCaptor.forClass(Prompt.class);
+        verify(chatModel).call(prompt.capture());
+        String promptText = promptText(prompt.getValue());
+        assertFalse(promptText.contains("Retrieved Images"));
+        assertFalse(promptText.contains("response attachments"));
+    }
+
+    @Test
+    void streamingPromptReceivesImageAwarenessWithoutChangingDoneContract() throws Exception {
+        ChatModel chatModel = mock(ChatModel.class);
+        ConversationMemoryService conversation = mock(ConversationMemoryService.class);
+        SearchService searchService = mock(SearchService.class);
+        SearchDecisionService decisionService = mock(SearchDecisionService.class);
+        when(conversation.load(any())).thenReturn(List.of());
+        when(chatModel.stream(any(Prompt.class))).thenReturn(Flux.just(response("streaming answer")));
+        when(decisionService.decide(any())).thenReturn(new SearchDecision(true, "image query"));
+        ImageSource image = new ImageSource("https://example.com/image.jpg", "Image", "source", "description");
+        when(searchService.search(any())).thenReturn(new KnowledgeContext("search text", List.of(), List.of(image)));
+
+        ChatService service = service(chatModel, conversation, searchService, decisionService);
+        setField(service, "searchEnabled", true);
+        setField(service, "searchTimeout", Duration.ofSeconds(10));
+        setField(service, "searchQueryPlanningEnabled", false);
+
+        List<String> chunks = service.chatCompletionStream(request(), new ConversationId("stream-images"))
+                .collectList().block();
+
+        ArgumentCaptor<Prompt> prompt = ArgumentCaptor.forClass(Prompt.class);
+        verify(chatModel).stream(prompt.capture());
+        assertTrue(promptText(prompt.getValue()).contains("Count: 1"));
+        assertTrue(chunks.get(chunks.size() - 1).equals("[DONE]"));
+        assertTrue(chunks.stream().anyMatch(chunk -> chunk.contains("streaming answer")));
+    }
 
     private ChatService service(ChatModel chatModel, ConversationMemoryService conversation) {
         return service(chatModel, conversation, mock(SearchService.class), mock(SearchDecisionService.class));
