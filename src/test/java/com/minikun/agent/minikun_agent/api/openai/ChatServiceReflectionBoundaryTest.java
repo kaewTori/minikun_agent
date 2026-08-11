@@ -21,6 +21,9 @@ import com.minikun.agent.minikun_agent.conversation.ChatMessage;
 import com.minikun.agent.minikun_agent.conversation.ConversationId;
 import com.minikun.agent.minikun_agent.conversation.ConversationMemoryService;
 import com.minikun.model.DefaultChatModelProviderRegistry;
+import com.minikun.model.ActiveModelConfiguration;
+import com.minikun.model.ChatModelId;
+import com.minikun.model.DefaultActiveChatModelProvider;
 import com.minikun.model.existing.ExistingChatModelProvider;
 import com.minikun.character.CharacterLoader;
 import com.minikun.character.model.CharacterSpecification;
@@ -138,7 +141,9 @@ class ChatServiceReflectionBoundaryTest {
     private ChatService service(ConversationMemoryService memory) {
         CharacterSpecification character = new CharacterLoader(MCS_ROOT).load();
         return new ChatService(
-                new DefaultChatModelProviderRegistry(List.of(new ExistingChatModelProvider(mock(ChatModel.class)))),
+                new DefaultActiveChatModelProvider(
+                        new ActiveModelConfiguration(ChatModelId.EXISTING),
+                        new DefaultChatModelProviderRegistry(List.of(new ExistingChatModelProvider(mock(ChatModel.class))))),
                 mock(EmbeddingModel.class),
                 mock(ChatTransactionLogger.class),
                 memory,

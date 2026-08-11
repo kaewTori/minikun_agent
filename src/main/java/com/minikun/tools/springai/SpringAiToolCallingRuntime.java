@@ -16,6 +16,7 @@ import org.springframework.ai.tool.ToolCallback;
 import org.springframework.stereotype.Component;
 
 import com.minikun.agent.minikun_agent.conversation.ConversationId;
+import com.minikun.model.ActiveChatModelProvider;
 import com.minikun.model.ChatModelProvider;
 import com.minikun.tools.Tool;
 import com.minikun.tools.ToolExecutor;
@@ -27,11 +28,12 @@ public final class SpringAiToolCallingRuntime {
     private final List<ToolCallback> callbacks;
 
     public SpringAiToolCallingRuntime(
-            ChatModelProvider chatModelProvider,
+            ActiveChatModelProvider activeChatModelProvider,
             List<Tool> tools,
             ToolExecutor toolExecutor,
             ObjectMapper objectMapper) {
-        this.chatModelProvider = Objects.requireNonNull(chatModelProvider, "chat model provider must not be null");
+        this.chatModelProvider = Objects.requireNonNull(
+                activeChatModelProvider, "active chat model provider must not be null").get();
         Objects.requireNonNull(tools, "tools must not be null");
         this.callbacks = tools.stream()
                 .sorted((left, right) -> left.definition().name().compareTo(right.definition().name()))
@@ -44,6 +46,10 @@ public final class SpringAiToolCallingRuntime {
     public ChatResponse call(Prompt prompt, ConversationId conversationId) {
         Objects.requireNonNull(prompt, "prompt must not be null");
         Objects.requireNonNull(conversationId, "conversation id must not be null");
+        if (!chatModelProvider.capabilities().toolCalling()) {
+            throw new IllegalStateException(
+                    "Chat model provider does not support tool calling: " + chatModelProvider.id());
+        }
         ToolCallingChatOptions options = DefaultToolCallingChatOptions.builder()
                 .toolCallbacks(callbacks)
                 .toolContext(Map.of("conversationId", conversationId.value()))

@@ -22,6 +22,8 @@ import com.minikun.runtime.ModelsService;
 import com.minikun.runtime.VersionFormatter;
 import com.minikun.runtime.VersionService;
 import com.minikun.model.DefaultChatModelProviderRegistry;
+import com.minikun.model.ActiveModelConfigurationSetup;
+import com.minikun.model.DefaultActiveChatModelProvider;
 import com.minikun.model.existing.ExistingChatModelProvider;
 import com.minikun.model.tinygrad.TinyGradChatModelProvider;
 import com.minikun.model.tinygrad.TinyGradConfiguration;
@@ -33,7 +35,8 @@ import com.minikun.model.tinygrad.TinyGradConfiguration;
 		CommandCatalog.class, CommandFormatter.class,
 		VersionService.class, VersionFormatter.class, ModelsService.class, ModelsFormatter.class,
 		CacheService.class, CacheFormatter.class,
-		DefaultChatModelProviderRegistry.class, ExistingChatModelProvider.class,
+		DefaultChatModelProviderRegistry.class, ActiveModelConfigurationSetup.class,
+		DefaultActiveChatModelProvider.class, ExistingChatModelProvider.class,
 		TinyGradChatModelProvider.class, TinyGradConfiguration.class})
 public class MinikunAgentApplication {
 

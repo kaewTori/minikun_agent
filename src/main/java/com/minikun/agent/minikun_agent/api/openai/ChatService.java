@@ -42,7 +42,7 @@ import com.minikun.memory.ReflectionService;
 import com.minikun.memory.model.CompletedConversation;
 import com.minikun.model.ChatModelId;
 import com.minikun.model.ChatModelProvider;
-import com.minikun.model.ChatModelProviderRegistry;
+import com.minikun.model.ActiveChatModelProvider;
 import com.minikun.character.model.CharacterSpecification;
 import com.minikun.browser.BrowserContentException;
 import com.minikun.browser.BrowserContentService;
@@ -91,7 +91,7 @@ import org.slf4j.MDC;
 @Slf4j
 public class ChatService {
 
-    private final ChatModelProviderRegistry chatModelProviderRegistry;
+    private final ActiveChatModelProvider activeChatModelProvider;
     private final EmbeddingModel embeddingModel;
     private final ChatTransactionLogger transactionLogger;
     private final ConversationMemoryService conversationMemoryService;
@@ -126,7 +126,7 @@ public class ChatService {
     private BrowserContentService browserContentService;
 
     public ChatService(
-            ChatModelProviderRegistry chatModelProviderRegistry,
+            ActiveChatModelProvider activeChatModelProvider,
             EmbeddingModel embeddingModel,
             ChatTransactionLogger transactionLogger,
             ConversationMemoryService conversationMemoryService,
@@ -149,7 +149,7 @@ public class ChatService {
             CacheFormatter cacheFormatter,
             ObjectProvider<ReflectionService> reflectionService) {
         this(
-                chatModelProviderRegistry,
+                activeChatModelProvider,
                 embeddingModel,
                 transactionLogger,
                 conversationMemoryService,
@@ -1001,7 +1001,7 @@ public class ChatService {
     }
 
     private ChatModelProvider chatModelProvider() {
-        return chatModelProviderRegistry.get(ChatModelId.EXISTING);
+        return activeChatModelProvider.get();
     }
 
     private void logModelDuration(String process, long started, String requestId) {

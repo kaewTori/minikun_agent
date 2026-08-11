@@ -32,7 +32,13 @@ import com.minikun.agent.minikun_agent.conversation.ChatMessage;
 import com.minikun.agent.minikun_agent.conversation.ConversationId;
 import com.minikun.agent.minikun_agent.conversation.ConversationMemoryService;
 import com.minikun.model.ChatModelProviderRegistry;
+import com.minikun.model.ActiveChatModelProvider;
+import com.minikun.model.ActiveModelConfiguration;
+import com.minikun.model.ChatModelId;
+import com.minikun.model.ChatModelProvider;
 import com.minikun.model.DefaultChatModelProviderRegistry;
+import com.minikun.model.DefaultActiveChatModelProvider;
+import com.minikun.model.ModelCapabilities;
 import com.minikun.model.existing.ExistingChatModelProvider;
 import com.minikun.character.CharacterLoader;
 import com.minikun.character.model.CharacterSpecification;
@@ -100,6 +106,23 @@ class ChatServiceChatOrchestrationTest {
         verify(streamingConversation, org.mockito.Mockito.times(2)).append(any(), any());
         verify(blockingModel, never()).stream(any(Prompt.class));
         verify(streamingModel, never()).call(any(Prompt.class));
+    }
+
+    @Test
+    void blockingUsesConfiguredTinyGradProvider() {
+        ChatModelProvider tinyGradProvider = mock(ChatModelProvider.class);
+        ConversationMemoryService conversation = mock(ConversationMemoryService.class);
+        when(tinyGradProvider.id()).thenReturn(ChatModelId.TINYGRAD);
+        when(tinyGradProvider.capabilities()).thenReturn(new ModelCapabilities(true, false, false));
+        when(tinyGradProvider.chat(any(Prompt.class))).thenReturn(response("tinygrad answer"));
+        when(conversation.load(any())).thenReturn(List.of());
+
+        ChatService service = service(tinyGradProvider, conversation);
+
+        var result = service.chatCompletion(request(), new ConversationId("tinygrad"));
+
+        assertEquals("tinygrad answer", result.choices().get(0).message().content());
+        verify(tinyGradProvider).chat(any(Prompt.class));
     }
 
     @Test
@@ -248,15 +271,29 @@ class ChatServiceChatOrchestrationTest {
         return service(chatModel, conversation, mock(SearchService.class), mock(SearchDecisionService.class));
         }
 
+    private ChatService service(ChatModelProvider provider, ConversationMemoryService conversation) {
+        return service(provider, conversation, mock(SearchService.class), mock(SearchDecisionService.class));
+    }
+
         private ChatService service(
             ChatModel chatModel,
+            ConversationMemoryService conversation,
+            SearchService searchService,
+            SearchDecisionService decisionService) {
+        return service(new ExistingChatModelProvider(chatModel), conversation, searchService, decisionService);
+    }
+
+        private ChatService service(
+            ChatModelProvider provider,
             ConversationMemoryService conversation,
             SearchService searchService,
             SearchDecisionService decisionService) {
         CharacterSpecification character = new CharacterLoader(MCS_ROOT).load();
         ObjectProvider<?> buildProperties = mock(ObjectProvider.class);
         return new ChatService(
-            new DefaultChatModelProviderRegistry(List.of(new ExistingChatModelProvider(chatModel))),
+                new DefaultActiveChatModelProvider(
+                        new ActiveModelConfiguration(provider.id()),
+                    new DefaultChatModelProviderRegistry(List.of(provider))),
                 mock(EmbeddingModel.class),
                 new ChatTransactionLogger(),
                 conversation,

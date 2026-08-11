@@ -27,6 +27,9 @@ import org.springframework.beans.factory.ObjectProvider;
 import com.minikun.agent.minikun_agent.conversation.ConversationId;
 import com.minikun.agent.minikun_agent.conversation.ConversationMemoryService;
 import com.minikun.model.DefaultChatModelProviderRegistry;
+import com.minikun.model.ActiveModelConfiguration;
+import com.minikun.model.ChatModelId;
+import com.minikun.model.DefaultActiveChatModelProvider;
 import com.minikun.model.existing.ExistingChatModelProvider;
 import com.minikun.agent.minikun_agent.api.openai.dto.ChatCompletionRequest;
 import com.minikun.agent.minikun_agent.api.openai.dto.Message;
@@ -141,7 +144,9 @@ class ChatServiceDiagnosticsTest {
                 ? spy(new DiagnosticsPromptBuilder(new MinikunPersonaProvider(character)))
                 : promptBuilder;
         return new ChatService(
-            new DefaultChatModelProviderRegistry(List.of(new ExistingChatModelProvider(chatModel))),
+                new DefaultActiveChatModelProvider(
+                    new ActiveModelConfiguration(ChatModelId.EXISTING),
+                    new DefaultChatModelProviderRegistry(List.of(new ExistingChatModelProvider(chatModel)))),
                 mock(EmbeddingModel.class),
                 mock(ChatTransactionLogger.class),
                 mock(ConversationMemoryService.class),

@@ -20,6 +20,9 @@ import com.minikun.agent.minikun_agent.api.openai.dto.Message;
 import com.minikun.agent.minikun_agent.conversation.ConversationId;
 import com.minikun.agent.minikun_agent.conversation.ConversationMemoryService;
 import com.minikun.model.DefaultChatModelProviderRegistry;
+import com.minikun.model.ActiveModelConfiguration;
+import com.minikun.model.ChatModelId;
+import com.minikun.model.DefaultActiveChatModelProvider;
 import com.minikun.model.existing.ExistingChatModelProvider;
 import com.minikun.character.CharacterLoader;
 import com.minikun.character.model.CharacterSpecification;
@@ -81,7 +84,9 @@ class ChatServiceRuntimeCommandTest {
         CharacterSpecification character = new CharacterLoader(MCS_ROOT).load();
         ObjectProvider<?> buildProperties = mock(ObjectProvider.class);
         return new ChatService(
-                new DefaultChatModelProviderRegistry(List.of(new ExistingChatModelProvider(chatModel))),
+                new DefaultActiveChatModelProvider(
+                        new ActiveModelConfiguration(ChatModelId.EXISTING),
+                        new DefaultChatModelProviderRegistry(List.of(new ExistingChatModelProvider(chatModel)))),
                 mock(EmbeddingModel.class),
                 transactions,
                 conversation,
