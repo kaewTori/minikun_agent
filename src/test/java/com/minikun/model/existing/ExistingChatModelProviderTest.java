@@ -40,7 +40,10 @@ class ExistingChatModelProviderTest {
         when(chatModel.stream(prompt)).thenReturn(responses);
         ExistingChatModelProvider provider = new ExistingChatModelProvider(chatModel);
 
-        assertEquals(List.of(response("Hi")), provider.stream(prompt).collectList().block());
+        assertEquals(List.of("Hi"), provider.stream(prompt)
+                .map(chatResponse -> chatResponse.getResult().getOutput().getText())
+                .collectList()
+                .block());
         verify(chatModel).stream(prompt);
     }
 

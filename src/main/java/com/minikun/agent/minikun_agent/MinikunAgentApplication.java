@@ -21,6 +21,10 @@ import com.minikun.runtime.ModelsFormatter;
 import com.minikun.runtime.ModelsService;
 import com.minikun.runtime.VersionFormatter;
 import com.minikun.runtime.VersionService;
+import com.minikun.model.DefaultChatModelProviderRegistry;
+import com.minikun.model.existing.ExistingChatModelProvider;
+import com.minikun.model.tinygrad.TinyGradChatModelProvider;
+import com.minikun.model.tinygrad.TinyGradConfiguration;
 
 @SpringBootApplication
 @Import({MemoryConfiguration.class, SearchConfiguration.class, BrowserConfiguration.class, MeterRegistryMetricsReader.class,
@@ -28,7 +32,9 @@ import com.minikun.runtime.VersionService;
 		MinikunPersonaProvider.class, KnowledgeSelectionConfiguration.class,
 		CommandCatalog.class, CommandFormatter.class,
 		VersionService.class, VersionFormatter.class, ModelsService.class, ModelsFormatter.class,
-		CacheService.class, CacheFormatter.class})
+		CacheService.class, CacheFormatter.class,
+		DefaultChatModelProviderRegistry.class, ExistingChatModelProvider.class,
+		TinyGradChatModelProvider.class, TinyGradConfiguration.class})
 public class MinikunAgentApplication {
 
 	public static void main(String[] args) {

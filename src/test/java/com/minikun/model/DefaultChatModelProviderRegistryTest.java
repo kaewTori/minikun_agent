@@ -12,10 +12,12 @@ import org.junit.jupiter.api.Test;
 class DefaultChatModelProviderRegistryTest {
     @Test
     void registersAndLooksUpProviderById() {
-        ChatModelProvider provider = provider(ChatModelId.EXISTING);
-        DefaultChatModelProviderRegistry registry = new DefaultChatModelProviderRegistry(List.of(provider));
+        ChatModelProvider existing = provider(ChatModelId.EXISTING);
+        ChatModelProvider tinyGrad = provider(ChatModelId.TINYGRAD);
+        DefaultChatModelProviderRegistry registry = new DefaultChatModelProviderRegistry(List.of(existing, tinyGrad));
 
-        assertEquals(provider, registry.get(ChatModelId.EXISTING));
+        assertEquals(existing, registry.get(ChatModelId.EXISTING));
+        assertEquals(tinyGrad, registry.get(ChatModelId.TINYGRAD));
     }
 
     @Test
