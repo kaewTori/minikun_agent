@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -27,6 +28,7 @@ import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.beans.factory.ObjectProvider;
 
 import com.minikun.agent.minikun_agent.api.openai.dto.ChatCompletionRequest;
+import com.minikun.agent.minikun_agent.api.openai.dto.ChatCompletionResponse;
 import com.minikun.agent.minikun_agent.api.openai.dto.Message;
 import com.minikun.agent.minikun_agent.conversation.ChatMessage;
 import com.minikun.agent.minikun_agent.conversation.ConversationId;
@@ -40,6 +42,8 @@ import com.minikun.model.DefaultChatModelProviderRegistry;
 import com.minikun.model.DefaultActiveChatModelProvider;
 import com.minikun.model.ModelCapabilities;
 import com.minikun.model.existing.ExistingChatModelProvider;
+import com.minikun.model.task.title.TitleGenerationProvider;
+import com.minikun.model.task.title.TitleGenerationService;
 import com.minikun.character.CharacterLoader;
 import com.minikun.character.model.CharacterSpecification;
 import com.minikun.commands.CommandCatalog;
@@ -152,6 +156,49 @@ class ChatServiceChatOrchestrationTest {
                 .blockLast();
 
         verify(conversation, org.mockito.Mockito.times(1)).append(any(), any());
+    }
+
+    @Test
+    void titleRequestUsesTitleServiceWithoutCallingActiveProvider() {
+        ChatModelProvider activeProvider = mock(ChatModelProvider.class);
+        ConversationMemoryService conversation = mock(ConversationMemoryService.class);
+        TitleGenerationService titleService = mock(TitleGenerationService.class);
+        when(activeProvider.id()).thenReturn(ChatModelId.TINYGRAD);
+        when(activeProvider.capabilities()).thenReturn(new ModelCapabilities(true, false, false));
+        when(titleService.generateTitle(anyList())).thenReturn("Postgres Setup");
+
+        ChatCompletionResponse response = service(activeProvider, conversation, titleService)
+                .chatCompletion(titleRequest(), new ConversationId("title-isolation"));
+
+        assertEquals("Postgres Setup", response.choices().get(0).message().content());
+        verify(titleService).generateTitle(anyList());
+        verify(activeProvider, never()).chat(any(Prompt.class));
+        verify(activeProvider, never()).stream(any(Prompt.class));
+        verify(conversation, never()).load(any());
+        verify(conversation, never()).append(any(), any());
+    }
+
+    @Test
+    void titleFailureReturnsFallbackAndNormalChatStillUsesActiveProvider() {
+        ChatModelProvider activeProvider = mock(ChatModelProvider.class);
+        ConversationMemoryService conversation = mock(ConversationMemoryService.class);
+        TitleGenerationProvider failingProvider = messages -> {
+            throw new IllegalStateException("Ollama timeout");
+        };
+        when(activeProvider.id()).thenReturn(ChatModelId.TINYGRAD);
+        when(activeProvider.capabilities()).thenReturn(new ModelCapabilities(true, false, false));
+        when(activeProvider.chat(any(Prompt.class))).thenReturn(response("normal answer"));
+        when(conversation.load(any())).thenReturn(List.of());
+
+        ChatService service = service(activeProvider, conversation, new TitleGenerationService(failingProvider));
+        ChatCompletionResponse title = service.chatCompletion(
+                titleRequest(), new ConversationId("title-failure"));
+        ChatCompletionResponse normal = service.chatCompletion(
+                request(), new ConversationId("normal-after-title-failure"));
+
+        assertEquals(TitleGenerationService.FALLBACK_TITLE, title.choices().get(0).message().content());
+        assertEquals("normal answer", normal.choices().get(0).message().content());
+        verify(activeProvider).chat(any(Prompt.class));
     }
 
             @Test
@@ -275,6 +322,40 @@ class ChatServiceChatOrchestrationTest {
         return service(provider, conversation, mock(SearchService.class), mock(SearchDecisionService.class));
     }
 
+    private ChatService service(
+            ChatModelProvider provider,
+            ConversationMemoryService conversation,
+            TitleGenerationService titleGenerationService) {
+        CharacterSpecification character = new CharacterLoader(MCS_ROOT).load();
+        ObjectProvider<?> buildProperties = mock(ObjectProvider.class);
+        return new ChatService(
+                new DefaultActiveChatModelProvider(
+                        new ActiveModelConfiguration(provider.id()),
+                        new DefaultChatModelProviderRegistry(List.of(provider))),
+                mock(EmbeddingModel.class),
+                new ChatTransactionLogger(),
+                conversation,
+                mock(ObjectProvider.class),
+                character,
+                new PromptComposer(),
+                mock(SearchService.class),
+                mock(SearchDecisionService.class),
+                new com.minikun.search.SearchSelectionSignalMapper(),
+                mock(DiagnosticsService.class),
+                new DiagnosticsFormatter(),
+                new DiagnosticsPromptBuilder(new MinikunPersonaProvider(character)),
+                new CommandCatalog(),
+                new CommandFormatter(),
+                new VersionService((ObjectProvider) buildProperties, "1.0.0"),
+                new VersionFormatter(),
+                new ModelsService("chat", "embedding", "memory", ""),
+                new ModelsFormatter(),
+                new CacheService("true", "valkey", Duration.ofMinutes(5)),
+                new CacheFormatter(),
+                mock(ObjectProvider.class),
+                titleGenerationService);
+    }
+
         private ChatService service(
             ChatModel chatModel,
             ConversationMemoryService conversation,
@@ -340,6 +421,17 @@ class ChatServiceChatOrchestrationTest {
                 "test-model",
                 List.of(new Message("user", "Explain the previous answer.")),
                 "orchestration",
+                false,
+                null,
+                null,
+                null);
+    }
+
+    private ChatCompletionRequest titleRequest() {
+        return new ChatCompletionRequest(
+                "test-model",
+                List.of(new Message("user", "Generate a concise title summarizing the chat history.")),
+                "title",
                 false,
                 null,
                 null,

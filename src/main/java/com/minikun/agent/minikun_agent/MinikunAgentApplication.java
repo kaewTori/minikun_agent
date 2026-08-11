@@ -27,6 +27,8 @@ import com.minikun.model.DefaultActiveChatModelProvider;
 import com.minikun.model.existing.ExistingChatModelProvider;
 import com.minikun.model.tinygrad.TinyGradChatModelProvider;
 import com.minikun.model.tinygrad.TinyGradConfiguration;
+import com.minikun.model.task.title.TitleGenerationConfiguration;
+import com.minikun.model.task.title.TitleGenerationService;
 
 @SpringBootApplication
 @Import({MemoryConfiguration.class, SearchConfiguration.class, BrowserConfiguration.class, MeterRegistryMetricsReader.class,
@@ -37,7 +39,8 @@ import com.minikun.model.tinygrad.TinyGradConfiguration;
 		CacheService.class, CacheFormatter.class,
 		DefaultChatModelProviderRegistry.class, ActiveModelConfigurationSetup.class,
 		DefaultActiveChatModelProvider.class, ExistingChatModelProvider.class,
-		TinyGradChatModelProvider.class, TinyGradConfiguration.class})
+		TinyGradChatModelProvider.class, TinyGradConfiguration.class,
+		TitleGenerationConfiguration.class, TitleGenerationService.class})
 public class MinikunAgentApplication {
 
 	public static void main(String[] args) {

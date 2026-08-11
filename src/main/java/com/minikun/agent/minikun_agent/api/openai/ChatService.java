@@ -43,6 +43,7 @@ import com.minikun.memory.model.CompletedConversation;
 import com.minikun.model.ChatModelId;
 import com.minikun.model.ChatModelProvider;
 import com.minikun.model.ActiveChatModelProvider;
+import com.minikun.model.task.title.TitleGenerationService;
 import com.minikun.character.model.CharacterSpecification;
 import com.minikun.browser.BrowserContentException;
 import com.minikun.browser.BrowserContentService;
@@ -117,6 +118,7 @@ public class ChatService {
     private final CacheService cacheService;
     private final CacheFormatter cacheFormatter;
     private final ObjectProvider<ReflectionService> reflectionService;
+        private final TitleGenerationService titleGenerationService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Autowired(required = false)
@@ -174,8 +176,63 @@ public class ChatService {
                 modelsFormatter,
                 cacheService,
                 cacheFormatter,
-                reflectionService);
+                reflectionService,
+                new TitleGenerationService(messages -> TitleGenerationService.FALLBACK_TITLE));
     }
+
+        public ChatService(
+                ActiveChatModelProvider activeChatModelProvider,
+                EmbeddingModel embeddingModel,
+                ChatTransactionLogger transactionLogger,
+                ConversationMemoryService conversationMemoryService,
+                ObjectProvider<MemoryRecallService> memoryRecallService,
+                CharacterSpecification characterSpecification,
+                PromptComposer promptComposer,
+                SearchService searchService,
+                SearchDecisionService searchDecisionService,
+                SearchSelectionSignalMapper searchSelectionSignalMapper,
+                DiagnosticsService diagnosticsService,
+                DiagnosticsFormatter diagnosticsFormatter,
+                DiagnosticsPromptBuilder diagnosticsPromptBuilder,
+                CommandCatalog commandCatalog,
+                CommandFormatter commandFormatter,
+                VersionService versionService,
+                VersionFormatter versionFormatter,
+                ModelsService modelsService,
+                ModelsFormatter modelsFormatter,
+                CacheService cacheService,
+                CacheFormatter cacheFormatter,
+                ObjectProvider<ReflectionService> reflectionService,
+                TitleGenerationService titleGenerationService) {
+            this(
+                    activeChatModelProvider,
+                    embeddingModel,
+                    transactionLogger,
+                    conversationMemoryService,
+                    memoryRecallService,
+                    characterSpecification,
+                    promptComposer,
+                    searchService,
+                    searchDecisionService,
+                    new com.minikun.search.internal.DefaultSearchQueryPlanningService(),
+                    new com.minikun.search.internal.DefaultSearchContextAwarenessService(),
+                    new com.minikun.pcs.DefaultKnowledgeSelectionService(),
+                    new com.minikun.pcs.DefaultKnowledgeConsolidationService(),
+                    searchSelectionSignalMapper,
+                    diagnosticsService,
+                    diagnosticsFormatter,
+                    diagnosticsPromptBuilder,
+                    commandCatalog,
+                    commandFormatter,
+                    versionService,
+                    versionFormatter,
+                    modelsService,
+                    modelsFormatter,
+                    cacheService,
+                    cacheFormatter,
+                    reflectionService,
+                    titleGenerationService);
+        }
 
     @Value("${spring.ai.ollama.chat.options.model:hf.co/llmfan46/gemma-4-E4B-it-ultra-uncensored-heretic-GGUF:Q5_K_M}")
     private String configuredChatModel;
@@ -213,6 +270,9 @@ public class ChatService {
         if (commandResponse != null) {
             log.info("process=command event=completed");
             return commandResponse;
+        }
+        if (isInternalTitleRequest(request)) {
+            return responseForContent(request, titleGenerationService.generateTitle(titleMessages(request)));
         }
         String model = modelName(request.model(), configuredChatModel);
         ChatTransactionLogger.Transaction transaction = transactionLogger.start(
@@ -257,6 +317,9 @@ public class ChatService {
         String command = commandOutput(userMessage);
         if (command != null) {
             return commandStream(command, request);
+        }
+        if (isInternalTitleRequest(request)) {
+            return commandStream(titleGenerationService.generateTitle(titleMessages(request)), request);
         }
         String model = modelName(request.model(), configuredChatModel);
         String requestId = "chatcmpl-" + UUID.randomUUID();
@@ -967,6 +1030,21 @@ public class ChatService {
                 .map(com.minikun.agent.minikun_agent.api.openai.dto.Message::content)
                 .filter(this::hasText)
                 .noneMatch(this::isInternalTitleRequest);
+    }
+
+    private boolean isInternalTitleRequest(ChatCompletionRequest request) {
+        return request.messages().stream()
+                .map(com.minikun.agent.minikun_agent.api.openai.dto.Message::content)
+                .filter(this::hasText)
+                .anyMatch(this::isInternalTitleRequest);
+    }
+
+    private List<ChatMessage> titleMessages(ChatCompletionRequest request) {
+        return request.messages().stream()
+                .filter(message -> hasText(message.content()))
+                .filter(message -> "user".equals(message.role()) || "assistant".equals(message.role()))
+                .map(message -> new ChatMessage(message.role(), message.content()))
+                .toList();
     }
 
     private boolean isInternalTitleRequest(String content) {
