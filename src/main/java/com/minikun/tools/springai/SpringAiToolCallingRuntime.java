@@ -5,7 +5,6 @@ import java.util.Map;
 import java.util.Objects;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.prompt.Prompt;
@@ -17,21 +16,22 @@ import org.springframework.ai.tool.ToolCallback;
 import org.springframework.stereotype.Component;
 
 import com.minikun.agent.minikun_agent.conversation.ConversationId;
+import com.minikun.model.ChatModelProvider;
 import com.minikun.tools.Tool;
 import com.minikun.tools.ToolExecutor;
 
 @Component
 public final class SpringAiToolCallingRuntime {
-    private final ChatModel chatModel;
+    private final ChatModelProvider chatModelProvider;
     private final ToolCallingManager toolCallingManager;
     private final List<ToolCallback> callbacks;
 
     public SpringAiToolCallingRuntime(
-            ChatModel chatModel,
+            ChatModelProvider chatModelProvider,
             List<Tool> tools,
             ToolExecutor toolExecutor,
             ObjectMapper objectMapper) {
-        this.chatModel = Objects.requireNonNull(chatModel, "chat model must not be null");
+        this.chatModelProvider = Objects.requireNonNull(chatModelProvider, "chat model provider must not be null");
         Objects.requireNonNull(tools, "tools must not be null");
         this.callbacks = tools.stream()
                 .sorted((left, right) -> left.definition().name().compareTo(right.definition().name()))
@@ -50,7 +50,7 @@ public final class SpringAiToolCallingRuntime {
                 .build();
         Prompt currentPrompt = new Prompt(prompt.getInstructions(), options);
         ChatResponse response;
-        response = chatModel.call(currentPrompt);
+        response = chatModelProvider.chat(currentPrompt);
         if (!hasToolCalls(response)) {
             return response;
         }
@@ -74,7 +74,7 @@ public final class SpringAiToolCallingRuntime {
         } finally {
             callback.clearCurrentCallId();
         }
-        response = chatModel.call(new Prompt(executionResult.conversationHistory(), options));
+        response = chatModelProvider.chat(new Prompt(executionResult.conversationHistory(), options));
         if (hasToolCalls(response)) {
             throw new IllegalStateException("multiple tool continuations are not supported");
         }

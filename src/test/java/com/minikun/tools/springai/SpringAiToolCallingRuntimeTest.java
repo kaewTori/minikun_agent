@@ -18,6 +18,7 @@ import org.springframework.ai.chat.model.Generation;
 import org.springframework.ai.chat.prompt.Prompt;
 
 import com.minikun.agent.minikun_agent.conversation.ConversationId;
+import com.minikun.model.existing.ExistingChatModelProvider;
 import com.minikun.tools.CalculatorAddTool;
 import com.minikun.tools.DefaultToolExecutor;
 import com.minikun.tools.DefaultToolRegistry;
@@ -37,7 +38,7 @@ class SpringAiToolCallingRuntimeTest {
         when(chatModel.call(any(Prompt.class))).thenReturn(toolRequest, finalResponse);
 
         SpringAiToolCallingRuntime runtime = new SpringAiToolCallingRuntime(
-                chatModel,
+                new ExistingChatModelProvider(chatModel),
                 List.of(new CalculatorAddTool()),
                 new DefaultToolExecutor(new DefaultToolRegistry(List.of(new CalculatorAddTool()))),
                 new ObjectMapper());

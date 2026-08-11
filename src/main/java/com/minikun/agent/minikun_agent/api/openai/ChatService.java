@@ -11,7 +11,6 @@ import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
-import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.beans.factory.annotation.Value;
@@ -41,6 +40,9 @@ import com.minikun.memory.MemoryRecallService;
 import com.minikun.memory.MemoryScope;
 import com.minikun.memory.ReflectionService;
 import com.minikun.memory.model.CompletedConversation;
+import com.minikun.model.ChatModelId;
+import com.minikun.model.ChatModelProvider;
+import com.minikun.model.ChatModelProviderRegistry;
 import com.minikun.character.model.CharacterSpecification;
 import com.minikun.browser.BrowserContentException;
 import com.minikun.browser.BrowserContentService;
@@ -89,7 +91,7 @@ import org.slf4j.MDC;
 @Slf4j
 public class ChatService {
 
-    private final ChatModel chatModel;
+    private final ChatModelProviderRegistry chatModelProviderRegistry;
     private final EmbeddingModel embeddingModel;
     private final ChatTransactionLogger transactionLogger;
     private final ConversationMemoryService conversationMemoryService;
@@ -124,7 +126,7 @@ public class ChatService {
     private BrowserContentService browserContentService;
 
     public ChatService(
-            ChatModel chatModel,
+            ChatModelProviderRegistry chatModelProviderRegistry,
             EmbeddingModel embeddingModel,
             ChatTransactionLogger transactionLogger,
             ConversationMemoryService conversationMemoryService,
@@ -147,7 +149,7 @@ public class ChatService {
             CacheFormatter cacheFormatter,
             ObjectProvider<ReflectionService> reflectionService) {
         this(
-                chatModel,
+                chatModelProviderRegistry,
                 embeddingModel,
                 transactionLogger,
                 conversationMemoryService,
@@ -279,7 +281,7 @@ public class ChatService {
         String traceId = MDC.get("trace_id");
         Flux<ChatResponse> modelResponses = toolsEnabled && toolCallingRuntime != null
             ? Flux.defer(() -> Flux.just(toolCallingRuntime.call(context.prompt(), context.conversationId())))
-            : chatModel.stream(context.prompt());
+            : chatModelProvider().stream(context.prompt());
         Flux<String> chunks = modelResponses
                 .doOnNext(response -> appendAssistantText(assistantContent, response))
                 .map(response -> streamChunk(response, id, created, model))
@@ -980,7 +982,7 @@ public class ChatService {
     private ChatResponse callChatModel(Prompt prompt, String process, String requestId) {
         long started = System.nanoTime();
         try {
-            return chatModel.call(prompt);
+            return chatModelProvider().chat(prompt);
         } finally {
             logModelDuration(process, started, requestId);
         }
@@ -996,6 +998,10 @@ public class ChatService {
             }
         }
         return callChatModel(prompt, "chat_model", requestId);
+    }
+
+    private ChatModelProvider chatModelProvider() {
+        return chatModelProviderRegistry.get(ChatModelId.EXISTING);
     }
 
     private void logModelDuration(String process, long started, String requestId) {

@@ -20,6 +20,8 @@ import com.minikun.agent.minikun_agent.api.openai.dto.Message;
 import com.minikun.agent.minikun_agent.conversation.ChatMessage;
 import com.minikun.agent.minikun_agent.conversation.ConversationId;
 import com.minikun.agent.minikun_agent.conversation.ConversationMemoryService;
+import com.minikun.model.DefaultChatModelProviderRegistry;
+import com.minikun.model.existing.ExistingChatModelProvider;
 import com.minikun.character.CharacterLoader;
 import com.minikun.character.model.CharacterSpecification;
 import com.minikun.commands.CommandCatalog;
@@ -136,7 +138,7 @@ class ChatServiceReflectionBoundaryTest {
     private ChatService service(ConversationMemoryService memory) {
         CharacterSpecification character = new CharacterLoader(MCS_ROOT).load();
         return new ChatService(
-                mock(ChatModel.class),
+                new DefaultChatModelProviderRegistry(List.of(new ExistingChatModelProvider(mock(ChatModel.class)))),
                 mock(EmbeddingModel.class),
                 mock(ChatTransactionLogger.class),
                 memory,
