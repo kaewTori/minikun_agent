@@ -3,12 +3,17 @@ package com.minikun.tokenbudget.runtime;
 import com.minikun.model.GenerationOptions;
 import com.minikun.model.capability.ModelCapability;
 import com.minikun.tokenbudget.diagnostics.DefaultTokenBudgetSafetyPolicy;
+import com.minikun.tokenbudget.diagnostics.ContextPressureDiagnostics;
 import com.minikun.tokenbudget.diagnostics.TokenBudgetDecisionMapper;
 import com.minikun.tokenbudget.diagnostics.TokenBudgetSafetyPolicy;
 import com.minikun.tokenbudget.domain.TokenBudget;
 import com.minikun.tokenbudget.domain.TokenBudgetAllocation;
 import com.minikun.tokenbudget.integration.GenerationOptionsResolver;
 import com.minikun.tokenbudget.planner.DynamicTokenPlanner;
+import com.minikun.tokenbudget.pressure.ContextPressureAnalyzer;
+import com.minikun.tokenbudget.pressure.ContextPressureRecoveryPolicy;
+import com.minikun.tokenbudget.pressure.DefaultContextPressureAnalyzer;
+import com.minikun.tokenbudget.pressure.DefaultContextPressureRecoveryPolicy;
 
 import java.util.Objects;
 
@@ -17,6 +22,8 @@ public final class DynamicGenerationOptionsFactory {
     private final GenerationOptionsResolver generationOptionsResolver;
     private final TokenBudgetDecisionMapper tokenBudgetDecisionMapper;
     private final TokenBudgetSafetyPolicy tokenBudgetSafetyPolicy;
+    private final ContextPressureAnalyzer contextPressureAnalyzer;
+    private final ContextPressureRecoveryPolicy contextPressureRecoveryPolicy;
 
     public DynamicGenerationOptionsFactory(
             DynamicTokenPlanner dynamicTokenPlanner,
@@ -27,6 +34,8 @@ public final class DynamicGenerationOptionsFactory {
                 "generation options resolver must not be null");
         this.tokenBudgetDecisionMapper = new TokenBudgetDecisionMapper();
         this.tokenBudgetSafetyPolicy = new DefaultTokenBudgetSafetyPolicy();
+        this.contextPressureAnalyzer = new DefaultContextPressureAnalyzer();
+        this.contextPressureRecoveryPolicy = new DefaultContextPressureRecoveryPolicy();
         }
 
         public DynamicGenerationOptionsFactory(
@@ -34,6 +43,18 @@ public final class DynamicGenerationOptionsFactory {
             GenerationOptionsResolver generationOptionsResolver,
             TokenBudgetDecisionMapper tokenBudgetDecisionMapper,
             TokenBudgetSafetyPolicy tokenBudgetSafetyPolicy) {
+            this(dynamicTokenPlanner, generationOptionsResolver, tokenBudgetDecisionMapper,
+                tokenBudgetSafetyPolicy, new DefaultContextPressureAnalyzer(),
+                new DefaultContextPressureRecoveryPolicy());
+            }
+
+            public DynamicGenerationOptionsFactory(
+                DynamicTokenPlanner dynamicTokenPlanner,
+                GenerationOptionsResolver generationOptionsResolver,
+                TokenBudgetDecisionMapper tokenBudgetDecisionMapper,
+                TokenBudgetSafetyPolicy tokenBudgetSafetyPolicy,
+                ContextPressureAnalyzer contextPressureAnalyzer,
+                ContextPressureRecoveryPolicy contextPressureRecoveryPolicy) {
         this.dynamicTokenPlanner = Objects.requireNonNull(dynamicTokenPlanner,
             "dynamic token planner must not be null");
         this.generationOptionsResolver = Objects.requireNonNull(generationOptionsResolver,
@@ -42,6 +63,10 @@ public final class DynamicGenerationOptionsFactory {
             "token budget decision mapper must not be null");
         this.tokenBudgetSafetyPolicy = Objects.requireNonNull(tokenBudgetSafetyPolicy,
             "token budget safety policy must not be null");
+        this.contextPressureAnalyzer = Objects.requireNonNull(contextPressureAnalyzer,
+            "context pressure analyzer must not be null");
+        this.contextPressureRecoveryPolicy = Objects.requireNonNull(contextPressureRecoveryPolicy,
+            "context pressure recovery policy must not be null");
     }
 
     public GenerationOptions create(
@@ -72,8 +97,11 @@ public final class DynamicGenerationOptionsFactory {
             new TokenBudgetDecisionMapper.RuntimeMetadata(budget.applicationMaxOutputTokens(),
                 existing == null ? null : existing.maxTokens());
         var decision = tokenBudgetDecisionMapper.map(allocation, metadata);
+        var pressureDecision = contextPressureAnalyzer.analyze(capability, allocation);
         return new DynamicGenerationOptionsResult(
-            requestCapped, decision, tokenBudgetSafetyPolicy.shouldWarn(decision));
+            requestCapped, decision, tokenBudgetSafetyPolicy.shouldWarn(decision),
+            new ContextPressureDiagnostics(
+                pressureDecision, contextPressureRecoveryPolicy.decide(pressureDecision)));
     }
 
     private GenerationOptions applyRequestMaximum(GenerationOptions existing, GenerationOptions resolved) {

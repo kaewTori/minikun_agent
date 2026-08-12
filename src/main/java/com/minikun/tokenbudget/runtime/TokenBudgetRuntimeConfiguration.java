@@ -16,6 +16,10 @@ import com.minikun.tokenbudget.planner.DefaultDynamicTokenPlanner;
 import com.minikun.tokenbudget.planner.DynamicTokenPlanner;
 import com.minikun.tokenbudget.policy.DefaultTokenBudgetPolicy;
 import com.minikun.tokenbudget.policy.TokenBudgetPolicy;
+import com.minikun.tokenbudget.pressure.ContextPressureAnalyzer;
+import com.minikun.tokenbudget.pressure.ContextPressureRecoveryPolicy;
+import com.minikun.tokenbudget.pressure.DefaultContextPressureAnalyzer;
+import com.minikun.tokenbudget.pressure.DefaultContextPressureRecoveryPolicy;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -58,13 +62,26 @@ public class TokenBudgetRuntimeConfiguration {
     }
 
     @Bean
+    ContextPressureAnalyzer contextPressureAnalyzer() {
+        return new DefaultContextPressureAnalyzer();
+    }
+
+    @Bean
+    ContextPressureRecoveryPolicy contextPressureRecoveryPolicy() {
+        return new DefaultContextPressureRecoveryPolicy();
+    }
+
+    @Bean
     DynamicGenerationOptionsFactory dynamicGenerationOptionsFactory(
             DynamicTokenPlanner dynamicTokenPlanner,
             GenerationOptionsResolver generationOptionsResolver,
             TokenBudgetDecisionMapper tokenBudgetDecisionMapper,
-            TokenBudgetSafetyPolicy tokenBudgetSafetyPolicy) {
+            TokenBudgetSafetyPolicy tokenBudgetSafetyPolicy,
+            ContextPressureAnalyzer contextPressureAnalyzer,
+            ContextPressureRecoveryPolicy contextPressureRecoveryPolicy) {
         return new DynamicGenerationOptionsFactory(dynamicTokenPlanner, generationOptionsResolver,
-                tokenBudgetDecisionMapper, tokenBudgetSafetyPolicy);
+                tokenBudgetDecisionMapper, tokenBudgetSafetyPolicy, contextPressureAnalyzer,
+                contextPressureRecoveryPolicy);
     }
 
     @Bean

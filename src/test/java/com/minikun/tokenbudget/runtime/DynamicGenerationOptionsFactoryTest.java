@@ -4,10 +4,17 @@ import com.minikun.model.ChatModelId;
 import com.minikun.model.GenerationOptions;
 import com.minikun.model.capability.ModelCapability;
 import com.minikun.model.capability.ModelRole;
+import com.minikun.tokenbudget.diagnostics.DefaultTokenBudgetSafetyPolicy;
+import com.minikun.tokenbudget.diagnostics.TokenBudgetDecisionMapper;
 import com.minikun.tokenbudget.domain.TokenBudget;
 import com.minikun.tokenbudget.domain.TokenBudgetAllocation;
 import com.minikun.tokenbudget.integration.GenerationOptionsResolver;
 import com.minikun.tokenbudget.planner.DynamicTokenPlanner;
+import com.minikun.tokenbudget.pressure.ContextPressureAnalyzer;
+import com.minikun.tokenbudget.pressure.ContextPressureDecision;
+import com.minikun.tokenbudget.pressure.ContextPressureLevel;
+import com.minikun.tokenbudget.pressure.ContextPressureRecoveryPolicy;
+import com.minikun.tokenbudget.pressure.RecoveryAction;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -127,6 +134,38 @@ class DynamicGenerationOptionsFactoryTest {
         assertFalse(uncapped.tokenBudgetDecision().cappedByRequestLimit());
         assertEquals(1_000, uncapped.generationOptions().maxTokens());
     }
+
+        @Test
+        void attachesPressureDiagnosticsWithoutChangingGenerationOptions() {
+        AtomicReference<ModelCapability> receivedCapability = new AtomicReference<>();
+        AtomicReference<TokenBudgetAllocation> receivedAllocation = new AtomicReference<>();
+        GenerationOptions existing = new GenerationOptions(0.7, 2_000, List.of("END"));
+        GenerationOptions resolved = new GenerationOptions(0.2, 500, List.of("STOP"));
+        ContextPressureAnalyzer analyzer = (capability, allocation) -> {
+            receivedCapability.set(capability);
+            receivedAllocation.set(allocation);
+            return new ContextPressureDecision(300, 500, ContextPressureLevel.WARNING, true);
+        };
+        ContextPressureRecoveryPolicy recoveryPolicy = decision -> RecoveryAction.REDUCE_CONTEXT;
+        DynamicGenerationOptionsFactory factory = new DynamicGenerationOptionsFactory(
+            (capability, budget, prompt) -> new TokenBudgetAllocation(300, 500, false),
+            (options, allocation) -> resolved,
+            new TokenBudgetDecisionMapper(),
+            new DefaultTokenBudgetSafetyPolicy(),
+            analyzer,
+            recoveryPolicy);
+
+        DynamicGenerationOptionsResult result = factory.createWithDiagnostics(
+            existing, CAPABILITY, BUDGET, "prompt");
+
+        assertSame(CAPABILITY, receivedCapability.get());
+        assertEquals(new TokenBudgetAllocation(300, 500, false), receivedAllocation.get());
+        assertSame(resolved, result.generationOptions());
+        assertEquals(ContextPressureLevel.WARNING,
+            result.contextPressureDiagnostics().decision().level());
+        assertEquals(RecoveryAction.REDUCE_CONTEXT,
+            result.contextPressureDiagnostics().recoveryAction());
+        }
 
     @Test
     void rejectsNullDependenciesAndInputs() {
