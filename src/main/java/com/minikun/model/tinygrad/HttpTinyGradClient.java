@@ -39,7 +39,7 @@ final class HttpTinyGradClient implements TinyGradClient {
     private final String endpoint;
     private final String model;
     private final Duration requestTimeout;
-        private final int contextSize;
+    private final int contextSize;
 
     HttpTinyGradClient(HttpClient httpClient, ObjectMapper objectMapper, String baseUrl,
             String model, Duration requestTimeout, int contextSize) {
@@ -110,6 +110,7 @@ final class HttpTinyGradClient implements TinyGradClient {
             ObjectNode root = objectMapper.createObjectNode();
             root.put("model", model);
             root.put("stream", stream);
+            root.put("thinking", false);
             ObjectNode requestOptions = root.putObject("options");
             requestOptions.put("num_ctx", contextSize);
             var messages = root.putArray("messages");
@@ -151,7 +152,8 @@ final class HttpTinyGradClient implements TinyGradClient {
     private ChatResponse responseFrom(String body) {
         try {
             JsonNode root = objectMapper.readTree(body);
-            String content = root.path("choices").path(0).path("message").path("content").textValue();
+            JsonNode message = root.path("choices").path(0).path("message");
+            String content = message.path("content").textValue();
             if (content == null) {
                 throw new IllegalStateException("TinyGrad response did not contain assistant content");
             }

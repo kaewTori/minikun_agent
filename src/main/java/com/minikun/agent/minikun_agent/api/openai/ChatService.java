@@ -15,6 +15,7 @@ import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.embedding.EmbeddingModel;
+import org.springframework.ai.ollama.api.OllamaChatOptions;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -95,6 +96,8 @@ import org.slf4j.MDC;
 @RequiredArgsConstructor(onConstructor_ = @Autowired)
 @Slf4j
 public class ChatService {
+    private static final String DEFAULT_CHAT_MODEL = "hf.co/llmfan46/gemma-4-E4B-it-ultra-uncensored-heretic-GGUF:Q5_K_M";
+
 
     private final ActiveChatModelProvider activeChatModelProvider;
     private final EmbeddingModel embeddingModel;
@@ -238,9 +241,6 @@ public class ChatService {
                     titleGenerationService);
         }
 
-    @Value("${spring.ai.ollama.chat.options.model:hf.co/llmfan46/gemma-4-E4B-it-ultra-uncensored-heretic-GGUF:Q5_K_M}")
-    private String configuredChatModel;
-
     @Value("${spring.ai.ollama.embedding.options.model:nomic-embed-text}")
     private String configuredEmbeddingModel;
 
@@ -268,6 +268,12 @@ public class ChatService {
     @Value("${minikun.search.query-planning.enabled:true}")
     private boolean searchQueryPlanningEnabled;
 
+    @Value("${minikun.model.generation.temperature:0.5}")
+    private double configuredGenerationTemperature;
+
+    @Value("${minikun.model.generation.max-tokens:2048}")
+    private int configuredGenerationMaxTokens;
+
     public ChatCompletionResponse chatCompletion(ChatCompletionRequest request, ConversationId conversationId) {
         ChatMessage userMessage = userMessage(request);
         var commandResponse = commandResponse(request, userMessage);
@@ -278,7 +284,7 @@ public class ChatService {
         if (isInternalTitleRequest(request)) {
             return responseForContent(request, titleGenerationService.generateTitle(titleMessages(request)));
         }
-        String model = modelName(request.model(), configuredChatModel);
+        String model = modelName(request.model(), effectiveConfiguredChatModel());
         ChatTransactionLogger.Transaction transaction = transactionLogger.start(
                 "chatcmpl-" + UUID.randomUUID(), model, false, request.messages().size());
         try {
@@ -325,7 +331,7 @@ public class ChatService {
         if (isInternalTitleRequest(request)) {
             return commandStream(titleGenerationService.generateTitle(titleMessages(request)), request);
         }
-        String model = modelName(request.model(), configuredChatModel);
+        String model = modelName(request.model(), effectiveConfiguredChatModel());
         String requestId = "chatcmpl-" + UUID.randomUUID();
         ChatTransactionLogger.Transaction transaction = transactionLogger.start(
                 requestId, model, true, request.messages().size());
@@ -443,7 +449,7 @@ public class ChatService {
         if (content == null) {
             return null;
         }
-        String model = modelName(request.model(), configuredChatModel);
+        String model = modelName(request.model(), effectiveConfiguredChatModel());
         return new ChatCompletionResponse(
                 "chatcmpl-" + UUID.randomUUID(), "chat.completion", Instant.now().getEpochSecond(),
                 model,
@@ -487,7 +493,7 @@ public class ChatService {
     }
 
     private ChatCompletionResponse responseForContent(ChatCompletionRequest request, String content) {
-        String model = modelName(request.model(), configuredChatModel);
+        String model = modelName(request.model(), effectiveConfiguredChatModel());
         return new ChatCompletionResponse(
                 "chatcmpl-" + UUID.randomUUID(), "chat.completion", Instant.now().getEpochSecond(),
                 model,
@@ -501,7 +507,7 @@ public class ChatService {
     private Flux<String> commandStream(String content, ChatCompletionRequest request) {
         String id = "chatcmpl-" + UUID.randomUUID();
         long created = Instant.now().getEpochSecond();
-        String model = modelName(request.model(), configuredChatModel);
+        String model = modelName(request.model(), effectiveConfiguredChatModel());
         return Flux.just(
                 data(new ChatCompletionResponse.StreamChunk(
                         id, "chat.completion.chunk", created, model,
@@ -568,7 +574,7 @@ public class ChatService {
     }
 
     public ModelsResponse listModels() {
-        String model = configuredChatModel;
+        String model = effectiveConfiguredChatModel();
         return new ModelsResponse("list", List.of(
                 new ModelsResponse.Model(model, "model", Instant.now().getEpochSecond(), "minikun")));
     }
@@ -632,9 +638,12 @@ public class ChatService {
 
     private GenerationOptions generationOptions(ChatCompletionRequest request) {
         Integer maxTokens = request.max_completion_tokens() != null
-                ? request.max_completion_tokens() : request.max_tokens();
+            ? request.max_completion_tokens()
+            : request.max_tokens() != null ? request.max_tokens() : configuredGenerationMaxTokens;
         List<String> stop = request.stop() == null ? List.of() : request.stop();
-        return new GenerationOptions(request.temperature(), maxTokens, stop);
+        Double temperature = request.temperature() != null
+            ? request.temperature() : configuredGenerationTemperature;
+        return new GenerationOptions(temperature, maxTokens, stop);
     }
 
     private String requestConversation(ChatCompletionRequest request) {
@@ -952,13 +961,24 @@ public class ChatService {
     }
 
     private ChatOptions chatOptions(GenerationOptions generationOptions) {
-        ChatOptions.Builder<?> builder = ChatOptions.builder()
+        ChatOptions.Builder<?> builder = activeChatModelProvider.get().id() == ChatModelId.EXISTING
+            ? OllamaChatOptions.builder()
+            : ChatOptions.builder();
+        builder
+                .model(effectiveConfiguredChatModel())
                 .temperature(generationOptions.temperature())
                 .maxTokens(generationOptions.maxTokens());
         if (!generationOptions.stop().isEmpty()) {
             builder.stopSequences(generationOptions.stop());
         }
         return builder.build();
+    }
+
+    private String effectiveConfiguredChatModel() {
+        String chatModel = modelsService.chatModel();
+        return chatModel == null || chatModel.isBlank()
+                ? DEFAULT_CHAT_MODEL
+            : chatModel;
     }
 
     private Prompt toSpringPrompt(DiagnosticsPrompt diagnosticsPrompt) {

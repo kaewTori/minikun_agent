@@ -29,6 +29,10 @@ public final class ModelsService {
                 configured(searchDecisionModel));
     }
 
+    public String chatModel() {
+        return chatModel;
+    }
+
     private RuntimeValue configured(String value) {
         return value == null || value.isBlank()
                 ? RuntimeValue.notConfigured()

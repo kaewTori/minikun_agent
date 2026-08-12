@@ -26,6 +26,7 @@ import org.springframework.ai.chat.model.Generation;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.chat.metadata.ChatResponseMetadata;
 import org.springframework.ai.chat.metadata.DefaultUsage;
+import org.springframework.ai.ollama.api.OllamaChatOptions;
 import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.beans.factory.ObjectProvider;
 
@@ -155,6 +156,9 @@ class ChatServiceChatOrchestrationTest {
 
         ArgumentCaptor<Prompt> prompt = ArgumentCaptor.forClass(Prompt.class);
         verify(chatModel).call(prompt.capture());
+        assertTrue(prompt.getValue().getOptions() instanceof OllamaChatOptions);
+        assertEquals("chat",
+            prompt.getValue().getOptions().getModel());
         assertEquals(0.7, prompt.getValue().getOptions().getTemperature());
         assertEquals(200, prompt.getValue().getOptions().getMaxTokens());
         assertEquals(List.of("END"), prompt.getValue().getOptions().getStopSequences());

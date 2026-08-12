@@ -78,6 +78,7 @@ class TinyGradChatModelProviderTest {
         assertTrue(body.contains("\"role\":\"user\""));
         assertTrue(body.contains("\"content\":\"Hello\""));
         assertTrue(body.contains("\"stream\":false"));
+        assertTrue(body.contains("\"thinking\":false"));
         assertTrue(body.contains("\"options\":{\"num_ctx\":16384}"));
     }
 
@@ -101,6 +102,16 @@ class TinyGradChatModelProviderTest {
         assertTrue(requestBody.get().contains("\"temperature\":0.7"));
         assertTrue(requestBody.get().contains("\"max_tokens\":512"));
         assertTrue(requestBody.get().contains("\"stop\":[\"END\"]"));
+    }
+
+    @Test
+    void rejectsReasoningOnlyResponseWithoutAssistantContent() {
+        server.createContext("/v1/chat/completions", exchange -> send(exchange, 200, """
+                {"choices":[{"message":{"role":"assistant","content":null,"reasoning_content":"Thinking Process"}}],"finish_reason":"length"}
+                """));
+        TinyGradChatModelProvider provider = provider("test-model");
+
+        assertThrows(IllegalStateException.class, () -> provider.chat(new Prompt("Hello")));
     }
 
     @Test
