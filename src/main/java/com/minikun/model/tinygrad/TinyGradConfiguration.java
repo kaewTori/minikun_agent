@@ -16,10 +16,11 @@ public class TinyGradConfiguration {
             ObjectMapper objectMapper,
             @Value("${minikun.model.tinygrad.base-url:http://localhost:8001/v1}") String baseUrl,
             @Value("${minikun.model.tinygrad.model:}") String model,
-            @Value("${minikun.model.tinygrad.timeout:PT120S}") Duration timeout) {
+            @Value("${minikun.model.tinygrad.timeout:PT120S}") Duration timeout,
+            @Value("${spring.ai.ollama.chat.options.num-ctx:16384}") int contextSize) {
         HttpClient httpClient = HttpClient.newBuilder()
                 .connectTimeout(timeout)
                 .build();
-        return new HttpTinyGradClient(httpClient, objectMapper, baseUrl, model, timeout);
+        return new HttpTinyGradClient(httpClient, objectMapper, baseUrl, model, timeout, contextSize);
     }
 }

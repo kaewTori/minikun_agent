@@ -77,6 +77,7 @@ class TinyGradChatModelProviderTest {
         assertTrue(body.contains("\"role\":\"user\""));
         assertTrue(body.contains("\"content\":\"Hello\""));
         assertTrue(body.contains("\"stream\":false"));
+        assertTrue(body.contains("\"options\":{\"num_ctx\":16384}"));
     }
 
     @Test
@@ -91,7 +92,7 @@ class TinyGradChatModelProviderTest {
                 output.write("data: [DONE]\n\n".getBytes(StandardCharsets.UTF_8));
             }
         });
-        TinyGradChatModelProvider provider = provider("test-model");
+        TinyGradChatModelProvider provider = provider("test-model", 8192);
 
         List<String> content = provider.stream(new Prompt("Hello"))
                 .map(response -> response.getResult().getOutput().getText())
@@ -100,6 +101,7 @@ class TinyGradChatModelProviderTest {
 
         assertEquals(List.of("one", " two"), content);
         assertTrue(requestBody.get().contains("\"stream\":true"));
+        assertTrue(requestBody.get().contains("\"options\":{\"num_ctx\":8192}"));
     }
 
     @Test
@@ -132,9 +134,13 @@ class TinyGradChatModelProviderTest {
     }
 
     private TinyGradChatModelProvider provider(String model) {
+        return provider(model, 16384);
+    }
+
+    private TinyGradChatModelProvider provider(String model, int contextSize) {
         HttpTinyGradClient client = new HttpTinyGradClient(
                 HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2)).build(),
-                new ObjectMapper(), baseUrl, model, Duration.ofSeconds(5));
+                new ObjectMapper(), baseUrl, model, Duration.ofSeconds(5), contextSize);
         return new TinyGradChatModelProvider(client);
     }
 

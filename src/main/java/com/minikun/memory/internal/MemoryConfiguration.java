@@ -25,9 +25,10 @@ import com.minikun.memory.MemoryRetrievalProperties;
 import com.minikun.memory.MemoryService;
 import com.minikun.memory.ReflectionService;
 import com.minikun.memory.ReflectionDecisionService;
-import com.minikun.memory.reflection.ReflectionClient;
+import com.minikun.memory.reflection.ReflectionProvider;
 import com.minikun.memory.reflection.ReflectionParser;
 import com.minikun.memory.reflection.ReflectionPromptBuilder;
+import com.minikun.model.task.TaskModelProvider;
 import com.minikun.pcs.MinikunPersonaProvider;
 import io.micrometer.core.instrument.MeterRegistry;
 
@@ -139,28 +140,14 @@ public class MemoryConfiguration {
     }
 
     @Bean
-    ReflectionClient reflectionClient(
-            @Value("${minikun.memory.reflection.endpoint:http://flip3:8080/v1/chat/completions}") String endpoint,
-            @Value("${minikun.memory.reflection.connect-timeout:PT500MS}") String connectTimeout,
-            @Value("${minikun.memory.reflection.read-timeout:PT120S}") String readTimeout) {
-        var httpClient = java.net.http.HttpClient.newBuilder()
-                .connectTimeout(parseReflectionDuration(connectTimeout)).build();
-        var requestFactory = new JdkClientHttpRequestFactory(httpClient);
-        requestFactory.setReadTimeout(parseReflectionDuration(readTimeout));
-        return new ReflectionHttpClient(RestClient.builder().baseUrl(endpoint)
-                .requestFactory(requestFactory).build());
-    }
-
-    private Duration parseReflectionDuration(String value) {
-        if (value.endsWith("MS")) {
-            return Duration.ofMillis(Long.parseLong(value.substring(2, value.length() - 2)));
-        }
-        return Duration.parse(value);
+    ReflectionProvider reflectionProvider(TaskModelProvider taskModelProvider,
+            @Qualifier("memoryObjectMapper") ObjectMapper objectMapper) {
+        return new TaskModelReflectionProvider(taskModelProvider, objectMapper);
     }
 
     @Bean
     @ConditionalOnBean(MemoryRepository.class)
-    ReflectionService reflectionService(ReflectionPromptBuilder promptBuilder, ReflectionClient client,
+    ReflectionService reflectionService(ReflectionPromptBuilder promptBuilder, ReflectionProvider client,
             ReflectionParser parser, ReflectionDecisionService decisionService,
             MemoryRepository repository, Clock memoryClock, MeterRegistry meterRegistry) {
         return new ReflectionService(promptBuilder, client, parser, decisionService, repository, memoryClock,

@@ -1,6 +1,6 @@
 package com.minikun.search.internal;
 
-import com.minikun.search.SearchDecisionClient;
+import com.minikun.search.SearchDecisionProvider;
 import com.minikun.search.SearchDecisionService;
 import com.minikun.search.model.SearchDecision;
 import com.minikun.search.model.SearchDecisionReason;
@@ -19,7 +19,7 @@ public final class LlmSearchDecisionService implements SearchDecisionService {
     private static final String DECISION_TIMER = "minikun.search.decision.duration";
     private static final String NO_SEARCH_COUNTER = "minikun.search.quality.no_search";
 
-    private final SearchDecisionClient client;
+    private final SearchDecisionProvider client;
     private final SearchDecisionService fallback;
     private final Clock clock;
     private final SearchDecisionPromptBuilder promptBuilder;
@@ -27,7 +27,7 @@ public final class LlmSearchDecisionService implements SearchDecisionService {
     private final AtomicLong lastWarning = new AtomicLong(Long.MIN_VALUE);
 
     public LlmSearchDecisionService(
-            SearchDecisionClient client, SearchDecisionService fallback, Clock clock,
+            SearchDecisionProvider client, SearchDecisionService fallback, Clock clock,
             SearchDecisionPromptBuilder promptBuilder, MeterRegistry meterRegistry) {
         this.client = client;
         this.fallback = fallback;

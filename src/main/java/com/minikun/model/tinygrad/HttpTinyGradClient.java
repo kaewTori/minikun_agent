@@ -37,14 +37,16 @@ final class HttpTinyGradClient implements TinyGradClient {
     private final String endpoint;
     private final String model;
     private final Duration requestTimeout;
+        private final int contextSize;
 
     HttpTinyGradClient(HttpClient httpClient, ObjectMapper objectMapper, String baseUrl,
-            String model, Duration requestTimeout) {
+            String model, Duration requestTimeout, int contextSize) {
         this.httpClient = httpClient;
         this.objectMapper = objectMapper;
         this.endpoint = normalizeEndpoint(baseUrl) + CHAT_COMPLETIONS_PATH;
         this.model = model;
         this.requestTimeout = requestTimeout;
+        this.contextSize = contextSize;
     }
 
     @Override
@@ -106,6 +108,8 @@ final class HttpTinyGradClient implements TinyGradClient {
             ObjectNode root = objectMapper.createObjectNode();
             root.put("model", model);
             root.put("stream", stream);
+            ObjectNode requestOptions = root.putObject("options");
+            requestOptions.put("num_ctx", contextSize);
             var messages = root.putArray("messages");
             for (Message message : prompt.getInstructions()) {
                 ObjectNode item = messages.addObject();

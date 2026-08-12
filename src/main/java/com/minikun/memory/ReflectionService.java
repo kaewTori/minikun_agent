@@ -13,7 +13,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import com.minikun.memory.model.CompletedConversation;
 import com.minikun.memory.model.AcceptedMemory;
-import com.minikun.memory.reflection.ReflectionClient;
+import com.minikun.memory.reflection.ReflectionProvider;
 import com.minikun.memory.reflection.ReflectionParser;
 import com.minikun.memory.reflection.ReflectionPrompt;
 import com.minikun.memory.reflection.ReflectionPromptBuilder;
@@ -26,20 +26,20 @@ public class ReflectionService {
     private static final String OUTCOMES = "minikun.memory.reflection.outcomes";
 
     private final ReflectionPromptBuilder promptBuilder;
-    private final ReflectionClient client;
+    private final ReflectionProvider client;
     private final ReflectionParser parser;
     private final ReflectionDecisionService decisionService;
     private final MemoryRepository repository;
     private final Clock clock;
     private final MeterRegistry meterRegistry;
 
-    public ReflectionService(ReflectionPromptBuilder promptBuilder, ReflectionClient client,
+    public ReflectionService(ReflectionPromptBuilder promptBuilder, ReflectionProvider client,
             ReflectionParser parser, ReflectionDecisionService decisionService,
             MemoryRepository repository, Clock clock) {
         this(promptBuilder, client, parser, decisionService, repository, clock, null);
     }
 
-    public ReflectionService(ReflectionPromptBuilder promptBuilder, ReflectionClient client,
+    public ReflectionService(ReflectionPromptBuilder promptBuilder, ReflectionProvider client,
             ReflectionParser parser, ReflectionDecisionService decisionService,
             MemoryRepository repository, Clock clock, MeterRegistry meterRegistry) {
         this.promptBuilder = promptBuilder;

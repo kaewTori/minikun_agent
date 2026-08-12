@@ -3,7 +3,6 @@ package com.minikun.search.internal;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.minikun.search.AliasDictionary;
 import com.minikun.search.AcronymDictionary;
-import com.minikun.search.SearchDecisionClient;
 import com.minikun.search.SearchManager;
 import com.minikun.search.SearchProvider;
 import com.minikun.search.SearchQueryExpansionService;
@@ -12,7 +11,9 @@ import com.minikun.search.SearchQueryRewriteService;
 import com.minikun.search.SearchDecisionService;
 import com.minikun.search.SearchCache;
 import com.minikun.search.SearchContextAwarenessService;
+import com.minikun.search.SearchDecisionProvider;
 import com.minikun.search.SearchService;
+import com.minikun.model.task.TaskModelProvider;
 import com.minikun.search.SynonymDictionary;
 import com.minikun.search.dictionary.ImmutableAcronymDictionary;
 import com.minikun.search.dictionary.ImmutableAliasDictionary;
@@ -135,39 +136,20 @@ public class SearchConfiguration {
                 new AliasExpansionRule(aliasDictionary)));
     }
 
-    @Bean
-    SearchDecisionClient searchDecisionClient(
-            ObjectMapper objectMapper,
-            @Value("${minikun.search.decision.endpoint:}") String endpoint,
-            @Value("${minikun.search.decision.connect-timeout:}") String connectTimeout,
-            @Value("${minikun.search.decision.read-timeout:}") String readTimeout) {
-        HttpClient httpClient = HttpClient.newBuilder()
-                .connectTimeout(parseDecisionDuration(connectTimeout))
-                .build();
-        JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(httpClient);
-        requestFactory.setReadTimeout(parseDecisionDuration(readTimeout));
-        RestClient restClient = RestClient.builder()
-                .baseUrl(endpoint)
-                .requestFactory(requestFactory)
-                .build();
-        return new HttpSearchDecisionClient(restClient, objectMapper);
-    }
+        @Bean
+        SearchDecisionProvider searchDecisionProvider(TaskModelProvider taskModelProvider,
+            ObjectMapper objectMapper) {
+        return new TaskModelSearchDecisionProvider(taskModelProvider, objectMapper);
+        }
 
     @Bean
     SearchDecisionPromptBuilder searchDecisionPromptBuilder() {
         return new SearchDecisionPromptBuilder();
     }
 
-    private Duration parseDecisionDuration(String value) {
-        if (value.endsWith("MS")) {
-            return Duration.ofMillis(Long.parseLong(value.substring(2, value.length() - 2)));
-        }
-        return Duration.parse(value);
-    }
-
     @Bean
     SearchDecisionService searchDecisionService(
-            SearchDecisionClient client,
+            SearchDecisionProvider client,
             Clock memoryClock,
             SearchDecisionPromptBuilder promptBuilder,
             MeterRegistry meterRegistry,
