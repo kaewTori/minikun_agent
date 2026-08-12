@@ -7,6 +7,9 @@ import com.minikun.model.capability.ModelCapabilityRegistry;
 import com.minikun.model.capability.ModelRole;
 import com.minikun.tokenbudget.counter.ApproximateTokenCounter;
 import com.minikun.tokenbudget.counter.TokenCounter;
+import com.minikun.tokenbudget.diagnostics.DefaultTokenBudgetSafetyPolicy;
+import com.minikun.tokenbudget.diagnostics.TokenBudgetDecisionMapper;
+import com.minikun.tokenbudget.diagnostics.TokenBudgetSafetyPolicy;
 import com.minikun.tokenbudget.integration.DefaultGenerationOptionsResolver;
 import com.minikun.tokenbudget.integration.GenerationOptionsResolver;
 import com.minikun.tokenbudget.planner.DefaultDynamicTokenPlanner;
@@ -45,10 +48,23 @@ public class TokenBudgetRuntimeConfiguration {
     }
 
     @Bean
+    TokenBudgetDecisionMapper tokenBudgetDecisionMapper() {
+        return new TokenBudgetDecisionMapper();
+    }
+
+    @Bean
+    TokenBudgetSafetyPolicy tokenBudgetSafetyPolicy() {
+        return new DefaultTokenBudgetSafetyPolicy();
+    }
+
+    @Bean
     DynamicGenerationOptionsFactory dynamicGenerationOptionsFactory(
             DynamicTokenPlanner dynamicTokenPlanner,
-            GenerationOptionsResolver generationOptionsResolver) {
-        return new DynamicGenerationOptionsFactory(dynamicTokenPlanner, generationOptionsResolver);
+            GenerationOptionsResolver generationOptionsResolver,
+            TokenBudgetDecisionMapper tokenBudgetDecisionMapper,
+            TokenBudgetSafetyPolicy tokenBudgetSafetyPolicy) {
+        return new DynamicGenerationOptionsFactory(dynamicTokenPlanner, generationOptionsResolver,
+                tokenBudgetDecisionMapper, tokenBudgetSafetyPolicy);
     }
 
     @Bean

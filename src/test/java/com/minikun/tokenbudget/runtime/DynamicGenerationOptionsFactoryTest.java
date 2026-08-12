@@ -14,7 +14,9 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class DynamicGenerationOptionsFactoryTest {
@@ -86,6 +88,44 @@ class DynamicGenerationOptionsFactoryTest {
         GenerationOptions resolved = factory.create(existing, CAPABILITY, BUDGET, "prompt");
 
         assertEquals(0, resolved.maxTokens());
+    }
+
+    @Test
+    void exposesDiagnosticsWithoutChangingResolvedOptions() {
+        GenerationOptions existing = new GenerationOptions(0.7, 3_000, List.of("END"));
+        DynamicGenerationOptionsFactory factory = new DynamicGenerationOptionsFactory(
+                (capability, budget, prompt) -> new TokenBudgetAllocation(200, 2_048, true),
+                (options, allocation) -> new GenerationOptions(0.2, 2_048, List.of("STOP")));
+
+        DynamicGenerationOptionsResult result = factory.createWithDiagnostics(
+            existing, CAPABILITY, new TokenBudget(16_384, 0, 2_048), "prompt");
+
+        assertEquals(new GenerationOptions(0.2, 2_048, List.of("STOP")), result.generationOptions());
+        assertEquals(200, result.tokenBudgetDecision().inputTokens());
+        assertEquals(2_048, result.tokenBudgetDecision().allocatedOutputTokens());
+        assertTrue(result.tokenBudgetDecision().truncated());
+        assertTrue(result.tokenBudgetDecision().cappedByApplicationLimit());
+        assertFalse(result.tokenBudgetDecision().cappedByRequestLimit());
+        assertTrue(result.warning());
+    }
+
+    @Test
+    void reportsRequestCapAndKeepsNullRequestUncapped() {
+        DynamicGenerationOptionsFactory factory = new DynamicGenerationOptionsFactory(
+                (capability, budget, prompt) -> new TokenBudgetAllocation(100, 1_000, false),
+                (options, allocation) -> new GenerationOptions(0.2, 1_000, List.of("STOP")));
+
+        DynamicGenerationOptionsResult capped = factory.createWithDiagnostics(
+            new GenerationOptions(0.7, 0, List.of()), CAPABILITY,
+            new TokenBudget(16_384, 0, 2_048), "prompt");
+        DynamicGenerationOptionsResult uncapped = factory.createWithDiagnostics(
+            new GenerationOptions(0.7, null, List.of()), CAPABILITY,
+            new TokenBudget(16_384, 0, 2_048), "prompt");
+
+        assertTrue(capped.tokenBudgetDecision().cappedByRequestLimit());
+        assertEquals(0, capped.generationOptions().maxTokens());
+        assertFalse(uncapped.tokenBudgetDecision().cappedByRequestLimit());
+        assertEquals(1_000, uncapped.generationOptions().maxTokens());
     }
 
     @Test
