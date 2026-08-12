@@ -26,6 +26,11 @@ import com.minikun.tokenbudget.recovery.ContextRecoveryPriorityPolicy;
 import com.minikun.tokenbudget.recovery.DefaultContextRecoveryPriorityPolicy;
 import com.minikun.tokenbudget.recovery.NoOpRecoveryExecutor;
 import com.minikun.tokenbudget.recovery.RecoveryExecutor;
+import com.minikun.tokenbudget.recovery.DefaultRecoveryStrategyRegistry;
+import com.minikun.tokenbudget.recovery.NoOpRecoveryStrategyHandler;
+import com.minikun.tokenbudget.recovery.RecoveryStep;
+import com.minikun.tokenbudget.recovery.RecoveryStrategyHandler;
+import com.minikun.tokenbudget.recovery.RecoveryStrategyRegistry;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -90,6 +95,16 @@ public class TokenBudgetRuntimeConfiguration {
     @Bean
     RecoveryExecutor recoveryExecutor() {
         return new NoOpRecoveryExecutor();
+    }
+
+    @Bean
+    RecoveryStrategyRegistry recoveryStrategyRegistry() {
+        RecoveryStrategyHandler noOpHandler = new NoOpRecoveryStrategyHandler();
+        return new DefaultRecoveryStrategyRegistry(Map.of(
+                RecoveryStep.REDUCE_KNOWLEDGE, noOpHandler,
+                RecoveryStep.REDUCE_MEMORY, noOpHandler,
+                RecoveryStep.REDUCE_CONVERSATION_HISTORY, noOpHandler,
+                RecoveryStep.REQUEST_FALLBACK, noOpHandler));
     }
 
     @Bean
