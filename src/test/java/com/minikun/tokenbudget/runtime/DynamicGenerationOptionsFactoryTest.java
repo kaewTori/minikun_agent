@@ -14,11 +14,26 @@ import com.minikun.tokenbudget.pressure.ContextPressureAnalyzer;
 import com.minikun.tokenbudget.pressure.ContextPressureDecision;
 import com.minikun.tokenbudget.pressure.ContextPressureLevel;
 import com.minikun.tokenbudget.pressure.ContextPressureRecoveryPolicy;
+import com.minikun.tokenbudget.pressure.DefaultContextPressureAnalyzer;
+import com.minikun.tokenbudget.pressure.DefaultContextPressureRecoveryPolicy;
 import com.minikun.tokenbudget.pressure.RecoveryAction;
+import com.minikun.tokenbudget.recovery.ContextRecoveryPlanner;
+import com.minikun.tokenbudget.recovery.ContextRecoveryPlan;
+import com.minikun.tokenbudget.recovery.RecoveryPriority;
+import com.minikun.tokenbudget.recovery.RecoveryTarget;
+import com.minikun.tokenbudget.recovery.ContextRecoveryPriorityPolicy;
+import com.minikun.tokenbudget.recovery.DefaultContextRecoveryPriorityPolicy;
+import com.minikun.tokenbudget.recovery.DefaultContextRecoveryPlanner;
+import com.minikun.tokenbudget.recovery.RecoveryPriorityPlan;
+import com.minikun.tokenbudget.recovery.RecoveryStep;
+import com.minikun.tokenbudget.recovery.RecoveryExecutionResult;
+import com.minikun.tokenbudget.recovery.RecoveryExecutionStatus;
+import com.minikun.tokenbudget.recovery.RecoveryExecutor;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -166,6 +181,105 @@ class DynamicGenerationOptionsFactoryTest {
         assertEquals(RecoveryAction.REDUCE_CONTEXT,
             result.contextPressureDiagnostics().recoveryAction());
         }
+
+        @Test
+        void attachesRecoveryPlanWithoutChangingGenerationOptions() {
+        GenerationOptions existing = new GenerationOptions(0.7, 2_000, List.of("END"));
+        GenerationOptions resolved = new GenerationOptions(0.2, 500, List.of("STOP"));
+        ContextRecoveryPlanner planner = decision -> new ContextRecoveryPlan(
+            RecoveryPriority.MEDIUM, RecoveryTarget.KNOWLEDGE_CONTEXT, true);
+        DynamicGenerationOptionsFactory factory = new DynamicGenerationOptionsFactory(
+            (capability, budget, prompt) -> new TokenBudgetAllocation(300, 500, false),
+            (options, allocation) -> resolved,
+            new TokenBudgetDecisionMapper(),
+            new DefaultTokenBudgetSafetyPolicy(),
+            new DefaultContextPressureAnalyzer(),
+            new DefaultContextPressureRecoveryPolicy(),
+            planner);
+
+        DynamicGenerationOptionsResult result = factory.createWithDiagnostics(
+            existing, CAPABILITY, BUDGET, "prompt");
+
+        assertSame(resolved, result.generationOptions());
+        assertEquals(RecoveryPriority.MEDIUM,
+            result.contextPressureDiagnostics().recoveryPlan().priority());
+        assertEquals(RecoveryTarget.KNOWLEDGE_CONTEXT,
+            result.contextPressureDiagnostics().recoveryPlan().target());
+        assertTrue(result.contextPressureDiagnostics().recoveryPlan().required());
+        }
+
+        @Test
+        void attachesPriorityPlanWithoutChangingGenerationOptions() {
+        GenerationOptions existing = new GenerationOptions(0.7, 2_000, List.of("END"));
+        GenerationOptions resolved = new GenerationOptions(0.2, 500, List.of("STOP"));
+        ContextRecoveryPriorityPolicy priorityPolicy = plan -> new RecoveryPriorityPlan(
+            List.of(RecoveryStep.REDUCE_KNOWLEDGE));
+        DynamicGenerationOptionsFactory factory = new DynamicGenerationOptionsFactory(
+            (capability, budget, prompt) -> new TokenBudgetAllocation(300, 500, false),
+            (options, allocation) -> resolved,
+            new TokenBudgetDecisionMapper(),
+            new DefaultTokenBudgetSafetyPolicy(),
+            new DefaultContextPressureAnalyzer(),
+            new DefaultContextPressureRecoveryPolicy(),
+            new DefaultContextRecoveryPlanner(),
+            priorityPolicy);
+
+        DynamicGenerationOptionsResult result = factory.createWithDiagnostics(
+            existing, CAPABILITY, BUDGET, "prompt");
+
+        assertSame(resolved, result.generationOptions());
+        assertEquals(List.of(RecoveryStep.REDUCE_KNOWLEDGE),
+            result.contextPressureDiagnostics().priorityPlan().steps());
+        }
+
+        @Test
+        void attachesExecutionResultWithoutChangingGenerationOptions() {
+        GenerationOptions existing = new GenerationOptions(0.7, 2_000, List.of("END"));
+        GenerationOptions resolved = new GenerationOptions(0.2, 500, List.of("STOP"));
+        RecoveryExecutor executor = plan -> new RecoveryExecutionResult(
+            RecoveryExecutionStatus.PLANNED, plan, false);
+        DynamicGenerationOptionsFactory factory = new DynamicGenerationOptionsFactory(
+            (capability, budget, prompt) -> new TokenBudgetAllocation(300, 500, false),
+            (options, allocation) -> resolved,
+            new TokenBudgetDecisionMapper(),
+            new DefaultTokenBudgetSafetyPolicy(),
+            new DefaultContextPressureAnalyzer(),
+            new DefaultContextPressureRecoveryPolicy(),
+            new DefaultContextRecoveryPlanner(),
+            new DefaultContextRecoveryPriorityPolicy(),
+            executor);
+
+        DynamicGenerationOptionsResult result = factory.createWithDiagnostics(
+            existing, CAPABILITY, BUDGET, "prompt");
+
+        assertSame(resolved, result.generationOptions());
+        assertEquals(RecoveryExecutionStatus.PLANNED,
+            result.contextPressureDiagnostics().executionResult().status());
+        assertFalse(result.contextPressureDiagnostics().executionResult().changed());
+        }
+
+    @Test
+    void createDoesNotInvokeRecoveryExecutor() {
+        AtomicBoolean executorCalled = new AtomicBoolean();
+        RecoveryExecutor executor = plan -> {
+            executorCalled.set(true);
+            return new RecoveryExecutionResult(RecoveryExecutionStatus.PLANNED, plan, false);
+        };
+        DynamicGenerationOptionsFactory factory = new DynamicGenerationOptionsFactory(
+                (capability, budget, prompt) -> new TokenBudgetAllocation(300, 500, false),
+                (options, allocation) -> new GenerationOptions(0.2, 500, List.of("STOP")),
+                new TokenBudgetDecisionMapper(),
+                new DefaultTokenBudgetSafetyPolicy(),
+                new DefaultContextPressureAnalyzer(),
+                new DefaultContextPressureRecoveryPolicy(),
+                new DefaultContextRecoveryPlanner(),
+                new DefaultContextRecoveryPriorityPolicy(),
+                executor);
+
+        factory.create(new GenerationOptions(0.7, 2_000, List.of("END")), CAPABILITY, BUDGET, "prompt");
+
+        assertFalse(executorCalled.get());
+    }
 
     @Test
     void rejectsNullDependenciesAndInputs() {
