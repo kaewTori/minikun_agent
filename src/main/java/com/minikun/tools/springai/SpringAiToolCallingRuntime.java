@@ -7,6 +7,7 @@ import java.util.Objects;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.model.tool.DefaultToolCallingChatOptions;
 import org.springframework.ai.model.tool.ToolCallingChatOptions;
@@ -50,7 +51,9 @@ public final class SpringAiToolCallingRuntime {
             throw new IllegalStateException(
                     "Chat model provider does not support tool calling: " + chatModelProvider.id());
         }
-        ToolCallingChatOptions options = DefaultToolCallingChatOptions.builder()
+        ToolCallingChatOptions.Builder<?> optionsBuilder = DefaultToolCallingChatOptions.builder();
+        copyChatOptions(prompt.getOptions(), optionsBuilder);
+        ToolCallingChatOptions options = optionsBuilder
                 .toolCallbacks(callbacks)
                 .toolContext(Map.of("conversationId", conversationId.value()))
                 .build();
@@ -85,6 +88,20 @@ public final class SpringAiToolCallingRuntime {
             throw new IllegalStateException("multiple tool continuations are not supported");
         }
         return response;
+    }
+
+    private void copyChatOptions(ChatOptions source, ToolCallingChatOptions.Builder<?> target) {
+        if (source == null) {
+            return;
+        }
+        target.model(source.getModel())
+                .frequencyPenalty(source.getFrequencyPenalty())
+                .maxTokens(source.getMaxTokens())
+                .presencePenalty(source.getPresencePenalty())
+                .stopSequences(source.getStopSequences())
+                .temperature(source.getTemperature())
+                .topK(source.getTopK())
+                .topP(source.getTopP());
     }
 
     private boolean hasToolCalls(ChatResponse response) {

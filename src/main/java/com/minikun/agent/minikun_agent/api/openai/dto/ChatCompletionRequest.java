@@ -10,10 +10,17 @@ public record ChatCompletionRequest(
         Double temperature,
         Integer max_tokens,
         Integer max_completion_tokens,
+        List<String> stop,
         String owner_id
 ) {
     public ChatCompletionRequest(String model, List<Message> messages, String conversationId,
             Boolean stream, Double temperature, Integer maxTokens, Integer maxCompletionTokens) {
-        this(model, messages, conversationId, stream, temperature, maxTokens, maxCompletionTokens, null);
+        this(model, messages, conversationId, stream, temperature, maxTokens, maxCompletionTokens, null, null);
+    }
+
+    public ChatCompletionRequest(String model, List<Message> messages, String conversationId,
+            Boolean stream, Double temperature, Integer maxTokens, Integer maxCompletionTokens,
+            String ownerId) {
+        this(model, messages, conversationId, stream, temperature, maxTokens, maxCompletionTokens, null, ownerId);
     }
 }

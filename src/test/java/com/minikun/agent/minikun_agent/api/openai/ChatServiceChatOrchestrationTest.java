@@ -24,6 +24,8 @@ import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
 import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.chat.metadata.ChatResponseMetadata;
+import org.springframework.ai.chat.metadata.DefaultUsage;
 import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.beans.factory.ObjectProvider;
 
@@ -128,6 +130,36 @@ class ChatServiceChatOrchestrationTest {
         assertEquals("tinygrad answer", result.choices().get(0).message().content());
         verify(tinyGradProvider).chat(any(Prompt.class));
     }
+
+        @Test
+        void propagatesGenerationOptionsAndMapsModelUsage() {
+        ChatModel chatModel = mock(ChatModel.class);
+        ConversationMemoryService conversation = mock(ConversationMemoryService.class);
+        when(conversation.load(any())).thenReturn(List.of());
+        when(chatModel.call(any(Prompt.class))).thenReturn(new ChatResponse(
+            List.of(new Generation(new AssistantMessage("answer"))),
+            ChatResponseMetadata.builder().usage(new DefaultUsage(12, 5, 17, null)).build()));
+        ChatCompletionRequest request = new ChatCompletionRequest(
+            "test-model",
+            List.of(new Message("user", "Explain this.")),
+            "options",
+            false,
+            0.7,
+            100,
+            200,
+            List.of("END"),
+            null);
+
+        ChatCompletionResponse response = service(chatModel, conversation)
+            .chatCompletion(request, new ConversationId("options"));
+
+        ArgumentCaptor<Prompt> prompt = ArgumentCaptor.forClass(Prompt.class);
+        verify(chatModel).call(prompt.capture());
+        assertEquals(0.7, prompt.getValue().getOptions().getTemperature());
+        assertEquals(200, prompt.getValue().getOptions().getMaxTokens());
+        assertEquals(List.of("END"), prompt.getValue().getOptions().getStopSequences());
+        assertEquals(new ChatCompletionResponse.Usage(12, 5, 17), response.usage());
+        }
 
     @Test
     void streamingErrorDoesNotPersistAssistantResponse() {

@@ -35,7 +35,8 @@ public record ChatCompletionResponse(
             long created,
             String model,
             java.util.List<StreamChoice> choices,
-            java.util.List<ChatAttachment> attachments
+            java.util.List<ChatAttachment> attachments,
+            Usage usage
     ) {
         public StreamChunk(
                 String id,
@@ -43,7 +44,17 @@ public record ChatCompletionResponse(
                 long created,
                 String model,
                 java.util.List<StreamChoice> choices) {
-            this(id, object, created, model, choices, java.util.List.of());
+            this(id, object, created, model, choices, java.util.List.of(), null);
+        }
+
+        public StreamChunk(
+                String id,
+                String object,
+                long created,
+                String model,
+                java.util.List<StreamChoice> choices,
+                java.util.List<ChatAttachment> attachments) {
+            this(id, object, created, model, choices, attachments, null);
         }
 
         public StreamChunk {

@@ -20,6 +20,7 @@ import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
 import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.chat.prompt.ChatOptions;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
@@ -78,6 +79,51 @@ class TinyGradChatModelProviderTest {
         assertTrue(body.contains("\"content\":\"Hello\""));
         assertTrue(body.contains("\"stream\":false"));
         assertTrue(body.contains("\"options\":{\"num_ctx\":16384}"));
+    }
+
+    @Test
+    void mapsGenerationOptionsAndUsage() {
+        server.createContext("/v1/chat/completions", exchange -> {
+            requestBody.set(readBody(exchange));
+            send(exchange, 200, """
+                    {"choices":[{"message":{"content":"answer"}}],"usage":{"prompt_tokens":12,"completion_tokens":5,"total_tokens":17}}
+                    """);
+        });
+        TinyGradChatModelProvider provider = provider("test-model");
+        Prompt prompt = new Prompt(new org.springframework.ai.chat.messages.UserMessage("Hello"),
+                ChatOptions.builder().temperature(0.7).maxTokens(512).stopSequences(List.of("END")).build());
+
+        ChatResponse response = provider.chat(prompt);
+
+        assertEquals("answer", response.getResult().getOutput().getText());
+        assertEquals(12, response.getMetadata().getUsage().getPromptTokens());
+        assertEquals(5, response.getMetadata().getUsage().getCompletionTokens());
+        assertTrue(requestBody.get().contains("\"temperature\":0.7"));
+        assertTrue(requestBody.get().contains("\"max_tokens\":512"));
+        assertTrue(requestBody.get().contains("\"stop\":[\"END\"]"));
+    }
+
+    @Test
+    void mapsStreamingUsageEventWithoutEmittingText() {
+        server.createContext("/v1/chat/completions", exchange -> {
+            requestBody.set(readBody(exchange));
+            exchange.getResponseHeaders().set("Content-Type", "text/event-stream");
+            exchange.sendResponseHeaders(200, 0);
+            try (OutputStream output = exchange.getResponseBody()) {
+                output.write("data: {\"choices\":[{\"delta\":{\"content\":\"answer\"}}]}\n\n".getBytes(StandardCharsets.UTF_8));
+                output.write("data: {\"usage\":{\"prompt_tokens\":9,\"completion_tokens\":3,\"total_tokens\":12}}\n\n".getBytes(StandardCharsets.UTF_8));
+                output.write("data: [DONE]\n\n".getBytes(StandardCharsets.UTF_8));
+            }
+        });
+        TinyGradChatModelProvider provider = provider("test-model");
+
+        List<ChatResponse> responses = provider.stream(new Prompt("Hello"))
+                .collectList().block(Duration.ofSeconds(5));
+
+        assertEquals(2, responses.size());
+        assertEquals("answer", responses.get(0).getResult().getOutput().getText());
+        assertEquals(9, responses.get(1).getMetadata().getUsage().getPromptTokens());
+        assertEquals("", responses.get(1).getResult().getOutput().getText());
     }
 
     @Test

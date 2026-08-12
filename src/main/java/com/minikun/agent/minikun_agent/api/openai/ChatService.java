@@ -6,12 +6,14 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.beans.factory.ObjectProvider;
@@ -43,6 +45,8 @@ import com.minikun.memory.model.CompletedConversation;
 import com.minikun.model.ChatModelId;
 import com.minikun.model.ChatModelProvider;
 import com.minikun.model.ActiveChatModelProvider;
+import com.minikun.model.GenerationOptions;
+import com.minikun.model.ModelUsage;
 import com.minikun.model.task.title.TitleGenerationService;
 import com.minikun.character.model.CharacterSpecification;
 import com.minikun.browser.BrowserContentException;
@@ -302,7 +306,7 @@ public class ChatService {
                     "stop");
             ChatCompletionResponse result = new ChatCompletionResponse(
                     transaction.requestId(), "chat.completion", Instant.now().getEpochSecond(),
-                    model, List.of(choice), new ChatCompletionResponse.Usage(0, 0, 0),
+                    model, List.of(choice), toOpenAiUsage(modelUsage(response)),
                     context.attachments());
             transaction.success();
             return result;
@@ -328,6 +332,7 @@ public class ChatService {
         String id = requestId;
         long created = Instant.now().getEpochSecond();
         StringBuilder assistantContent = new StringBuilder();
+        AtomicReference<ModelUsage> modelUsage = new AtomicReference<>(ModelUsage.empty());
 
         ChatExecutionContext context;
         try {
@@ -347,6 +352,7 @@ public class ChatService {
             : chatModelProvider().stream(context.prompt());
         Flux<String> chunks = modelResponses
                 .doOnNext(response -> appendAssistantText(assistantContent, response))
+            .doOnNext(response -> modelUsage.set(modelUsage(response)))
                 .map(response -> streamChunk(response, id, created, model))
                 .filter(chunk -> !chunk.isBlank())
                 .doOnComplete(() -> withTrace(traceId,
@@ -364,6 +370,7 @@ public class ChatService {
                                         "assistant", "", imageDeltas(context.attachments())), null)),
                         context.attachments()))),
                 chunks,
+                Flux.defer(() -> usageChunk(modelUsage.get(), id, created, model)),
                 Flux.just(data(new ChatCompletionResponse.StreamChunk(
                         id, "chat.completion.chunk", created, model,
                         List.of(new ChatCompletionResponse.StreamChoice(0,
@@ -518,6 +525,33 @@ public class ChatService {
                         0, new ChatCompletionResponse.Delta(null, content), null))));
     }
 
+    private Flux<String> usageChunk(ModelUsage usage, String id, long created, String model) {
+        if (usage.equals(ModelUsage.empty())) {
+            return Flux.empty();
+        }
+        return Flux.just(data(new ChatCompletionResponse.StreamChunk(
+                id, "chat.completion.chunk", created, model, List.of(), List.of(),
+                toOpenAiUsage(usage))));
+    }
+
+    private ModelUsage modelUsage(ChatResponse response) {
+        if (response == null || response.getMetadata() == null || response.getMetadata().getUsage() == null) {
+            return ModelUsage.empty();
+        }
+        var usage = response.getMetadata().getUsage();
+        return new ModelUsage(
+                nonNegative(usage.getPromptTokens()), nonNegative(usage.getCompletionTokens()));
+    }
+
+    private int nonNegative(Integer value) {
+        return value == null ? 0 : Math.max(0, value);
+    }
+
+    private ChatCompletionResponse.Usage toOpenAiUsage(ModelUsage usage) {
+        return new ChatCompletionResponse.Usage(
+                usage.promptTokens(), usage.completionTokens(), usage.totalTokens());
+    }
+
         private List<ChatCompletionResponse.Image> imageDeltas(List<ChatAttachment> attachments) {
         return attachments.stream()
             .map(attachment -> new ChatCompletionResponse.Image(
@@ -593,7 +627,14 @@ public class ChatService {
                 knowledgeSelection.searchContext(),
                 knowledgeSelection.selection(),
                 knowledgeSelection.consolidation());
-        return toSpringPrompt(promptComposer.compose(promptRequest));
+        return toSpringPrompt(promptComposer.compose(promptRequest), generationOptions(request));
+    }
+
+    private GenerationOptions generationOptions(ChatCompletionRequest request) {
+        Integer maxTokens = request.max_completion_tokens() != null
+                ? request.max_completion_tokens() : request.max_tokens();
+        List<String> stop = request.stop() == null ? List.of() : request.stop();
+        return new GenerationOptions(request.temperature(), maxTokens, stop);
     }
 
     private String requestConversation(ChatCompletionRequest request) {
@@ -900,10 +941,24 @@ public class ChatService {
     }
 
     private Prompt toSpringPrompt(com.minikun.pcs.model.Prompt prompt) {
+        return toSpringPrompt(prompt, new GenerationOptions(null, null, List.of()));
+    }
+
+    private Prompt toSpringPrompt(com.minikun.pcs.model.Prompt prompt, GenerationOptions generationOptions) {
         List<Message> messages = prompt.messages().stream()
                 .map(this::toSpringMessage)
                 .toList();
-        return new Prompt(messages);
+        return new Prompt(messages, chatOptions(generationOptions));
+    }
+
+    private ChatOptions chatOptions(GenerationOptions generationOptions) {
+        ChatOptions.Builder<?> builder = ChatOptions.builder()
+                .temperature(generationOptions.temperature())
+                .maxTokens(generationOptions.maxTokens());
+        if (!generationOptions.stop().isEmpty()) {
+            builder.stopSequences(generationOptions.stop());
+        }
+        return builder.build();
     }
 
     private Prompt toSpringPrompt(DiagnosticsPrompt diagnosticsPrompt) {

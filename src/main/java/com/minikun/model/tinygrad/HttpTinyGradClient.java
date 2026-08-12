@@ -14,6 +14,8 @@ import java.util.List;
 
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
+import org.springframework.ai.chat.metadata.ChatResponseMetadata;
+import org.springframework.ai.chat.metadata.DefaultUsage;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
 import org.springframework.ai.chat.prompt.ChatOptions;
@@ -153,7 +155,7 @@ final class HttpTinyGradClient implements TinyGradClient {
             if (content == null) {
                 throw new IllegalStateException("TinyGrad response did not contain assistant content");
             }
-            return response(content);
+            return response(content, usage(root.path("usage")));
         } catch (IOException exception) {
             throw new IllegalStateException("Unable to decode TinyGrad response", exception);
         }
@@ -190,6 +192,11 @@ final class HttpTinyGradClient implements TinyGradClient {
         }
         try {
             JsonNode root = objectMapper.readTree(eventData.toString());
+            JsonNode usage = root.path("usage");
+            if (!usage.isMissingNode() && !usage.isNull()) {
+                emitter.next(response("", usage(usage)));
+                return;
+            }
             JsonNode content = root.path("choices").path(0).path("delta").path("content");
             if (!content.isMissingNode() && !content.isNull()) {
                 emitter.next(response(content.asText()));
@@ -201,6 +208,24 @@ final class HttpTinyGradClient implements TinyGradClient {
 
     private ChatResponse response(String content) {
         return new ChatResponse(List.of(new Generation(new AssistantMessage(content))));
+    }
+
+    private ChatResponse response(String content, DefaultUsage usage) {
+        return new ChatResponse(
+                List.of(new Generation(new AssistantMessage(content))),
+                ChatResponseMetadata.builder().usage(usage).build());
+    }
+
+    private DefaultUsage usage(JsonNode usage) {
+        Integer promptTokens = integerValue(usage, "prompt_tokens");
+        Integer completionTokens = integerValue(usage, "completion_tokens");
+        Integer totalTokens = integerValue(usage, "total_tokens");
+        return new DefaultUsage(promptTokens, completionTokens, totalTokens, usage);
+    }
+
+    private Integer integerValue(JsonNode node, String field) {
+        JsonNode value = node.path(field);
+        return value.isNumber() ? value.intValue() : null;
     }
 
     private void ensureSuccess(int statusCode) {
