@@ -3,6 +3,7 @@ package com.minikun.model.task.title;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -26,7 +27,8 @@ class OllamaTitleGenerationProviderTest {
 
         assertEquals("Postgres Setup", provider.generateTitle(
                 List.of(new ChatMessage("user", "How do I configure PostgreSQL?"))));
-        verify(taskModelProvider).generate(any(TaskModelRequest.class));
+        verify(taskModelProvider).generate(argThat(request -> request.messages().getFirst().content()
+                .startsWith("/no_think\nGenerate a short conversation title.")));
     }
 
     @Test

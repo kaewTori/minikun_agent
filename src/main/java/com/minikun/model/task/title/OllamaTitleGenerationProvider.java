@@ -13,6 +13,7 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public final class OllamaTitleGenerationProvider implements TitleGenerationProvider {
     private static final int MAX_OUTPUT_TOKENS = 32;
+    private static final String NO_THINK_PREFIX = "/no_think\n";
     private final TitlePromptBuilder promptBuilder;
     private final TaskModelProvider taskModelProvider;
 
@@ -25,7 +26,7 @@ public final class OllamaTitleGenerationProvider implements TitleGenerationProvi
 
     @Override
     public String generateTitle(List<ChatMessage> messages) {
-        String prompt = promptBuilder.build(messages);
+        String prompt = NO_THINK_PREFIX + promptBuilder.build(messages);
         String response = taskModelProvider.generate(new TaskModelRequest(
                 List.of(new TaskModelMessage("user", prompt)), MAX_OUTPUT_TOKENS, 0.0,
                 TaskModelRequest.ResponseFormat.TEXT));
