@@ -9,6 +9,7 @@ import com.minikun.memory.model.CompletedConversation;
 import com.minikun.pcs.MinikunPersonaProvider;
 
 public final class ReflectionPromptBuilder {
+    private static final String NO_THINK_PREFIX = "/no_think\n";
     private final ObjectMapper objectMapper;
 
     public ReflectionPromptBuilder(ObjectMapper objectMapper, MinikunPersonaProvider personaProvider) {
@@ -21,7 +22,7 @@ public final class ReflectionPromptBuilder {
         Objects.requireNonNull(currentDate, "currentDate must not be null");
         try {
             String messages = objectMapper.writeValueAsString(conversation.messages());
-            String content = """
+                String content = NO_THINK_PREFIX + """
                     [Reflection instructions]
                     Extract only durable, user-confirmed memories from the conversation snapshot below.
                     Return exactly one JSON object with a `memories` array and no surrounding text.
