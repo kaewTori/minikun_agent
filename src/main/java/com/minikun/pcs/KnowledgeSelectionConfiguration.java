@@ -30,8 +30,11 @@ public class KnowledgeSelectionConfiguration {
     KnowledgeRelevanceService aiKnowledgeRelevanceService(
             ChatModel chatModel,
             ObjectMapper objectMapper,
-            KnowledgeRelevancePolicy policy) {
-        return new AiKnowledgeRelevanceService(chatModel, objectMapper, policy);
+            KnowledgeRelevancePolicy policy,
+            @Value("${minikun.knowledge-relevance.ai.minimum-candidates:6}") int minimumCandidates) {
+        return new ThresholdKnowledgeRelevanceService(
+                new AiKnowledgeRelevanceService(chatModel, objectMapper, policy),
+                new DefaultKnowledgeRelevanceService(policy), minimumCandidates);
     }
 
     @Bean
@@ -46,7 +49,8 @@ public class KnowledgeSelectionConfiguration {
             @Value("${minikun.memory.model:${spring.ai.ollama.chat.options.model:main-model}}") String model,
             @Value("${spring.ai.ollama.base-url:http://127.0.0.1:11434}") String baseUrl,
             @Value("${minikun.memory.main-model.timeout:240s}") Duration timeout,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            @Value("${minikun.knowledge-ranking.ai.minimum-candidates:6}") int minimumCandidates) {
         var httpClient = HttpClient.newBuilder()
                 .connectTimeout(timeout)
                 .build();
@@ -56,7 +60,8 @@ public class KnowledgeSelectionConfiguration {
                 .baseUrl(baseUrl)
                 .restClientBuilder(RestClient.builder().requestFactory(requestFactory))
                 .build();
-        return new AiKnowledgeRankingService(ollamaApi, model, objectMapper);
+        return new ThresholdKnowledgeRankingService(
+                new AiKnowledgeRankingService(ollamaApi, model, objectMapper), minimumCandidates);
     }
 
     @Bean

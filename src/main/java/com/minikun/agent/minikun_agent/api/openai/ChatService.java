@@ -7,6 +7,8 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.messages.Message;
@@ -310,6 +312,9 @@ public class ChatService {
 
     @Value("${minikun.search.query-planning.enabled:true}")
     private boolean searchQueryPlanningEnabled;
+
+    @Value("${minikun.search.result-limit:8}")
+    private int configuredSearchResultLimit;
 
     @Value("${minikun.model.generation.temperature:0.5}")
     private double configuredGenerationTemperature;
@@ -823,10 +828,13 @@ public class ChatService {
                 !memoryKnowledge.content().isBlank());
         log.info("process=external_context event=planned action={} confidence={} reason={}",
                 externalDecision.action(), externalDecision.confidence(), externalDecision.reason());
-        if (externalDecision.action() == com.minikun.search.model.ExternalContextAction.OPEN_EXPLICIT_URL
-                || externalDecision.action() == com.minikun.search.model.ExternalContextAction.SEARCH_THEN_OPEN) {
-            browserCandidates = readBrowserCandidates(query);
-        }
+        boolean shouldOpenBrowser = externalDecision.action()
+                == com.minikun.search.model.ExternalContextAction.OPEN_EXPLICIT_URL
+                || externalDecision.action()
+                == com.minikun.search.model.ExternalContextAction.SEARCH_THEN_OPEN;
+        CompletableFuture<List<KnowledgeCandidate>> browserFuture = shouldOpenBrowser
+                ? CompletableFuture.supplyAsync(() -> readBrowserCandidates(query))
+                : CompletableFuture.completedFuture(List.of());
         SearchQueryPlan plan = searchQueryPlanningEnabled
                 ? searchQueryPlanningService.plan(query, decision)
                 : new SearchQueryPlan(decision.shouldSearch(), query,
@@ -840,6 +848,7 @@ public class ChatService {
         SearchSelectionSignals searchSignals = searchSelectionSignalMapper.map(decision);
         if (!plan.shouldSearch()) {
             log.info("process=search event=skipped reason=query_plan");
+            browserCandidates = joinBrowser(browserFuture);
             return selectionWithContext(query, conversationContextAvailable, memoryKnowledge,
                     plannedDecision, false, null, browserCandidates, searchSignals);
         }
@@ -851,12 +860,15 @@ public class ChatService {
             SearchRequest searchRequest = new SearchRequest(
                     UUID.randomUUID(),
                     plan.primaryQuery(),
-                    10,
+                    configuredSearchResultLimit,
                     Instant.now().plus(searchTimeout),
                         new SearchOptions(plan.language(), categoryFor(plannedDecision, plan.intent()), plan.timeRange(),
                             searchSafeSearch),
                     plan.alternateQueries());
-            searchKnowledge = searchService.search(searchRequest);
+            CompletableFuture<KnowledgeContext> searchFuture =
+                    CompletableFuture.supplyAsync(() -> searchService.search(searchRequest));
+            browserCandidates = joinBrowser(browserFuture);
+            searchKnowledge = searchFuture.join();
             log.info("Search completed knowledgeCharacters={}",
                     searchKnowledge == null ? 0 : searchKnowledge.content().length());
             return pipelineSelection(query, conversationContextAvailable, memoryKnowledge,
@@ -999,6 +1011,18 @@ public class ChatService {
                 log.warn("process=browser event=url_failed url={} reason={}",
                         failure.url(), failure.reason()));
         return browserRead.candidates();
+    }
+
+    private List<KnowledgeCandidate> joinBrowser(CompletableFuture<List<KnowledgeCandidate>> future) {
+        try {
+            return future.join();
+        } catch (CompletionException exception) {
+            Throwable cause = exception.getCause();
+            if (cause instanceof BrowserContentException browserException) {
+                throw browserException;
+            }
+            throw exception;
+        }
     }
 
     private record ChatExecutionContext(

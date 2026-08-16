@@ -2,6 +2,10 @@ package com.minikun.search.internal;
 
 import java.util.List;
 import java.util.Objects;
+import java.time.Duration;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -17,20 +21,38 @@ import com.minikun.search.model.SearchDecisionReason;
 final class TaskModelSearchDecisionProvider implements SearchDecisionClient {
     private final TaskModelProvider taskModelProvider;
     private final ObjectMapper objectMapper;
+    private final Duration timeout;
 
     TaskModelSearchDecisionProvider(TaskModelProvider taskModelProvider, ObjectMapper objectMapper) {
+        this(taskModelProvider, objectMapper, Duration.ofSeconds(5));
+    }
+
+    TaskModelSearchDecisionProvider(
+            TaskModelProvider taskModelProvider, ObjectMapper objectMapper, Duration timeout) {
         this.taskModelProvider = Objects.requireNonNull(taskModelProvider, "taskModelProvider must not be null");
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper must not be null");
+        this.timeout = Objects.requireNonNull(timeout, "timeout must not be null");
     }
 
     @Override
     public SearchDecision classify(SearchDecisionPrompt prompt) {
         try {
-            String response = taskModelProvider.generate(new TaskModelRequest(
+            TaskModelRequest request = new TaskModelRequest(
                     List.of(new TaskModelMessage("system", prompt.instructions()),
                             new TaskModelMessage("user", "/no_think\ncurrentDate: %s\nuserMessage: %s"
                                     .formatted(prompt.currentDate(), prompt.userMessage()))),
-                    256, 0.0, TaskModelRequest.ResponseFormat.JSON_OBJECT));
+                    256, 0.0, TaskModelRequest.ResponseFormat.JSON_OBJECT);
+            String response;
+            try {
+                response = CompletableFuture.supplyAsync(() -> taskModelProvider.generate(request))
+                        .orTimeout(timeout.toMillis(), TimeUnit.MILLISECONDS)
+                        .get();
+            } catch (ExecutionException exception) {
+                throw new SearchDecisionClientException("search decision timed out", exception);
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+                throw new SearchDecisionClientException("search decision interrupted", exception);
+            }
             JsonNode root = objectMapper.readTree(response);
             validateSchema(root);
             return new SearchDecision(root.get("shouldSearch").booleanValue(),

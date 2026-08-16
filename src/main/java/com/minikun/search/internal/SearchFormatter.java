@@ -6,6 +6,7 @@ import com.minikun.pcs.KnowledgeSource;
 import com.minikun.pcs.model.ImageSource;
 import com.minikun.search.model.ImageSearchResult;
 import com.minikun.search.model.SearchResponse;
+import com.minikun.search.model.SearchResult;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -35,6 +36,22 @@ final class SearchFormatter {
                 "search-" + index, KnowledgeSource.SEARCH, content, index));
         }
         return KnowledgeContext.fromCandidates(candidates);
+    }
+
+    SearchResponse filterQuality(SearchResponse response) {
+        if (response == null || response.results().isEmpty()) {
+            return response;
+        }
+        List<SearchResult> usable = response.results().stream()
+                .filter(result -> {
+                    SearchSourceQuality quality = qualityClassifier.classify(result);
+                    return quality == SearchSourceQuality.USABLE
+                            || quality == SearchSourceQuality.LOW_INFORMATION;
+                })
+                .toList();
+        return usable.size() == response.results().size()
+                ? response
+                : new SearchResponse(response.requestId(), response.status(), usable, response.metadata());
     }
 
     KnowledgeContext formatImages(List<ImageSearchResult> results, int resultLimit) {

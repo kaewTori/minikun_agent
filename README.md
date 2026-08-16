@@ -139,12 +139,20 @@ events.addEventListener("cooperative-review", event => {
   if (review.status !== "PENDING") events.close();
 });
 ```
+
+การ route ปัจจุบันใช้กฎแบบเร็ว 3 ระดับ: `LOW` ให้ Ollama ตอบทันที,
+`MEDIUM` ให้ Ollama ตอบก่อนแล้ว TinyGrad ตรวจเบื้องหลัง และ `HIGH` รอ TinyGrad
+ก่อนส่งคำตอบ เช่น สุขภาพ การเงิน กฎหมาย ความปลอดภัย และข้อมูล credential
 | `MINIKUN_SEARCH_CACHE_ENABLED` | `true` | เปิด/ปิด search cache |
 | `MINIKUN_SEARCH_CACHE_TTL` | `PT5M` | อายุ search cache |
 | `MINIKUN_SEARCH_SAFESEARCH` | `true` | ส่ง safe-search option ให้ SearXNG |
+| `MINIKUN_SEARCH_RESULT_LIMIT` | `8` | จำนวนผลลัพธ์ search ต่อ query |
 | `MINIKUN_SEARCH_QUERY_PLANNING_ENABLED` | `true` | เปิด query planning และ core keyword extraction |
 | `MINIKUN_SEARCH_QUERY_PLANNING_MAX_ALTERNATES` | `2` | จำนวน alternate queries สูงสุด |
 | `MINIKUN_SEARCH_CACHE_PROVIDER_VERSION` | `v1` | version ของ provider ที่รวมใน cache key |
+| `MINIKUN_SEARCH_PARALLEL_QUERIES_ENABLED` | `true` | ทำ expanded search queries แบบ parallel |
+| `MINIKUN_SEARCH_PARALLEL_QUERIES_MAX_CONCURRENCY` | `3` | จำนวน search query สูงสุดที่ทำพร้อมกัน |
+| `MINIKUN_SEARCH_DECISION_TIMEOUT` | `5s` | timeout เฉพาะ search classifier |
 | `MINIKUN_BROWSER_ENABLED` | `true` | เปิด/ปิดการอ่าน URL ผ่าน minikun-browser-worker |
 | `MINIKUN_BROWSER_WORKER_URL` | `http://127.0.0.1:3000` | endpoint ของ browser worker |
 | `MINIKUN_BROWSER_WORKER_TOKEN` | ว่าง | Bearer token ที่ตรงกับ `BROWSER_WORKER_TOKEN` ของ worker |
@@ -152,6 +160,7 @@ events.addEventListener("cooperative-review", event => {
 | `MINIKUN_BROWSER_MAX_URLS` | `5` | จำนวน URL สูงสุดต่อข้อความ |
 | `MINIKUN_BROWSER_BLOCK_PRIVATE_ADDRESSES` | `true` | ป้องกัน browser worker เข้าถึง localhost/private network |
 | `MINIKUN_BROWSER_MAX_CONTENT_CHARACTERS` | `12000` | ขนาดเนื้อหาสูงสุดต่อ URL ก่อนใส่เข้า Knowledge context |
+| `MINIKUN_BROWSER_MAX_CONCURRENCY` | `3` | จำนวน URL ที่ browser worker อ่านพร้อมกัน |
 | `SPRING_AI_CHAT_MEMORY_MAX_MESSAGES` | `20` | จำนวนข้อความ short-term memory สูงสุด |
 | `MINIKUN_MEMORY_RECALL_MAXIMUM_COUNT` | `10` | จำนวน long-term memories ที่เรียกคืนสูงสุด |
 | `MINIKUN_MEMORY_RECALL_MAXIMUM_CHARACTERS` | `4000` | ขนาด Knowledge context สูงสุด |

@@ -122,25 +122,41 @@ public final class DefaultSearchService implements SearchService {
                         .toList();
             if (cacheEnabled) {
                     List<KnowledgeContext> cachedContexts = new ArrayList<>();
-                    boolean allCached = true;
-                    for (SearchCacheKey key : keys) {
+                    List<String> missingQueries = new ArrayList<>();
+                    for (int index = 0; index < keys.size(); index++) {
+                        SearchCacheKey key = keys.get(index);
                         try {
                             Optional<KnowledgeContext> cached = cache.get(key);
                             if (cached.isPresent()) {
                                 cachedContexts.add(cached.get());
                             } else {
-                                allCached = false;
+                                missingQueries.add(expandedSearchQuery.expandedQueries().get(index));
                             }
                         } catch (RuntimeException exception) {
-                            allCached = false;
+                            missingQueries.add(expandedSearchQuery.expandedQueries().get(index));
                             LOGGER.warn("Search cache lookup failed; continuing with live search", exception);
                     }
                     }
-                    if (allCached) {
-                        if (cachedContexts.size() == 1) {
-                            return cachedContexts.get(0);
+                    if (missingQueries.isEmpty()) {
+                        return cachedContexts.size() == 1
+                                ? cachedContexts.get(0) : combineCachedContexts(cachedContexts, request);
+                    }
+                    if (!cachedContexts.isEmpty()) {
+                        List<KnowledgeContext> contexts = new ArrayList<>(cachedContexts);
+                        for (String missingQuery : missingQueries) {
+                            KnowledgeContext live = manager.search(
+                                    new SearchRequest(request.requestId(), missingQuery, request.resultLimit(),
+                                            request.deadline(), request.options(), List.of()),
+                                    new ExpandedSearchQuery(missingQuery, missingQuery, List.of(missingQuery)));
+                            contexts.add(live);
+                            try {
+                                cache.put(SearchCacheKey.from(missingQuery, request.resultLimit(),
+                                        request.options(), providerVersion), live);
+                            } catch (RuntimeException exception) {
+                                LOGGER.warn("Search cache insertion failed for missing query", exception);
+                            }
                         }
-                        return combineCachedContexts(cachedContexts, request);
+                        return combineCachedContexts(contexts, request);
                 }
             } else {
                 increment(BYPASS_COUNTER);

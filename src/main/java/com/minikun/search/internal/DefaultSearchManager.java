@@ -21,6 +21,9 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.Semaphore;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
@@ -41,6 +44,8 @@ public final class DefaultSearchManager implements SearchManager {
     private final SearchDeduplicator deduplicator;
     private final SearchBudgeter budgeter;
     private final SearchFormatter formatter;
+    private final boolean parallelQueries;
+    private final int maxConcurrentQueries;
 
     public DefaultSearchManager(
             SearchProvider provider,
@@ -60,6 +65,19 @@ public final class DefaultSearchManager implements SearchManager {
             SearchBudgeter budgeter,
             SearchFormatter formatter,
             MeterRegistry meterRegistry) {
+        this(provider, clock, maxRetries, deduplicator, budgeter, formatter, meterRegistry, false, 1);
+    }
+
+    public DefaultSearchManager(
+            SearchProvider provider,
+            Clock clock,
+            int maxRetries,
+            SearchDeduplicator deduplicator,
+            SearchBudgeter budgeter,
+            SearchFormatter formatter,
+            MeterRegistry meterRegistry,
+            boolean parallelQueries,
+            int maxConcurrentQueries) {
         this.provider = Objects.requireNonNull(provider, "provider must not be null");
         this.clock = Objects.requireNonNull(clock, "clock must not be null");
         this.meterRegistry = meterRegistry;
@@ -69,7 +87,12 @@ public final class DefaultSearchManager implements SearchManager {
         if (maxRetries < 0) {
             throw new IllegalArgumentException("max retries must not be negative");
         }
+        if (maxConcurrentQueries < 1) {
+            throw new IllegalArgumentException("max concurrent queries must be positive");
+        }
         this.maxRetries = maxRetries;
+        this.parallelQueries = parallelQueries;
+        this.maxConcurrentQueries = maxConcurrentQueries;
     }
 
     @Override
@@ -89,12 +112,9 @@ public final class DefaultSearchManager implements SearchManager {
         List<ImageSearchResult> providerImageResults = new ArrayList<>();
         RuntimeException failure = null;
         try {
+            List<Execution> executions = executeExpandedQueries(request, expandedQuery);
             int retryCount = 0;
-            for (String query : expandedQuery.expandedQueries()) {
-                SearchRequest expandedRequest = new SearchRequest(
-                        request.requestId(), query, request.resultLimit(), request.deadline(),
-                        request.options(), List.of());
-                Execution execution = execute(expandedRequest);
+            for (Execution execution : executions) {
                 providerResults.addAll(execution.response().results());
                 providerImageResults.addAll(execution.response().images());
                 retryCount += execution.retryCount();
@@ -114,7 +134,8 @@ public final class DefaultSearchManager implements SearchManager {
                 request.requestId(), status, providerResponse.results(), metadata);
             SearchResponse deduplicated = deduplicator.deduplicate(response);
             SearchResponse ranked = new SearchRanker().rank(deduplicated, request.query(), request.options());
-            KnowledgeContext result = formatter.format(budgeter.budget(ranked), request.query());
+            SearchResponse qualityFiltered = formatter.filterQuality(ranked);
+            KnowledgeContext result = formatter.format(budgeter.budget(qualityFiltered), request.query());
             recordQuality(result);
             return result;
         } catch (RuntimeException exception) {
@@ -221,6 +242,50 @@ public final class DefaultSearchManager implements SearchManager {
     }
 
     private record Execution(SearchProviderResponse response, int retryCount) {
+    }
+
+    private List<Execution> executeExpandedQueries(
+            SearchRequest request, ExpandedSearchQuery expandedQuery) {
+        if (!parallelQueries || expandedQuery.expandedQueries().size() < 2) {
+            List<Execution> executions = new ArrayList<>();
+            for (String query : expandedQuery.expandedQueries()) {
+                executions.add(execute(new SearchRequest(request.requestId(), query, request.resultLimit(),
+                        request.deadline(), request.options(), List.of())));
+            }
+            return executions;
+        }
+        Semaphore permits = new Semaphore(maxConcurrentQueries);
+        List<CompletableFuture<Execution>> futures = expandedQuery.expandedQueries().stream()
+                .map(query -> CompletableFuture.supplyAsync(() -> {
+                    boolean acquired = false;
+                    try {
+                        permits.acquire();
+                        acquired = true;
+                        return execute(new SearchRequest(request.requestId(), query, request.resultLimit(),
+                                request.deadline(), request.options(), List.of()));
+                    } catch (InterruptedException exception) {
+                        Thread.currentThread().interrupt();
+                        throw new SearchTimeoutException("parallel search execution interrupted");
+                    } finally {
+                        if (acquired) {
+                            permits.release();
+                        }
+                    }
+                }))
+                .toList();
+        List<Execution> executions = new ArrayList<>(futures.size());
+        for (CompletableFuture<Execution> future : futures) {
+            try {
+                executions.add(future.join());
+            } catch (CompletionException exception) {
+                Throwable cause = exception.getCause();
+                if (cause instanceof RuntimeException runtimeException) {
+                    throw runtimeException;
+                }
+                throw exception;
+            }
+        }
+        return executions;
     }
 
     private void ensureWithinDeadline(SearchRequest request) {

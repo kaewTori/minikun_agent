@@ -2,7 +2,6 @@ package com.minikun.model;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.regex.Pattern;
 import java.util.concurrent.CompletableFuture;
 
 import org.springframework.ai.chat.messages.AssistantMessage;
@@ -21,14 +20,9 @@ import reactor.core.publisher.Flux;
 @Service
 @Slf4j
 public final class CooperativeChatModelService {
-    private static final Pattern VERIFICATION_SIGNAL = Pattern.compile(
-            "(ล่าสุด|ปัจจุบัน|วันนี้|แม่นยำ|ชัดเจน|ตรวจสอบ|อ้างอิง|เปรียบเทียบ|คำนวณ|ตัวเลข|โค้ด|ข้อผิดพลาด|"
-                    + "exact|accurate|verify|fact.?check|current|latest|today|precise|compare|calculate|number|"
-                    + "code|error|debug|source|citation|why|how to)",
-            Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
-
     private final ChatModelProviderRegistry registry;
     private final CooperativeReviewStore reviewStore;
+    private final CooperationRouter router;
     private final boolean enabled;
     private final String mode;
     private final int maxDraftCharacters;
@@ -36,11 +30,13 @@ public final class CooperativeChatModelService {
     public CooperativeChatModelService(
             ChatModelProviderRegistry registry,
             CooperativeReviewStore reviewStore,
+            CooperationRouter router,
             @Value("${minikun.model.cooperation.enabled:false}") boolean enabled,
             @Value("${minikun.model.cooperation.mode:blocking}") String mode,
             @Value("${minikun.model.cooperation.max-draft-characters:12000}") int maxDraftCharacters) {
         this.registry = registry;
         this.reviewStore = reviewStore;
+        this.router = router;
         this.enabled = enabled;
         this.mode = mode == null ? "blocking" : mode.trim().toLowerCase();
         this.maxDraftCharacters = Math.max(1000, maxDraftCharacters);
@@ -48,28 +44,31 @@ public final class CooperativeChatModelService {
 
     public ChatResponse chat(ChatModelProvider frontLine, Prompt prompt) {
         ChatResponse draft = frontLine.chat(prompt);
-        if ("hybrid".equals(mode) && shouldVerify(frontLine, prompt)) {
+        CooperationRoutingDecision decision = decision(frontLine, prompt);
+        if ("hybrid".equals(mode) && decision.needsExpert() && decision.risk() != CooperationRisk.HIGH) {
             submitReview(prompt, draft, "unknown");
             return draft;
         }
-        return shouldVerify(frontLine, prompt) ? verifyOrFallback(prompt, draft) : draft;
+        return decision.needsExpert() ? verifyOrFallback(prompt, draft) : draft;
     }
 
     public ChatResponse chat(ChatModelProvider frontLine, Prompt prompt, String conversationId) {
         ChatResponse draft = frontLine.chat(prompt);
-        if ("hybrid".equals(mode) && shouldVerify(frontLine, prompt)) {
+        CooperationRoutingDecision decision = decision(frontLine, prompt);
+        if ("hybrid".equals(mode) && decision.needsExpert() && decision.risk() != CooperationRisk.HIGH) {
             submitReview(prompt, draft, conversationId);
             return draft;
         }
-        return shouldVerify(frontLine, prompt) ? verifyOrFallback(prompt, draft) : draft;
+        return decision.needsExpert() ? verifyOrFallback(prompt, draft) : draft;
     }
 
     /** Buffer only precision-sensitive streams so an unverified draft is never emitted before its rewrite. */
     public Flux<ChatResponse> stream(ChatModelProvider frontLine, Prompt prompt) {
-        if (!shouldVerify(frontLine, prompt)) {
+        CooperationRoutingDecision decision = decision(frontLine, prompt);
+        if (!decision.needsExpert()) {
             return frontLine.stream(prompt);
         }
-        if ("hybrid".equals(mode)) {
+        if ("hybrid".equals(mode) && decision.risk() != CooperationRisk.HIGH) {
             return streamAndReview(frontLine, prompt, "unknown");
         }
         return frontLine.stream(prompt).collectList().flatMapMany(chunks -> {
@@ -79,10 +78,11 @@ public final class CooperativeChatModelService {
     }
 
     public Flux<ChatResponse> stream(ChatModelProvider frontLine, Prompt prompt, String conversationId) {
-        if (!shouldVerify(frontLine, prompt)) {
+        CooperationRoutingDecision decision = decision(frontLine, prompt);
+        if (!decision.needsExpert()) {
             return frontLine.stream(prompt);
         }
-        if ("hybrid".equals(mode)) {
+        if ("hybrid".equals(mode) && decision.risk() != CooperationRisk.HIGH) {
             return streamAndReview(frontLine, prompt, conversationId);
         }
         return frontLine.stream(prompt).collectList().flatMapMany(chunks -> {
@@ -143,17 +143,19 @@ public final class CooperativeChatModelService {
         }
     }
 
-    private boolean shouldVerify(ChatModelProvider frontLine, Prompt prompt) {
+    private CooperationRoutingDecision decision(ChatModelProvider frontLine, Prompt prompt) {
         if (!enabled || frontLine.id() != ChatModelId.EXISTING) {
-            return false;
+            return CooperationRoutingDecision.low();
         }
         String userText = prompt.getInstructions().stream()
                 .filter(message -> "user".equalsIgnoreCase(message.getMessageType().getValue()))
                 .map(Message::getText)
                 .reduce((left, right) -> right)
                 .orElse("");
-        return VERIFICATION_SIGNAL.matcher(userText).find()
-                || userText.contains("?") || userText.contains("？") || userText.length() > 600;
+        CooperationRoutingDecision result = router.decide(userText);
+        log.debug("cooperation_route risk={} needs_expert={} reason={}",
+                result.risk(), result.needsExpert(), result.reason());
+        return result;
     }
 
     private Prompt verificationPrompt(Prompt original, ChatResponse draft) {

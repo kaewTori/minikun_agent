@@ -58,9 +58,12 @@ public class SearchConfiguration {
             SearchDeduplicator deduplicator,
             SearchBudgeter budgeter,
             SearchFormatter formatter,
-            MeterRegistry meterRegistry) {
+            MeterRegistry meterRegistry,
+            @Value("${minikun.search.parallel-queries.enabled:true}") boolean parallelQueries,
+            @Value("${minikun.search.parallel-queries.max-concurrency:3}") int maxConcurrentQueries) {
         return new DefaultSearchManager(
-                provider, memoryClock, maxRetries, deduplicator, budgeter, formatter, meterRegistry);
+                provider, memoryClock, maxRetries, deduplicator, budgeter, formatter, meterRegistry,
+                parallelQueries, maxConcurrentQueries);
     }
 
     @Bean
@@ -138,8 +141,9 @@ public class SearchConfiguration {
 
         @Bean
         SearchDecisionProvider searchDecisionProvider(TaskModelProvider taskModelProvider,
-            ObjectMapper objectMapper) {
-        return new TaskModelSearchDecisionProvider(taskModelProvider, objectMapper);
+            ObjectMapper objectMapper,
+            @Value("${minikun.search.decision.timeout:PT5S}") Duration timeout) {
+        return new TaskModelSearchDecisionProvider(taskModelProvider, objectMapper, timeout);
         }
 
     @Bean
@@ -164,6 +168,8 @@ public class SearchConfiguration {
             default -> throw new IllegalArgumentException(
                     "Unsupported minikun.search.decision.mode: " + mode);
         };
+        decisionService = new FastPathSearchDecisionService(
+                decisionService, new RuleBasedSearchDecisionService(meterRegistry));
         return new ImageIntentSearchDecisionService(decisionService, imageIntentDetector);
     }
 
