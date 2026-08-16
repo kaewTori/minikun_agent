@@ -116,6 +116,7 @@ Actuator ที่เปิดให้เข้าถึงคือ `/actuator
 | `OLLAMA_NUM_CTX` | `16384` | context window ของ Ollama |
 | `MINIKUN_MODEL_COOPERATION_ENABLED` | `true` | เปิด Ollama → TinyGrad precision pass |
 | `MINIKUN_MODEL_COOPERATION_MODE` | `hybrid` | `hybrid` แสดง Ollama ก่อนแล้วตรวจเบื้องหลัง, `blocking` รอตรวจให้เสร็จก่อนตอบ |
+| `MINIKUN_MODEL_COOPERATION_TIMEOUT` | `PT20S` | timeout เฉพาะ TinyGrad verification; timeout แล้ว fallback ตาม mode |
 | `MINIKUN_TINYGRAD_MODEL` | `Qwen3.6` | model ที่ TinyGrad ใช้ตรวจ/เสริมคำตอบ |
 | `MINIKUN_TINYGRAD_BASE_URL` | `http://localhost:8001/v1` | TinyGrad OpenAI-compatible endpoint |
 | `VALKEY_URL` | `redis://127.0.0.1:6379` | Valkey/Redis endpoint |

@@ -3,6 +3,9 @@ package com.minikun.model;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.time.Duration;
+import java.util.concurrent.TimeUnit;
 
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
@@ -25,6 +28,7 @@ public final class CooperativeChatModelService {
     private final CooperationRouter router;
     private final boolean enabled;
     private final String mode;
+    private final Duration verificationTimeout;
     private final int maxDraftCharacters;
 
     public CooperativeChatModelService(
@@ -33,12 +37,15 @@ public final class CooperativeChatModelService {
             CooperationRouter router,
             @Value("${minikun.model.cooperation.enabled:false}") boolean enabled,
             @Value("${minikun.model.cooperation.mode:blocking}") String mode,
+            @Value("${minikun.model.cooperation.timeout:PT20S}") Duration verificationTimeout,
             @Value("${minikun.model.cooperation.max-draft-characters:12000}") int maxDraftCharacters) {
         this.registry = registry;
         this.reviewStore = reviewStore;
         this.router = router;
         this.enabled = enabled;
         this.mode = mode == null ? "blocking" : mode.trim().toLowerCase();
+        this.verificationTimeout = verificationTimeout == null || verificationTimeout.isNegative()
+                || verificationTimeout.isZero() ? Duration.ofSeconds(20) : verificationTimeout;
         this.maxDraftCharacters = Math.max(1000, maxDraftCharacters);
     }
 
@@ -122,7 +129,7 @@ public final class CooperativeChatModelService {
 
     private ChatResponse verifyOrFallbackWithoutFallback(Prompt prompt, String draftText) {
         ChatModelProvider verifier = registry.get(ChatModelId.TINYGRAD);
-        return verifier.chat(verificationPrompt(prompt,
+        return callWithTimeout(verifier, verificationPrompt(prompt,
                 new ChatResponse(List.of(new Generation(new AssistantMessage(draftText))))));
     }
 
@@ -136,10 +143,21 @@ public final class CooperativeChatModelService {
     private ChatResponse verifyOrFallback(Prompt prompt, ChatResponse draft) {
         try {
             ChatModelProvider verifier = registry.get(ChatModelId.TINYGRAD);
-            return verifier.chat(verificationPrompt(prompt, draft));
+            return callWithTimeout(verifier, verificationPrompt(prompt, draft));
         } catch (RuntimeException exception) {
             log.warn("TinyGrad verification failed; returning Ollama draft", exception);
             return draft;
+        }
+    }
+
+    private ChatResponse callWithTimeout(ChatModelProvider verifier, Prompt prompt) {
+        try {
+            return CompletableFuture.supplyAsync(() -> verifier.chat(prompt))
+                    .orTimeout(verificationTimeout.toMillis(), TimeUnit.MILLISECONDS)
+                    .join();
+        } catch (CompletionException exception) {
+            Throwable cause = exception.getCause() == null ? exception : exception.getCause();
+            throw new IllegalStateException("TinyGrad verification timed out or failed", cause);
         }
     }
 
@@ -168,14 +186,26 @@ public final class CooperativeChatModelService {
         }
         List<Message> messages = new ArrayList<>(original.getInstructions());
         messages.add(new UserMessage("""
-                ตรวจคำตอบร่างด้านล่าง แล้วตอบผู้ใช้ด้วยคำตอบสุดท้ายเพียงครั้งเดียว
+                คุณคือ specialist reviewer ของผู้ช่วยหลัก จงตรวจคำตอบร่างด้านล่าง แล้วตอบผู้ใช้ด้วยคำตอบสุดท้ายเพียงครั้งเดียว
+                ระดับความเสี่ยงและเหตุผลของการส่งงาน: %s
+                รักษา personality, ภาษา, น้ำเสียง และรูปแบบการตอบจาก system prompt เดิม
                 แก้ไขข้อเท็จจริง เหตุผล ตัวเลข และโค้ดที่ไม่ถูกต้อง หากข้อมูลไม่พอให้ระบุข้อจำกัดอย่างตรงไปตรงมา
                 ห้ามพูดถึงการตรวจสอบ โมเดล ร่างคำตอบ หรือขั้นตอนภายใน และอย่าเพิ่มข้อมูลที่ไม่มีหลักฐาน
 
                 [คำตอบร่างจาก Ollama]
                 %s
-                """.formatted(draftText)));
+                """.formatted(routeHint(original), draftText)));
         return new Prompt(messages, original.getOptions());
+    }
+
+    private String routeHint(Prompt prompt) {
+        String userText = prompt.getInstructions().stream()
+                .filter(message -> "user".equalsIgnoreCase(message.getMessageType().getValue()))
+                .map(Message::getText)
+                .reduce((left, right) -> right)
+                .orElse("");
+        CooperationRoutingDecision decision = router.decide(userText);
+        return decision.risk() + " / " + decision.reason();
     }
 
     private ChatResponse merge(List<ChatResponse> chunks) {
