@@ -1,0 +1,196 @@
+package com.minikun.model;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.regex.Pattern;
+import java.util.concurrent.CompletableFuture;
+
+import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.ai.chat.messages.Message;
+import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.ai.chat.model.ChatResponse;
+import org.springframework.ai.chat.model.Generation;
+import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+
+import lombok.extern.slf4j.Slf4j;
+import reactor.core.publisher.Flux;
+
+/** Lets Ollama answer first and uses TinyGrad as a precision pass when useful. */
+@Service
+@Slf4j
+public final class CooperativeChatModelService {
+    private static final Pattern VERIFICATION_SIGNAL = Pattern.compile(
+            "(ล่าสุด|ปัจจุบัน|วันนี้|แม่นยำ|ชัดเจน|ตรวจสอบ|อ้างอิง|เปรียบเทียบ|คำนวณ|ตัวเลข|โค้ด|ข้อผิดพลาด|"
+                    + "exact|accurate|verify|fact.?check|current|latest|today|precise|compare|calculate|number|"
+                    + "code|error|debug|source|citation|why|how to)",
+            Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+
+    private final ChatModelProviderRegistry registry;
+    private final CooperativeReviewStore reviewStore;
+    private final boolean enabled;
+    private final String mode;
+    private final int maxDraftCharacters;
+
+    public CooperativeChatModelService(
+            ChatModelProviderRegistry registry,
+            CooperativeReviewStore reviewStore,
+            @Value("${minikun.model.cooperation.enabled:false}") boolean enabled,
+            @Value("${minikun.model.cooperation.mode:blocking}") String mode,
+            @Value("${minikun.model.cooperation.max-draft-characters:12000}") int maxDraftCharacters) {
+        this.registry = registry;
+        this.reviewStore = reviewStore;
+        this.enabled = enabled;
+        this.mode = mode == null ? "blocking" : mode.trim().toLowerCase();
+        this.maxDraftCharacters = Math.max(1000, maxDraftCharacters);
+    }
+
+    public ChatResponse chat(ChatModelProvider frontLine, Prompt prompt) {
+        ChatResponse draft = frontLine.chat(prompt);
+        if ("hybrid".equals(mode) && shouldVerify(frontLine, prompt)) {
+            submitReview(prompt, draft, "unknown");
+            return draft;
+        }
+        return shouldVerify(frontLine, prompt) ? verifyOrFallback(prompt, draft) : draft;
+    }
+
+    public ChatResponse chat(ChatModelProvider frontLine, Prompt prompt, String conversationId) {
+        ChatResponse draft = frontLine.chat(prompt);
+        if ("hybrid".equals(mode) && shouldVerify(frontLine, prompt)) {
+            submitReview(prompt, draft, conversationId);
+            return draft;
+        }
+        return shouldVerify(frontLine, prompt) ? verifyOrFallback(prompt, draft) : draft;
+    }
+
+    /** Buffer only precision-sensitive streams so an unverified draft is never emitted before its rewrite. */
+    public Flux<ChatResponse> stream(ChatModelProvider frontLine, Prompt prompt) {
+        if (!shouldVerify(frontLine, prompt)) {
+            return frontLine.stream(prompt);
+        }
+        if ("hybrid".equals(mode)) {
+            return streamAndReview(frontLine, prompt, "unknown");
+        }
+        return frontLine.stream(prompt).collectList().flatMapMany(chunks -> {
+            ChatResponse draft = merge(chunks);
+            return draft == null ? Flux.empty() : Flux.just(verifyOrFallback(prompt, draft));
+        });
+    }
+
+    public Flux<ChatResponse> stream(ChatModelProvider frontLine, Prompt prompt, String conversationId) {
+        if (!shouldVerify(frontLine, prompt)) {
+            return frontLine.stream(prompt);
+        }
+        if ("hybrid".equals(mode)) {
+            return streamAndReview(frontLine, prompt, conversationId);
+        }
+        return frontLine.stream(prompt).collectList().flatMapMany(chunks -> {
+            ChatResponse draft = merge(chunks);
+            return draft == null ? Flux.empty() : Flux.just(verifyOrFallback(prompt, draft));
+        });
+    }
+
+    private Flux<ChatResponse> streamAndReview(
+            ChatModelProvider frontLine, Prompt prompt, String conversationId) {
+        StringBuilder draftText = new StringBuilder();
+        return frontLine.stream(prompt)
+                .doOnNext(response -> append(draftText, response))
+                .doOnComplete(() -> submitReviewText(prompt, draftText.toString(), conversationId));
+    }
+
+    private void submitReview(Prompt prompt, ChatResponse draft, String conversationId) {
+        submitReviewText(prompt, draft.getResult().getOutput().getText(), conversationId);
+    }
+
+    private void submitReviewText(Prompt prompt, String draftText, String conversationId) {
+        if (draftText == null || draftText.isBlank()) {
+            return;
+        }
+        reviewStore.pending(conversationId, draftText);
+        CompletableFuture.runAsync(() -> {
+            try {
+                ChatResponse revised = verifyOrFallbackWithoutFallback(prompt, draftText);
+                String revisedText = revised.getResult().getOutput().getText();
+                reviewStore.completed(conversationId, draftText, revisedText);
+            } catch (RuntimeException exception) {
+                reviewStore.failed(conversationId, draftText, exception.getMessage());
+                log.warn("TinyGrad background verification failed conversation_id={}", conversationId, exception);
+            }
+        });
+    }
+
+    private ChatResponse verifyOrFallbackWithoutFallback(Prompt prompt, String draftText) {
+        ChatModelProvider verifier = registry.get(ChatModelId.TINYGRAD);
+        return verifier.chat(verificationPrompt(prompt,
+                new ChatResponse(List.of(new Generation(new AssistantMessage(draftText))))));
+    }
+
+    private void append(StringBuilder target, ChatResponse response) {
+        if (response != null && response.getResult() != null && response.getResult().getOutput() != null
+                && response.getResult().getOutput().getText() != null) {
+            target.append(response.getResult().getOutput().getText());
+        }
+    }
+
+    private ChatResponse verifyOrFallback(Prompt prompt, ChatResponse draft) {
+        try {
+            ChatModelProvider verifier = registry.get(ChatModelId.TINYGRAD);
+            return verifier.chat(verificationPrompt(prompt, draft));
+        } catch (RuntimeException exception) {
+            log.warn("TinyGrad verification failed; returning Ollama draft", exception);
+            return draft;
+        }
+    }
+
+    private boolean shouldVerify(ChatModelProvider frontLine, Prompt prompt) {
+        if (!enabled || frontLine.id() != ChatModelId.EXISTING) {
+            return false;
+        }
+        String userText = prompt.getInstructions().stream()
+                .filter(message -> "user".equalsIgnoreCase(message.getMessageType().getValue()))
+                .map(Message::getText)
+                .reduce((left, right) -> right)
+                .orElse("");
+        return VERIFICATION_SIGNAL.matcher(userText).find()
+                || userText.contains("?") || userText.contains("？") || userText.length() > 600;
+    }
+
+    private Prompt verificationPrompt(Prompt original, ChatResponse draft) {
+        String draftText = draft.getResult().getOutput().getText();
+        if (draftText == null) {
+            draftText = "";
+        }
+        if (draftText.length() > maxDraftCharacters) {
+            draftText = draftText.substring(0, maxDraftCharacters);
+        }
+        List<Message> messages = new ArrayList<>(original.getInstructions());
+        messages.add(new UserMessage("""
+                ตรวจคำตอบร่างด้านล่าง แล้วตอบผู้ใช้ด้วยคำตอบสุดท้ายเพียงครั้งเดียว
+                แก้ไขข้อเท็จจริง เหตุผล ตัวเลข และโค้ดที่ไม่ถูกต้อง หากข้อมูลไม่พอให้ระบุข้อจำกัดอย่างตรงไปตรงมา
+                ห้ามพูดถึงการตรวจสอบ โมเดล ร่างคำตอบ หรือขั้นตอนภายใน และอย่าเพิ่มข้อมูลที่ไม่มีหลักฐาน
+
+                [คำตอบร่างจาก Ollama]
+                %s
+                """.formatted(draftText)));
+        return new Prompt(messages, original.getOptions());
+    }
+
+    private ChatResponse merge(List<ChatResponse> chunks) {
+        StringBuilder text = new StringBuilder();
+        ChatResponse last = null;
+        for (ChatResponse chunk : chunks) {
+            if (chunk == null || chunk.getResult() == null || chunk.getResult().getOutput() == null) {
+                continue;
+            }
+            last = chunk;
+            String value = chunk.getResult().getOutput().getText();
+            if (value != null) {
+                text.append(value);
+            }
+        }
+        return last == null
+                ? null
+                : new ChatResponse(List.of(new Generation(new AssistantMessage(text.toString()))), last.getMetadata());
+    }
+}

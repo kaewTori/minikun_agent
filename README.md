@@ -27,6 +27,7 @@
 - Spring AI 2.0.0
 - Maven Wrapper (`./mvnw`)
 - Ollama-compatible chat และ embedding model
+- cooperative model flow: Ollama รับคำถามก่อน และ TinyGrad ช่วยตรวจ/ปรับคำตอบในคำถามที่ต้องการความแม่นยำ
 - PostgreSQL สำหรับ conversation memory และ long-term memory
 - Valkey/Redis สำหรับ search cache
 - SearXNG สำหรับ web search
@@ -112,9 +113,31 @@ Actuator ที่เปิดให้เข้าถึงคือ `/actuator
 | `SPRING_AI_OLLAMA_CHAT_OPTIONS_MODEL` | gemma model ใน properties | chat model หลัก |
 | `EMBEDDING_MODEL` | `nomic-embed-text` | embedding model |
 | `OLLAMA_NUM_CTX` | `16384` | context window ของ Ollama |
+| `MINIKUN_MODEL_COOPERATION_ENABLED` | `true` | เปิด Ollama → TinyGrad precision pass |
+| `MINIKUN_MODEL_COOPERATION_MODE` | `hybrid` | `hybrid` แสดง Ollama ก่อนแล้วตรวจเบื้องหลัง, `blocking` รอตรวจให้เสร็จก่อนตอบ |
+| `MINIKUN_TINYGRAD_MODEL` | `Qwen3.6` | model ที่ TinyGrad ใช้ตรวจ/เสริมคำตอบ |
+| `MINIKUN_TINYGRAD_BASE_URL` | `http://localhost:8001/v1` | TinyGrad OpenAI-compatible endpoint |
 | `VALKEY_URL` | `redis://127.0.0.1:6379` | Valkey/Redis endpoint |
 | `MINIKUN_SEARCH_SEARXNG_URL` | `http://127.0.0.1:8888` | SearXNG endpoint |
 | `MINIKUN_SEARCH_ENABLED` | `true` | เปิด/ปิด web search |
+
+ในโหมด `hybrid` สามารถตรวจผล TinyGrad ตาม `conversation_id` ได้ที่
+`GET /v1/cooperation/reviews/{conversation_id}` โดยสถานะจะเป็น `PENDING`,
+`COMPLETED` หรือ `FAILED` ผลตรวจนี้ถูกเก็บแยกจาก conversation memory และเป็น in-memory
+จึงเหมาะกับ feedback แบบทันทีระหว่าง runtime; หากต้องการ persistence ควรย้าย store ไป PostgreSQL/Valkey ภายหลัง
+สำหรับ UI ที่ต้องการรับผลทันทีโดยไม่ polling ให้เปิด SSE ที่
+`GET /v1/cooperation/reviews/{conversation_id}/events` โดย stream จะจบเมื่อสถานะเป็น
+`COMPLETED` หรือ `FAILED` ตัวอย่าง JavaScript:
+
+```javascript
+const events = new EventSource(`/v1/cooperation/reviews/${conversationId}/events`);
+events.addEventListener("cooperative-review", event => {
+  const review = JSON.parse(event.data);
+  if (review.status === "COMPLETED") showRevisedAnswer(review.revised);
+  if (review.status === "FAILED") showReviewFailure(review.error);
+  if (review.status !== "PENDING") events.close();
+});
+```
 | `MINIKUN_SEARCH_CACHE_ENABLED` | `true` | เปิด/ปิด search cache |
 | `MINIKUN_SEARCH_CACHE_TTL` | `PT5M` | อายุ search cache |
 | `MINIKUN_SEARCH_SAFESEARCH` | `true` | ส่ง safe-search option ให้ SearXNG |

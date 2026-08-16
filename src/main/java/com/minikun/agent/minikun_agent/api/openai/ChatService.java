@@ -56,6 +56,7 @@ import com.minikun.model.ChatModelProvider;
 import com.minikun.model.ActiveChatModelProvider;
 import com.minikun.model.GenerationOptions;
 import com.minikun.model.ModelUsage;
+import com.minikun.model.CooperativeChatModelService;
 import com.minikun.model.capability.ModelCapability;
 import com.minikun.model.capability.ModelCapabilityRegistry;
 import com.minikun.model.task.title.TitleGenerationService;
@@ -159,6 +160,9 @@ public class ChatService {
 
     @Autowired(required = false)
     private AdaptivePersonaService adaptivePersonaService;
+
+    @Autowired(required = false)
+    private CooperativeChatModelService cooperativeChatModelService;
 
     @Autowired(required = false)
     private DeferredReflectionService deferredReflectionService;
@@ -400,7 +404,7 @@ public class ChatService {
         String traceId = MDC.get("trace_id");
         Flux<ChatResponse> modelResponses = toolsEnabled && toolCallingRuntime != null
             ? Flux.defer(() -> Flux.just(toolCallingRuntime.call(context.prompt(), context.conversationId())))
-            : chatModelProvider().stream(context.prompt());
+            : streamChatModel(context.prompt(), context.conversationId());
         Flux<String> chunks = modelResponses
                 .doOnNext(response -> appendAssistantText(assistantContent, response))
             .doOnNext(response -> modelUsage.set(modelUsage(response)))
@@ -1226,12 +1230,27 @@ public class ChatService {
     }
 
     private ChatResponse callChatModel(Prompt prompt, String process, String requestId) {
+        return callChatModel(prompt, process, requestId, null);
+    }
+
+    private ChatResponse callChatModel(
+            Prompt prompt, String process, String requestId, ConversationId conversationId) {
         long started = System.nanoTime();
         try {
-            return chatModelProvider().chat(prompt);
+            return cooperativeChatModelService == null
+                    ? chatModelProvider().chat(prompt)
+                    : cooperativeChatModelService.chat(chatModelProvider(), prompt,
+                            conversationId == null ? "unknown" : conversationId.value());
         } finally {
             logModelDuration(process, started, requestId);
         }
+    }
+
+    private Flux<ChatResponse> streamChatModel(Prompt prompt, ConversationId conversationId) {
+        return cooperativeChatModelService == null
+                ? chatModelProvider().stream(prompt)
+                : cooperativeChatModelService.stream(chatModelProvider(), prompt,
+                        conversationId == null ? "unknown" : conversationId.value());
     }
 
     private ChatResponse callModel(Prompt prompt, ConversationId conversationId, String requestId) {
@@ -1243,7 +1262,7 @@ public class ChatService {
                 logModelDuration("chat_model", started, requestId);
             }
         }
-        return callChatModel(prompt, "chat_model", requestId);
+        return callChatModel(prompt, "chat_model", requestId, conversationId);
     }
 
     private ChatModelProvider chatModelProvider() {
