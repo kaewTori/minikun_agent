@@ -6,6 +6,7 @@ import com.minikun.pcs.model.ConversationContext;
 import com.minikun.pcs.model.KnowledgeContext;
 import com.minikun.pcs.model.RuntimeContext;
 import com.minikun.pcs.model.UserMessage;
+import com.minikun.personality.signal.PersonaSelectionSignals;
 
 import java.util.List;
 
@@ -20,7 +21,8 @@ public record PromptRequest(
         SearchContext searchContext,
         KnowledgeSelection knowledgeSelection,
         KnowledgeConsolidation knowledgeConsolidation,
-        ContextBudget contextBudget) {
+        ContextBudget contextBudget,
+        PersonaSelectionSignals personaSelectionSignals) {
     public PromptRequest(
             CharacterSpecification character,
             RuntimeContext runtime,
@@ -30,7 +32,7 @@ public record PromptRequest(
             UserMessage userMessage) {
         this(character, runtime, conversation, knowledge, capabilities, userMessage,
             SearchSelectionSignals.EMPTY, SearchContext.EMPTY, KnowledgeSelection.EMPTY,
-            KnowledgeConsolidation.EMPTY, null);
+            KnowledgeConsolidation.EMPTY, null, PersonaSelectionSignals.EMPTY);
         }
 
         public PromptRequest(
@@ -43,7 +45,7 @@ public record PromptRequest(
             SearchSelectionSignals searchSelectionSignals) {
         this(character, runtime, conversation, knowledge, capabilities, userMessage,
             searchSelectionSignals, SearchContext.EMPTY, KnowledgeSelection.EMPTY,
-            KnowledgeConsolidation.EMPTY, null);
+            KnowledgeConsolidation.EMPTY, null, PersonaSelectionSignals.EMPTY);
     }
 
     public PromptRequest(
@@ -57,7 +59,7 @@ public record PromptRequest(
             SearchContext searchContext) {
         this(character, runtime, conversation, knowledge, capabilities, userMessage,
             searchSelectionSignals, searchContext, KnowledgeSelection.EMPTY,
-            KnowledgeConsolidation.EMPTY, null);
+            KnowledgeConsolidation.EMPTY, null, PersonaSelectionSignals.EMPTY);
     }
 
         public PromptRequest(
@@ -71,7 +73,8 @@ public record PromptRequest(
             SearchContext searchContext,
             KnowledgeSelection knowledgeSelection) {
         this(character, runtime, conversation, knowledge, capabilities, userMessage,
-            searchSelectionSignals, searchContext, knowledgeSelection, KnowledgeConsolidation.EMPTY);
+            searchSelectionSignals, searchContext, knowledgeSelection, KnowledgeConsolidation.EMPTY,
+            null, PersonaSelectionSignals.EMPTY);
     }
 
     public PromptRequest(
@@ -86,8 +89,26 @@ public record PromptRequest(
             KnowledgeSelection knowledgeSelection,
             KnowledgeConsolidation knowledgeConsolidation) {
         this(character, runtime, conversation, knowledge, capabilities, userMessage,
-            searchSelectionSignals, searchContext, knowledgeSelection, knowledgeConsolidation, null);
+            searchSelectionSignals, searchContext, knowledgeSelection, knowledgeConsolidation, null,
+            PersonaSelectionSignals.EMPTY);
         }
+
+    public PromptRequest(
+            CharacterSpecification character,
+            RuntimeContext runtime,
+            ConversationContext conversation,
+            KnowledgeContext knowledge,
+            List<CapabilityInstruction> capabilities,
+            UserMessage userMessage,
+            SearchSelectionSignals searchSelectionSignals,
+            SearchContext searchContext,
+            KnowledgeSelection knowledgeSelection,
+            KnowledgeConsolidation knowledgeConsolidation,
+            ContextBudget contextBudget) {
+        this(character, runtime, conversation, knowledge, capabilities, userMessage,
+                searchSelectionSignals, searchContext, knowledgeSelection, knowledgeConsolidation,
+                contextBudget, PersonaSelectionSignals.EMPTY);
+    }
 
     public PromptRequest {
         capabilities = capabilities == null ? List.of() : List.copyOf(capabilities);
@@ -97,5 +118,7 @@ public record PromptRequest(
         knowledgeSelection = knowledgeSelection == null ? KnowledgeSelection.EMPTY : knowledgeSelection;
         knowledgeConsolidation = knowledgeConsolidation == null
             ? KnowledgeConsolidation.EMPTY : knowledgeConsolidation;
+        personaSelectionSignals = personaSelectionSignals == null
+            ? PersonaSelectionSignals.EMPTY : personaSelectionSignals;
     }
 }

@@ -37,7 +37,7 @@ class MemoryRecallComponentsTest {
                 "Learn Java", Instant.now());
 
         assertEquals("", new MemoryFormatter(20).format(List.of()).content());
-        assertEquals("PROFILE: Lives in Bangkok (confidence=0.9, reason=user stated directly)", new MemoryFormatter(100)
+        assertEquals("PROFILE: Lives in Bangkok (confidence=0.9, source=LLM_EXTRACTION, reason=user stated directly)", new MemoryFormatter(100)
                 .format(List.of(first, second)).content());
     }
 

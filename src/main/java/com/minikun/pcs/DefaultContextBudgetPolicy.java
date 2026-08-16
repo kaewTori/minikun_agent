@@ -12,10 +12,10 @@ public final class DefaultContextBudgetPolicy implements ContextBudgetPolicy {
             ContextBudgetSection.CHARACTER, 15L,
             ContextBudgetSection.RUNTIME, 10L,
             ContextBudgetSection.CONVERSATION, 15L,
-            ContextBudgetSection.MEMORY, 15L,
-            ContextBudgetSection.KNOWLEDGE, 20L,
+            ContextBudgetSection.MEMORY, 20L,
+            ContextBudgetSection.KNOWLEDGE, 10L,
             ContextBudgetSection.CAPABILITIES, 10L,
-            ContextBudgetSection.USER_MESSAGE, 15L);
+            ContextBudgetSection.USER_MESSAGE, 20L);
 
     private final Map<ContextBudgetSection, Long> weights;
     private final BigInteger totalWeight;

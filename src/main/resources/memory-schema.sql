@@ -22,3 +22,21 @@ ALTER TABLE minikun_memory
 
 CREATE INDEX IF NOT EXISTS idx_minikun_memory_conversation
     ON minikun_memory (owner_id, conversation_id, created_at, id);
+
+CREATE TABLE IF NOT EXISTS minikun_user_profile (
+    owner_id VARCHAR(255) PRIMARY KEY,
+    display_name VARCHAR(255) NOT NULL DEFAULT '',
+    preferred_language VARCHAR(64) NOT NULL DEFAULT '',
+    response_style VARCHAR(255) NOT NULL DEFAULT '',
+    timezone VARCHAR(128) NOT NULL DEFAULT '',
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS minikun_user_preference (
+    owner_id VARCHAR(255) NOT NULL,
+    preference_key VARCHAR(255) NOT NULL,
+    preference_value TEXT NOT NULL,
+    confidence DOUBLE PRECISION NOT NULL DEFAULT 0.0,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (owner_id, preference_key)
+);

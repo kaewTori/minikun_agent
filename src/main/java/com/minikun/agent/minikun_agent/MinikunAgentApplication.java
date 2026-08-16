@@ -31,6 +31,9 @@ import com.minikun.model.task.title.TitleGenerationConfiguration;
 import com.minikun.model.task.title.TitleGenerationService;
 import com.minikun.model.task.TaskModelConfiguration;
 import com.minikun.tokenbudget.runtime.TokenBudgetRuntimeConfiguration;
+import com.minikun.context.config.ContextRuntimeConfiguration;
+import com.minikun.memory.management.MemoryManagementController;
+import com.minikun.memory.management.MemoryManagementService;
 
 @SpringBootApplication
 @Import({MemoryConfiguration.class, SearchConfiguration.class, BrowserConfiguration.class, MeterRegistryMetricsReader.class,
@@ -43,7 +46,9 @@ import com.minikun.tokenbudget.runtime.TokenBudgetRuntimeConfiguration;
 		DefaultActiveChatModelProvider.class, ExistingChatModelProvider.class,
 		TinyGradChatModelProvider.class, TinyGradConfiguration.class, TaskModelConfiguration.class,
 		TokenBudgetRuntimeConfiguration.class,
-		TitleGenerationConfiguration.class, TitleGenerationService.class})
+		TitleGenerationConfiguration.class, TitleGenerationService.class,
+		ContextRuntimeConfiguration.class,
+		MemoryManagementService.class, MemoryManagementController.class})
 public class MinikunAgentApplication {
 
 	public static void main(String[] args) {

@@ -69,7 +69,7 @@ public final class PromptComposer {
             userMessage.content(),
             request.conversation() == null ? "" : request.conversation().content(),
             request.searchSelectionSignals(),
-            request.searchContext());
+            request.searchContext(), request.personaSelectionSignals());
         McsSelectionResult selection = selector.select(request.character(), context);
         Optional<ContextProcessingResult> processingResult = processContext(request, selection);
         return new PromptCompositionResult(

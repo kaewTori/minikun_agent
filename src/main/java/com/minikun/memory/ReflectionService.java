@@ -17,6 +17,13 @@ import com.minikun.memory.reflection.ReflectionProvider;
 import com.minikun.memory.reflection.ReflectionParser;
 import com.minikun.memory.reflection.ReflectionPrompt;
 import com.minikun.memory.reflection.ReflectionPromptBuilder;
+import com.minikun.memory.event.MinikunEvent;
+import com.minikun.memory.event.NoOpObservationPublisher;
+import com.minikun.memory.event.Observation;
+import com.minikun.memory.event.ObservationPublisher;
+import com.minikun.memory.event.ObservationSource;
+import com.minikun.memory.event.ObservationType;
+import com.minikun.memory.event.SafeObservationPublisher;
 
 public class ReflectionService {
     private static final Logger log = LoggerFactory.getLogger(ReflectionService.class);
@@ -32,16 +39,26 @@ public class ReflectionService {
     private final MemoryRepository repository;
     private final Clock clock;
     private final MeterRegistry meterRegistry;
+    private final ObservationPublisher observationPublisher;
 
     public ReflectionService(ReflectionPromptBuilder promptBuilder, ReflectionProvider client,
             ReflectionParser parser, ReflectionDecisionService decisionService,
             MemoryRepository repository, Clock clock) {
-        this(promptBuilder, client, parser, decisionService, repository, clock, null);
+        this(promptBuilder, client, parser, decisionService, repository, clock, null,
+                new NoOpObservationPublisher());
     }
 
     public ReflectionService(ReflectionPromptBuilder promptBuilder, ReflectionProvider client,
             ReflectionParser parser, ReflectionDecisionService decisionService,
             MemoryRepository repository, Clock clock, MeterRegistry meterRegistry) {
+        this(promptBuilder, client, parser, decisionService, repository, clock, meterRegistry,
+                new NoOpObservationPublisher());
+    }
+
+    public ReflectionService(ReflectionPromptBuilder promptBuilder, ReflectionProvider client,
+            ReflectionParser parser, ReflectionDecisionService decisionService,
+            MemoryRepository repository, Clock clock, MeterRegistry meterRegistry,
+            ObservationPublisher observationPublisher) {
         this.promptBuilder = promptBuilder;
         this.client = client;
         this.parser = parser;
@@ -49,6 +66,8 @@ public class ReflectionService {
         this.repository = repository;
         this.clock = clock;
         this.meterRegistry = meterRegistry;
+        this.observationPublisher = observationPublisher == null
+                ? new NoOpObservationPublisher() : observationPublisher;
     }
 
     public void reflect(CompletedConversation conversation) {
@@ -108,8 +127,19 @@ public class ReflectionService {
             recordOutcome(outcome);
             stopTimer(sample, outcome);
             logExecution(conversation, outcome, acceptedCount, rejectedCount, persistedCount, duration);
+            publishObservation(conversation, outcome, acceptedCount, rejectedCount, persistedCount);
             restoreConversationId(previousConversationId);
         }
+    }
+
+    private void publishObservation(CompletedConversation conversation, String outcome,
+            int accepted, int rejected, int persisted) {
+        new SafeObservationPublisher(observationPublisher).publish(MinikunEvent.from(new Observation(
+                ObservationType.REFLECTION_COMPLETED, ObservationSource.REFLECTION,
+                conversation == null ? null : conversation.ownerId(),
+                conversation == null ? null : conversation.conversationId(), java.time.Instant.now(),
+                java.util.Map.of("outcome", outcome, "accepted_count", String.valueOf(accepted),
+                        "rejected_count", String.valueOf(rejected), "persisted_count", String.valueOf(persisted)))));
     }
 
     private Timer.Sample startTimer() {

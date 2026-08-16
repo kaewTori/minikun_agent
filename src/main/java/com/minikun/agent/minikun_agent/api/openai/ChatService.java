@@ -40,8 +40,16 @@ import com.minikun.diagnostics.DiagnosticsPromptBuilder;
 import com.minikun.diagnostics.DiagnosticsService;
 import com.minikun.diagnostics.DiagnosticsSummary;
 import com.minikun.memory.MemoryRecallService;
-import com.minikun.memory.MemoryScope;
+import com.minikun.memory.LongTermMemoryScope;
+import com.minikun.memory.DeferredReflectionService;
+import com.minikun.memory.event.Observation;
+import com.minikun.memory.event.ObservationPublisher;
+import com.minikun.memory.event.ObservationSource;
+import com.minikun.memory.event.ObservationType;
+import com.minikun.memory.event.SafeObservationPublisher;
 import com.minikun.memory.ReflectionService;
+import com.minikun.personality.model.MoodSnapshot;
+import com.minikun.personality.runtime.AdaptivePersonaService;
 import com.minikun.memory.model.CompletedConversation;
 import com.minikun.model.ChatModelId;
 import com.minikun.model.ChatModelProvider;
@@ -148,6 +156,15 @@ public class ChatService {
 
     @Autowired(required = false)
     private PersonalContextRuntime personalContextRuntime;
+
+    @Autowired(required = false)
+    private AdaptivePersonaService adaptivePersonaService;
+
+    @Autowired(required = false)
+    private DeferredReflectionService deferredReflectionService;
+
+    @Autowired(required = false)
+    private ObservationPublisher observationPublisher;
 
     @Autowired
     private BrowserContentService browserContentService;
@@ -331,6 +348,7 @@ public class ChatService {
             if (context.persistConversation()) {
                 conversationMemoryService.append(context.conversationId(), new ChatMessage("assistant", content));
                 log.info("process=conversation event=assistant_message_persisted");
+                publishTurnCompleted(context.ownerId(), context.conversationId(), transaction.requestId());
                 reflectOnCompletedConversation(context.ownerId(), context.conversationId());
             }
             var choice = new ChatCompletionResponse.Choice(
@@ -414,6 +432,7 @@ public class ChatService {
                         conversationMemoryService.append(
                                 context.conversationId(), new ChatMessage("assistant", assistantContent.toString()));
                         log.info("process=conversation event=assistant_message_persisted stream=true");
+                        publishTurnCompleted(context.ownerId(), context.conversationId(), transaction.requestId());
                         reflectOnCompletedConversation(context.ownerId(), context.conversationId());
                     }
                     withTrace(traceId, transaction::success);
@@ -649,6 +668,11 @@ public class ChatService {
         String conversationContent = conversation.isBlank()
                 ? requestConversation(request)
                 : conversation;
+        var personaSignals = adaptivePersonaService == null
+                ? com.minikun.personality.signal.PersonaSelectionSignals.EMPTY
+                : adaptivePersonaService.evaluate("default", userMessage.content(),
+                        knowledgeSelection.searchSignals().searchRequested(), false, false,
+                        MoodSnapshot.DEFAULT).signals();
         PromptRequest promptRequest = new PromptRequest(
                 characterSpecification,
                 new RuntimeContext(runtime),
@@ -659,7 +683,7 @@ public class ChatService {
                 knowledgeSelection.searchSignals(),
                 knowledgeSelection.searchContext(),
                 knowledgeSelection.selection(),
-                knowledgeSelection.consolidation());
+                knowledgeSelection.consolidation(), null, personaSignals);
         GenerationOptions options = generationOptions(request);
         PersonalContextRuntime contextRuntime = personalContextRuntime;
         if (contextRuntime == null && dynamicTokenBudgetEnabled && dynamicGenerationOptionsFactory != null) {
@@ -714,7 +738,7 @@ public class ChatService {
                 .orElse("");
     }
 
-    private KnowledgeContext recallKnowledge(ConversationId conversationId, String ownerId) {
+    private KnowledgeContext recallKnowledge(String query, ConversationId conversationId, String ownerId) {
         if (conversationId == null || ownerId == null || ownerId.isBlank()) {
             return new KnowledgeContext("");
         }
@@ -723,7 +747,7 @@ public class ChatService {
             return new KnowledgeContext("");
         }
         try {
-            KnowledgeContext knowledge = service.recall(new MemoryScope(ownerId, conversationId),
+            KnowledgeContext knowledge = service.recall(new LongTermMemoryScope(ownerId), query,
                     configuredMemoryRetrievalLimit);
             log.info("process=memory_recall event=completed candidates={}",
                     knowledge == null ? 0 : knowledge.candidates().size());
@@ -771,7 +795,7 @@ public class ChatService {
     private KnowledgePipelineSelection knowledgeFor(String query, boolean conversationContextAvailable,
             ConversationId conversationId, String ownerId) {
         log.info("process=knowledge_pipeline event=start");
-        KnowledgeContext memoryKnowledge = recallKnowledge(conversationId, ownerId);
+        KnowledgeContext memoryKnowledge = recallKnowledge(query, conversationId, ownerId);
         List<KnowledgeCandidate> browserCandidates = browserContentService == null
                 ? List.of()
                 : browserContentService.read(query);
@@ -1132,11 +1156,24 @@ public class ChatService {
             }
             var service = reflectionService.getIfAvailable();
             if (service != null) {
-                service.reflect(conversation.get());
+                if (deferredReflectionService == null
+                        || !deferredReflectionService.submit(service, conversation.get())) {
+                    service.reflect(conversation.get());
+                }
             }
         } catch (RuntimeException exception) {
             log.warn("memory_reflection conversation_id={} success=false", conversationId.value(), exception);
         }
+    }
+
+    private void publishTurnCompleted(String ownerId, ConversationId conversationId, String requestId) {
+        ObservationPublisher delegate = observationPublisher == null
+                ? new com.minikun.memory.event.NoOpObservationPublisher() : observationPublisher;
+        new SafeObservationPublisher(delegate).publish(
+                com.minikun.memory.event.MinikunEvent.from(new Observation(
+                        ObservationType.TURN_COMPLETED, ObservationSource.CHAT, ownerId,
+                        conversationId == null ? null : conversationId.value(), java.time.Instant.now(),
+                        java.util.Map.of("request_id", requestId == null ? "" : requestId))));
     }
 
     private int lastUserMessageIndex(List<com.minikun.agent.minikun_agent.api.openai.dto.Message> messages) {

@@ -28,6 +28,8 @@ import com.minikun.memory.ReflectionDecisionService;
 import com.minikun.memory.reflection.ReflectionProvider;
 import com.minikun.memory.reflection.ReflectionParser;
 import com.minikun.memory.reflection.ReflectionPromptBuilder;
+import com.minikun.memory.event.NoOpObservationPublisher;
+import com.minikun.memory.event.ObservationPublisher;
 import com.minikun.model.task.TaskModelProvider;
 import com.minikun.pcs.MinikunPersonaProvider;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -71,6 +73,11 @@ public class MemoryConfiguration {
     @ConditionalOnProperty(name = "minikun.memory.persistence.enabled", havingValue = "true", matchIfMissing = true)
     MemoryRepository memoryRepository(JdbcTemplate jdbcTemplate, MeterRegistry meterRegistry) {
         return new JdbcMemoryRepository(jdbcTemplate, meterRegistry);
+    }
+
+    @Bean
+    ObservationPublisher observationPublisher() {
+        return new NoOpObservationPublisher();
     }
 
     @Bean
@@ -149,8 +156,9 @@ public class MemoryConfiguration {
     @ConditionalOnBean(MemoryRepository.class)
     ReflectionService reflectionService(ReflectionPromptBuilder promptBuilder, ReflectionProvider client,
             ReflectionParser parser, ReflectionDecisionService decisionService,
-            MemoryRepository repository, Clock memoryClock, MeterRegistry meterRegistry) {
+            MemoryRepository repository, Clock memoryClock, MeterRegistry meterRegistry,
+            ObservationPublisher observationPublisher) {
         return new ReflectionService(promptBuilder, client, parser, decisionService, repository, memoryClock,
-                meterRegistry);
+                meterRegistry, observationPublisher);
     }
 }

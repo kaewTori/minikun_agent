@@ -42,9 +42,6 @@ import java.util.Map;
 @Configuration(proxyBeanMethods = false)
 @EnableConfigurationProperties(TokenBudgetProperties.class)
 public class TokenBudgetRuntimeConfiguration {
-    private static final long DEFAULT_CONTEXT_WINDOW_TOKENS = 16_384L;
-    private static final long DEFAULT_MAX_OUTPUT_TOKENS = 4_096L;
-
     @Bean
     TokenCounter tokenCounter() {
         return new ApproximateTokenCounter();
@@ -128,13 +125,21 @@ public class TokenBudgetRuntimeConfiguration {
     }
 
     @Bean
-    ModelCapabilityRegistry modelCapabilityRegistry() {
+    ModelCapabilityRegistry modelCapabilityRegistry(
+            @org.springframework.beans.factory.annotation.Value("${minikun.model.capability.existing.context-window:16384}")
+            long existingContextWindow,
+            @org.springframework.beans.factory.annotation.Value("${minikun.model.capability.existing.max-output:4096}")
+            long existingMaxOutput,
+            @org.springframework.beans.factory.annotation.Value("${minikun.model.capability.tinygrad.context-window:16384}")
+            long tinygradContextWindow,
+            @org.springframework.beans.factory.annotation.Value("${minikun.model.capability.tinygrad.max-output:4096}")
+            long tinygradMaxOutput) {
         return new DefaultModelCapabilityRegistry(Map.of(
                 ChatModelId.EXISTING,
                 new ModelCapability(ChatModelId.EXISTING, ModelRole.CHAT,
-                        DEFAULT_CONTEXT_WINDOW_TOKENS, DEFAULT_MAX_OUTPUT_TOKENS),
+                        existingContextWindow, existingMaxOutput),
                 ChatModelId.TINYGRAD,
                 new ModelCapability(ChatModelId.TINYGRAD, ModelRole.CHAT,
-                        DEFAULT_CONTEXT_WINDOW_TOKENS, DEFAULT_MAX_OUTPUT_TOKENS)));
+                        tinygradContextWindow, tinygradMaxOutput)));
     }
 }

@@ -1,5 +1,7 @@
 package com.minikun.pcs;
 
+import com.minikun.personality.signal.PersonaSelectionSignals;
+
 import java.util.Objects;
 
 public final class SelectionContextFactory {
@@ -22,7 +24,8 @@ public final class SelectionContextFactory {
                 ConversationAttributes.EMPTY,
                 RuntimeAttributes.EMPTY,
                 MemorySelectionSignals.EMPTY,
-                signalProducer.produce(normalizedMessage, normalizedHistory));
+                signalProducer.produce(normalizedMessage, normalizedHistory), SearchContext.EMPTY,
+                PersonaSelectionSignals.EMPTY);
         }
 
         public McsSelectionContext create(
@@ -37,7 +40,8 @@ public final class SelectionContextFactory {
                 ConversationAttributes.EMPTY,
                 RuntimeAttributes.EMPTY,
                 MemorySelectionSignals.EMPTY,
-                signalProducer.produce(Objects.requireNonNull(searchSignals, "searchSignals")));
+                signalProducer.produce(Objects.requireNonNull(searchSignals, "searchSignals")),
+                SearchContext.EMPTY, PersonaSelectionSignals.EMPTY);
     }
 
             public McsSelectionContext create(
@@ -54,6 +58,23 @@ public final class SelectionContextFactory {
                     RuntimeAttributes.EMPTY,
                     MemorySelectionSignals.EMPTY,
                     signalProducer.produce(Objects.requireNonNull(searchSignals, "searchSignals")),
-                    Objects.requireNonNullElse(searchContext, SearchContext.EMPTY));
+                    Objects.requireNonNullElse(searchContext, SearchContext.EMPTY), PersonaSelectionSignals.EMPTY);
             }
+
+    public McsSelectionContext create(String currentUserMessage, String conversationHistory,
+            SearchSelectionSignals searchSignals, SearchContext searchContext,
+            PersonaSelectionSignals personaSignals) {
+        String message = Objects.requireNonNullElse(currentUserMessage, "");
+        String history = Objects.requireNonNullElse(conversationHistory, "");
+        PersonaSelectionSignals signals = Objects.requireNonNullElse(
+                personaSignals, PersonaSelectionSignals.EMPTY);
+        MemorySelectionSignals memory = signals.equals(PersonaSelectionSignals.EMPTY)
+                ? MemorySelectionSignals.EMPTY
+                : new MemorySelectionSignals(signals.memoryAvailable(), signals.recalledMemoryCount(),
+                        signals.memoryAvailable());
+        return new McsSelectionContext(message, history, ConversationAttributes.EMPTY, RuntimeAttributes.EMPTY,
+                memory,
+                signalProducer.produce(Objects.requireNonNull(searchSignals, "searchSignals")),
+                Objects.requireNonNullElse(searchContext, SearchContext.EMPTY), signals);
+    }
 }

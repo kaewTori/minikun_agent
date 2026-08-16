@@ -26,7 +26,7 @@ final class MemoryFormatter {
         List<KnowledgeCandidate> candidates = new java.util.ArrayList<>();
         for (int index = 0; index < memories.size(); index++) {
             Memory memory = memories.get(index);
-                String entry = memory.category().name()
+            String entry = memory.category().name()
                     + ": " + memory.content()
                     + " (confidence=" + memory.confidence()
                     + ", source=" + memory.source()
@@ -40,7 +40,8 @@ final class MemoryFormatter {
             }
             content.append(entry);
             candidates.add(new KnowledgeCandidate(
-                    "memory-" + index, KnowledgeSource.MEMORY, entry, index));
+                    "memory-" + index, KnowledgeSource.MEMORY, entry, index,
+                    memory.conversationId() == null ? "memory" : "conversation:" + memory.conversationId()));
         }
         return new KnowledgeContext(content.toString(), candidates);
     }

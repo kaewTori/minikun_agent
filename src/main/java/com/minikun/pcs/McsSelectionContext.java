@@ -1,5 +1,7 @@
 package com.minikun.pcs;
 
+import com.minikun.personality.signal.PersonaSelectionSignals;
+
 import java.util.Objects;
 
 public record McsSelectionContext(
@@ -9,11 +11,13 @@ public record McsSelectionContext(
     RuntimeAttributes runtimeAttributes,
     MemorySelectionSignals memorySelectionSignals,
     InterestSelectionSignals interestSelectionSignals,
-    SearchContext searchContext) {
+    SearchContext searchContext,
+    PersonaSelectionSignals personaSelectionSignals) {
     public McsSelectionContext(String currentUserMessage, String conversationHistory) {
         this(currentUserMessage, conversationHistory,
         ConversationAttributes.EMPTY, RuntimeAttributes.EMPTY,
-        MemorySelectionSignals.EMPTY, InterestSelectionSignals.EMPTY);
+        MemorySelectionSignals.EMPTY, InterestSelectionSignals.EMPTY, SearchContext.EMPTY,
+        PersonaSelectionSignals.EMPTY);
     }
 
     public McsSelectionContext(
@@ -22,7 +26,8 @@ public record McsSelectionContext(
         ConversationAttributes conversationAttributes,
         RuntimeAttributes runtimeAttributes) {
     this(currentUserMessage, conversationHistory, conversationAttributes, runtimeAttributes,
-    MemorySelectionSignals.EMPTY, InterestSelectionSignals.EMPTY, SearchContext.EMPTY);
+    MemorySelectionSignals.EMPTY, InterestSelectionSignals.EMPTY, SearchContext.EMPTY,
+        PersonaSelectionSignals.EMPTY);
     }
 
     public McsSelectionContext(
@@ -32,7 +37,8 @@ public record McsSelectionContext(
         RuntimeAttributes runtimeAttributes,
         MemorySelectionSignals memorySelectionSignals) {
     this(currentUserMessage, conversationHistory, conversationAttributes, runtimeAttributes,
-        memorySelectionSignals, InterestSelectionSignals.EMPTY, SearchContext.EMPTY);
+        memorySelectionSignals, InterestSelectionSignals.EMPTY, SearchContext.EMPTY,
+        PersonaSelectionSignals.EMPTY);
     }
 
     public McsSelectionContext(
@@ -43,7 +49,8 @@ public record McsSelectionContext(
         MemorySelectionSignals memorySelectionSignals,
         InterestSelectionSignals interestSelectionSignals) {
     this(currentUserMessage, conversationHistory, conversationAttributes, runtimeAttributes,
-        memorySelectionSignals, interestSelectionSignals, SearchContext.EMPTY);
+        memorySelectionSignals, interestSelectionSignals, SearchContext.EMPTY,
+        PersonaSelectionSignals.EMPTY);
     }
 
     public McsSelectionContext {
@@ -57,5 +64,7 @@ public record McsSelectionContext(
         interestSelectionSignals = Objects.requireNonNullElse(
             interestSelectionSignals, InterestSelectionSignals.EMPTY);
         searchContext = Objects.requireNonNullElse(searchContext, SearchContext.EMPTY);
+        personaSelectionSignals = Objects.requireNonNullElse(
+                personaSelectionSignals, PersonaSelectionSignals.EMPTY);
     }
 }

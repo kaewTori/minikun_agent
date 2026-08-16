@@ -3,6 +3,7 @@ package com.minikun.memory.management;
 import com.minikun.memory.MemoryRepository;
 import com.minikun.memory.model.Memory;
 import com.minikun.memory.model.MemoryId;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -10,6 +11,7 @@ import java.util.Objects;
 
 /** Owner-scoped inspection and deletion operations for a personal agent. */
 @Service
+@ConditionalOnBean(MemoryRepository.class)
 public final class MemoryManagementService {
     private static final int MAXIMUM_LIST_LIMIT = 500;
     private final MemoryRepository repository;

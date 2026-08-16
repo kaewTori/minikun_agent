@@ -131,6 +131,9 @@ Actuator ที่เปิดให้เข้าถึงคือ `/actuator
 | `MINIKUN_MEMORY_RECALL_MAXIMUM_CHARACTERS` | `4000` | ขนาด Knowledge context สูงสุด |
 | `MINIKUN_MEMORY_REFLECTION_ENABLED` | `true` | เปิด memory reflection หลังจบ conversation |
 | `MINIKUN_DIAGNOSTICS_CONVERSATIONAL_ENABLED` | `false` | เปิด diagnostics แบบ conversational |
+| `MINIKUN_CONTEXT_BUDGET_CHARACTERS` | `24000` | character budget สำหรับ prompt context |
+| `MINIKUN_TOKEN_BUDGET_RESERVED_OUTPUT_TOKENS` | `256` | output reserve ก่อนคำนวณ dynamic max-tokens |
+| `MINIKUN_MEMORY_MANAGEMENT_TOKEN` | ว่าง | token สำหรับป้องกัน API จัดการ memory |
 
 ดูค่าทั้งหมดและ default เพิ่มเติมได้ที่ [`application.properties`](src/main/resources/application.properties)
 
@@ -217,7 +220,14 @@ curl -X DELETE 'http://127.0.0.1:8080/v1/memory/<memory-id>?owner_id=default'
 curl -X DELETE 'http://127.0.0.1:8080/v1/memory?owner_id=default'
 ```
 
-การลบทั้งหมดเป็น owner-scoped และไม่ยอมรับ wildcard owner (`*`)
+การลบทั้งหมดเป็น owner-scoped และไม่ยอมรับ wildcard owner (`*`) หากตั้งค่า
+`MINIKUN_MEMORY_MANAGEMENT_TOKEN` ต้องส่ง header เพิ่ม:
+
+```sh
+curl -H "X-Minikun-Memory-Token: $MINIKUN_MEMORY_MANAGEMENT_TOKEN" \
+  'http://127.0.0.1:8080/v1/memory?owner_id=default'
+```
+หากตั้ง `MINIKUN_MEMORY_MANAGEMENT_TOKEN` ต้องส่ง header `X-Minikun-Memory-Token` ทุก request
 
 ## Memory และ prompt composition
 

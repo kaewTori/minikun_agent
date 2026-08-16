@@ -64,6 +64,7 @@ final class PromptRenderer {
         addProcessedCharacter(sections, contents);
         addProcessedRequired(sections, "Runtime", ContextBudgetSection.RUNTIME, contents);
         addProcessedOptional(sections, "Conversation", ContextBudgetSection.CONVERSATION, contents);
+        addProcessedOptional(sections, "Memory", ContextBudgetSection.MEMORY, contents);
         addProcessedOptional(sections, "Knowledge", ContextBudgetSection.KNOWLEDGE, contents);
         addProcessedOptional(sections, "Capabilities", ContextBudgetSection.CAPABILITIES, contents);
         return new Prompt(List.of(

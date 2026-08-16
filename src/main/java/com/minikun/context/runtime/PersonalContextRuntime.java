@@ -21,7 +21,6 @@ import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Component;
 
 import java.util.Objects;
 import java.util.Optional;
@@ -30,7 +29,6 @@ import java.util.Optional;
  * Coordinates context composition, token budgeting, and one bounded recovery pass
  * for a single-user personal agent request.
  */
-@Component
 public final class PersonalContextRuntime {
     private final PromptComposer promptComposer;
     private final ContextBudgetPolicy contextBudgetPolicy;
@@ -42,27 +40,31 @@ public final class PersonalContextRuntime {
     public PersonalContextRuntime(
             PromptComposer promptComposer,
             DynamicGenerationOptionsFactory dynamicGenerationOptionsFactory,
-            MeterRegistry meterRegistry) {
+            MeterRegistry meterRegistry,
+            ContextRecoveryPolicy contextRecoveryPolicy) {
         this(promptComposer, dynamicGenerationOptionsFactory, Objects.requireNonNull(meterRegistry,
-                "meter registry must not be null"), true);
+                "meter registry must not be null"), contextRecoveryPolicy, true);
     }
 
     public PersonalContextRuntime(
             PromptComposer promptComposer,
             DynamicGenerationOptionsFactory dynamicGenerationOptionsFactory) {
-        this(promptComposer, dynamicGenerationOptionsFactory, null, true);
+        this(promptComposer, dynamicGenerationOptionsFactory, null,
+                new DefaultContextRecoveryPolicy(), true);
     }
 
     private PersonalContextRuntime(
             PromptComposer promptComposer,
             DynamicGenerationOptionsFactory dynamicGenerationOptionsFactory,
             MeterRegistry meterRegistry,
+            ContextRecoveryPolicy contextRecoveryPolicy,
             boolean ignored) {
         this.promptComposer = Objects.requireNonNull(promptComposer, "prompt composer must not be null");
         this.contextBudgetPolicy = new DefaultContextBudgetPolicy();
         this.dynamicGenerationOptionsFactory = Objects.requireNonNull(
                 dynamicGenerationOptionsFactory, "dynamic generation options factory must not be null");
-        this.contextRecoveryPolicy = new DefaultContextRecoveryPolicy();
+        this.contextRecoveryPolicy = Objects.requireNonNull(
+                contextRecoveryPolicy, "context recovery policy must not be null");
         this.meterRegistry = meterRegistry;
     }
 

@@ -5,8 +5,23 @@ import com.minikun.tokenbudget.pressure.ContextPressureLevel;
 import java.util.Objects;
 
 public final class DefaultContextRecoveryPolicy implements ContextRecoveryPolicy {
-    private static final long MINIMUM_CONTEXT_CHARACTERS = 8_000L;
-    private static final long RECOVERY_PERCENT = 75L;
+    private final long minimumContextCharacters;
+    private final long recoveryPercent;
+
+    public DefaultContextRecoveryPolicy() {
+        this(8_000L, 75L);
+    }
+
+    public DefaultContextRecoveryPolicy(long minimumContextCharacters, long recoveryPercent) {
+        if (minimumContextCharacters < 0) {
+            throw new IllegalArgumentException("minimum context characters must not be negative");
+        }
+        if (recoveryPercent < 1 || recoveryPercent > 99) {
+            throw new IllegalArgumentException("recovery percent must be between 1 and 99");
+        }
+        this.minimumContextCharacters = minimumContextCharacters;
+        this.recoveryPercent = recoveryPercent;
+    }
 
     @Override
     public ContextRecoveryDecision decide(long currentContextCharacters, ContextPressureLevel pressureLevel) {
@@ -18,8 +33,8 @@ public final class DefaultContextRecoveryPolicy implements ContextRecoveryPolicy
             return ContextRecoveryDecision.none(currentContextCharacters);
         }
         long reduced = Math.max(
-                MINIMUM_CONTEXT_CHARACTERS,
-                currentContextCharacters * RECOVERY_PERCENT / 100L);
+                minimumContextCharacters,
+                currentContextCharacters * recoveryPercent / 100L);
         if (reduced >= currentContextCharacters) {
             return ContextRecoveryDecision.none(currentContextCharacters);
         }

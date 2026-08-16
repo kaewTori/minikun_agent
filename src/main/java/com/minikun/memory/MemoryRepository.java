@@ -21,6 +21,10 @@ public interface MemoryRepository {
         throw new UnsupportedOperationException("owner memory listing is not implemented");
     }
 
+    default List<Memory> findLongTerm(LongTermMemoryScope scope, int limit) {
+        return findByOwner(scope.ownerId(), limit);
+    }
+
     default boolean deleteByOwner(String ownerId, MemoryId memoryId) {
         throw new UnsupportedOperationException("memory deletion is not implemented");
     }
