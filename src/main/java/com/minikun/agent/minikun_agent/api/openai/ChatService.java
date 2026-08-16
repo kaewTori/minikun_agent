@@ -820,6 +820,16 @@ public class ChatService {
         }
 
         SearchDecision decision = searchDecisionService.decide(query, classifierContext);
+        // Keep compatibility with simple decision providers that only implement the
+        // one-argument hook, then fail closed if neither hook returns a decision.
+        if (decision == null) {
+            decision = searchDecisionService.decide(query);
+        }
+        if (decision == null) {
+            // A decision provider must not be able to break the chat pipeline by returning null.
+            // No search is safer than accidentally issuing an unclassified external request.
+            decision = new SearchDecision(false, query);
+        }
         log.info("process=search_decision event=completed should_search={} reason={}",
                 decision.shouldSearch(), decision.reason());
         boolean explicitUrl = browserContentService != null && !browserContentService.urlsIn(query).isEmpty();
@@ -860,7 +870,7 @@ public class ChatService {
             SearchRequest searchRequest = new SearchRequest(
                     UUID.randomUUID(),
                     plan.primaryQuery(),
-                    configuredSearchResultLimit,
+                    Math.max(1, Math.min(100, configuredSearchResultLimit)),
                     Instant.now().plus(searchTimeout),
                         new SearchOptions(plan.language(), categoryFor(plannedDecision, plan.intent()), plan.timeRange(),
                             searchSafeSearch),

@@ -24,6 +24,9 @@ import com.minikun.runtime.VersionService;
 import com.minikun.model.DefaultChatModelProviderRegistry;
 import com.minikun.model.ActiveModelConfigurationSetup;
 import com.minikun.model.DefaultActiveChatModelProvider;
+import com.minikun.model.CooperativeChatModelService;
+import com.minikun.model.CooperativeReviewStore;
+import com.minikun.model.CooperationRouter;
 import com.minikun.model.existing.ExistingChatModelProvider;
 import com.minikun.model.tinygrad.TinyGradChatModelProvider;
 import com.minikun.model.tinygrad.TinyGradConfiguration;
@@ -45,6 +48,7 @@ import com.minikun.memory.management.MemoryManagementService;
 		DefaultChatModelProviderRegistry.class, ActiveModelConfigurationSetup.class,
 		DefaultActiveChatModelProvider.class, ExistingChatModelProvider.class,
 		TinyGradChatModelProvider.class, TinyGradConfiguration.class, TaskModelConfiguration.class,
+		CooperativeReviewStore.class, CooperationRouter.class, CooperativeChatModelService.class,
 		TokenBudgetRuntimeConfiguration.class,
 		TitleGenerationConfiguration.class, TitleGenerationService.class,
 		ContextRuntimeConfiguration.class,
