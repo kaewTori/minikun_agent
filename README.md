@@ -13,6 +13,7 @@
 - ประกอบ prompt ผ่าน Provider Composition System (PCS)
 - ค้นเว็บผ่าน SearXNG พร้อม cache บน Valkey
 - เลือกว่าจะค้นเว็บหรือไม่ผ่าน rule/LLM decision mode
+- รวมผล search, explicit URL, image intent และ local context เป็น external-context action ก่อนเรียก Browser/Search
 - วางแผน query แบบ deterministic สำหรับตัด conversational wrapper และสร้าง core query ภาษาไทย/อังกฤษ
 - ส่ง language/category/time-range/safe-search options ไปยัง SearXNG พร้อม ranking และ URL deduplication
 - Actuator health และ metrics
@@ -149,6 +150,8 @@ events.addEventListener("cooperative-review", event => {
 | `MINIKUN_BROWSER_WORKER_TOKEN` | ว่าง | Bearer token ที่ตรงกับ `BROWSER_WORKER_TOKEN` ของ worker |
 | `MINIKUN_BROWSER_TIMEOUT` | `20s` | timeout ของการ render แต่ละ URL |
 | `MINIKUN_BROWSER_MAX_URLS` | `5` | จำนวน URL สูงสุดต่อข้อความ |
+| `MINIKUN_BROWSER_BLOCK_PRIVATE_ADDRESSES` | `true` | ป้องกัน browser worker เข้าถึง localhost/private network |
+| `MINIKUN_BROWSER_MAX_CONTENT_CHARACTERS` | `12000` | ขนาดเนื้อหาสูงสุดต่อ URL ก่อนใส่เข้า Knowledge context |
 | `SPRING_AI_CHAT_MEMORY_MAX_MESSAGES` | `20` | จำนวนข้อความ short-term memory สูงสุด |
 | `MINIKUN_MEMORY_RECALL_MAXIMUM_COUNT` | `10` | จำนวน long-term memories ที่เรียกคืนสูงสุด |
 | `MINIKUN_MEMORY_RECALL_MAXIMUM_CHARACTERS` | `4000` | ขนาด Knowledge context สูงสุด |
@@ -157,6 +160,12 @@ events.addEventListener("cooperative-review", event => {
 | `MINIKUN_CONTEXT_BUDGET_CHARACTERS` | `24000` | character budget สำหรับ prompt context |
 | `MINIKUN_TOKEN_BUDGET_RESERVED_OUTPUT_TOKENS` | `256` | output reserve ก่อนคำนวณ dynamic max-tokens |
 | `MINIKUN_MEMORY_MANAGEMENT_TOKEN` | ว่าง | token สำหรับป้องกัน API จัดการ memory |
+
+Browser จะอ่านหลาย URL แบบ best-effort: URL ที่อ่านไม่ได้จะถูกบันทึกเป็น failure แต่ URL อื่นยังถูกส่งต่อให้ model ได้ ส่วน URL ที่ชี้ไปยัง localhost หรือ private address จะถูก block โดยค่าเริ่มต้นเพื่อป้องกัน SSRF; หากต้องการเปิด resource ภายในอย่างตั้งใจควรทำ allowlist แยกที่ browser worker/gateway แทนการปิด policy ทั้งหมด
+
+External context planner จะเลือก action ระหว่าง `MEMORY_ONLY`, `OPEN_EXPLICIT_URL`, `SEARCH_WEB`, `SEARCH_THEN_OPEN` และ `IMAGE_SEARCH` ก่อนเรียก external runtime โดย browser content ที่เป็นหน้า error หรือ login/access-blocked จะถูกคัดออกจาก Knowledge context
+
+Search และ Browser มี source-quality gate แบบ conservative สำหรับตรวจหน้า error, access-blocked และข้อความที่มีลักษณะ prompt injection; เนื้อหาที่สั้นหรือข้อมูลน้อยจะถูกติดป้ายคุณภาพต่ำแต่ยังคงไว้ เพื่อไม่ให้ snippet ที่ถูกต้องแต่สั้นถูกทิ้งโดยอัตโนมัติ
 
 ดูค่าทั้งหมดและ default เพิ่มเติมได้ที่ [`application.properties`](src/main/resources/application.properties)
 

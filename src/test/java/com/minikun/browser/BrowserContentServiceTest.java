@@ -14,7 +14,9 @@ class BrowserContentServiceTest {
         AtomicInteger calls = new AtomicInteger();
         BrowserContentService service = new BrowserContentService(url -> {
             int index = calls.getAndIncrement();
-            return new BrowserContent(url + "/resolved", "page " + index, "text/html; rendered", false);
+            return new BrowserContent(url + "/resolved",
+                    "A valid rendered page with enough reference text for quality checks. page " + index,
+                    "text/html; rendered", false);
         }, true, 5);
 
         List<String> urls = service.urlsIn("อ่าน https://example.com/a, และ https://example.com/a https://example.org/b.");
@@ -47,5 +49,33 @@ class BrowserContentServiceTest {
 
         assertThrows(BrowserContentException.class,
                 () -> service.read("https://example.com https://example.org"));
+    }
+
+    @Test
+    void keepsSuccessfulUrlsWhenAnotherUrlFails() {
+        BrowserContentService service = new BrowserContentService(url -> {
+            if (url.contains("bad")) {
+                throw new BrowserContentException("worker failed");
+            }
+            return new BrowserContent(url, "good", "text/html", false);
+        }, true, 5);
+
+        BrowserReadResult result = service.readPartial("https://good.example https://bad.example");
+
+        assertEquals(1, result.candidates().size());
+        assertEquals(List.of("https://bad.example"), result.failures().stream()
+                .map(BrowserReadFailure::url).toList());
+    }
+
+    @Test
+    void blocksPrivateTargetsWhenPolicyIsEnabled() {
+        BrowserContentService service = new BrowserContentService(
+                url -> new BrowserContent(url, "must not be called", "text/html", false),
+                true, 5, null, new BrowserUrlPolicy(true));
+
+        BrowserReadResult result = service.readPartial("http://127.0.0.1:8080/health");
+
+        assertTrue(result.candidates().isEmpty());
+        assertEquals("http://127.0.0.1:8080/health", result.failures().get(0).url());
     }
 }

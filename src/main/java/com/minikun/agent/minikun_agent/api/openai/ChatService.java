@@ -62,6 +62,7 @@ import com.minikun.model.capability.ModelCapabilityRegistry;
 import com.minikun.model.task.title.TitleGenerationService;
 import com.minikun.character.model.CharacterSpecification;
 import com.minikun.browser.BrowserContentException;
+import com.minikun.browser.BrowserReadResult;
 import com.minikun.browser.BrowserContentService;
 import com.minikun.context.runtime.PersonalContextRuntime;
 import com.minikun.context.runtime.PersonalContextRuntimeResult;
@@ -88,6 +89,8 @@ import com.minikun.search.SearchContextAwarenessService;
 import com.minikun.search.SearchService;
 import com.minikun.search.SearchSelectionSignalMapper;
 import com.minikun.search.model.SearchDecision;
+import com.minikun.search.model.ExternalContextDecision;
+import com.minikun.search.internal.ExternalContextPlanner;
 import com.minikun.tools.springai.SpringAiToolCallingRuntime;
 import com.minikun.tokenbudget.runtime.DynamicGenerationOptionsFactory;
 import com.minikun.tokenbudget.config.TokenBudgetProperties;
@@ -142,6 +145,7 @@ public class ChatService {
     private final ObjectProvider<ReflectionService> reflectionService;
     private final TitleGenerationService titleGenerationService;
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ExternalContextPlanner externalContextPlanner = new ExternalContextPlanner();
 
     @Autowired(required = false)
     private SpringAiToolCallingRuntime toolCallingRuntime;
@@ -461,7 +465,8 @@ public class ChatService {
         }
         KnowledgePipelineSelection knowledgeSelection = knowledgeFor(
                 userMessage.content(), transaction.requestId(), conversationId,
-                memoryOwnerId(request, conversationId), hasConversationContext(history, request));
+                memoryOwnerId(request, conversationId), hasConversationContext(history, request),
+                classifierContext(history));
         PreparedImages preparedImages = prepareImages(knowledgeSelection);
         Prompt prompt = promptFor(request, history, knowledgeSelection, preparedImages.awareness());
         log.info("process=prompt event=composed{}", streaming ? " stream=true" : "");
@@ -772,7 +777,7 @@ public class ChatService {
 
     private KnowledgePipelineSelection knowledgeFor(
             String query, String requestId, ConversationId conversationId, String ownerId,
-            boolean conversationContextAvailable) {
+            boolean conversationContextAvailable, String classifierContext) {
         Map<String, String> previous = null;
         boolean scoped = false;
         try {
@@ -788,7 +793,7 @@ public class ChatService {
             restoreMdc(previous);
         }
         try {
-            return knowledgeFor(query, conversationContextAvailable, conversationId, ownerId);
+            return knowledgeFor(query, conversationContextAvailable, conversationId, ownerId, classifierContext);
         } finally {
             if (scoped) {
                 restoreMdc(previous);
@@ -797,23 +802,31 @@ public class ChatService {
     }
 
     private KnowledgePipelineSelection knowledgeFor(String query, boolean conversationContextAvailable,
-            ConversationId conversationId, String ownerId) {
+            ConversationId conversationId, String ownerId, String classifierContext) {
         log.info("process=knowledge_pipeline event=start");
         KnowledgeContext memoryKnowledge = recallKnowledge(query, conversationId, ownerId);
-        List<KnowledgeCandidate> browserCandidates = browserContentService == null
-                ? List.of()
-                : browserContentService.read(query);
-        log.info("process=browser event=completed candidates={}", browserCandidates.size());
+        List<KnowledgeCandidate> browserCandidates = List.of();
         if (!searchEnabled || isInternalTitleRequest(query)) {
             log.info("process=search event=skipped enabled={} internal_request={}",
                     searchEnabled, isInternalTitleRequest(query));
+            browserCandidates = readBrowserCandidates(query);
             return selectionWithContext(query, conversationContextAvailable, memoryKnowledge,
                     null, false, null, browserCandidates, SearchSelectionSignals.EMPTY);
         }
 
-        SearchDecision decision = searchDecisionService.decide(query);
+        SearchDecision decision = searchDecisionService.decide(query, classifierContext);
         log.info("process=search_decision event=completed should_search={} reason={}",
                 decision.shouldSearch(), decision.reason());
+        boolean explicitUrl = browserContentService != null && !browserContentService.urlsIn(query).isEmpty();
+        ExternalContextDecision externalDecision = externalContextPlanner.plan(
+                decision, explicitUrl, conversationContextAvailable,
+                !memoryKnowledge.content().isBlank());
+        log.info("process=external_context event=planned action={} confidence={} reason={}",
+                externalDecision.action(), externalDecision.confidence(), externalDecision.reason());
+        if (externalDecision.action() == com.minikun.search.model.ExternalContextAction.OPEN_EXPLICIT_URL
+                || externalDecision.action() == com.minikun.search.model.ExternalContextAction.SEARCH_THEN_OPEN) {
+            browserCandidates = readBrowserCandidates(query);
+        }
         SearchQueryPlan plan = searchQueryPlanningEnabled
                 ? searchQueryPlanningService.plan(query, decision)
                 : new SearchQueryPlan(decision.shouldSearch(), query,
@@ -975,6 +988,19 @@ public class ChatService {
         return "ไม่สามารถอ่านลิงก์ได้: " + url + " (" + exception.getMessage() + ")";
     }
 
+    private List<KnowledgeCandidate> readBrowserCandidates(String query) {
+        if (browserContentService == null) {
+            return List.of();
+        }
+        BrowserReadResult browserRead = browserContentService.readPartial(query);
+        log.info("process=browser event=completed candidates={} failures={}",
+                browserRead.candidates().size(), browserRead.failures().size());
+        browserRead.failures().forEach(failure ->
+                log.warn("process=browser event=url_failed url={} reason={}",
+                        failure.url(), failure.reason()));
+        return browserRead.candidates();
+    }
+
     private record ChatExecutionContext(
             Prompt prompt,
             ConversationId conversationId,
@@ -1007,6 +1033,19 @@ public class ChatService {
                 .filter(message -> hasText(message.content()))
                 .count();
         return hasHistory || requestConversationMessages > 1;
+    }
+
+    private String classifierContext(List<ChatMessage> history) {
+        if (history == null || history.isEmpty()) {
+            return "";
+        }
+        return history.stream()
+                .filter(message -> message != null && !isSystemMessage(message)
+                        && hasText(message.content()) && !isCommandMessage(message.content()))
+                .skip(Math.max(0, history.size() - 6L))
+                .map(message -> message.role() + ": " + message.content())
+                .reduce((left, right) -> left + "\n" + right)
+                .orElse("");
     }
 
     private void restoreMdc(Map<String, String> previous) {

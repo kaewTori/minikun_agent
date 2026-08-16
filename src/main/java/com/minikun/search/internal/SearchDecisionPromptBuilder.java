@@ -17,4 +17,13 @@ final class SearchDecisionPromptBuilder {
     SearchDecisionPrompt build(LocalDate currentDate, String userMessage) {
         return new SearchDecisionPrompt(INSTRUCTIONS, currentDate.toString(), userMessage);
     }
+
+    SearchDecisionPrompt build(LocalDate currentDate, String userMessage, String conversationContext) {
+        String context = conversationContext == null || conversationContext.isBlank()
+                ? "No prior conversation context is available."
+                : "Prior conversation context (use only to resolve references; do not search it):\n"
+                        + conversationContext;
+        return new SearchDecisionPrompt(INSTRUCTIONS, currentDate.toString(),
+                context + "\n\nCurrent user message:\n" + userMessage);
+    }
 }

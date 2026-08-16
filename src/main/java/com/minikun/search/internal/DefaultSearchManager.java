@@ -114,7 +114,7 @@ public final class DefaultSearchManager implements SearchManager {
                 request.requestId(), status, providerResponse.results(), metadata);
             SearchResponse deduplicated = deduplicator.deduplicate(response);
             SearchResponse ranked = new SearchRanker().rank(deduplicated, request.query(), request.options());
-            KnowledgeContext result = formatter.format(budgeter.budget(ranked));
+            KnowledgeContext result = formatter.format(budgeter.budget(ranked), request.query());
             recordQuality(result);
             return result;
         } catch (RuntimeException exception) {

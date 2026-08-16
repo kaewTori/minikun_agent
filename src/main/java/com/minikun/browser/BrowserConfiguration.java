@@ -18,15 +18,21 @@ public class BrowserConfiguration {
             @Value("${minikun.browser.worker-token:}") String token,
             @Value("${minikun.browser.timeout:20s}") Duration timeout,
             @Value("${minikun.browser.max-urls:5}") int maxUrls,
+            @Value("${minikun.browser.block-private-addresses:true}") boolean blockPrivateAddresses,
+            @Value("${minikun.browser.max-content-characters:12000}") int maxContentCharacters,
             MeterRegistry meterRegistry) {
         if (maxUrls < 1) {
             throw new IllegalArgumentException("minikun.browser.max-urls must be at least 1");
+        }
+        if (maxContentCharacters < 1) {
+            throw new IllegalArgumentException("minikun.browser.max-content-characters must be positive");
         }
         HttpClient httpClient = HttpClient.newBuilder().connectTimeout(timeout).build();
         JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(httpClient);
         requestFactory.setReadTimeout(timeout);
         RestClient restClient = RestClient.builder().baseUrl(workerUrl).requestFactory(requestFactory).build();
         return new BrowserContentService(
-                new HttpBrowserContentClient(restClient, token), enabled, maxUrls, meterRegistry);
+                new HttpBrowserContentClient(restClient, token), enabled, maxUrls, meterRegistry,
+                new BrowserUrlPolicy(blockPrivateAddresses), maxContentCharacters);
     }
 }

@@ -18,6 +18,16 @@ public final class ImageIntentSearchDecisionService implements SearchDecisionSer
     @Override
     public SearchDecision decide(String query) {
         SearchDecision decision = delegate.decide(query);
+        return applyImageIntent(query, decision);
+    }
+
+    @Override
+    public SearchDecision decide(String query, String conversationContext) {
+        SearchDecision decision = delegate.decide(query, conversationContext);
+        return applyImageIntent(query, decision);
+    }
+
+    private SearchDecision applyImageIntent(String query, SearchDecision decision) {
         if (decision.shouldSearch()
                 || decision.reason() != SearchDecisionReason.GENERAL_KNOWLEDGE
                 || !detector.detects(query)) {

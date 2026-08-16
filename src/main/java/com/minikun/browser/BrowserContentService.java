@@ -21,56 +21,114 @@ public final class BrowserContentService {
     private final boolean enabled;
     private final int maxUrls;
     private final MeterRegistry meterRegistry;
+    private final BrowserUrlPolicy urlPolicy;
+    private final int maxContentCharacters;
+    private final BrowserContentQualityClassifier qualityClassifier;
 
     public BrowserContentService(BrowserContentClient client, boolean enabled, int maxUrls) {
-        this(client, enabled, maxUrls, null);
+        this(client, enabled, maxUrls, null, BrowserUrlPolicy.permissive());
     }
 
     public BrowserContentService(
             BrowserContentClient client, boolean enabled, int maxUrls, MeterRegistry meterRegistry) {
+        this(client, enabled, maxUrls, meterRegistry, BrowserUrlPolicy.permissive());
+    }
+
+    public BrowserContentService(
+            BrowserContentClient client, boolean enabled, int maxUrls,
+            MeterRegistry meterRegistry, BrowserUrlPolicy urlPolicy) {
+        this(client, enabled, maxUrls, meterRegistry, urlPolicy, 12_000);
+    }
+
+    public BrowserContentService(
+            BrowserContentClient client, boolean enabled, int maxUrls,
+            MeterRegistry meterRegistry, BrowserUrlPolicy urlPolicy,
+            int maxContentCharacters) {
         this.client = client;
         this.enabled = enabled;
         this.maxUrls = maxUrls;
         this.meterRegistry = meterRegistry;
+        this.urlPolicy = urlPolicy == null ? BrowserUrlPolicy.permissive() : urlPolicy;
+        if (maxContentCharacters < 1) {
+            throw new IllegalArgumentException("max browser content characters must be positive");
+        }
+        this.maxContentCharacters = maxContentCharacters;
+        this.qualityClassifier = new BrowserContentQualityClassifier();
     }
 
     public List<KnowledgeCandidate> read(String message) {
+        BrowserReadResult result = readPartial(message);
+        if (!result.failures().isEmpty()) {
+            BrowserReadFailure failure = result.failures().get(0);
+            throw new BrowserContentException(failure.reason());
+        }
+        return result.candidates();
+    }
+
+    public BrowserReadResult readPartial(String message) {
         List<String> urls = urlsIn(message);
         if (urls.isEmpty() || !enabled) {
-            return List.of();
+            return new BrowserReadResult(List.of(), List.of());
         }
         if (urls.size() > maxUrls) {
             throw new BrowserContentException("too many links (maximum " + maxUrls + ")");
         }
         List<KnowledgeCandidate> candidates = new ArrayList<>();
+        List<BrowserReadFailure> failures = new ArrayList<>();
         for (int index = 0; index < urls.size(); index++) {
             String requestedUrl = urls.get(index);
+            try {
+                urlPolicy.validate(new URI(requestedUrl));
+            } catch (BrowserContentException exception) {
+                failures.add(new BrowserReadFailure(requestedUrl, exception.getMessage()));
+                recordOutcome("blocked", System.nanoTime());
+                continue;
+            } catch (URISyntaxException exception) {
+                failures.add(new BrowserReadFailure(requestedUrl, "invalid URL"));
+                continue;
+            }
             BrowserContent rendered;
             long started = System.nanoTime();
             try {
                 rendered = client.render(requestedUrl);
             } catch (BrowserContentException exception) {
                 recordOutcome("failure", started);
-                throw exception;
+                failures.add(new BrowserReadFailure(requestedUrl, exception.getMessage()));
+                continue;
             } catch (RuntimeException exception) {
                 recordOutcome("failure", started);
-                throw new BrowserContentException("browser worker is unavailable", exception);
+                failures.add(new BrowserReadFailure(requestedUrl, "browser worker is unavailable"));
+                continue;
             }
             if (rendered == null || rendered.content().isBlank()) {
                 recordOutcome("failure", started);
-                throw new BrowserContentException("browser worker returned empty content");
+                failures.add(new BrowserReadFailure(requestedUrl, "browser worker returned empty content"));
+                continue;
+            }
+            BrowserContentQuality quality = qualityClassifier.classify(rendered);
+            if (quality == BrowserContentQuality.ERROR_PAGE
+                    || quality == BrowserContentQuality.ACCESS_BLOCKED
+                    || quality == BrowserContentQuality.PROMPT_INJECTION_SUSPECTED) {
+                recordOutcome("quality_rejected", started);
+                failures.add(new BrowserReadFailure(requestedUrl,
+                        "browser content rejected as " + quality.name().toLowerCase()));
+                continue;
             }
             String sourceUrl = normalizeResponseUrl(rendered.url(), requestedUrl);
+            String renderedContent = rendered.content().length() > maxContentCharacters
+                    ? rendered.content().substring(0, maxContentCharacters)
+                    : rendered.content();
+            boolean truncated = rendered.truncated() || rendered.content().length() > maxContentCharacters;
             String content = "Source URL: " + sourceUrl + "\n"
                     + "Content type: " + rendered.contentType() + "\n"
-                    + "Truncated: " + rendered.truncated() + "\n"
-                    + "Rendered page content:\n" + rendered.content();
+                    + "Truncated: " + truncated + "\n"
+                    + "Rendered page content:\n" + renderedContent;
             candidates.add(new KnowledgeCandidate(
                     "browser-" + index, KnowledgeSource.BROWSER, content, index));
             recordOutcome("success", started);
             LOGGER.info("Browser render succeeded url_index={} truncated={}", index, rendered.truncated());
         }
-        return List.copyOf(candidates);
+        return new BrowserReadResult(candidates, failures);
     }
 
     public List<String> urlsIn(String message) {

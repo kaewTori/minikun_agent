@@ -11,13 +11,25 @@ import java.util.ArrayList;
 import java.util.List;
 
 final class SearchFormatter {
+    private final SearchSourceQualityClassifier qualityClassifier = new SearchSourceQualityClassifier();
+
     KnowledgeContext format(SearchResponse response) {
+        return format(response, "");
+    }
+
+    KnowledgeContext format(SearchResponse response, String query) {
         if (response == null || response.results().isEmpty()) {
             return new KnowledgeContext("");
         }
         List<KnowledgeCandidate> candidates = new ArrayList<>();
         for (int index = 0; index < response.results().size(); index++) {
             var result = response.results().get(index);
+            SearchSourceQuality quality = qualityClassifier.classify(result);
+            if (quality == SearchSourceQuality.ERROR_PAGE
+                    || quality == SearchSourceQuality.ACCESS_BLOCKED
+                    || quality == SearchSourceQuality.PROMPT_INJECTION_SUSPECTED) {
+                continue;
+            }
             String content = result.title() + " (" + result.source().canonicalUri() + "): " + result.content();
             candidates.add(new KnowledgeCandidate(
                 "search-" + index, KnowledgeSource.SEARCH, content, index));

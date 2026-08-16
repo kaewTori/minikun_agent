@@ -38,10 +38,21 @@ public final class LlmSearchDecisionService implements SearchDecisionService {
 
     @Override
     public SearchDecision decide(String query) {
+        return decideInternal(query, null);
+    }
+
+    @Override
+    public SearchDecision decide(String query, String conversationContext) {
+        return decideInternal(query, conversationContext);
+    }
+
+    private SearchDecision decideInternal(String query, String conversationContext) {
         Timer.Sample sample = startTimer();
         SearchDecision decision = null;
         try {
-            SearchDecisionPrompt prompt = promptBuilder.build(LocalDate.now(clock), query);
+            SearchDecisionPrompt prompt = conversationContext == null
+                    ? promptBuilder.build(LocalDate.now(clock), query)
+                    : promptBuilder.build(LocalDate.now(clock), query, conversationContext);
             decision = client.classify(prompt);
             return decision;
         } catch (RuntimeException exception) {
