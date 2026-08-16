@@ -24,8 +24,8 @@ class TokenCounterTest {
     }
 
     @Test
-    void estimatesShortTextAsZeroTokens() {
-        assertEquals(0, counter.count("abc"));
+    void roundsShortTextUpToOneToken() {
+        assertEquals(1, counter.count("abc"));
     }
 
     @Test

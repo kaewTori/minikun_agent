@@ -37,7 +37,7 @@ public class MemoryService {
             .toList(), conversation.ownerId());
         return accepted.stream().map(request -> {
             Memory memory = new Memory(
-                request.ownerId(), MemoryId.generate(), request.category(), request.source(),
+                request.ownerId(), request.conversationId(), MemoryId.generate(), request.category(), request.source(),
                 request.content(), Instant.now(clock), request.confidence(), request.reason());
                 return repository.save(request)
                     ? memory : null;

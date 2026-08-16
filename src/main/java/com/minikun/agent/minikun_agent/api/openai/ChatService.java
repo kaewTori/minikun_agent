@@ -54,6 +54,8 @@ import com.minikun.model.task.title.TitleGenerationService;
 import com.minikun.character.model.CharacterSpecification;
 import com.minikun.browser.BrowserContentException;
 import com.minikun.browser.BrowserContentService;
+import com.minikun.context.runtime.PersonalContextRuntime;
+import com.minikun.context.runtime.PersonalContextRuntimeResult;
 import com.minikun.pcs.PromptComposer;
 import com.minikun.pcs.PromptException;
 import com.minikun.pcs.PromptRequest;
@@ -78,8 +80,8 @@ import com.minikun.search.SearchService;
 import com.minikun.search.SearchSelectionSignalMapper;
 import com.minikun.search.model.SearchDecision;
 import com.minikun.tools.springai.SpringAiToolCallingRuntime;
-import com.minikun.tokenbudget.domain.TokenBudget;
 import com.minikun.tokenbudget.runtime.DynamicGenerationOptionsFactory;
+import com.minikun.tokenbudget.config.TokenBudgetProperties;
 import com.minikun.search.model.SearchDecisionReason;
 import com.minikun.search.model.SearchRequest;
 import com.minikun.search.model.SearchOptions;
@@ -129,7 +131,7 @@ public class ChatService {
     private final CacheService cacheService;
     private final CacheFormatter cacheFormatter;
     private final ObjectProvider<ReflectionService> reflectionService;
-        private final TitleGenerationService titleGenerationService;
+    private final TitleGenerationService titleGenerationService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Autowired(required = false)
@@ -140,6 +142,12 @@ public class ChatService {
 
     @Autowired(required = false)
     private ModelCapabilityRegistry modelCapabilityRegistry;
+
+    @Autowired(required = false)
+    private TokenBudgetProperties tokenBudgetProperties;
+
+    @Autowired(required = false)
+    private PersonalContextRuntime personalContextRuntime;
 
     @Autowired
     private BrowserContentService browserContentService;
@@ -286,6 +294,12 @@ public class ChatService {
 
     @Value("${minikun.token-budget.dynamic-enabled:false}")
     private boolean dynamicTokenBudgetEnabled;
+
+    @Value("${minikun.token-budget.reserved-output-tokens:256}")
+    private long reservedOutputTokens;
+
+    @Value("${minikun.context-budget.characters:24000}")
+    private long contextBudgetCharacters = 24_000L;
 
     public ChatCompletionResponse chatCompletion(ChatCompletionRequest request, ConversationId conversationId) {
         ChatMessage userMessage = userMessage(request);
@@ -646,26 +660,36 @@ public class ChatService {
                 knowledgeSelection.searchContext(),
                 knowledgeSelection.selection(),
                 knowledgeSelection.consolidation());
-        var composedPrompt = promptComposer.compose(promptRequest);
         GenerationOptions options = generationOptions(request);
-        if (dynamicTokenBudgetEnabled) {
-            options = dynamicGenerationOptions(composedPrompt, options);
+        PersonalContextRuntime contextRuntime = personalContextRuntime;
+        if (contextRuntime == null && dynamicTokenBudgetEnabled && dynamicGenerationOptionsFactory != null) {
+            contextRuntime = new PersonalContextRuntime(promptComposer, dynamicGenerationOptionsFactory);
         }
-        return toSpringPrompt(composedPrompt, options);
-    }
-
-    private GenerationOptions dynamicGenerationOptions(
-            com.minikun.pcs.model.Prompt composedPrompt,
-            GenerationOptions existing) {
-        if (dynamicGenerationOptionsFactory == null || modelCapabilityRegistry == null) {
-            throw new IllegalStateException("dynamic token budget runtime is not configured");
+        if (contextRuntime == null) {
+            return toSpringPrompt(promptComposer.compose(promptRequest), options);
         }
-        ModelCapability capability = modelCapabilityRegistry.get(activeChatModelProvider.get().id());
-        TokenBudget budget = new TokenBudget(
-                capability.contextWindowTokens(), 0, configuredGenerationMaxTokens);
-        String promptText = String.join("\n",
-                composedPrompt.messages().stream().map(PromptMessage::content).toList());
-        return dynamicGenerationOptionsFactory.create(existing, capability, budget, promptText);
+        ModelCapability capability = dynamicTokenBudgetEnabled && modelCapabilityRegistry != null
+                ? modelCapabilityRegistry.get(activeChatModelProvider.get().id())
+                : null;
+        long configuredReservedOutputTokens = tokenBudgetProperties == null
+                ? reservedOutputTokens
+                : tokenBudgetProperties.reservedOutputTokens();
+        PersonalContextRuntimeResult result = contextRuntime.prepare(
+                promptRequest,
+                options,
+                capability,
+                dynamicTokenBudgetEnabled,
+                contextBudgetCharacters,
+                configuredReservedOutputTokens,
+                configuredGenerationMaxTokens);
+        log.debug("process=context_runtime event=prepared requested_context_chars={} final_prompt_chars={} "
+                + "recovery_attempts={} estimated_input_tokens={} allocated_output_tokens={}",
+                result.snapshot().requestedContextCharacters(),
+                result.snapshot().finalPromptCharacters(),
+                result.snapshot().recoveryAttempts(),
+                result.snapshot().estimatedInputTokens(),
+                result.snapshot().allocatedOutputTokens());
+        return toSpringPrompt(result.prompt(), result.generationOptions());
     }
 
     private GenerationOptions generationOptions(ChatCompletionRequest request) {

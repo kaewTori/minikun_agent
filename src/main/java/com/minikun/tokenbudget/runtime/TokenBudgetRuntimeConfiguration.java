@@ -5,6 +5,7 @@ import com.minikun.model.capability.DefaultModelCapabilityRegistry;
 import com.minikun.model.capability.ModelCapability;
 import com.minikun.model.capability.ModelCapabilityRegistry;
 import com.minikun.model.capability.ModelRole;
+import com.minikun.tokenbudget.config.TokenBudgetProperties;
 import com.minikun.tokenbudget.counter.ApproximateTokenCounter;
 import com.minikun.tokenbudget.counter.TokenCounter;
 import com.minikun.tokenbudget.diagnostics.DefaultTokenBudgetSafetyPolicy;
@@ -32,12 +33,14 @@ import com.minikun.tokenbudget.recovery.RecoveryStep;
 import com.minikun.tokenbudget.recovery.RecoveryStrategyHandler;
 import com.minikun.tokenbudget.recovery.RecoveryStrategyRegistry;
 
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import java.util.Map;
 
 @Configuration(proxyBeanMethods = false)
+@EnableConfigurationProperties(TokenBudgetProperties.class)
 public class TokenBudgetRuntimeConfiguration {
     private static final long DEFAULT_CONTEXT_WINDOW_TOKENS = 16_384L;
     private static final long DEFAULT_MAX_OUTPUT_TOKENS = 4_096L;

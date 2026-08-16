@@ -95,13 +95,14 @@ final class JdbcMemoryRepository implements MemoryRepository {
             throw new IllegalArgumentException("memory retrieval limit must not be negative");
         }
         List<Memory> memories = jdbcTemplate.query("""
-                SELECT owner_id, id, category, source, content, created_at, confidence, reason
+                SELECT owner_id, conversation_id, id, category, source, content, created_at, confidence, reason
                 FROM minikun_memory
             WHERE owner_id = ? OR owner_id IS NULL
                 ORDER BY created_at DESC, id
                 LIMIT ?
                 """, (resultSet, rowNumber) -> new Memory(
                 resultSet.getString("owner_id"),
+                resultSet.getString("conversation_id"),
                 new MemoryId(resultSet.getObject("id", java.util.UUID.class)),
                 MemoryCategory.valueOf(resultSet.getString("category")),
                 MemorySource.valueOf(resultSet.getString("source")),
@@ -113,5 +114,54 @@ final class JdbcMemoryRepository implements MemoryRepository {
             log.info("memory_repository_find owner_id={} conversation_id={} rows={}",
                 scope.ownerId(), scope.conversationId().value(), memories.size());
             return memories;
+    }
+
+    @Override
+    public List<Memory> findByOwner(String ownerId, int limit) {
+        validateOwner(ownerId);
+        validateLimit(limit);
+        return jdbcTemplate.query("""
+                SELECT owner_id, conversation_id, id, category, source, content, created_at, confidence, reason
+                FROM minikun_memory
+                WHERE owner_id = ?
+                ORDER BY created_at DESC, id
+                LIMIT ?
+                """, (resultSet, rowNumber) -> new Memory(
+                resultSet.getString("owner_id"),
+                resultSet.getString("conversation_id"),
+                new MemoryId(resultSet.getObject("id", java.util.UUID.class)),
+                MemoryCategory.valueOf(resultSet.getString("category")),
+                MemorySource.valueOf(resultSet.getString("source")),
+                resultSet.getString("content"),
+                resultSet.getTimestamp("created_at").toInstant(),
+                resultSet.getDouble("confidence"),
+                resultSet.getString("reason")), ownerId, limit);
+    }
+
+    @Override
+    public boolean deleteByOwner(String ownerId, MemoryId memoryId) {
+        validateOwner(ownerId);
+        java.util.Objects.requireNonNull(memoryId, "memory id must not be null");
+        return jdbcTemplate.update(
+                "DELETE FROM minikun_memory WHERE owner_id = ? AND id = ?",
+                ownerId, memoryId.value()) > 0;
+    }
+
+    @Override
+    public int deleteAllByOwner(String ownerId) {
+        validateOwner(ownerId);
+        return jdbcTemplate.update("DELETE FROM minikun_memory WHERE owner_id = ?", ownerId);
+    }
+
+    private void validateOwner(String ownerId) {
+        if (ownerId == null || ownerId.isBlank() || "*".equals(ownerId)) {
+            throw new IllegalArgumentException("owner id must not be blank or wildcard");
+        }
+    }
+
+    private void validateLimit(int limit) {
+        if (limit < 0) {
+            throw new IllegalArgumentException("memory listing limit must not be negative");
+        }
     }
 }

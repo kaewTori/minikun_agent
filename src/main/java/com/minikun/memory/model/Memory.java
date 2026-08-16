@@ -5,6 +5,7 @@ import java.util.Objects;
 
 public record Memory(
     String ownerId,
+    String conversationId,
         MemoryId id,
         MemoryCategory category,
         MemorySource source,
@@ -14,12 +15,20 @@ public record Memory(
         String reason) {
     public Memory(MemoryId id, MemoryCategory category, MemorySource source, String content,
             Instant createdAt, double confidence, String reason) {
-        this(null, id, category, source, content, createdAt, confidence, reason);
+        this(null, null, id, category, source, content, createdAt, confidence, reason);
+    }
+
+    public Memory(String ownerId, MemoryId id, MemoryCategory category, MemorySource source, String content,
+            Instant createdAt, double confidence, String reason) {
+        this(ownerId, null, id, category, source, content, createdAt, confidence, reason);
     }
 
     public Memory {
         if (ownerId != null && (ownerId.isBlank() || "*".equals(ownerId))) {
             throw new IllegalArgumentException("owner id must not be blank or wildcard");
+        }
+        if (conversationId != null && conversationId.isBlank()) {
+            throw new IllegalArgumentException("conversation id must not be blank");
         }
         Objects.requireNonNull(id, "id must not be null");
         Objects.requireNonNull(category, "category must not be null");

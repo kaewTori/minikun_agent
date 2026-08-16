@@ -17,6 +17,8 @@
 - ส่ง language/category/time-range/safe-search options ไปยัง SearXNG พร้อม ranking และ URL deduplication
 - Actuator health และ metrics
 - คำสั่ง runtime และ diagnostics ที่จัดการในระดับ application
+- Personal Context Runtime สำหรับ context budget, dynamic max-tokens และ bounded recovery
+- ตรวจสอบ ลบรายรายการ และล้าง long-term memory แบบ owner-scoped ผ่าน `/v1/memory`
 
 ## เทคโนโลยี
 
@@ -39,6 +41,7 @@ src/main/java/
 ├── pcs/                 Provider Composition System สำหรับสร้าง prompt
 ├── search/              search decision, query processing และ SearXNG
 ├── commands/            runtime commands
+├── context/             Personal Context Runtime และ context snapshots
 ├── diagnostics/         diagnostics และ metrics
 └── runtime/             models, version และ cache information
 
@@ -203,6 +206,18 @@ curl -X POST http://127.0.0.1:8080/v1/embeddings \
     "input": ["ข้อความแรก", "ข้อความที่สอง"]
   }'
 ```
+
+### Memory management
+
+สำหรับการตรวจสอบและลบ long-term memory ของ personal agent:
+
+```sh
+curl 'http://127.0.0.1:8080/v1/memory?owner_id=default&limit=100'
+curl -X DELETE 'http://127.0.0.1:8080/v1/memory/<memory-id>?owner_id=default'
+curl -X DELETE 'http://127.0.0.1:8080/v1/memory?owner_id=default'
+```
+
+การลบทั้งหมดเป็น owner-scoped และไม่ยอมรับ wildcard owner (`*`)
 
 ## Memory และ prompt composition
 

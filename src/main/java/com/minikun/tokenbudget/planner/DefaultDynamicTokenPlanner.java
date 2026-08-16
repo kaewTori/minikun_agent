@@ -24,6 +24,13 @@ public final class DefaultDynamicTokenPlanner implements DynamicTokenPlanner {
         Objects.requireNonNull(prompt, "prompt must not be null");
 
         long inputTokens = tokenCounter.count(prompt);
-        return tokenBudgetPolicy.allocate(budget, inputTokens);
+        long modelOutputLimit = capability.maxOutputTokens();
+        long effectiveApplicationMaximum = Math.min(
+                budget.applicationMaxOutputTokens(), modelOutputLimit);
+        TokenBudget effectiveBudget = new TokenBudget(
+                Math.min(budget.maxContextTokens(), capability.contextWindowTokens()),
+                budget.reservedOutputTokens(),
+                effectiveApplicationMaximum);
+        return tokenBudgetPolicy.allocate(effectiveBudget, inputTokens);
     }
 }

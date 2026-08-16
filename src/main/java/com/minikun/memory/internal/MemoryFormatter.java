@@ -29,6 +29,7 @@ final class MemoryFormatter {
                 String entry = memory.category().name()
                     + ": " + memory.content()
                     + " (confidence=" + memory.confidence()
+                    + ", source=" + memory.source()
                     + ", reason=" + memory.reason() + ")";
             int separatorLength = content.isEmpty() ? 0 : 1;
             if (content.length() + separatorLength + entry.length() > maximumCharacters) {

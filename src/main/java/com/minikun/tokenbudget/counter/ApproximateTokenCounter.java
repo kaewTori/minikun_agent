@@ -8,6 +8,8 @@ public final class ApproximateTokenCounter implements TokenCounter {
     @Override
     public long count(String text) {
         Objects.requireNonNull(text, "text must not be null");
-        return text.length() / APPROXIMATE_CHARACTERS_PER_TOKEN;
+        long characters = text.length();
+        return (characters + APPROXIMATE_CHARACTERS_PER_TOKEN - 1L)
+                / APPROXIMATE_CHARACTERS_PER_TOKEN;
     }
 }
