@@ -116,6 +116,7 @@ import org.slf4j.MDC;
 @RequiredArgsConstructor(onConstructor_ = @Autowired)
 @Slf4j
 public class ChatService {
+    private static final String PUBLIC_MODEL_NAME = "mini-kun";
     private static final String DEFAULT_CHAT_MODEL = "hf.co/llmfan46/gemma-4-E4B-it-ultra-uncensored-heretic-GGUF:Q5_K_M";
 
 
@@ -634,9 +635,8 @@ public class ChatService {
     }
 
     public ModelsResponse listModels() {
-        String model = effectiveConfiguredChatModel();
         return new ModelsResponse("list", List.of(
-                new ModelsResponse.Model(model, "model", Instant.now().getEpochSecond(), "minikun")));
+                new ModelsResponse.Model(PUBLIC_MODEL_NAME, "model", Instant.now().getEpochSecond(), "minikun")));
     }
 
     public EmbeddingResponse embeddings(EmbeddingRequest request) {
@@ -1363,6 +1363,8 @@ public class ChatService {
     }
 
     private String modelName(String requestedModel, String configuredModel) {
-        return requestedModel == null || requestedModel.isBlank() ? configuredModel : requestedModel;
+        // Backend model identifiers are implementation details. Keep the public API stable
+        // even when Ollama/TinyGrad is switched or its configured model changes.
+        return PUBLIC_MODEL_NAME;
     }
 }
