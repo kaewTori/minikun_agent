@@ -66,10 +66,11 @@ public final class OpenMeteoWeatherProvider implements WeatherProvider {
     }
 
     private JsonNode geocode(WeatherRequest request) {
+        String geocodingName = normalizeLocation(request.location());
         UriComponentsBuilder builder = UriComponentsBuilder.fromPath("/v1/search")
-                .queryParam("name", request.location())
+                .queryParam("name", geocodingName)
                 .queryParam("count", 5)
-                .queryParam("language", "en")
+                .queryParam("language", geocodingLanguage(geocodingName))
                 .queryParam("format", "json");
         if (!request.countryCode().isBlank()) {
             builder.queryParam("countryCode", request.countryCode());
@@ -86,6 +87,19 @@ public final class OpenMeteoWeatherProvider implements WeatherProvider {
         } catch (Exception exception) {
             throw new IllegalStateException("weather geocoding response is invalid", exception);
         }
+    }
+
+    private String normalizeLocation(String location) {
+        return location.trim()
+                .replace('ฯ', ' ')
+                .replaceAll("\\s+", " ")
+                .trim();
+    }
+
+    private String geocodingLanguage(String location) {
+        boolean containsThai = location.codePoints()
+                .anyMatch(codePoint -> codePoint >= 0x0E00 && codePoint <= 0x0E7F);
+        return containsThai ? "th" : "en";
     }
 
     private URIRequest forecastUri(double latitude, double longitude) {

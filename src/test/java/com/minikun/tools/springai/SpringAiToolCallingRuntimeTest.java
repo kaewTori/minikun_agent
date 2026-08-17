@@ -17,6 +17,8 @@ import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
 import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.ollama.api.OllamaChatOptions;
+import org.mockito.ArgumentCaptor;
 
 import com.minikun.agent.minikun_agent.conversation.ConversationId;
 import com.minikun.model.ActiveModelConfiguration;
@@ -56,7 +58,10 @@ class SpringAiToolCallingRuntimeTest {
         ChatResponse response = runtime.call(new Prompt("Add 2 and 3."), new ConversationId("conversation"));
 
         assertEquals("The answer is 5.", response.getResult().getOutput().getText());
-        verify(chatModel, times(2)).call(any(Prompt.class));
+        ArgumentCaptor<Prompt> prompts = ArgumentCaptor.forClass(Prompt.class);
+        verify(chatModel, times(2)).call(prompts.capture());
+        assertEquals(true, prompts.getAllValues().stream()
+                .allMatch(prompt -> prompt.getOptions() instanceof OllamaChatOptions));
     }
 
     @Test

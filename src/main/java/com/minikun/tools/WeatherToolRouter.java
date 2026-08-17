@@ -92,7 +92,7 @@ public final class WeatherToolRouter {
             }
         }
         if (markerEnd < 0) {
-            return Optional.empty();
+            return temporalWeatherLocation(text);
         }
 
         String candidate = text.substring(markerEnd).trim();
@@ -114,6 +114,29 @@ public final class WeatherToolRouter {
         }
         String location = candidate.substring(0, end).trim();
         return location.isBlank() ? Optional.empty() : Optional.of(location);
+    }
+
+    private Optional<String> temporalWeatherLocation(String text) {
+        String normalized = text.toLowerCase(Locale.ROOT);
+        for (String timeWord : java.util.List.of("พรุ่งนี้", "วันนี้", "tomorrow", "today")) {
+            int timeEnd = normalized.indexOf(timeWord);
+            if (timeEnd < 0) {
+                continue;
+            }
+            timeEnd += timeWord.length();
+            for (String weatherWord : java.util.List.of("อากาศ", "weather", "forecast")) {
+                int weatherStart = normalized.indexOf(weatherWord, timeEnd);
+                if (weatherStart < 0) {
+                    continue;
+                }
+                String location = text.substring(timeEnd, weatherStart).trim();
+                location = location.replaceFirst("^(?iu)(ที่|ใน|แถว|ของ)\\s*", "").trim();
+                if (!location.isBlank()) {
+                    return Optional.of(location);
+                }
+            }
+        }
+        return Optional.empty();
     }
 
     private String format(WeatherReport report) {

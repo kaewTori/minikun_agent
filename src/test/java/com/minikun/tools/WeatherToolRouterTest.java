@@ -20,7 +20,7 @@ class WeatherToolRouterTest {
                                 28.0, 35.0, 70, 4.0, "06:00", "18:40", Instant.now(), "test"))))));
 
         var result = router.route(
-                "มินิคุงเราอยากรู้สภาพอากาศวันพรุ่งนี้ที่กรุงเทพจังเลย",
+                "แล้ว พรุ่งนี้กรุงเทพอากาศเป็นอย่างไร",
                 new ConversationId("conversation"));
 
         assertTrue(result.isPresent());

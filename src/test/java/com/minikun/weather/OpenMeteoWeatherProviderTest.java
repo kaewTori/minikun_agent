@@ -59,4 +59,43 @@ class OpenMeteoWeatherProviderTest {
         geocodingServer.verify();
         forecastServer.verify();
     }
+
+    @Test
+    void normalizesCommonThaiCityNameBeforeGeocoding() {
+        RestClient.Builder geocodingBuilder = RestClient.builder().baseUrl("https://geo.test");
+        RestClient.Builder forecastBuilder = RestClient.builder().baseUrl("https://forecast.test");
+        MockRestServiceServer geocodingServer = MockRestServiceServer.bindTo(geocodingBuilder).build();
+        MockRestServiceServer forecastServer = MockRestServiceServer.bindTo(forecastBuilder).build();
+        OpenMeteoWeatherProvider provider = new OpenMeteoWeatherProvider(
+                geocodingBuilder.build(), forecastBuilder.build(), new ObjectMapper(), CLOCK);
+
+        geocodingServer.expect(requestTo(
+                        "https://geo.test/v1/search?name=กรุงเทพ&count=5"
+                                + "&language=th&format=json"))
+                .andExpect(method(HttpMethod.GET))
+                .andRespond(withSuccess("""
+                        {"results":[{"name":"Bangkok","country":"Thailand","latitude":13.75,
+                        "longitude":100.50,"timezone":"Asia/Bangkok"}]}
+                        """, MediaType.APPLICATION_JSON));
+        forecastServer.expect(requestTo("https://forecast.test/v1/forecast?latitude=13.75&longitude=100.5"
+                + "&current=temperature_2m,apparent_temperature,precipitation,wind_speed_10m,weather_code"
+                + "&daily=weather_code,temperature_2m_min,temperature_2m_max,precipitation_probability_max,"
+                + "precipitation_sum,sunrise,sunset&forecast_days=16&timezone=auto&temperature_unit=celsius"
+                + "&wind_speed_unit=kmh&precipitation_unit=mm"))
+                .andExpect(method(HttpMethod.GET))
+                .andRespond(withSuccess("""
+                        {"current":{"temperature_2m":30.0,"weather_code":61},
+                        "daily":{"time":["2026-08-18"],"weather_code":[61],
+                        "temperature_2m_min":[27.0],"temperature_2m_max":[34.0],
+                        "precipitation_probability_max":[70],"precipitation_sum":[5.0],
+                        "sunrise":["06:00"],"sunset":["18:40"]}}
+                        """, MediaType.APPLICATION_JSON));
+
+        WeatherReport report = provider.forecast(new WeatherRequest("กรุงเทพฯ", "today", ""));
+
+        assertEquals("Bangkok", report.location());
+        assertEquals("2026-08-18", report.requestedDate());
+        geocodingServer.verify();
+        forecastServer.verify();
+    }
 }

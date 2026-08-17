@@ -9,7 +9,7 @@ import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.chat.prompt.Prompt;
-import org.springframework.ai.model.tool.DefaultToolCallingChatOptions;
+import org.springframework.ai.ollama.api.OllamaChatOptions;
 import org.springframework.ai.model.tool.ToolCallingChatOptions;
 import org.springframework.ai.model.tool.ToolCallingManager;
 import org.springframework.ai.model.tool.ToolExecutionResult;
@@ -51,7 +51,10 @@ public final class SpringAiToolCallingRuntime {
             throw new IllegalStateException(
                     "Chat model provider does not support tool calling: " + chatModelProvider.id());
         }
-        ToolCallingChatOptions.Builder<?> optionsBuilder = DefaultToolCallingChatOptions.builder();
+        // OllamaChatModel casts chat options to OllamaChatOptions. The generic
+        // DefaultToolCallingChatOptions is not compatible with that adapter,
+        // even though both implement ToolCallingChatOptions.
+        OllamaChatOptions.Builder optionsBuilder = OllamaChatOptions.builder();
         copyChatOptions(prompt.getOptions(), optionsBuilder);
         ToolCallingChatOptions options = optionsBuilder
                 .toolCallbacks(callbacks)
