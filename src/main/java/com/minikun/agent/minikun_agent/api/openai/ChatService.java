@@ -94,7 +94,8 @@ import com.minikun.search.model.SearchDecision;
 import com.minikun.search.model.ExternalContextDecision;
 import com.minikun.search.internal.ExternalContextPlanner;
 import com.minikun.tools.springai.SpringAiToolCallingRuntime;
-import com.minikun.tools.WeatherToolRouter;
+import com.minikun.tools.ToolEvidence;
+import com.minikun.tools.ToolRequestRouter;
 import com.minikun.tokenbudget.runtime.DynamicGenerationOptionsFactory;
 import com.minikun.tokenbudget.config.TokenBudgetProperties;
 import com.minikun.search.model.SearchDecisionReason;
@@ -155,7 +156,7 @@ public class ChatService {
     private SpringAiToolCallingRuntime toolCallingRuntime;
 
     @Autowired(required = false)
-    private WeatherToolRouter weatherToolRouter;
+    private List<ToolRequestRouter> toolRequestRouters = List.of();
 
     @Autowired(required = false)
     private DynamicGenerationOptionsFactory dynamicGenerationOptionsFactory;
@@ -350,11 +351,11 @@ public class ChatService {
         ChatTransactionLogger.Transaction transaction = transactionLogger.start(
                 "chatcmpl-" + UUID.randomUUID(), model, false, request.messages().size());
         try {
-            Optional<String> weatherContent = routeWeather(userMessage, conversationId);
+            Optional<ToolEvidence> verifiedToolResult = routeTool(userMessage, conversationId);
             ChatExecutionContext context;
             try {
                 context = prepareChatExecution(
-                        request, conversationId, userMessage, transaction, false, weatherContent.orElse(null));
+                        request, conversationId, userMessage, transaction, false, verifiedToolResult.orElse(null));
             } catch (BrowserContentException exception) {
                 String content = browserFailureMessage(userMessage.content(), exception);
                 if (shouldPersistConversation(request)) {
@@ -365,7 +366,7 @@ public class ChatService {
             }
             // The weather route has already executed the tool. Generate the final
             // answer from the MCS/PCS prompt, without invoking that tool twice.
-            var response = weatherContent.isPresent()
+            var response = verifiedToolResult.isPresent()
                     ? callChatModel(context.prompt(), "chat_model", transaction.requestId(), context.conversationId())
                     : callModel(context.prompt(), context.conversationId(), transaction.requestId());
             String content = response.getResult().getOutput().getText();
@@ -409,12 +410,12 @@ public class ChatService {
         StringBuilder assistantContent = new StringBuilder();
         AtomicReference<ModelUsage> modelUsage = new AtomicReference<>(ModelUsage.empty());
 
-        Optional<String> weatherContent = routeWeather(userMessage, conversationId);
+        Optional<ToolEvidence> verifiedToolResult = routeTool(userMessage, conversationId);
 
         ChatExecutionContext context;
         try {
             context = prepareChatExecution(
-                    request, conversationId, userMessage, transaction, true, weatherContent.orElse(null));
+                request, conversationId, userMessage, transaction, true, verifiedToolResult.orElse(null));
         } catch (BrowserContentException exception) {
             String content = browserFailureMessage(userMessage.content(), exception);
             if (shouldPersistConversation(request)) {
@@ -425,7 +426,7 @@ public class ChatService {
         }
         long modelStarted = System.nanoTime();
         String traceId = MDC.get("trace_id");
-        Flux<ChatResponse> modelResponses = weatherContent.isPresent()
+        Flux<ChatResponse> modelResponses = verifiedToolResult.isPresent()
             ? streamChatModel(context.prompt(), context.conversationId())
             : toolsEnabled && toolCallingRuntime != null
             ? Flux.defer(() -> Flux.just(toolCallingRuntime.call(context.prompt(), context.conversationId())))
@@ -476,7 +477,7 @@ public class ChatService {
             ChatMessage userMessage,
             ChatTransactionLogger.Transaction transaction,
             boolean streaming,
-            String verifiedToolResult) {
+            ToolEvidence verifiedToolResult) {
         boolean persistConversation = shouldPersistConversation(request);
         List<ChatMessage> history = conversationMemoryService.load(conversationId);
         log.info("process=conversation_history event=loaded messages={}{}", history.size(),
@@ -570,15 +571,20 @@ public class ChatService {
                 .orElse(null);
     }
 
-    private Optional<String> routeWeather(ChatMessage userMessage, ConversationId conversationId) {
-        if (!toolsEnabled || weatherToolRouter == null) {
+    private Optional<ToolEvidence> routeTool(ChatMessage userMessage, ConversationId conversationId) {
+        if (!toolsEnabled || toolRequestRouters == null || toolRequestRouters.isEmpty()) {
             return Optional.empty();
         }
-        Optional<String> result = weatherToolRouter.route(userMessage.content(), conversationId);
-        if (result.isPresent()) {
-            log.info("process=weather_route event=completed tool=weather.get_forecast");
+        for (ToolRequestRouter router : toolRequestRouters) {
+            Optional<ToolEvidence> result = router.route(userMessage.content(), conversationId);
+            if (result.isPresent()) {
+                ToolEvidence evidence = result.get();
+                log.info("process=tool_route event=completed tool={} success={}",
+                        evidence.toolName(), evidence.success());
+                return result;
+            }
         }
-        return result;
+        return Optional.empty();
     }
 
     private ChatCompletionResponse responseForContent(ChatCompletionRequest request, String content) {
@@ -693,7 +699,7 @@ public class ChatService {
             List<ChatMessage> history,
             KnowledgePipelineSelection knowledgeSelection,
             ImageAwareness imageAwareness,
-            String verifiedToolResult) {
+            ToolEvidence verifiedToolResult) {
         var userMessage = userMessage(request);
         String runtime = request.messages().stream()
                 .filter(message -> "system".equals(message.role()))
@@ -712,7 +718,7 @@ public class ChatService {
         // assistant messages or recalled memory. Keep the MCS character context,
         // but do not let stale answers such as "I cannot access weather" override
         // the verified result in the current turn.
-        boolean factFirstToolTurn = hasText(verifiedToolResult);
+        boolean factFirstToolTurn = isVerifiedToolResult(verifiedToolResult);
         String conversationContent = factFirstToolTurn
                 ? ""
                 : conversation.isBlank() ? requestConversation(request) : conversation;
@@ -730,7 +736,7 @@ public class ChatService {
                 ? com.minikun.personality.signal.PersonaSelectionSignals.EMPTY
                 : adaptivePersonaService.evaluate("default", userMessage.content(),
                         promptSearchSignals.searchRequested(),
-                        (toolsEnabled && toolCallingRuntime != null) || hasText(verifiedToolResult),
+                        (toolsEnabled && toolCallingRuntime != null) || verifiedToolResult != null,
                         false, MoodSnapshot.DEFAULT).signals();
         PromptRequest promptRequest = new PromptRequest(
                 characterSpecification,
@@ -1025,7 +1031,7 @@ public class ChatService {
     private List<CapabilityInstruction> capabilitiesFor(
             KnowledgePipelineSelection selection,
             ImageAwareness imageAwareness,
-            String verifiedToolResult) {
+            ToolEvidence verifiedToolResult) {
         List<CapabilityInstruction> capabilities = new java.util.ArrayList<>();
         boolean hasBrowserContent = selection.selection().selectedCandidates().stream()
                 .anyMatch(candidate -> candidate.source() == KnowledgeSource.BROWSER);
@@ -1042,13 +1048,22 @@ public class ChatService {
                             + ". The assistant cannot see, inspect, or analyze their visual contents "
                             + "and must not claim visual details unless trusted text explicitly provides them."));
         }
-        if (hasText(verifiedToolResult)) {
-            capabilities.add(new CapabilityInstruction("Verified tool result",
-                    "A native tool has already retrieved the following verified result for the current request. "
-                    + "Use it as the factual source and answer the user's original question now. "
-                    + "Do not say that the tool or external data is unavailable, and do not replace these "
-                    + "facts with guesses. Keep the identity, language, tone, and response style from MCS.\n"
-                    + verifiedToolResult, true));
+        if (verifiedToolResult != null) {
+            String evidenceContent = "Tool: " + verifiedToolResult.toolName() + "\n"
+                    + verifiedToolResult.content();
+            if (verifiedToolResult.success()) {
+                capabilities.add(new CapabilityInstruction("Verified tool result",
+                        "A native tool has already retrieved the following verified result for the current request. "
+                                + "Use it as the factual source and answer the user's original question now. "
+                                + "Do not say that the tool or external data is unavailable, and do not replace these "
+                                + "facts with guesses. Keep the identity, language, tone, and response style from MCS.\n"
+                                + evidenceContent, true));
+            } else {
+                capabilities.add(new CapabilityInstruction("Tool failure",
+                        "The tool call failed. Explain the failure honestly in the identity, language, tone, "
+                                + "and response style from MCS. Do not fabricate an answer.\n"
+                                + evidenceContent, true));
+            }
         } else if (toolsEnabled && toolCallingRuntime != null) {
             capabilities.add(new CapabilityInstruction("Native tools",
                     "When a native tool returns a successful result, treat its output as verified facts for the "
@@ -1057,6 +1072,10 @@ public class ChatService {
                             + "unavailable when a successful tool result is present."));
         }
         return List.copyOf(capabilities);
+    }
+
+    private boolean isVerifiedToolResult(ToolEvidence evidence) {
+        return evidence != null && evidence.success() && hasText(evidence.content());
     }
 
     private String browserFailureMessage(String userMessage, BrowserContentException exception) {

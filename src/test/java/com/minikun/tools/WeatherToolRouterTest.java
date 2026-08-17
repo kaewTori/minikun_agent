@@ -24,8 +24,9 @@ class WeatherToolRouterTest {
                 new ConversationId("conversation"));
 
         assertTrue(result.isPresent());
-        assertTrue(result.get().contains("กรุงเทพ"));
-        assertTrue(result.get().contains("70%"));
+        assertTrue(result.get().success());
+        assertTrue(result.get().content().contains("กรุงเทพ"));
+        assertTrue(result.get().content().contains("70%"));
     }
 
     @Test

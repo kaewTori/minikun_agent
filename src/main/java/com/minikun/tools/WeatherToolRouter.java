@@ -18,14 +18,15 @@ import com.minikun.weather.WeatherReport;
  * the language model to decide whether it should emit a native tool call.
  */
 @Component
-public final class WeatherToolRouter {
+public final class WeatherToolRouter implements ToolRequestRouter {
     private final ToolExecutor executor;
 
     public WeatherToolRouter(ToolExecutor executor) {
         this.executor = Objects.requireNonNull(executor, "tool executor must not be null");
     }
 
-    public Optional<String> route(String userText, ConversationId conversationId) {
+    @Override
+    public Optional<ToolEvidence> route(String userText, ConversationId conversationId) {
         if (userText == null || userText.isBlank() || conversationId == null || !isWeatherQuestion(userText)) {
             return Optional.empty();
         }
@@ -43,13 +44,15 @@ public final class WeatherToolRouter {
                 new ToolCallContext(conversationId, callId),
                 new ToolCall(callId, "weather.get_forecast", arguments));
         if (!result.success()) {
-            return Optional.of("ขออภัยครับ ตอนนี้ยังดึงข้อมูลสภาพอากาศของ " + location
-                    + " ไม่สำเร็จ: " + result.error());
+            return Optional.of(ToolEvidence.failed("weather.get_forecast",
+                    "ขออภัยครับ ตอนนี้ยังดึงข้อมูลสภาพอากาศของ " + location
+                            + " ไม่สำเร็จ: " + result.error()));
         }
         if (!(result.value() instanceof WeatherReport report)) {
-            return Optional.of("ขออภัยครับ ข้อมูลสภาพอากาศที่ได้รับมีรูปแบบไม่ถูกต้อง");
+            return Optional.of(ToolEvidence.failed("weather.get_forecast",
+                    "ขออภัยครับ ข้อมูลสภาพอากาศที่ได้รับมีรูปแบบไม่ถูกต้อง"));
         }
-        return Optional.of(format(report));
+        return Optional.of(ToolEvidence.verified("weather.get_forecast", format(report)));
     }
 
     private boolean isWeatherQuestion(String text) {

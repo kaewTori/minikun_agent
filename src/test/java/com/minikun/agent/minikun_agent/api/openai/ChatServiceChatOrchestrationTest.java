@@ -97,7 +97,7 @@ class ChatServiceChatOrchestrationTest {
                 new DefaultToolRegistry(List.of(weatherTool))));
         ChatService service = service(chatModel, conversation);
         setField(service, "toolsEnabled", true);
-        setField(service, "weatherToolRouter", router);
+        setField(service, "toolRequestRouters", List.of(router));
 
         ChatCompletionResponse result = service.chatCompletion(
                 new ChatCompletionRequest(

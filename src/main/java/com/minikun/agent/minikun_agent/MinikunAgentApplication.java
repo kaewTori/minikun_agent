@@ -39,6 +39,7 @@ import com.minikun.memory.management.MemoryManagementController;
 import com.minikun.memory.management.MemoryManagementService;
 import com.minikun.tools.CalculatorAddTool;
 import com.minikun.tools.CurrentTimeTool;
+import com.minikun.tools.CurrentTimeToolRouter;
 import com.minikun.tools.DefaultToolExecutor;
 import com.minikun.tools.DefaultToolRegistry;
 import com.minikun.tools.WeatherForecastTool;
@@ -64,6 +65,7 @@ import com.minikun.weather.WeatherConfiguration;
 		ContextRuntimeConfiguration.class,
 		MemoryManagementService.class, MemoryManagementController.class,
 		WeatherConfiguration.class,
+		CurrentTimeToolRouter.class,
 		DefaultToolRegistry.class, DefaultToolExecutor.class,
 		CalculatorAddTool.class, WeatherForecastTool.class, CurrentTimeTool.class,
 		WebSearchTool.class, WebOpenUrlTool.class, WeatherToolRouter.class,
