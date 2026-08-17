@@ -70,4 +70,27 @@ class DefaultSearchQueryPlanningServiceTest {
         assertEquals("images", imagePlan.intent());
         assertEquals("fact_lookup", unrelatedPlan.intent());
     }
+
+    @Test
+    void resolvesShortFollowUpAgainstTheLatestUserQuery() {
+        SearchQueryPlan plan = planner.plan(
+                "แล้วรุ่น Pro ล่ะ",
+                new SearchDecision(true, "แล้วรุ่น Pro ล่ะ", SearchDecisionReason.CURRENT_INFORMATION),
+                "user: Mac mini M4 ราคาเท่าไหร่\nassistant: ...");
+
+        assertTrue(plan.primaryQuery().contains("Mac mini M4 ราคาเท่าไหร่"));
+        assertTrue(plan.primaryQuery().contains("รุ่น Pro"));
+        assertEquals("contextual_query", plan.reason());
+    }
+
+    @Test
+    void emitsComparisonAlternateWithVs() {
+        SearchQueryPlan plan = planner.plan(
+                "เปรียบเทียบ Ollama กับ LM Studio บน Mac mini M4",
+                new SearchDecision(true, "เปรียบเทียบ Ollama กับ LM Studio บน Mac mini M4",
+                        SearchDecisionReason.CURRENT_INFORMATION));
+
+        assertEquals("comparison", plan.intent());
+        assertTrue(plan.alternateQueries().stream().anyMatch(query -> query.contains("vs")));
+    }
 }

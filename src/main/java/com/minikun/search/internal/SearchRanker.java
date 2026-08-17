@@ -54,9 +54,10 @@ public final class SearchRanker {
         String content = result.content().toLowerCase(Locale.ROOT);
         String normalizedQuery = query.toLowerCase(Locale.ROOT).trim();
         long matched = terms.stream().filter(term -> title.contains(term) || content.contains(term)).count();
-        double score = terms.isEmpty() ? 0.0 : (double) matched / terms.size();
+        double lexicalScore = terms.isEmpty() ? 0.0 : (double) matched / terms.size();
+        double score = lexicalScore * 0.55 + result.providerScore() * 0.45;
         if (!normalizedQuery.isBlank() && title.contains(normalizedQuery)) {
-            score += 0.75;
+            score += 0.65;
         }
         if ("day".equals(options.timeRange()) || "week".equals(options.timeRange())) {
             long ageHours = Math.max(0, Duration.between(result.source().retrievedAt(), Instant.now()).toHours());
@@ -66,14 +67,10 @@ public final class SearchRanker {
     }
 
     private List<String> terms(String query) {
-        List<String> result = new ArrayList<>();
-        for (String term : query.toLowerCase(Locale.ROOT).split("\\s+")) {
-            String clean = term.replaceAll("^[\\p{Punct}]+|[\\p{Punct}]+$", "");
-            if (clean.length() >= 2 && !Set.of("the", "and", "for", "ของ", "ที่", "ให้").contains(clean)) {
-                result.add(clean);
-            }
-        }
-        return result;
+        return SearchTermTokenizer.tokenize(query).stream()
+                .map(term -> term.toLowerCase(Locale.ROOT))
+                .filter(term -> term.codePointCount(0, term.length()) >= 2)
+                .toList();
     }
 
     private String domain(String value) {

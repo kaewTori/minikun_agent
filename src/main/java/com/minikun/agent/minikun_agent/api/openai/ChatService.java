@@ -846,15 +846,17 @@ public class ChatService {
                 ? CompletableFuture.supplyAsync(() -> readBrowserCandidates(query))
                 : CompletableFuture.completedFuture(List.of());
         SearchQueryPlan plan = searchQueryPlanningEnabled
-                ? searchQueryPlanningService.plan(query, decision)
+                ? searchQueryPlanningService.plan(query, decision, classifierContext)
                 : new SearchQueryPlan(decision.shouldSearch(), query,
                         decision.shouldSearch() ? decision.query() : "", List.of(), List.of(),
                         "all", "general", "", 1.0, "query_planning_disabled");
         SearchDecision plannedDecision = plan.shouldSearch()
                 ? new SearchDecision(true, plan.primaryQuery(), decision.reason())
                 : decision;
-        log.info("process=search_query_plan event=completed should_search={} alternates={}",
-                plan.shouldSearch(), plan.alternateQueries().size());
+        log.info("process=search_query_plan event=completed should_search={} primary_query={} alternates={} "
+                        + "core_terms={} language={} intent={} time_range={} confidence={} reason={}",
+                plan.shouldSearch(), plan.primaryQuery(), plan.alternateQueries(), plan.coreTerms(),
+                plan.language(), plan.intent(), plan.timeRange(), plan.confidence(), plan.reason());
         SearchSelectionSignals searchSignals = searchSelectionSignalMapper.map(decision);
         if (!plan.shouldSearch()) {
             log.info("process=search event=skipped reason=query_plan");

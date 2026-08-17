@@ -128,8 +128,9 @@ public final class TavilySearchProvider implements SearchProvider {
                 if (title.isBlank() || url.isBlank() || content.isBlank()) {
                     continue;
                 }
+                double score = number(result, "score");
                 mapped.add(new SearchResult(title, url, content,
-                        new SearchSource("tavily", url, clock.instant()), position++));
+                        new SearchSource("tavily", url, clock.instant()), position++, score));
             }
             return List.copyOf(mapped);
         } catch (SearchExecutionException exception) {
@@ -148,6 +149,12 @@ public final class TavilySearchProvider implements SearchProvider {
     private String text(JsonNode node, String field) {
         JsonNode value = node.get(field);
         return value != null && value.isTextual() ? value.asText().trim() : "";
+    }
+
+    private double number(JsonNode node, String field) {
+        JsonNode value = node.get(field);
+        return value != null && value.isNumber()
+                ? Math.max(0.0, Math.min(1.0, value.asDouble())) : 0.0;
     }
 
     private String normalizeDepth(String value) {

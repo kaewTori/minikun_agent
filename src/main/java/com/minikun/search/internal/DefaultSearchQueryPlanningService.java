@@ -20,9 +20,11 @@ public final class DefaultSearchQueryPlanningService implements SearchQueryPlann
     private static final List<String> ENGLISH_PREFIXES = List.of(
             "please search for", "search for", "find out", "look up", "can you tell me", "i want to know");
     private static final List<String> THAI_STOPWORDS = List.of("หน่อย", "ให้หน่อย", "ครับ", "ค่ะ", "นะ", "ที");
-    private static final List<String> THAI_CORE_PHRASES = List.of(
-            "ร้านกาแฟ", "เปิดวันนี้", "สัปดาห์นี้", "แถว", "เชียงใหม่", "กรุงเทพ", "ล่าสุด", "ข่าว");
-    private static final List<String> ENGLISH_STOPWORDS = List.of("please", "could", "you", "tell", "me", "about");
+    private static final List<String> ENGLISH_STOPWORDS = List.of(
+            "please", "could", "you", "tell", "me", "about", "what", "is", "the", "a", "an", "for");
+    private static final List<String> FOLLOW_UP_MARKERS = List.of(
+            "แล้ว", "อีก", "นั้น", "นี้", "ของ", "รุ่น", "ปีนี้", "เทียบกัน", "what about", "how about",
+            "and this", "that one", "this one", "also");
     private final MeterRegistry meterRegistry;
     private final int maxAlternates;
 
@@ -45,6 +47,11 @@ public final class DefaultSearchQueryPlanningService implements SearchQueryPlann
 
     @Override
     public SearchQueryPlan plan(String query, SearchDecision decision) {
+        return plan(query, decision, "");
+    }
+
+    @Override
+    public SearchQueryPlan plan(String query, SearchDecision decision, String conversationContext) {
         increment("minikun.search.query.plan.count");
         Objects.requireNonNull(query, "query must not be null");
         Objects.requireNonNull(decision, "decision must not be null");
@@ -54,20 +61,28 @@ public final class DefaultSearchQueryPlanningService implements SearchQueryPlann
                     detectLanguage(original), "general", "", 1.0, "search_not_requested");
         }
         String primary = stripConversationalPrefix(original);
+        boolean contextual = isFollowUp(primary, conversationContext);
+        if (contextual) {
+            String previousUserQuery = lastUserQuery(conversationContext);
+            if (!previousUserQuery.isBlank()) {
+                primary = previousUserQuery + " " + primary;
+            }
+        }
         primary = trimNoise(primary);
         if (primary.isBlank()) {
             primary = original;
         }
         String language = detectLanguage(primary);
-        List<String> terms = coreTerms(primary, language);
+        List<String> terms = coreTerms(primary);
         if ("th".equals(language) && terms.size() > 1) {
             primary = String.join(" ", terms);
         }
         String timeRange = detectTimeRange(primary);
         String intent = detectIntent(primary, timeRange, decision);
-        return new SearchQueryPlan(true, original, primary, alternateQueries(primary, terms).stream()
+        String reason = contextual ? "contextual_query" : "deterministic_core_query";
+        return new SearchQueryPlan(true, original, primary, alternateQueries(primary, terms, language, intent).stream()
                 .limit(maxAlternates).toList(), terms,
-                language, intent, timeRange, 0.92, "deterministic_core_query");
+                language, intent, timeRange, contextual ? 0.88 : 0.92, reason);
     }
 
     private void increment(String name) {
@@ -111,37 +126,54 @@ public final class DefaultSearchQueryPlanningService implements SearchQueryPlann
         return result;
     }
 
-    private List<String> coreTerms(String query, String language) {
-        List<String> terms = new ArrayList<>();
-        String tokenized = "th".equals(language) ? insertThaiBoundaries(query) : query;
-        for (String token : SPACE.split(tokenized)) {
-            String clean = token.replaceAll("^[\\p{Punct}]+|[\\p{Punct}]+$", "").trim();
-            if (!clean.isBlank() && !isStopword(clean)) {
-                terms.add(clean);
+    private List<String> coreTerms(String query) {
+        return SearchTermTokenizer.tokenize(query);
+    }
+
+    private List<String> alternateQueries(String primary, List<String> terms, String language, String intent) {
+        List<String> alternates = new ArrayList<>();
+        String compact = String.join(" ", terms).trim();
+        if (terms.size() >= 2 && !primary.equals(compact) && !compact.equalsIgnoreCase(primary)) {
+            alternates.add(compact);
+        }
+        String lower = primary.toLowerCase(Locale.ROOT);
+        if ("comparison".equals(intent) && !lower.contains(" vs ") && !lower.contains(" versus ")) {
+            String comparison = primary.replace("เปรียบเทียบ", "vs")
+                    .replaceAll("(?i)\\bcompare\\b", "vs")
+                    .replaceAll("\\s+", " ").trim();
+            if (!comparison.equalsIgnoreCase(primary)) {
+                alternates.add(comparison);
             }
         }
-        return List.copyOf(terms);
-    }
-
-    private String insertThaiBoundaries(String value) {
-        String tokenized = value;
-        for (String phrase : THAI_CORE_PHRASES.stream()
-                .sorted(java.util.Comparator.comparingInt(String::length).reversed()).toList()) {
-            tokenized = tokenized.replace(phrase, " " + phrase + " ");
+        if ("all".equals(language) && lower.contains("latest") && !lower.contains("official")) {
+            alternates.add(primary + " official");
         }
-        return tokenized;
+        return alternates.stream().distinct().toList();
     }
 
-    private List<String> alternateQueries(String primary, List<String> terms) {
-        if (terms.size() < 2 || primary.equals(String.join(" ", terms))) {
-            return List.of();
+    private boolean isFollowUp(String query, String conversationContext) {
+        if (conversationContext == null || conversationContext.isBlank() || query.isBlank()) {
+            return false;
         }
-        return List.of(String.join(" ", terms));
+        String lower = query.toLowerCase(Locale.ROOT);
+        if (FOLLOW_UP_MARKERS.stream().anyMatch(lower::contains)) {
+            return true;
+        }
+        return query.length() <= 24 && lower.matches("^(ราคา|สเปก|รุ่น|เวอร์ชัน|ปีนี้|price|spec|version|release)\\s*[?!.。！？]*$");
     }
 
-    private boolean isStopword(String token) {
-        String lower = token.toLowerCase(Locale.ROOT);
-        return ENGLISH_STOPWORDS.contains(lower) || THAI_STOPWORDS.contains(token);
+    private String lastUserQuery(String conversationContext) {
+        String[] lines = conversationContext.split("\\R");
+        for (int index = lines.length - 1; index >= 0; index--) {
+            String line = lines[index].trim();
+            if (line.regionMatches(true, 0, "user:", 0, 5)) {
+                String value = line.substring(5).trim();
+                if (!value.isBlank()) {
+                    return value.length() > 240 ? value.substring(0, 240).trim() : value;
+                }
+            }
+        }
+        return "";
     }
 
     private String detectLanguage(String value) {
@@ -170,6 +202,10 @@ public final class DefaultSearchQueryPlanningService implements SearchQueryPlann
         String lower = value.toLowerCase(Locale.ROOT);
         if (!timeRange.isBlank() || lower.contains("ข่าว") || lower.contains("news")) {
             return "current_information";
+        }
+        if (lower.contains("เปรียบเทียบ") || lower.contains("เทียบกับ")
+                || lower.contains(" compare ") || lower.contains(" versus ") || lower.contains(" vs ")) {
+            return "comparison";
         }
         if (lower.contains("ร้าน") || lower.contains("แนะนำ") || lower.contains("recommend")) {
             return "recommendation";

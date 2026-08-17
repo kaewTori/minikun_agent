@@ -28,6 +28,23 @@ class SearchRankerTest {
         assertEquals("Java 25 records", ranked.results().get(0).title());
     }
 
+    @Test
+    void usesProviderScoreWhenLexicalScoresAreSimilar() {
+        Instant now = Instant.now();
+        SearchResult weakerProvider = new SearchResult(
+                "Java records", "https://one.test/a", "Java records",
+                new SearchSource("searxng", "https://one.test/a", now), 1, 0.1);
+        SearchResult strongerProvider = new SearchResult(
+                "Java records", "https://two.test/a", "Java records",
+                new SearchSource("tavily", "https://two.test/a", now), 2, 0.95);
+        SearchResponse response = new SearchResponse(UUID.randomUUID(), SearchStatus.SUCCESS,
+                List.of(weakerProvider, strongerProvider), new SearchMetadata(Duration.ZERO, false, false, 0));
+
+        SearchResponse ranked = new SearchRanker().rank(response, "Java records", SearchOptions.defaults());
+
+        assertEquals("tavily", ranked.results().get(0).source().name());
+    }
+
     private SearchResult result(String title, String url, String content, Instant retrievedAt, int position) {
         return new SearchResult(title, url, content, new SearchSource("test", url, retrievedAt), position);
     }

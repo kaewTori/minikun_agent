@@ -7,7 +7,17 @@ public record SearchResult(
         String canonicalUri,
         String content,
         SearchSource source,
-        Integer sourcePosition) {
+        Integer sourcePosition,
+        double providerScore) {
+    public SearchResult(
+            String title,
+            String canonicalUri,
+            String content,
+            SearchSource source,
+            Integer sourcePosition) {
+        this(title, canonicalUri, content, source, sourcePosition, 0.0);
+    }
+
     public SearchResult {
         Objects.requireNonNull(title, "title must not be null");
         Objects.requireNonNull(canonicalUri, "canonical URI must not be null");
@@ -24,6 +34,9 @@ public record SearchResult(
         }
         if (sourcePosition != null && sourcePosition < 0) {
             throw new IllegalArgumentException("source position must not be negative");
+        }
+        if (Double.isNaN(providerScore) || providerScore < 0.0 || providerScore > 1.0) {
+            throw new IllegalArgumentException("provider score must be between 0 and 1");
         }
     }
 }
