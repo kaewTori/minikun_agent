@@ -18,12 +18,20 @@ public final class CooperationRouter {
                     + "exact|accurate|verify|fact.?check|current|latest|today|precise|compare|calculate|number|"
                     + "code|error|debug|source|citation|why|how to)",
             Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+    private static final Pattern CREATIVE_REQUEST = Pattern.compile(
+            "(แต่งเรื่อง|แต่งนิยาย|เขียนนิยาย|เรื่องสั้น|นิยาย|ฟิค|บทละคร|บทกวี|กลอน|กวี|สวมบทบาท|โลกสมมติ|"
+                    + "creative writing|write a story|write fiction|short story|novel|fanfic|roleplay|poem|"
+                    + "poetry|screenplay|fictional|worldbuilding)",
+            Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
 
     public CooperationRoutingDecision decide(String userText) {
         if (userText == null || userText.isBlank()) {
             return CooperationRoutingDecision.low();
         }
         String value = userText.trim().toLowerCase(Locale.ROOT);
+        if (CREATIVE_REQUEST.matcher(value).find()) {
+            return CooperationRoutingDecision.creative();
+        }
         if (HIGH_RISK.matcher(value).find()) {
             return new CooperationRoutingDecision(CooperationRisk.HIGH, true, "high_risk_domain");
         }

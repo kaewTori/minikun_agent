@@ -144,6 +144,8 @@ events.addEventListener("cooperative-review", event => {
 การ route ปัจจุบันใช้กฎแบบเร็ว 3 ระดับ: `LOW` ให้ Ollama ตอบทันที,
 `MEDIUM` ให้ Ollama ตอบก่อนแล้ว TinyGrad ตรวจเบื้องหลัง และ `HIGH` รอ TinyGrad
 ก่อนส่งคำตอบ เช่น สุขภาพ การเงิน กฎหมาย ความปลอดภัย และข้อมูล credential
+คำขอเชิงสร้างสรรค์ เช่น แต่งนิยาย เรื่องสั้น ฟิค roleplay บทกวี และ worldbuilding
+จะถูกจัดเป็น `creative_request` และส่งให้ Ollama โดยตรง ไม่ส่งเข้า TinyGrad
 | `MINIKUN_SEARCH_CACHE_ENABLED` | `true` | เปิด/ปิด search cache |
 | `MINIKUN_SEARCH_CACHE_TTL` | `PT5M` | อายุ search cache |
 | `MINIKUN_SEARCH_SAFESEARCH` | `true` | ส่ง safe-search option ให้ SearXNG |

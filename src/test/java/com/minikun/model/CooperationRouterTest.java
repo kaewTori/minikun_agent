@@ -31,4 +31,15 @@ class CooperationRouterTest {
         assertEquals(CooperationRisk.HIGH, decision.risk());
         assertTrue(decision.needsExpert());
     }
+
+    @Test
+    void keepsCreativeWritingOnOllamaEvenWhenThePromptIsLong() {
+        CooperationRoutingDecision decision = router.decide(
+                "ช่วยแต่งเรื่องสั้นแนวแฟนตาซีที่มีตัวละครหลายตัวและช่วยเล่าให้ละเอียดมาก ๆ "
+                        + "พร้อมบทสนทนาและฉากจบที่หักมุม");
+
+        assertEquals(CooperationRisk.LOW, decision.risk());
+        assertEquals("creative_request", decision.reason());
+        assertTrue(!decision.needsExpert());
+    }
 }
