@@ -24,6 +24,7 @@ import java.time.Duration;
 import java.util.List;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -32,7 +33,7 @@ import org.springframework.web.client.RestClient;
 
 @Configuration(proxyBeanMethods = false)
 public class SearchConfiguration {
-    @Bean
+    @Bean(name = "searxngSearchProvider")
     SearchProvider searxngProvider(
             ObjectMapper objectMapper,
             Clock memoryClock,
@@ -50,9 +51,48 @@ public class SearchConfiguration {
         return new SearXNGProvider(restClient, objectMapper, memoryClock);
     }
 
+    @Bean(name = "tavilySearchProvider")
+    SearchProvider tavilyProvider(
+            ObjectMapper objectMapper,
+            Clock memoryClock,
+            @Value("${minikun.search.tavily.url:https://api.tavily.com}") String baseUrl,
+            @Value("${minikun.search.tavily.timeout:10s}") Duration timeout,
+            @Value("${minikun.search.tavily.api-key:}") String apiKey,
+            @Value("${minikun.search.tavily.enabled:true}") boolean enabled,
+            @Value("${minikun.search.tavily.search-depth:basic}") String searchDepth) {
+        HttpClient httpClient = HttpClient.newBuilder()
+                .connectTimeout(timeout)
+                .build();
+        JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(httpClient);
+        requestFactory.setReadTimeout(timeout);
+        RestClient restClient = RestClient.builder()
+                .baseUrl(baseUrl)
+                .defaultHeader("Authorization", "Bearer " + apiKey)
+                .requestFactory(requestFactory)
+                .build();
+        return new TavilySearchProvider(
+                restClient, objectMapper, memoryClock, apiKey, enabled, searchDepth);
+    }
+
+    @Bean
+    SearchProvider searchProvider(
+            @Qualifier("tavilySearchProvider") SearchProvider tavilyProvider,
+            @Qualifier("searxngSearchProvider") SearchProvider searxngProvider,
+            Clock memoryClock,
+            MeterRegistry meterRegistry,
+            @Value("${minikun.search.failover.enabled:true}") boolean failoverEnabled,
+            @Value("${minikun.search.failover.cooldown:PT120S}") Duration cooldown,
+            @Value("${minikun.search.failover.failure-threshold:3}") int failureThreshold) {
+        if (!failoverEnabled) {
+            return tavilyProvider;
+        }
+        return new FailoverSearchProvider(
+                tavilyProvider, searxngProvider, memoryClock, cooldown, failureThreshold, meterRegistry);
+    }
+
     @Bean
     SearchManager searchManager(
-            SearchProvider provider,
+            @Qualifier("searchProvider") SearchProvider provider,
             Clock memoryClock,
             @Value("${minikun.search.max-retries:1}") int maxRetries,
             SearchDeduplicator deduplicator,

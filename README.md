@@ -121,6 +121,14 @@ Actuator ที่เปิดให้เข้าถึงคือ `/actuator
 | `MINIKUN_TINYGRAD_BASE_URL` | `http://localhost:8001/v1` | TinyGrad OpenAI-compatible endpoint |
 | `VALKEY_URL` | `redis://127.0.0.1:6379` | Valkey/Redis endpoint |
 | `MINIKUN_SEARCH_SEARXNG_URL` | `http://127.0.0.1:8888` | SearXNG endpoint |
+| `MINIKUN_SEARCH_TAVILY_ENABLED` | `true` | เปิด/ปิด Tavily provider |
+| `MINIKUN_SEARCH_TAVILY_API_KEY` | ว่าง | Tavily API key (เก็บใน environment เท่านั้น) |
+| `MINIKUN_SEARCH_TAVILY_URL` | `https://api.tavily.com` | Tavily endpoint |
+| `MINIKUN_SEARCH_TAVILY_TIMEOUT` | `10s` | timeout ของ Tavily |
+| `MINIKUN_SEARCH_TAVILY_SEARCH_DEPTH` | `basic` | `basic` หรือ `advanced` |
+| `MINIKUN_SEARCH_FAILOVER_ENABLED` | `true` | เปิด Tavily → SearXNG failover |
+| `MINIKUN_SEARCH_FAILOVER_COOLDOWN` | `PT120S` | ระยะพัก primary หลัง circuit เปิด |
+| `MINIKUN_SEARCH_FAILOVER_FAILURE_THRESHOLD` | `3` | จำนวน failure ก่อนเปิด circuit |
 | `MINIKUN_SEARCH_ENABLED` | `true` | เปิด/ปิด web search |
 
 ในโหมด `hybrid` สามารถตรวจผล TinyGrad ตาม `conversation_id` ได้ที่
@@ -152,10 +160,10 @@ events.addEventListener("cooperative-review", event => {
 | `MINIKUN_SEARCH_RESULT_LIMIT` | `8` | จำนวนผลลัพธ์ search ต่อ query |
 | `MINIKUN_SEARCH_QUERY_PLANNING_ENABLED` | `true` | เปิด query planning และ core keyword extraction |
 | `MINIKUN_SEARCH_QUERY_PLANNING_MAX_ALTERNATES` | `2` | จำนวน alternate queries สูงสุด |
-| `MINIKUN_SEARCH_CACHE_PROVIDER_VERSION` | `v1` | version ของ provider ที่รวมใน cache key |
+| `MINIKUN_SEARCH_CACHE_PROVIDER_VERSION` | `v2` | version ของ provider ที่รวมใน cache key |
 | `MINIKUN_SEARCH_PARALLEL_QUERIES_ENABLED` | `true` | ทำ expanded search queries แบบ parallel |
 | `MINIKUN_SEARCH_PARALLEL_QUERIES_MAX_CONCURRENCY` | `3` | จำนวน search query สูงสุดที่ทำพร้อมกัน |
-| `MINIKUN_SEARCH_DECISION_TIMEOUT` | `5s` | timeout เฉพาะ search classifier |
+| `MINIKUN_SEARCH_DECISION_TIMEOUT` | `PT15S` | timeout เฉพาะ search classifier |
 | `MINIKUN_BROWSER_ENABLED` | `true` | เปิด/ปิดการอ่าน URL ผ่าน minikun-browser-worker |
 | `MINIKUN_BROWSER_WORKER_URL` | `http://127.0.0.1:3000` | endpoint ของ browser worker |
 | `MINIKUN_BROWSER_WORKER_TOKEN` | ว่าง | Bearer token ที่ตรงกับ `BROWSER_WORKER_TOKEN` ของ worker |

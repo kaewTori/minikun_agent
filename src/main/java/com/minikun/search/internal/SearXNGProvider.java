@@ -45,7 +45,7 @@ public final class SearXNGProvider implements SearchProvider {
         SearchProviderResponse response = null;
         RuntimeException failure = null;
         try {
-                var uri = UriComponentsBuilder.fromPath("/search")
+            var uri = UriComponentsBuilder.fromPath("/search")
                     .queryParam("q", UriUtils.encodeQueryParam(request.query(), StandardCharsets.UTF_8))
                 .queryParam("format", "json")
                 .queryParam("number_of_results", request.resultLimit())
@@ -54,8 +54,10 @@ public final class SearXNGProvider implements SearchProvider {
                     .queryParamIfPresent("time_range", optional(request.options().timeRange()))
                     .queryParamIfPresent("safesearch", request.options().safeSearch()
                             ? java.util.Optional.of("1") : java.util.Optional.empty())
-                    .build(true)
+                .build(true)
                 .toUri();
+            LOGGER.info("process=searxng event=request request_id={} query={} result_limit={}",
+                    request.requestId(), request.query(), request.resultLimit());
             String body = restClient.get()
                 .uri(uri)
                     .accept(MediaType.APPLICATION_JSON)
@@ -95,11 +97,11 @@ public final class SearXNGProvider implements SearchProvider {
             Duration duration) {
         try {
             if (failure == null) {
-            LOGGER.debug("Search provider=searxng request_id={} duration_ms={} result_count={}",
+            LOGGER.info("process=searxng event=completed request_id={} duration_ms={} result_count={}",
                 request.requestId(), duration.toMillis(), response.results().size());
             } else {
-            LOGGER.warn("Search provider=searxng request_id={} duration_ms={} failure_type={}",
-                request.requestId(), duration.toMillis(), failure.getClass().getSimpleName());
+            LOGGER.warn("process=searxng event=failed request_id={} duration_ms={} failure_type={} message={}",
+                request.requestId(), duration.toMillis(), failure.getClass().getSimpleName(), failure.getMessage());
             }
         } catch (RuntimeException ignored) {
             // Logging must not affect provider behavior.

@@ -138,9 +138,16 @@ public final class DefaultSearchService implements SearchService {
                     }
                     }
                     if (missingQueries.isEmpty()) {
+                        LOGGER.info(
+                                "process=search_cache event=hit request_id={} query_count={} result_count={}",
+                                request.requestId(), cachedContexts.size(), cachedContexts.stream()
+                                        .mapToInt(context -> context.content().length()).sum());
                         return cachedContexts.size() == 1
                                 ? cachedContexts.get(0) : combineCachedContexts(cachedContexts, request);
                     }
+                    LOGGER.info(
+                            "process=search_cache event=partial_or_miss request_id={} cached_count={} missing_count={}",
+                            request.requestId(), cachedContexts.size(), missingQueries.size());
                     if (!cachedContexts.isEmpty()) {
                         List<KnowledgeContext> contexts = new ArrayList<>(cachedContexts);
                         for (String missingQuery : missingQueries) {
@@ -160,7 +167,12 @@ public final class DefaultSearchService implements SearchService {
                 }
             } else {
                 increment(BYPASS_COUNTER);
+                LOGGER.info("process=search_cache event=bypassed request_id={} reason=disabled",
+                        request.requestId());
             }
+            LOGGER.info("process=search_provider event=dispatch request_id={} component={} query_count={}",
+                    request.requestId(), manager.getClass().getSimpleName(),
+                    expandedSearchQuery.expandedQueries().size());
             KnowledgeContext context = manager.search(rewrittenRequest, expandedSearchQuery);
             if (cacheEnabled) {
                 for (SearchCacheKey key : keys) {
