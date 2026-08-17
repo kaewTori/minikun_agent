@@ -37,6 +37,16 @@ import com.minikun.tokenbudget.runtime.TokenBudgetRuntimeConfiguration;
 import com.minikun.context.config.ContextRuntimeConfiguration;
 import com.minikun.memory.management.MemoryManagementController;
 import com.minikun.memory.management.MemoryManagementService;
+import com.minikun.tools.CalculatorAddTool;
+import com.minikun.tools.CurrentTimeTool;
+import com.minikun.tools.DefaultToolExecutor;
+import com.minikun.tools.DefaultToolRegistry;
+import com.minikun.tools.WeatherForecastTool;
+import com.minikun.tools.WeatherToolRouter;
+import com.minikun.tools.WebOpenUrlTool;
+import com.minikun.tools.WebSearchTool;
+import com.minikun.tools.springai.SpringAiToolCallingRuntime;
+import com.minikun.weather.WeatherConfiguration;
 
 @SpringBootApplication
 @Import({MemoryConfiguration.class, SearchConfiguration.class, BrowserConfiguration.class, MeterRegistryMetricsReader.class,
@@ -52,7 +62,12 @@ import com.minikun.memory.management.MemoryManagementService;
 		TokenBudgetRuntimeConfiguration.class,
 		TitleGenerationConfiguration.class, TitleGenerationService.class,
 		ContextRuntimeConfiguration.class,
-		MemoryManagementService.class, MemoryManagementController.class})
+		MemoryManagementService.class, MemoryManagementController.class,
+		WeatherConfiguration.class,
+		DefaultToolRegistry.class, DefaultToolExecutor.class,
+		CalculatorAddTool.class, WeatherForecastTool.class, CurrentTimeTool.class,
+		WebSearchTool.class, WebOpenUrlTool.class, WeatherToolRouter.class,
+		SpringAiToolCallingRuntime.class})
 public class MinikunAgentApplication {
 
 	public static void main(String[] args) {

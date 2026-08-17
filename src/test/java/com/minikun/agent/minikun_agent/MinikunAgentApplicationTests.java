@@ -19,6 +19,7 @@ import com.minikun.search.dictionary.ImmutableAliasDictionary;
 import com.minikun.search.internal.RuleBasedSearchQueryExpansionService;
 import com.minikun.search.model.ExpandedSearchQuery;
 import com.minikun.search.model.SearchQuery;
+import com.minikun.tools.ToolRegistry;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
@@ -72,8 +73,23 @@ class MinikunAgentApplicationTests {
 	@Autowired
 	private AliasDictionary aliasDictionary;
 
+	@Autowired
+	private ToolRegistry toolRegistry;
+
 	@Test
 	void contextLoads() {
+	}
+
+	@Test
+	void contextRegistersNativeCapabilityTools() {
+		Set<String> names = toolRegistry.definitions().stream()
+				.map(com.minikun.tools.ToolDefinition::name)
+				.collect(java.util.stream.Collectors.toSet());
+
+		org.junit.jupiter.api.Assertions.assertTrue(names.contains("weather.get_forecast"));
+		org.junit.jupiter.api.Assertions.assertTrue(names.contains("time.get_current_time"));
+		org.junit.jupiter.api.Assertions.assertTrue(names.contains("web.search"));
+		org.junit.jupiter.api.Assertions.assertTrue(names.contains("web.open_url"));
 	}
 
 	@Test

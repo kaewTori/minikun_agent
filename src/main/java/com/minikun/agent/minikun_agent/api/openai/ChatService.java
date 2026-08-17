@@ -94,6 +94,7 @@ import com.minikun.search.model.SearchDecision;
 import com.minikun.search.model.ExternalContextDecision;
 import com.minikun.search.internal.ExternalContextPlanner;
 import com.minikun.tools.springai.SpringAiToolCallingRuntime;
+import com.minikun.tools.WeatherToolRouter;
 import com.minikun.tokenbudget.runtime.DynamicGenerationOptionsFactory;
 import com.minikun.tokenbudget.config.TokenBudgetProperties;
 import com.minikun.search.model.SearchDecisionReason;
@@ -152,6 +153,9 @@ public class ChatService {
 
     @Autowired(required = false)
     private SpringAiToolCallingRuntime toolCallingRuntime;
+
+    @Autowired(required = false)
+    private WeatherToolRouter weatherToolRouter;
 
     @Autowired(required = false)
     private DynamicGenerationOptionsFactory dynamicGenerationOptionsFactory;
@@ -346,6 +350,12 @@ public class ChatService {
         ChatTransactionLogger.Transaction transaction = transactionLogger.start(
                 "chatcmpl-" + UUID.randomUUID(), model, false, request.messages().size());
         try {
+            Optional<String> weatherContent = routeWeather(userMessage, conversationId);
+            if (weatherContent.isPresent()) {
+                persistDirectToolTurn(request, conversationId, userMessage, weatherContent.get(), transaction.requestId());
+                transaction.success();
+                return responseForContent(request, weatherContent.get());
+            }
             ChatExecutionContext context;
             try {
                 context = prepareChatExecution(request, conversationId, userMessage, transaction, false);
@@ -398,6 +408,13 @@ public class ChatService {
         long created = Instant.now().getEpochSecond();
         StringBuilder assistantContent = new StringBuilder();
         AtomicReference<ModelUsage> modelUsage = new AtomicReference<>(ModelUsage.empty());
+
+        Optional<String> weatherContent = routeWeather(userMessage, conversationId);
+        if (weatherContent.isPresent()) {
+            persistDirectToolTurn(request, conversationId, userMessage, weatherContent.get(), requestId);
+            transaction.success();
+            return commandStream(weatherContent.get(), request);
+        }
 
         ChatExecutionContext context;
         try {
@@ -551,6 +568,33 @@ public class ChatService {
                     case CACHE -> cacheFormatter.format(cacheService.snapshot());
                 })
                 .orElse(null);
+    }
+
+    private Optional<String> routeWeather(ChatMessage userMessage, ConversationId conversationId) {
+        if (!toolsEnabled || weatherToolRouter == null) {
+            return Optional.empty();
+        }
+        Optional<String> result = weatherToolRouter.route(userMessage.content(), conversationId);
+        if (result.isPresent()) {
+            log.info("process=weather_route event=completed tool=weather.get_forecast");
+        }
+        return result;
+    }
+
+    private void persistDirectToolTurn(
+            ChatCompletionRequest request,
+            ConversationId conversationId,
+            ChatMessage userMessage,
+            String assistantContent,
+            String requestId) {
+        if (!shouldPersistConversation(request)) {
+            return;
+        }
+        conversationMemoryService.append(conversationId, userMessage);
+        conversationMemoryService.append(conversationId, new ChatMessage("assistant", assistantContent));
+        log.info("process=conversation event=assistant_message_persisted tool=weather.get_forecast");
+        publishTurnCompleted(memoryOwnerId(request, conversationId), conversationId, requestId);
+        reflectOnCompletedConversation(memoryOwnerId(request, conversationId), conversationId);
     }
 
     private ChatCompletionResponse responseForContent(ChatCompletionRequest request, String content) {
