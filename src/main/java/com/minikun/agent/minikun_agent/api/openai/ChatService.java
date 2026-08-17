@@ -351,14 +351,10 @@ public class ChatService {
                 "chatcmpl-" + UUID.randomUUID(), model, false, request.messages().size());
         try {
             Optional<String> weatherContent = routeWeather(userMessage, conversationId);
-            if (weatherContent.isPresent()) {
-                persistDirectToolTurn(request, conversationId, userMessage, weatherContent.get(), transaction.requestId());
-                transaction.success();
-                return responseForContent(request, weatherContent.get());
-            }
             ChatExecutionContext context;
             try {
-                context = prepareChatExecution(request, conversationId, userMessage, transaction, false);
+                context = prepareChatExecution(
+                        request, conversationId, userMessage, transaction, false, weatherContent.orElse(null));
             } catch (BrowserContentException exception) {
                 String content = browserFailureMessage(userMessage.content(), exception);
                 if (shouldPersistConversation(request)) {
@@ -367,7 +363,11 @@ public class ChatService {
                 transaction.success();
                 return responseForContent(request, content);
             }
-            var response = callModel(context.prompt(), context.conversationId(), transaction.requestId());
+            // The weather route has already executed the tool. Generate the final
+            // answer from the MCS/PCS prompt, without invoking that tool twice.
+            var response = weatherContent.isPresent()
+                    ? callChatModel(context.prompt(), "chat_model", transaction.requestId(), context.conversationId())
+                    : callModel(context.prompt(), context.conversationId(), transaction.requestId());
             String content = response.getResult().getOutput().getText();
             if (context.persistConversation()) {
                 conversationMemoryService.append(context.conversationId(), new ChatMessage("assistant", content));
@@ -410,15 +410,11 @@ public class ChatService {
         AtomicReference<ModelUsage> modelUsage = new AtomicReference<>(ModelUsage.empty());
 
         Optional<String> weatherContent = routeWeather(userMessage, conversationId);
-        if (weatherContent.isPresent()) {
-            persistDirectToolTurn(request, conversationId, userMessage, weatherContent.get(), requestId);
-            transaction.success();
-            return commandStream(weatherContent.get(), request);
-        }
 
         ChatExecutionContext context;
         try {
-            context = prepareChatExecution(request, conversationId, userMessage, transaction, true);
+            context = prepareChatExecution(
+                    request, conversationId, userMessage, transaction, true, weatherContent.orElse(null));
         } catch (BrowserContentException exception) {
             String content = browserFailureMessage(userMessage.content(), exception);
             if (shouldPersistConversation(request)) {
@@ -429,7 +425,9 @@ public class ChatService {
         }
         long modelStarted = System.nanoTime();
         String traceId = MDC.get("trace_id");
-        Flux<ChatResponse> modelResponses = toolsEnabled && toolCallingRuntime != null
+        Flux<ChatResponse> modelResponses = weatherContent.isPresent()
+            ? streamChatModel(context.prompt(), context.conversationId())
+            : toolsEnabled && toolCallingRuntime != null
             ? Flux.defer(() -> Flux.just(toolCallingRuntime.call(context.prompt(), context.conversationId())))
             : streamChatModel(context.prompt(), context.conversationId());
         Flux<String> chunks = modelResponses
@@ -477,7 +475,8 @@ public class ChatService {
             ConversationId conversationId,
             ChatMessage userMessage,
             ChatTransactionLogger.Transaction transaction,
-            boolean streaming) {
+            boolean streaming,
+            String verifiedToolResult) {
         boolean persistConversation = shouldPersistConversation(request);
         List<ChatMessage> history = conversationMemoryService.load(conversationId);
         log.info("process=conversation_history event=loaded messages={}{}", history.size(),
@@ -491,7 +490,8 @@ public class ChatService {
                 memoryOwnerId(request, conversationId), hasConversationContext(history, request),
                 classifierContext(history));
         PreparedImages preparedImages = prepareImages(knowledgeSelection);
-        Prompt prompt = promptFor(request, history, knowledgeSelection, preparedImages.awareness());
+        Prompt prompt = promptFor(
+                request, history, knowledgeSelection, preparedImages.awareness(), verifiedToolResult);
         log.info("process=prompt event=composed{}", streaming ? " stream=true" : "");
         return new ChatExecutionContext(
                 prompt, conversationId, persistConversation, memoryOwnerId(request, conversationId),
@@ -579,22 +579,6 @@ public class ChatService {
             log.info("process=weather_route event=completed tool=weather.get_forecast");
         }
         return result;
-    }
-
-    private void persistDirectToolTurn(
-            ChatCompletionRequest request,
-            ConversationId conversationId,
-            ChatMessage userMessage,
-            String assistantContent,
-            String requestId) {
-        if (!shouldPersistConversation(request)) {
-            return;
-        }
-        conversationMemoryService.append(conversationId, userMessage);
-        conversationMemoryService.append(conversationId, new ChatMessage("assistant", assistantContent));
-        log.info("process=conversation event=assistant_message_persisted tool=weather.get_forecast");
-        publishTurnCompleted(memoryOwnerId(request, conversationId), conversationId, requestId);
-        reflectOnCompletedConversation(memoryOwnerId(request, conversationId), conversationId);
     }
 
     private ChatCompletionResponse responseForContent(ChatCompletionRequest request, String content) {
@@ -708,7 +692,8 @@ public class ChatService {
             ChatCompletionRequest request,
             List<ChatMessage> history,
             KnowledgePipelineSelection knowledgeSelection,
-            ImageAwareness imageAwareness) {
+            ImageAwareness imageAwareness,
+            String verifiedToolResult) {
         var userMessage = userMessage(request);
         String runtime = request.messages().stream()
                 .filter(message -> "system".equals(message.role()))
@@ -723,25 +708,41 @@ public class ChatService {
                 .reduce((left, right) -> left + "\n\n" + right)
                 .orElse("");
 
-        String conversationContent = conversation.isBlank()
-                ? requestConversation(request)
-                : conversation;
+        // A successful live tool result is newer and more authoritative than old
+        // assistant messages or recalled memory. Keep the MCS character context,
+        // but do not let stale answers such as "I cannot access weather" override
+        // the verified result in the current turn.
+        boolean factFirstToolTurn = hasText(verifiedToolResult);
+        String conversationContent = factFirstToolTurn
+                ? ""
+                : conversation.isBlank() ? requestConversation(request) : conversation;
+        SearchSelectionSignals promptSearchSignals = factFirstToolTurn
+                ? SearchSelectionSignals.EMPTY : knowledgeSelection.searchSignals();
+        SearchContext promptSearchContext = factFirstToolTurn
+                ? SearchContext.EMPTY : knowledgeSelection.searchContext();
+        KnowledgeSelection promptKnowledgeSelection = factFirstToolTurn
+                ? KnowledgeSelection.EMPTY : knowledgeSelection.selection();
+        KnowledgeConsolidation promptKnowledgeConsolidation = factFirstToolTurn
+                ? KnowledgeConsolidation.EMPTY : knowledgeSelection.consolidation();
+        KnowledgeContext promptKnowledge = factFirstToolTurn
+                ? new KnowledgeContext("") : knowledgeSelection.selection().knowledgeContext();
         var personaSignals = adaptivePersonaService == null
                 ? com.minikun.personality.signal.PersonaSelectionSignals.EMPTY
                 : adaptivePersonaService.evaluate("default", userMessage.content(),
-                        knowledgeSelection.searchSignals().searchRequested(), false, false,
-                        MoodSnapshot.DEFAULT).signals();
+                        promptSearchSignals.searchRequested(),
+                        (toolsEnabled && toolCallingRuntime != null) || hasText(verifiedToolResult),
+                        false, MoodSnapshot.DEFAULT).signals();
         PromptRequest promptRequest = new PromptRequest(
                 characterSpecification,
                 new RuntimeContext(runtime),
                 conversationContent.isBlank() ? null : new ConversationContext(conversationContent),
-                knowledgeSelection.selection().knowledgeContext(),
-                capabilitiesFor(knowledgeSelection, imageAwareness),
+                promptKnowledge,
+                capabilitiesFor(knowledgeSelection, imageAwareness, verifiedToolResult),
                 new com.minikun.pcs.model.UserMessage(userMessage.content()),
-                knowledgeSelection.searchSignals(),
-                knowledgeSelection.searchContext(),
-                knowledgeSelection.selection(),
-                knowledgeSelection.consolidation(), null, personaSignals);
+                promptSearchSignals,
+                promptSearchContext,
+                promptKnowledgeSelection,
+                promptKnowledgeConsolidation, null, personaSignals);
         GenerationOptions options = generationOptions(request);
         PersonalContextRuntime contextRuntime = personalContextRuntime;
         if (contextRuntime == null && dynamicTokenBudgetEnabled && dynamicGenerationOptionsFactory != null) {
@@ -1022,7 +1023,9 @@ public class ChatService {
     }
 
     private List<CapabilityInstruction> capabilitiesFor(
-            KnowledgePipelineSelection selection, ImageAwareness imageAwareness) {
+            KnowledgePipelineSelection selection,
+            ImageAwareness imageAwareness,
+            String verifiedToolResult) {
         List<CapabilityInstruction> capabilities = new java.util.ArrayList<>();
         boolean hasBrowserContent = selection.selection().selectedCandidates().stream()
                 .anyMatch(candidate -> candidate.source() == KnowledgeSource.BROWSER);
@@ -1038,6 +1041,20 @@ public class ChatService {
                             + "attachments. Count: " + imageAwareness.count()
                             + ". The assistant cannot see, inspect, or analyze their visual contents "
                             + "and must not claim visual details unless trusted text explicitly provides them."));
+        }
+        if (hasText(verifiedToolResult)) {
+            capabilities.add(new CapabilityInstruction("Verified tool result",
+                    "A native tool has already retrieved the following verified result for the current request. "
+                    + "Use it as the factual source and answer the user's original question now. "
+                    + "Do not say that the tool or external data is unavailable, and do not replace these "
+                    + "facts with guesses. Keep the identity, language, tone, and response style from MCS.\n"
+                    + verifiedToolResult, true));
+        } else if (toolsEnabled && toolCallingRuntime != null) {
+            capabilities.add(new CapabilityInstruction("Native tools",
+                    "When a native tool returns a successful result, treat its output as verified facts for the "
+                            + "user's current request. Continue answering the original request in the identity, "
+                            + "language, tone, and response style defined by MCS. Never claim that a tool is "
+                            + "unavailable when a successful tool result is present."));
         }
         return List.copyOf(capabilities);
     }

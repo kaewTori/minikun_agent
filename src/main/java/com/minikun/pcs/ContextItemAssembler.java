@@ -65,17 +65,13 @@ public final class ContextItemAssembler {
         if (capabilities.isEmpty()) {
             return;
         }
-        StringBuilder content = new StringBuilder();
         for (CapabilityInstruction capability : capabilities) {
             if (capability == null || capability.content() == null || capability.content().isBlank()) {
                 continue;
             }
-            if (content.length() > 0) {
-                content.append("\n");
-            }
-            content.append(capability.name()).append(": ").append(capability.content());
+            String content = capability.name() + ": " + capability.content();
+            addOptional(items, ContextBudgetSection.CAPABILITIES, content, 0, capability.required());
         }
-        addOptional(items, ContextBudgetSection.CAPABILITIES, content.toString(), 0);
     }
 
     private void addOptional(
@@ -83,8 +79,17 @@ public final class ContextItemAssembler {
             ContextBudgetSection section,
             String content,
             int priority) {
+        addOptional(items, section, content, priority, false);
+    }
+
+    private void addOptional(
+            List<ContextItem> items,
+            ContextBudgetSection section,
+            String content,
+            int priority,
+            boolean required) {
         if (content != null && !content.isBlank()) {
-            items.add(new ContextItem(section, content, Math.max(priority, OPTIONAL_PRIORITY), false));
+            items.add(new ContextItem(section, content, Math.max(priority, OPTIONAL_PRIORITY), required));
         }
     }
 }

@@ -13,6 +13,7 @@ import java.util.List;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.ai.chat.messages.ToolResponseMessage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
@@ -62,6 +63,31 @@ class SpringAiToolCallingRuntimeTest {
         verify(chatModel, times(2)).call(prompts.capture());
         assertEquals(true, prompts.getAllValues().stream()
                 .allMatch(prompt -> prompt.getOptions() instanceof OllamaChatOptions));
+        String continuation = prompts.getAllValues().get(1).getInstructions().stream()
+                .filter(ToolResponseMessage.class::isInstance)
+                .map(ToolResponseMessage.class::cast)
+                .flatMap(message -> message.getResponses().stream())
+                .map(ToolResponseMessage.ToolResponse::responseData)
+                .reduce((left, right) -> left + "\n" + right)
+                .orElse("");
+        assertEquals(true, continuation.contains("assistant_instruction"));
+    }
+
+    @Test
+    void callbackMakesSuccessfulResultExplicitForFinalMcsAnswer() throws Exception {
+        CalculatorAddTool tool = new CalculatorAddTool();
+        SpringAiToolCallback callback = new SpringAiToolCallback(
+                tool,
+                new DefaultToolExecutor(new DefaultToolRegistry(List.of(tool))),
+                new ObjectMapper());
+
+        var result = new ObjectMapper().readTree(callback.call("{\"a\":2,\"b\":3}"));
+
+        assertEquals(true, result.get("success").asBoolean());
+        assertEquals("calculator.add", result.get("tool").asText());
+        assertEquals("5", result.get("result").asText());
+        assertEquals(true, result.get("assistant_instruction").asText().contains("verified result"));
+        assertEquals(true, result.get("assistant_instruction").asText().contains("MCS"));
     }
 
     @Test

@@ -230,7 +230,7 @@ class PromptComposerTest {
         }
 
         @Test
-        void requiredOverflowRemainsVisibleAndRequiredSectionsAreNotDropped() {
+    void requiredOverflowRemainsVisibleAndRequiredSectionsAreNotDropped() {
         ContextBudget budget = budgetWithAllocations(1, 100_000, 100_000, 100_000, 100_000, 100_000, 100_000);
         PromptCompositionResult result = new PromptComposer().composeWithDiagnostics(requestWithBudget(
             new RuntimeContext("now"), null, new UserMessage("hello"), budget));
@@ -240,6 +240,22 @@ class PromptComposerTest {
         assertTrue(result.prompt().messages().get(0).content().contains("[Character]"));
         assertEquals("hello", result.prompt().messages().get(1).content());
         }
+
+    @Test
+    void requiredCapabilitySurvivesCharacterOverflow() {
+        ContextBudget budget = budgetWithAllocations(1, 100_000, 100_000, 100_000, 100_000, 1, 100_000);
+        PromptCompositionResult result = new PromptComposer().composeWithDiagnostics(new PromptRequest(
+                character(), new RuntimeContext("now"), null, null,
+                List.of(new CapabilityInstruction("Verified tool result", "weather facts", true)),
+                new UserMessage("hello"), SearchSelectionSignals.EMPTY, SearchContext.EMPTY,
+                KnowledgeSelection.EMPTY, KnowledgeConsolidation.EMPTY, budget,
+                com.minikun.personality.signal.PersonaSelectionSignals.EMPTY));
+
+        assertTrue(result.contextProcessingResult().orElseThrow().selectedItems().stream()
+                .anyMatch(item -> item.section() == ContextBudgetSection.CAPABILITIES
+                        && item.required() && item.content().contains("weather facts")));
+        assertTrue(result.prompt().messages().get(0).content().contains("Verified tool result"));
+    }
 
     private PromptRequest request() {
         return new PromptRequest(character(), new RuntimeContext("2026-08-01"),

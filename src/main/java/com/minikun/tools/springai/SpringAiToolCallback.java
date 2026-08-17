@@ -58,7 +58,7 @@ public final class SpringAiToolCallback implements ToolCallback {
             ToolResult result = executor.execute(
                     new ToolCallContext(new ConversationId(conversationValue), callId()),
                     new ToolCall(callId(), tool.definition().name(), arguments));
-            return objectMapper.writeValueAsString(result);
+            return objectMapper.writeValueAsString(modelFacingResult(result));
         } catch (JsonProcessingException | IllegalArgumentException exception) {
             return errorResult(ToolErrorCode.INVALID_ARGUMENTS, "invalid tool arguments");
         }
@@ -119,9 +119,36 @@ public final class SpringAiToolCallback implements ToolCallback {
 
     private String errorResult(ToolErrorCode errorCode, String message) {
         try {
-            return objectMapper.writeValueAsString(ToolResult.failure(errorCode, message));
+            return objectMapper.writeValueAsString(modelFacingResult(ToolResult.failure(errorCode, message)));
         } catch (JsonProcessingException exception) {
-            return "{\"success\":false,\"errorCode\":\"INVALID_ARGUMENTS\",\"error\":\"invalid tool arguments\"}";
+            return "{\"success\":false,\"tool\":\"unknown\","
+                    + "\"assistant_instruction\":\"The tool failed. Explain the failure honestly in the MCS style.\"}";
         }
+    }
+
+    /**
+     * Keep the domain result structured, but make the continuation contract explicit
+     * for smaller local models. The original nested {@code ToolResult} shape left the
+     * model to infer that a successful value was authoritative evidence.
+     */
+    private Map<String, Object> modelFacingResult(ToolResult result) {
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("success", result.success());
+        response.put("tool", tool.definition().name());
+        if (result.success()) {
+            response.put("result", result.value());
+            response.put("assistant_instruction",
+                    "This is a verified result from the tool. Answer the user's original request now using "
+                            + "these facts. Do not claim that the tool or external data is unavailable, do not "
+                            + "invent missing values, and preserve the identity, language, tone, and response "
+                            + "style from MCS.");
+        } else {
+            response.put("error_code", result.errorCode());
+            response.put("error", result.error());
+            response.put("assistant_instruction",
+                    "The tool failed. Explain the failure honestly in the identity, language, tone, and response "
+                            + "style from MCS, and do not fabricate an answer.");
+        }
+        return response;
     }
 }

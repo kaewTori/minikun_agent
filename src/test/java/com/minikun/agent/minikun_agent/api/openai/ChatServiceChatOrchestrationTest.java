@@ -70,11 +70,54 @@ import com.minikun.runtime.VersionService;
 import com.minikun.search.SearchDecisionService;
 import com.minikun.search.SearchService;
 import com.minikun.search.model.SearchDecision;
+import com.minikun.tools.DefaultToolExecutor;
+import com.minikun.tools.DefaultToolRegistry;
+import com.minikun.tools.WeatherForecastTool;
+import com.minikun.tools.WeatherToolRouter;
+import com.minikun.weather.WeatherReport;
 
 import reactor.core.publisher.Flux;
 
 class ChatServiceChatOrchestrationTest {
     private static final Path MCS_ROOT = Path.of("../../config/minikun-agent/mcs");
+
+    @Test
+    void verifiedWeatherResultIsAnsweredThroughMcsPrompt() throws Exception {
+        ChatModel chatModel = mock(ChatModel.class);
+        ConversationMemoryService conversation = mock(ConversationMemoryService.class);
+        when(conversation.load(any())).thenReturn(List.of(
+                new ChatMessage("assistant", "พี่สาวครับ ตอนนี้มินิคุงยังไม่สามารถตรวจสอบข้อมูลสภาพอากาศได้ครับ")));
+        when(chatModel.call(any(Prompt.class))).thenReturn(response("พรุ่งนี้มีฝนครับ พี่สาวควรพกร่มนะครับ"));
+
+        WeatherForecastTool weatherTool = new WeatherForecastTool(request ->
+                new WeatherReport("กรุงเทพมหานคร", "Thailand", 13.75, 100.50, "Asia/Bangkok",
+                        "2026-08-19", 30.0, 34.0, 1.0, 12.0, 61, "ฝนตก",
+                        28.0, 35.0, 70, 4.0, "06:00", "18:40", java.time.Instant.now(), "test"));
+        WeatherToolRouter router = new WeatherToolRouter(new DefaultToolExecutor(
+                new DefaultToolRegistry(List.of(weatherTool))));
+        ChatService service = service(chatModel, conversation);
+        setField(service, "toolsEnabled", true);
+        setField(service, "weatherToolRouter", router);
+
+        ChatCompletionResponse result = service.chatCompletion(
+                new ChatCompletionRequest(
+                        "test-model",
+                        List.of(new Message("user", "แล้ว พรุ่งนี้กรุงเทพอากาศเป็นอย่างไร")),
+                        "weather-mcs", false, null, null, null, null),
+                new ConversationId("weather-mcs"));
+
+        assertEquals("พรุ่งนี้มีฝนครับ พี่สาวควรพกร่มนะครับ", result.choices().get(0).message().content());
+        ArgumentCaptor<Prompt> prompt = ArgumentCaptor.forClass(Prompt.class);
+        verify(chatModel).call(prompt.capture());
+        String text = promptText(prompt.getValue());
+        assertTrue(text.contains("[Character]"));
+        assertTrue(text.contains("[Capabilities]"));
+        assertTrue(text.contains("Verified tool result"));
+        assertTrue(text.contains("กรุงเทพมหานคร"));
+        assertTrue(text.contains("70%"));
+        assertTrue(text.contains("Keep the identity, language, tone, and response style from MCS"));
+        assertTrue(!text.contains("ยังไม่สามารถตรวจสอบข้อมูลสภาพอากาศได้"));
+    }
 
     @Test
     void blockingAndStreamingUseEquivalentPreparationOncePerRequest() {

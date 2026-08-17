@@ -19,6 +19,7 @@
 - Actuator health และ metrics
 - คำสั่ง runtime และ diagnostics ที่จัดการในระดับ application
 - Native function tools: `time.get_current_time`, `weather.get_forecast`, `web.search`, `web.open_url` และ `calculator.add`
+- ผลลัพธ์จาก tool จะถูกส่งกลับเข้า prompt ของ MCS/PCS เพื่อให้โมเดลตอบต่อด้วยตัวตน บริบท และน้ำเสียงเดิมของมินิคุง
 - Personal Context Runtime สำหรับ context budget, dynamic max-tokens และ bounded recovery
 - ตรวจสอบ ลบรายรายการ และล้าง long-term memory แบบ owner-scoped ผ่าน `/v1/memory`
 
@@ -292,6 +293,8 @@ curl -H "X-Minikun-Memory-Token: $MINIKUN_MEMORY_MANAGEMENT_TOKEN" \
 Short-term history ถูกผูกกับ `ConversationId` และเก็บผ่าน Spring AI JDBC Chat Memory ใน PostgreSQL ส่วน long-term memory ถูกเก็บในตาราง `minikun_memory` ตาม schema ใน [`memory-schema.sql`](src/main/resources/memory-schema.sql)
 
 ใน request chat ระบบจะโหลด history เดิม, เรียกคืน knowledge ที่เกี่ยวข้อง, สร้าง prompt ผ่าน PCS แล้วจึงเรียก chat model หลังตอบสำเร็จจึงบันทึก assistant message กลับเข้า conversation memory
+
+เมื่อมี tool result ที่ยืนยันแล้ว ระบบจะใส่ผลลัพธ์นั้นไว้ใน context ของ prompt และให้โมเดลสร้างคำตอบสุดท้ายเองตาม MCS แทนการส่งข้อความสำเร็จรูปจาก tool โดยตรง
 
 รายละเอียดเพิ่มเติม:
 
