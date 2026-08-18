@@ -5,6 +5,7 @@ import com.minikun.memory.model.Memory;
 import com.minikun.memory.model.MemoryCategory;
 import com.minikun.memory.model.MemoryId;
 import com.minikun.memory.model.MemorySource;
+import com.minikun.memory.model.AcceptedMemory;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
@@ -39,14 +40,29 @@ class MemoryManagementServiceTest {
         assertThrows(IllegalArgumentException.class, () -> service.list("default", 501));
     }
 
+    @Test
+    void savesExplicitMemoryAsUserDirectiveWithOwnerScope() {
+        InMemoryRepository repository = new InMemoryRepository();
+        MemoryManagementService service = new MemoryManagementService(repository);
+
+        assertEquals(true, service.remember("default", "conversation", MemoryCategory.PREFERENCE,
+                "ไม่กินเผ็ด"));
+        assertEquals("default", repository.saved.ownerId());
+        assertEquals("conversation", repository.saved.conversationId());
+        assertEquals(MemoryCategory.PREFERENCE, repository.saved.category());
+        assertEquals(MemorySource.USER_DIRECTIVE, repository.saved.source());
+    }
+
     private static final class InMemoryRepository implements MemoryRepository {
         private final List<Memory> memories = new ArrayList<>();
         private final List<String> listOwners = new ArrayList<>();
         private String deletedOwner;
         private MemoryId deletedId;
+        private AcceptedMemory saved;
 
         @Override
         public boolean save(com.minikun.memory.model.AcceptedMemory memory) {
+            saved = memory;
             return true;
         }
 

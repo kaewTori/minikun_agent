@@ -55,8 +55,13 @@ public final class SpringAiToolCallingRuntime {
     }
 
     public ChatResponse call(Prompt prompt, ConversationId conversationId) {
+        return call(prompt, conversationId, "default");
+    }
+
+    public ChatResponse call(Prompt prompt, ConversationId conversationId, String ownerId) {
         Objects.requireNonNull(prompt, "prompt must not be null");
         Objects.requireNonNull(conversationId, "conversation id must not be null");
+        Objects.requireNonNull(ownerId, "owner id must not be null");
         if (!chatModelProvider.capabilities().toolCalling()) {
             throw new IllegalStateException(
                     "Chat model provider does not support tool calling: " + chatModelProvider.id());
@@ -68,7 +73,7 @@ public final class SpringAiToolCallingRuntime {
         copyChatOptions(prompt.getOptions(), optionsBuilder);
         ToolCallingChatOptions options = optionsBuilder
                 .toolCallbacks(callbacks)
-                .toolContext(Map.of("conversationId", conversationId.value()))
+                .toolContext(Map.of("conversationId", conversationId.value(), "ownerId", ownerId))
                 .build();
         Prompt currentPrompt = new Prompt(prompt.getInstructions(), options);
         ChatResponse response = chatModelProvider.chat(currentPrompt);

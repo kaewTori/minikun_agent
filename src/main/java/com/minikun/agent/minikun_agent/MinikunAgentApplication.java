@@ -45,9 +45,14 @@ import com.minikun.tools.DefaultToolExecutor;
 import com.minikun.tools.DefaultToolRegistry;
 import com.minikun.tools.WeatherForecastTool;
 import com.minikun.tools.WeatherToolRouter;
+import com.minikun.tools.LocationResolveTool;
 import com.minikun.tools.WebOpenUrlTool;
 import com.minikun.tools.WebSearchTool;
 import com.minikun.tools.PlannerManageTool;
+import com.minikun.tools.CalendarManageTool;
+import com.minikun.tools.MemoryManageTool;
+import com.minikun.tools.ServiceHealthTool;
+import com.minikun.tools.SystemHealthTool;
 import com.minikun.tools.PlannerConfirmationRouter;
 import com.minikun.tools.RelativeReminderToolRouter;
 import com.minikun.tools.AbsoluteReminderToolRouter;
@@ -61,6 +66,7 @@ import com.minikun.planner.PlannerNotificationScheduler;
 import com.minikun.planner.PlannerService;
 import com.minikun.weather.DailyWeatherNotificationScheduler;
 import com.minikun.weather.WeatherConfiguration;
+import com.minikun.systemhealth.SystemHealthConfiguration;
 
 @SpringBootApplication
 @EnableScheduling
@@ -79,10 +85,13 @@ import com.minikun.weather.WeatherConfiguration;
 		ContextRuntimeConfiguration.class,
 		MemoryManagementService.class, MemoryManagementController.class,
 		WeatherConfiguration.class,
+		SystemHealthConfiguration.class,
 		CurrentTimeToolRouter.class,
 		DefaultToolRegistry.class, DefaultToolExecutor.class,
 		CalculatorAddTool.class, WeatherForecastTool.class, CurrentTimeTool.class,
-		WebSearchTool.class, WebOpenUrlTool.class, WeatherToolRouter.class, PlannerManageTool.class,
+		WebSearchTool.class, WebOpenUrlTool.class, WeatherToolRouter.class, LocationResolveTool.class,
+		PlannerManageTool.class, CalendarManageTool.class, MemoryManageTool.class,
+		ServiceHealthTool.class, SystemHealthTool.class,
 		PlannerConfirmationRouter.class, RelativeReminderToolRouter.class, AbsoluteReminderToolRouter.class,
 		ReminderContextToolRouter.class,
 		JdbcPlannerConfirmationStore.class, PlannerConfirmationService.class,

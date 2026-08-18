@@ -88,9 +88,12 @@ class MinikunAgentApplicationTests {
 				.collect(java.util.stream.Collectors.toSet());
 
 		org.junit.jupiter.api.Assertions.assertTrue(names.contains("weather.get_forecast"));
+		org.junit.jupiter.api.Assertions.assertTrue(names.contains("location.resolve"));
 		org.junit.jupiter.api.Assertions.assertTrue(names.contains("time.get_current_time"));
 		org.junit.jupiter.api.Assertions.assertTrue(names.contains("web.search"));
 		org.junit.jupiter.api.Assertions.assertTrue(names.contains("web.open_url"));
+		org.junit.jupiter.api.Assertions.assertTrue(names.contains("service.health"));
+		org.junit.jupiter.api.Assertions.assertTrue(names.contains("system.health"));
 	}
 
 	@Test

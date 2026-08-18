@@ -1,8 +1,11 @@
 package com.minikun.memory.management;
 
 import com.minikun.memory.MemoryRepository;
+import com.minikun.memory.model.AcceptedMemory;
+import com.minikun.memory.model.MemoryCategory;
 import com.minikun.memory.model.Memory;
 import com.minikun.memory.model.MemoryId;
+import com.minikun.memory.model.MemorySource;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.stereotype.Service;
 
@@ -14,6 +17,7 @@ import java.util.Objects;
 @ConditionalOnBean(MemoryRepository.class)
 public final class MemoryManagementService {
     private static final int MAXIMUM_LIST_LIMIT = 500;
+    private static final int MAXIMUM_CONTENT_LENGTH = 500;
     private final MemoryRepository repository;
 
     public MemoryManagementService(MemoryRepository repository) {
@@ -33,6 +37,22 @@ public final class MemoryManagementService {
         return repository.deleteByOwner(ownerId, Objects.requireNonNull(memoryId, "memory id must not be null"));
     }
 
+    public boolean remember(
+            String ownerId,
+            String conversationId,
+            MemoryCategory category,
+            String content) {
+        validateOwner(ownerId);
+        if (conversationId == null || conversationId.isBlank()) {
+            throw new IllegalArgumentException("conversation id must not be blank");
+        }
+        Objects.requireNonNull(category, "memory category must not be null");
+        String normalizedContent = requireContent(content);
+        return repository.save(new AcceptedMemory(
+                ownerId, conversationId, category, normalizedContent, 1.0,
+                "ผู้ใช้สั่งให้มินิคุงจำโดยตรง", MemorySource.USER_DIRECTIVE));
+    }
+
     public int deleteAll(String ownerId) {
         validateOwner(ownerId);
         return repository.deleteAllByOwner(ownerId);
@@ -42,5 +62,17 @@ public final class MemoryManagementService {
         if (ownerId == null || ownerId.isBlank() || "*".equals(ownerId)) {
             throw new IllegalArgumentException("owner id must not be blank or wildcard");
         }
+    }
+
+    private String requireContent(String content) {
+        String normalized = content == null ? "" : content.trim();
+        if (normalized.isBlank()) {
+            throw new IllegalArgumentException("memory content is required");
+        }
+        if (normalized.length() > MAXIMUM_CONTENT_LENGTH) {
+            throw new IllegalArgumentException(
+                    "memory content must not exceed " + MAXIMUM_CONTENT_LENGTH + " characters");
+        }
+        return normalized;
     }
 }

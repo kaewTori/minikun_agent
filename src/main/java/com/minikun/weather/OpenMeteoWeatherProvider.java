@@ -17,22 +17,22 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.util.UriComponentsBuilder;
 
-/** Open-Meteo geocoding plus forecast adapter. */
+/** Open-Meteo forecast adapter using the shared location resolver. */
 public final class OpenMeteoWeatherProvider implements WeatherProvider {
     private static final Logger LOGGER = LoggerFactory.getLogger(OpenMeteoWeatherProvider.class);
     private static final String SOURCE = "Open-Meteo (CC BY 4.0)";
 
-    private final RestClient geocodingClient;
+    private final LocationResolver locationResolver;
     private final RestClient forecastClient;
     private final ObjectMapper objectMapper;
     private final Clock clock;
 
     public OpenMeteoWeatherProvider(
-            RestClient geocodingClient,
+            LocationResolver locationResolver,
             RestClient forecastClient,
             ObjectMapper objectMapper,
             Clock clock) {
-        this.geocodingClient = Objects.requireNonNull(geocodingClient, "geocoding client must not be null");
+        this.locationResolver = Objects.requireNonNull(locationResolver, "location resolver must not be null");
         this.forecastClient = Objects.requireNonNull(forecastClient, "forecast client must not be null");
         this.objectMapper = Objects.requireNonNull(objectMapper, "object mapper must not be null");
         this.clock = Objects.requireNonNull(clock, "clock must not be null");
@@ -43,10 +43,11 @@ public final class OpenMeteoWeatherProvider implements WeatherProvider {
         Objects.requireNonNull(request, "request must not be null");
         Instant started = clock.instant();
         try {
-            JsonNode location = geocode(request);
-            double latitude = number(location, "latitude");
-            double longitude = number(location, "longitude");
-            String timezone = text(location, "timezone", "UTC");
+            LocationResult location = locationResolver.resolve(
+                    new LocationRequest(request.location(), request.countryCode()));
+            double latitude = location.latitude();
+            double longitude = location.longitude();
+            String timezone = location.timezone();
             ZoneId zone = ZoneId.of(timezone);
             LocalDate requestedDate = requestedDate(request.when(), clock.instant(), zone);
             URIRequest forecastRequest = forecastUri(latitude, longitude);
@@ -63,43 +64,6 @@ public final class OpenMeteoWeatherProvider implements WeatherProvider {
                     request.location(), exception.getClass().getSimpleName(), exception.getMessage());
             throw exception;
         }
-    }
-
-    private JsonNode geocode(WeatherRequest request) {
-        String geocodingName = normalizeLocation(request.location());
-        UriComponentsBuilder builder = UriComponentsBuilder.fromPath("/v1/search")
-                .queryParam("name", geocodingName)
-                .queryParam("count", 5)
-                .queryParam("language", geocodingLanguage(geocodingName))
-                .queryParam("format", "json");
-        if (!request.countryCode().isBlank()) {
-            builder.queryParam("countryCode", request.countryCode());
-        }
-        String body = geocodingClient.get().uri(builder.build().toUri()).retrieve().body(String.class);
-        try {
-            JsonNode results = objectMapper.readTree(body).path("results");
-            if (!results.isArray() || results.isEmpty()) {
-                throw new IllegalArgumentException("location could not be resolved: " + request.location());
-            }
-            return results.get(0);
-        } catch (IllegalArgumentException exception) {
-            throw exception;
-        } catch (Exception exception) {
-            throw new IllegalStateException("weather geocoding response is invalid", exception);
-        }
-    }
-
-    private String normalizeLocation(String location) {
-        return location.trim()
-                .replace('ฯ', ' ')
-                .replaceAll("\\s+", " ")
-                .trim();
-    }
-
-    private String geocodingLanguage(String location) {
-        boolean containsThai = location.codePoints()
-                .anyMatch(codePoint -> codePoint >= 0x0E00 && codePoint <= 0x0E7F);
-        return containsThai ? "th" : "en";
     }
 
     private URIRequest forecastUri(double latitude, double longitude) {
@@ -121,7 +85,7 @@ public final class OpenMeteoWeatherProvider implements WeatherProvider {
     }
 
     private WeatherReport parseReport(
-            JsonNode location,
+            LocationResult location,
             String body,
             LocalDate requestedDate,
             double latitude,
@@ -138,7 +102,7 @@ public final class OpenMeteoWeatherProvider implements WeatherProvider {
             }
             int code = integerAt(daily.path("weather_code"), index, integer(current, "weather_code", -1));
             return new WeatherReport(
-                    text(location, "name", "Unknown"), text(location, "country", ""), latitude, longitude,
+                    location.name(), location.country(), latitude, longitude,
                     timezone, requestedDate.toString(), nullableNumber(current, "temperature_2m"),
                     nullableNumber(current, "apparent_temperature"), nullableNumber(current, "precipitation"),
                     nullableNumber(current, "wind_speed_10m"), integerOrNull(current, "weather_code"),
@@ -214,19 +178,6 @@ public final class OpenMeteoWeatherProvider implements WeatherProvider {
     private int integer(JsonNode node, String field, int fallback) {
         JsonNode value = node.get(field);
         return value != null && value.isNumber() ? value.asInt() : fallback;
-    }
-
-    private double number(JsonNode node, String field) {
-        JsonNode value = node.get(field);
-        if (value == null || !value.isNumber()) {
-            throw new IllegalArgumentException("geocoding response missing " + field);
-        }
-        return value.asDouble();
-    }
-
-    private String text(JsonNode node, String field, String fallback) {
-        JsonNode value = node.get(field);
-        return value != null && value.isTextual() && !value.asText().isBlank() ? value.asText() : fallback;
     }
 
     private String weatherDescription(int code) {

@@ -379,7 +379,7 @@ public class ChatService {
             // answer from the MCS/PCS prompt, without invoking that tool twice.
             var response = verifiedToolResult.isPresent()
                     ? callChatModel(context.prompt(), "chat_model", transaction.requestId(), context.conversationId())
-                    : callModel(context.prompt(), context.conversationId(), transaction.requestId());
+                    : callModel(context.prompt(), context.conversationId(), context.ownerId(), transaction.requestId());
             String content = response.getResult().getOutput().getText();
             if (context.persistConversation()) {
                 conversationMemoryService.append(context.conversationId(), new ChatMessage("assistant", content));
@@ -452,7 +452,8 @@ public class ChatService {
         Flux<ChatResponse> modelResponses = verifiedToolResult.isPresent()
             ? streamChatModel(context.prompt(), context.conversationId())
             : toolsEnabled && toolCallingRuntime != null
-            ? Flux.defer(() -> Flux.just(toolCallingRuntime.call(context.prompt(), context.conversationId())))
+            ? Flux.defer(() -> Flux.just(toolCallingRuntime.call(
+                    context.prompt(), context.conversationId(), context.ownerId())))
             : streamChatModel(context.prompt(), context.conversationId());
         Flux<String> chunks = modelResponses
                 .doOnNext(response -> appendAssistantText(assistantContent, response))
@@ -1431,11 +1432,12 @@ public class ChatService {
                         conversationId == null ? "unknown" : conversationId.value());
     }
 
-    private ChatResponse callModel(Prompt prompt, ConversationId conversationId, String requestId) {
+    private ChatResponse callModel(
+            Prompt prompt, ConversationId conversationId, String ownerId, String requestId) {
         if (toolsEnabled && toolCallingRuntime != null) {
             long started = System.nanoTime();
             try {
-                return toolCallingRuntime.call(prompt, conversationId);
+                return toolCallingRuntime.call(prompt, conversationId, ownerId);
             } finally {
                 logModelDuration("chat_model", started, requestId);
             }

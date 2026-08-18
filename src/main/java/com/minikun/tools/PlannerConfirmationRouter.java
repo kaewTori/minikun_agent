@@ -65,7 +65,7 @@ public final class PlannerConfirmationRouter implements ToolRequestRouter {
     private String formatSuccess(PendingPlannerConfirmation pending, ToolResult result) {
         Object title = pending.arguments().get("title");
         String titleText = title == null || title.toString().isBlank() ? "รายการที่ขอ" : title.toString();
-        return "ยืนยันแล้วครับ ระบบบันทึกการแจ้งเตือนเรียบร้อยแล้วจาก planner.manage\n"
+        return "ยืนยันแล้วครับ ระบบบันทึกการแจ้งเตือนเรียบร้อยแล้ว\n"
                 + "รายการ: " + titleText + "\nผลลัพธ์ที่ตรวจสอบแล้ว: " + result.value();
     }
 }

@@ -21,25 +21,7 @@ public final class PlannerManageTool implements Tool {
                     + "For create, update, and cancel, first show the proposed change and ask the user for confirmation. "
                     + "Only execute the write after confirmed=true. Convert natural-language dates into ISO-8601 local date-time "
                     + "using Asia/Bangkok unless the user specifies another IANA timezone.",
-            Map.of(
-                    "action", new ToolParameter("action", ToolParameterType.STRING, true,
-                            "One of create, list, update, or cancel."),
-                    "title", new ToolParameter("title", ToolParameterType.STRING, false,
-                            "Short reminder title."),
-                    "note", new ToolParameter("note", ToolParameterType.STRING, false,
-                            "Optional details."),
-                    "at", new ToolParameter("at", ToolParameterType.STRING, false,
-                            "ISO-8601 date/time, preferably with offset, such as 2026-08-20T09:00:00+07:00."),
-                    "timezone", new ToolParameter("timezone", ToolParameterType.STRING, false,
-                            "IANA timezone, default Asia/Bangkok."),
-                    "remind_before_minutes", new ToolParameter("remind_before_minutes", ToolParameterType.INTEGER,
-                            false, "Minutes before the event to send the reminder."),
-                    "recurrence", new ToolParameter("recurrence", ToolParameterType.STRING, false,
-                            "NONE, DAILY, or WEEKLY."),
-                    "event_id", new ToolParameter("event_id", ToolParameterType.STRING, false,
-                            "Existing reminder UUID for update or cancel."),
-                    "confirmed", new ToolParameter("confirmed", ToolParameterType.BOOLEAN, false,
-                            "Must be true to apply create, update, or cancel.")));
+            ScheduleToolSchema.parameters());
 
     private final PlannerService planner;
     private final PlannerConfirmationService confirmations;

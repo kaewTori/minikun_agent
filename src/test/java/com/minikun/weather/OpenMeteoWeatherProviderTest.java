@@ -26,7 +26,8 @@ class OpenMeteoWeatherProviderTest {
         MockRestServiceServer geocodingServer = MockRestServiceServer.bindTo(geocodingBuilder).build();
         MockRestServiceServer forecastServer = MockRestServiceServer.bindTo(forecastBuilder).build();
         OpenMeteoWeatherProvider provider = new OpenMeteoWeatherProvider(
-                geocodingBuilder.build(), forecastBuilder.build(), new ObjectMapper(), CLOCK);
+                new OpenMeteoLocationResolver(geocodingBuilder.build(), new ObjectMapper(), CLOCK),
+                forecastBuilder.build(), new ObjectMapper(), CLOCK);
 
         geocodingServer.expect(requestTo("https://geo.test/v1/search?name=Chiang%20Mai&count=5&language=en&format=json&countryCode=TH"))
                 .andExpect(method(HttpMethod.GET))
@@ -67,7 +68,8 @@ class OpenMeteoWeatherProviderTest {
         MockRestServiceServer geocodingServer = MockRestServiceServer.bindTo(geocodingBuilder).build();
         MockRestServiceServer forecastServer = MockRestServiceServer.bindTo(forecastBuilder).build();
         OpenMeteoWeatherProvider provider = new OpenMeteoWeatherProvider(
-                geocodingBuilder.build(), forecastBuilder.build(), new ObjectMapper(), CLOCK);
+                new OpenMeteoLocationResolver(geocodingBuilder.build(), new ObjectMapper(), CLOCK),
+                forecastBuilder.build(), new ObjectMapper(), CLOCK);
 
         geocodingServer.expect(requestTo(
                         "https://geo.test/v1/search?name=กรุงเทพ&count=5"

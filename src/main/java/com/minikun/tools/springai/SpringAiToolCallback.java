@@ -58,9 +58,10 @@ public final class SpringAiToolCallback implements ToolCallback {
             Map<String, Object> arguments = objectMapper.convertValue(
                     objectMapper.readTree(toolInput == null || toolInput.isBlank() ? "{}" : toolInput), Map.class);
             String conversationValue = value(toolContext, "conversationId", "tool-call");
+            String ownerValue = value(toolContext, "ownerId", "default");
             String toolCallId = callId();
             ToolResult result = executor.execute(
-                    new ToolCallContext(new ConversationId(conversationValue), toolCallId),
+                    new ToolCallContext(new ConversationId(conversationValue), toolCallId, ownerValue),
                     new ToolCall(toolCallId, tool.definition().name(), arguments));
             return objectMapper.writeValueAsString(modelFacingResult(result));
         } catch (JsonProcessingException | IllegalArgumentException exception) {
