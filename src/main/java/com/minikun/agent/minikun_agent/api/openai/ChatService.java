@@ -364,6 +364,17 @@ public class ChatService {
                 transaction.success();
                 return responseForContent(request, content);
             }
+            if (verifiedToolResult.map(ToolEvidence::requiresConfirmation).orElse(false)) {
+                String content = verifiedToolResult.get().content();
+                if (context.persistConversation()) {
+                    conversationMemoryService.append(context.conversationId(), new ChatMessage("assistant", content));
+                    log.info("process=conversation event=assistant_message_persisted");
+                    publishTurnCompleted(context.ownerId(), context.conversationId(), transaction.requestId());
+                    reflectOnCompletedConversation(context.ownerId(), context.conversationId());
+                }
+                transaction.success();
+                return responseForContent(request, content);
+            }
             // The weather route has already executed the tool. Generate the final
             // answer from the MCS/PCS prompt, without invoking that tool twice.
             var response = verifiedToolResult.isPresent()
@@ -420,6 +431,18 @@ public class ChatService {
             String content = browserFailureMessage(userMessage.content(), exception);
             if (shouldPersistConversation(request)) {
                 conversationMemoryService.append(conversationId, new ChatMessage("assistant", content));
+            }
+            transaction.success();
+            return commandStream(content, request);
+        }
+        if (verifiedToolResult.map(ToolEvidence::requiresConfirmation).orElse(false)) {
+            String content = verifiedToolResult.get().content();
+            if (context.persistConversation()) {
+                conversationMemoryService.append(
+                        context.conversationId(), new ChatMessage("assistant", content));
+                log.info("process=conversation event=assistant_message_persisted stream=true");
+                publishTurnCompleted(context.ownerId(), context.conversationId(), transaction.requestId());
+                reflectOnCompletedConversation(context.ownerId(), context.conversationId());
             }
             transaction.success();
             return commandStream(content, request);

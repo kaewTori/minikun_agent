@@ -1,6 +1,9 @@
 package com.minikun.tools.springai;
 
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
@@ -26,7 +29,7 @@ public final class SpringAiToolCallback implements ToolCallback {
     private final ToolExecutor executor;
     private final ObjectMapper objectMapper;
     private final ToolDefinition definition;
-    private final ThreadLocal<String> currentCallId = new ThreadLocal<>();
+    private final ThreadLocal<Deque<String>> currentCallIds = new ThreadLocal<>();
 
     public SpringAiToolCallback(Tool tool, ToolExecutor executor, ObjectMapper objectMapper) {
         this.tool = Objects.requireNonNull(tool, "tool must not be null");
@@ -55,9 +58,10 @@ public final class SpringAiToolCallback implements ToolCallback {
             Map<String, Object> arguments = objectMapper.convertValue(
                     objectMapper.readTree(toolInput == null || toolInput.isBlank() ? "{}" : toolInput), Map.class);
             String conversationValue = value(toolContext, "conversationId", "tool-call");
+            String toolCallId = callId();
             ToolResult result = executor.execute(
-                    new ToolCallContext(new ConversationId(conversationValue), callId()),
-                    new ToolCall(callId(), tool.definition().name(), arguments));
+                    new ToolCallContext(new ConversationId(conversationValue), toolCallId),
+                    new ToolCall(toolCallId, tool.definition().name(), arguments));
             return objectMapper.writeValueAsString(modelFacingResult(result));
         } catch (JsonProcessingException | IllegalArgumentException exception) {
             return errorResult(ToolErrorCode.INVALID_ARGUMENTS, "invalid tool arguments");
@@ -65,15 +69,23 @@ public final class SpringAiToolCallback implements ToolCallback {
     }
 
     void setCurrentCallId(String callId) {
-        currentCallId.set(callId);
+        setCurrentCallIds(List.of(callId));
+    }
+
+    void setCurrentCallIds(List<String> callIds) {
+        currentCallIds.set(new ArrayDeque<>(callIds));
     }
 
     void clearCurrentCallId() {
-        currentCallId.remove();
+        currentCallIds.remove();
     }
 
     private String callId() {
-        return Objects.requireNonNullElse(currentCallId.get(), "spring-ai-tool-call");
+        Deque<String> callIds = currentCallIds.get();
+        if (callIds != null && !callIds.isEmpty()) {
+            return callIds.removeFirst();
+        }
+        return "spring-ai-tool-call";
     }
 
     private String inputSchema(Tool tool) {
@@ -137,11 +149,18 @@ public final class SpringAiToolCallback implements ToolCallback {
         response.put("tool", tool.definition().name());
         if (result.success()) {
             response.put("result", result.value());
-            response.put("assistant_instruction",
-                    "This is a verified result from the tool. Answer the user's original request now using "
-                            + "these facts. Do not claim that the tool or external data is unavailable, do not "
-                            + "invent missing values, and preserve the identity, language, tone, and response "
-                            + "style from MCS.");
+            if (requiresConfirmation(result.value())) {
+                response.put("assistant_instruction",
+                        "The requested write operation has not been applied yet. Ask the user to confirm the "
+                                + "proposed change in the identity, language, tone, and response style from MCS. "
+                                + "Do not claim that the event or reminder was saved.");
+            } else {
+                response.put("assistant_instruction",
+                        "This is a verified result from the tool. Answer the user's original request now using "
+                                + "these facts. Do not claim that the tool or external data is unavailable, do not "
+                                + "invent missing values, and preserve the identity, language, tone, and response "
+                                + "style from MCS.");
+            }
         } else {
             response.put("error_code", result.errorCode());
             response.put("error", result.error());
@@ -150,5 +169,13 @@ public final class SpringAiToolCallback implements ToolCallback {
                             + "style from MCS, and do not fabricate an answer.");
         }
         return response;
+    }
+
+    private boolean requiresConfirmation(Object value) {
+        if (!(value instanceof Map<?, ?> map)) {
+            return false;
+        }
+        Object flag = map.get("requires_confirmation");
+        return Boolean.TRUE.equals(flag) || "true".equalsIgnoreCase(String.valueOf(flag));
     }
 }

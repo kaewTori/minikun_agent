@@ -9,6 +9,7 @@ import static org.mockito.Mockito.when;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.util.List;
+import java.util.Map;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
@@ -33,6 +34,8 @@ import com.minikun.model.existing.ExistingChatModelProvider;
 import com.minikun.tools.CalculatorAddTool;
 import com.minikun.tools.DefaultToolExecutor;
 import com.minikun.tools.DefaultToolRegistry;
+import com.minikun.tools.Tool;
+import com.minikun.tools.ToolDefinition;
 
 class SpringAiToolCallingRuntimeTest {
     @Test
@@ -71,6 +74,102 @@ class SpringAiToolCallingRuntimeTest {
                 .reduce((left, right) -> left + "\n" + right)
                 .orElse("");
         assertEquals(true, continuation.contains("assistant_instruction"));
+    }
+
+    @Test
+    void supportsMultipleToolContinuationsUntilFinalAssistantResponse() {
+        ChatModel chatModel = mock(ChatModel.class);
+        ChatResponse firstToolRequest = toolRequest("call-1", 2, 3);
+        ChatResponse secondToolRequest = toolRequest("call-2", 4, 6);
+        ChatResponse finalResponse = new ChatResponse(List.of(new Generation(
+                new AssistantMessage("The verified results are 5 and 10."))));
+        when(chatModel.call(any(Prompt.class))).thenReturn(firstToolRequest, secondToolRequest, finalResponse);
+
+        SpringAiToolCallingRuntime runtime = new SpringAiToolCallingRuntime(
+                new DefaultActiveChatModelProvider(
+                        new ActiveModelConfiguration(ChatModelId.EXISTING),
+                        new DefaultChatModelProviderRegistry(List.of(new ExistingChatModelProvider(chatModel)))),
+                List.of(new CalculatorAddTool()),
+                new DefaultToolExecutor(new DefaultToolRegistry(List.of(new CalculatorAddTool()))),
+                new ObjectMapper());
+
+        ChatResponse response = runtime.call(new Prompt("Calculate both sums."), new ConversationId("conversation"));
+
+        assertEquals("The verified results are 5 and 10.", response.getResult().getOutput().getText());
+        verify(chatModel, times(3)).call(any(Prompt.class));
+    }
+
+    @Test
+    void returnsSafeResponseWhenToolContinuationLimitIsReached() {
+        ChatModel chatModel = mock(ChatModel.class);
+        ChatResponse[] toolRequests = new ChatResponse[5];
+        for (int index = 0; index < toolRequests.length; index++) {
+            toolRequests[index] = toolRequest("call-" + index, index, 1);
+        }
+        when(chatModel.call(any(Prompt.class))).thenReturn(toolRequests[0], toolRequests[1], toolRequests[2],
+                toolRequests[3], toolRequests[4]);
+
+        SpringAiToolCallingRuntime runtime = new SpringAiToolCallingRuntime(
+                new DefaultActiveChatModelProvider(
+                        new ActiveModelConfiguration(ChatModelId.EXISTING),
+                        new DefaultChatModelProviderRegistry(List.of(new ExistingChatModelProvider(chatModel)))),
+                List.of(new CalculatorAddTool()),
+                new DefaultToolExecutor(new DefaultToolRegistry(List.of(new CalculatorAddTool()))),
+                new ObjectMapper());
+
+        ChatResponse response = runtime.call(new Prompt("Keep calculating."), new ConversationId("conversation"));
+
+        assertEquals(true, response.getResult().getOutput().getText().contains("ยังไม่เสร็จสมบูรณ์"));
+        verify(chatModel, times(5)).call(any(Prompt.class));
+    }
+
+    @Test
+    void returnsDeterministicConfirmationMessageBeforeFinalModelTurn() {
+        ChatModel chatModel = mock(ChatModel.class);
+        ChatResponse toolRequest = new ChatResponse(List.of(new Generation(
+                AssistantMessage.builder()
+                        .content("")
+                        .toolCalls(List.of(new AssistantMessage.ToolCall(
+                                "confirm-call", "function", "confirmation.tool", "{}")))
+                        .build())));
+        when(chatModel.call(any(Prompt.class))).thenReturn(toolRequest,
+                new ChatResponse(List.of(new Generation(new AssistantMessage("model should not answer")))));
+        Tool confirmationTool = new Tool() {
+            @Override
+            public ToolDefinition definition() {
+                return new ToolDefinition("confirmation.tool", "create a pending confirmation", Map.of());
+            }
+
+            @Override
+            public com.minikun.tools.ToolResult execute(
+                    com.minikun.tools.ToolCallContext context, Map<String, Object> arguments) {
+                return com.minikun.tools.ToolResult.success(Map.of(
+                        "requires_confirmation", true,
+                        "message", "ยังไม่ได้บันทึกครับ กรุณายืนยันก่อน"));
+            }
+        };
+        SpringAiToolCallingRuntime runtime = new SpringAiToolCallingRuntime(
+                new DefaultActiveChatModelProvider(
+                        new ActiveModelConfiguration(ChatModelId.EXISTING),
+                        new DefaultChatModelProviderRegistry(List.of(
+                                new ExistingChatModelProvider(chatModel)))),
+                List.of(confirmationTool),
+                new DefaultToolExecutor(new DefaultToolRegistry(List.of(confirmationTool))),
+                new ObjectMapper());
+
+        ChatResponse response = runtime.call(new Prompt("Create something."), new ConversationId("conversation"));
+
+        assertEquals("ยังไม่ได้บันทึกครับ กรุณายืนยันก่อน", response.getResult().getOutput().getText());
+        verify(chatModel, times(1)).call(any(Prompt.class));
+    }
+
+    private ChatResponse toolRequest(String callId, int a, int b) {
+        return new ChatResponse(List.of(new Generation(
+                AssistantMessage.builder()
+                        .content("")
+                        .toolCalls(List.of(new AssistantMessage.ToolCall(
+                                callId, "function", "calculator.add", "{\"a\":" + a + ",\"b\":" + b + "}")))
+                        .build())));
     }
 
     @Test

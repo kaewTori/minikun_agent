@@ -18,8 +18,9 @@
 - ส่ง language/category/time-range/safe-search options ไปยัง SearXNG พร้อม ranking และ URL deduplication
 - Actuator health และ metrics
 - คำสั่ง runtime และ diagnostics ที่จัดการในระดับ application
-- Native function tools: `time.get_current_time`, `weather.get_forecast`, `web.search`, `web.open_url` และ `calculator.add`
+- Native function tools: `time.get_current_time`, `weather.get_forecast`, `web.search`, `web.open_url`, `calculator.add` และ `planner.manage`
 - ผลลัพธ์จาก tool จะถูกส่งกลับเข้า prompt ของ MCS/PCS เพื่อให้โมเดลตอบต่อด้วยตัวตน บริบท และน้ำเสียงเดิมของมินิคุง
+- เก็บ reminder ใน PostgreSQL และส่ง notification ผ่าน ntfy พร้อม daily weather digest เวลา 07:00 (`Asia/Bangkok`)
 - Personal Context Runtime สำหรับ context budget, dynamic max-tokens และ bounded recovery
 - ตรวจสอบ ลบรายรายการ และล้าง long-term memory แบบ owner-scoped ผ่าน `/v1/memory`
 
@@ -137,6 +138,15 @@ Actuator ที่เปิดให้เข้าถึงคือ `/actuator
 | `MINIKUN_WEATHER_FORECAST_URL` | `https://api.open-meteo.com` | endpoint สำหรับ forecast |
 | `MINIKUN_WEATHER_TIMEOUT` | `10s` | timeout ของ geocoding และ forecast |
 | `MINIKUN_TIME_DEFAULT_ZONE` | `Asia/Bangkok` | timezone เริ่มต้นของ `time.get_current_time` |
+| `MINIKUN_PLANNER_ENABLED` | `true` | เปิด planner, reminder scheduler และ daily weather notification |
+| `MINIKUN_PLANNER_POLL_INTERVAL_MS` | `30000` | รอบตรวจ reminder ที่ถึงเวลาแล้ว |
+| `MINIKUN_NTFY_ENABLED` | `true` | เปิด/ปิดการส่ง ntfy |
+| `MINIKUN_NTFY_TOKEN` | ว่าง | Bearer token สำหรับ ntfy topic ถ้าตั้ง access control |
+| `MINIKUN_NTFY_REMINDER_TOPIC` | topic ที่กำหนดใน `application.properties` | topic สำหรับ reminder |
+| `MINIKUN_NTFY_WEATHER_TOPIC` | topic ที่กำหนดใน `application.properties` | topic สำหรับ daily weather |
+| `MINIKUN_WEATHER_ALERT_LOCATION` | `Bangkok` | สถานที่ของ daily weather digest |
+| `MINIKUN_WEATHER_ALERT_ZONE` | `Asia/Bangkok` | timezone ของ daily weather digest |
+| `MINIKUN_WEATHER_ALERT_TIME` | `07:00` | เวลาส่ง daily weather digest |
 
 ในโหมด `hybrid` สามารถตรวจผล TinyGrad ตาม `conversation_id` ได้ที่
 `GET /v1/cooperation/reviews/{conversation_id}` โดยสถานะจะเป็น `PENDING`,
@@ -295,6 +305,8 @@ Short-term history ถูกผูกกับ `ConversationId` และเก�
 ใน request chat ระบบจะโหลด history เดิม, เรียกคืน knowledge ที่เกี่ยวข้อง, สร้าง prompt ผ่าน PCS แล้วจึงเรียก chat model หลังตอบสำเร็จจึงบันทึก assistant message กลับเข้า conversation memory
 
 เมื่อมี tool result ที่ยืนยันแล้ว ระบบจะใส่ผลลัพธ์นั้นไว้ใน context ของ prompt และให้โมเดลสร้างคำตอบสุดท้ายเองตาม MCS แทนการส่งข้อความสำเร็จรูปจาก tool โดยตรง
+
+`planner.manage` รองรับ `create`, `list`, `update` และ `cancel` สำหรับ reminder โดยการเขียน/แก้ไข/ยกเลิกต้องผ่าน confirmation ก่อนเสมอ งานที่บันทึกแล้วจะถูกส่งไปยัง ntfy เมื่อถึงเวลา และรายการที่ตั้งซ้ำแบบ `DAILY` หรือ `WEEKLY` จะเลื่อนรอบถัดไปอัตโนมัติ
 
 รายละเอียดเพิ่มเติม:
 

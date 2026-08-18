@@ -33,7 +33,8 @@ import org.springframework.test.web.servlet.MvcResult;
 
 @SpringBootTest(properties = {
 	"spring.autoconfigure.exclude=org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration,org.springframework.ai.model.chat.memory.repository.jdbc.autoconfigure.JdbcChatMemoryRepositoryAutoConfiguration",
-	"minikun.memory.persistence.enabled=false"
+	"minikun.memory.persistence.enabled=false",
+	"minikun.planner.enabled=false"
 })
 @AutoConfigureMockMvc
 @Import(TestChatMemoryConfiguration.class)

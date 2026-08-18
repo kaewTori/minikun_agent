@@ -3,6 +3,7 @@ package com.minikun.agent.minikun_agent;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Import;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 import com.minikun.memory.internal.MemoryConfiguration;
 import com.minikun.browser.BrowserConfiguration;
@@ -46,10 +47,23 @@ import com.minikun.tools.WeatherForecastTool;
 import com.minikun.tools.WeatherToolRouter;
 import com.minikun.tools.WebOpenUrlTool;
 import com.minikun.tools.WebSearchTool;
+import com.minikun.tools.PlannerManageTool;
+import com.minikun.tools.PlannerConfirmationRouter;
+import com.minikun.tools.RelativeReminderToolRouter;
+import com.minikun.tools.AbsoluteReminderToolRouter;
+import com.minikun.tools.ReminderContextToolRouter;
 import com.minikun.tools.springai.SpringAiToolCallingRuntime;
+import com.minikun.notification.NtfyNotificationService;
+import com.minikun.planner.JdbcPlannerStore;
+import com.minikun.planner.JdbcPlannerConfirmationStore;
+import com.minikun.planner.PlannerConfirmationService;
+import com.minikun.planner.PlannerNotificationScheduler;
+import com.minikun.planner.PlannerService;
+import com.minikun.weather.DailyWeatherNotificationScheduler;
 import com.minikun.weather.WeatherConfiguration;
 
 @SpringBootApplication
+@EnableScheduling
 @Import({MemoryConfiguration.class, SearchConfiguration.class, BrowserConfiguration.class, MeterRegistryMetricsReader.class,
 		DiagnosticsService.class, DiagnosticsFormatter.class, DiagnosticsPromptBuilder.class,
 		MinikunPersonaProvider.class, KnowledgeSelectionConfiguration.class,
@@ -68,7 +82,12 @@ import com.minikun.weather.WeatherConfiguration;
 		CurrentTimeToolRouter.class,
 		DefaultToolRegistry.class, DefaultToolExecutor.class,
 		CalculatorAddTool.class, WeatherForecastTool.class, CurrentTimeTool.class,
-		WebSearchTool.class, WebOpenUrlTool.class, WeatherToolRouter.class,
+		WebSearchTool.class, WebOpenUrlTool.class, WeatherToolRouter.class, PlannerManageTool.class,
+		PlannerConfirmationRouter.class, RelativeReminderToolRouter.class, AbsoluteReminderToolRouter.class,
+		ReminderContextToolRouter.class,
+		JdbcPlannerConfirmationStore.class, PlannerConfirmationService.class,
+		NtfyNotificationService.class, JdbcPlannerStore.class, PlannerService.class,
+		PlannerNotificationScheduler.class, DailyWeatherNotificationScheduler.class,
 		SpringAiToolCallingRuntime.class})
 public class MinikunAgentApplication {
 
