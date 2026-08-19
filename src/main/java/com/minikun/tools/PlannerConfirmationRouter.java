@@ -17,6 +17,8 @@ import com.minikun.planner.PlannerConfirmationService;
 @ConditionalOnProperty(name = "minikun.planner.enabled", havingValue = "true", matchIfMissing = true)
 public final class PlannerConfirmationRouter implements ToolRequestRouter {
     private static final String TOOL_NAME = "planner.manage";
+    private static final java.util.Set<String> PLANNER_ACTIONS = java.util.Set.of(
+            "create", "update", "cancel", "snooze");
 
     private final ToolExecutor executor;
     private final PlannerConfirmationService confirmations;
@@ -32,7 +34,7 @@ public final class PlannerConfirmationRouter implements ToolRequestRouter {
             return Optional.empty();
         }
         Optional<PendingPlannerConfirmation> pending = confirmations.find(conversationId)
-                .filter(value -> !value.action().startsWith("task."));
+                .filter(value -> PLANNER_ACTIONS.contains(value.action()));
         if (pending.isEmpty()) {
             return Optional.empty();
         }

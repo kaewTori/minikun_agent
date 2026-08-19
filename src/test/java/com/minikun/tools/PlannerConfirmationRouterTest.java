@@ -68,6 +68,21 @@ class PlannerConfirmationRouterTest {
         assertTrue(router.route("ยืนยันเรื่องอะไรเหรอครับ", new ConversationId("empty")).isEmpty());
     }
 
+    @Test
+    void doesNotMisrouteGuardianConfirmationToPlannerTool() {
+        InMemoryConfirmationStore confirmationStore = new InMemoryConfirmationStore();
+        PlannerConfirmationService confirmations = new PlannerConfirmationService(
+                confirmationStore, Clock.fixed(NOW, ZoneId.of("UTC")));
+        PlannerConfirmationRouter router = new PlannerConfirmationRouter(
+                new DefaultToolExecutor(new DefaultToolRegistry(List.of())), confirmations);
+        ConversationId conversation = new ConversationId("guardian-pending");
+        confirmations.save(conversation, "default", "guardian.execute",
+                Map.of("action", "execute", "action_id", "restart-ollama"));
+
+        assertTrue(router.route("ยืนยัน", conversation).isEmpty());
+        assertTrue(confirmations.find(conversation).isPresent());
+    }
+
     private static final class InMemoryConfirmationStore implements PlannerConfirmationStore {
         private PendingPlannerConfirmation value;
 

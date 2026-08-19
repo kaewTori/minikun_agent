@@ -72,14 +72,53 @@ import com.minikun.search.SearchService;
 import com.minikun.search.model.SearchDecision;
 import com.minikun.tools.DefaultToolExecutor;
 import com.minikun.tools.DefaultToolRegistry;
+import com.minikun.tools.ToolEvidence;
+import com.minikun.tools.ToolRequestRouter;
 import com.minikun.tools.WeatherForecastTool;
 import com.minikun.tools.WeatherToolRouter;
 import com.minikun.weather.WeatherReport;
+import com.minikun.vision.VisionInputService;
 
 import reactor.core.publisher.Flux;
 
 class ChatServiceChatOrchestrationTest {
     private static final Path MCS_ROOT = Path.of("../../config/minikun-agent/mcs");
+
+    @Test
+    void attachesVisionMediaToCurrentPromptWithoutPersistingImageBytes() throws Exception {
+        ChatModel chatModel = mock(ChatModel.class);
+        ConversationMemoryService conversation = mock(ConversationMemoryService.class);
+        when(conversation.load(any())).thenReturn(List.of());
+        when(chatModel.call(any(Prompt.class))).thenReturn(response("เห็นภาพแล้วครับ"));
+        ChatService service = service(chatModel, conversation);
+        setField(service, "visionInputService", new VisionInputService(
+                true, 3, 1024, true, false, Duration.ofSeconds(1), Duration.ofSeconds(1)));
+        ChatCompletionRequest request = new ObjectMapper().readValue("""
+                {"model":"mini-kun","conversation_id":"vision-test","stream":false,"messages":[
+                  {"role":"user","content":[
+                    {"type":"text","text":"อธิบายภาพนี้"},
+                    {"type":"image_url","image_url":{"url":"data:image/png;base64,iVBORw0KGgo="}}
+                  ]}
+                ]}
+                """, ChatCompletionRequest.class);
+
+        service.chatCompletion(request, new ConversationId("vision-test"));
+
+        ArgumentCaptor<Prompt> prompt = ArgumentCaptor.forClass(Prompt.class);
+        verify(chatModel).call(prompt.capture());
+        assertEquals(1, prompt.getValue().getUserMessage().getMedia().size());
+        assertEquals("image/png", prompt.getValue().getUserMessage().getMedia().getFirst()
+                .getMimeType().toString());
+        assertEquals(false, ((OllamaChatOptions) prompt.getValue().getOptions())
+                .getThinkOption().toJsonValue());
+        assertTrue(promptText(prompt.getValue()).contains("User-provided Images"));
+
+        ArgumentCaptor<ChatMessage> persisted = ArgumentCaptor.forClass(ChatMessage.class);
+        verify(conversation, org.mockito.Mockito.times(2)).append(any(), persisted.capture());
+        assertEquals("อธิบายภาพนี้", persisted.getAllValues().getFirst().content());
+        assertFalse(persisted.getAllValues().stream()
+                .anyMatch(message -> message.content().contains("iVBORw0KGgo")));
+    }
 
     @Test
     void verifiedWeatherResultIsAnsweredThroughMcsPrompt() throws Exception {
@@ -117,6 +156,38 @@ class ChatServiceChatOrchestrationTest {
         assertTrue(text.contains("70%"));
         assertTrue(text.contains("Keep the identity, language, tone, and response style from MCS"));
         assertTrue(!text.contains("ยังไม่สามารถตรวจสอบข้อมูลสภาพอากาศได้"));
+    }
+
+    @Test
+    void deterministicToolResultBypassesKnowledgeAndModelForBlockingAndStreaming() throws Exception {
+        ChatModel blockingModel = mock(ChatModel.class);
+        ChatModel streamingModel = mock(ChatModel.class);
+        ConversationMemoryService blockingConversation = mock(ConversationMemoryService.class);
+        ConversationMemoryService streamingConversation = mock(ConversationMemoryService.class);
+        ToolRequestRouter router = (text, conversationId) -> java.util.Optional.of(
+                ToolEvidence.finalVerified("homelab.guardian", "verified guardian status"));
+        ChatService blockingService = service(blockingModel, blockingConversation);
+        ChatService streamingService = service(streamingModel, streamingConversation);
+        setField(blockingService, "toolsEnabled", true);
+        setField(streamingService, "toolsEnabled", true);
+        setField(blockingService, "toolRequestRouters", List.of(router));
+        setField(streamingService, "toolRequestRouters", List.of(router));
+
+        ChatCompletionResponse blocking = blockingService.chatCompletion(
+                request(), new ConversationId("guardian-blocking"));
+        List<String> streaming = streamingService.chatCompletionStream(
+                request(), new ConversationId("guardian-streaming")).collectList().block();
+
+        assertEquals("verified guardian status", blocking.choices().getFirst().message().content());
+        assertTrue(streaming.stream().anyMatch(chunk -> chunk.contains("verified guardian status")));
+        verify(blockingModel, never()).call(any(Prompt.class));
+        verify(blockingModel, never()).stream(any(Prompt.class));
+        verify(streamingModel, never()).call(any(Prompt.class));
+        verify(streamingModel, never()).stream(any(Prompt.class));
+        verify(blockingConversation, never()).load(any());
+        verify(streamingConversation, never()).load(any());
+        verify(blockingConversation, org.mockito.Mockito.times(2)).append(any(), any());
+        verify(streamingConversation, org.mockito.Mockito.times(2)).append(any(), any());
     }
 
     @Test

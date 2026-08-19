@@ -23,6 +23,7 @@ public final class DefaultSystemHealthReader implements SystemHealthReader {
     private final int connectTimeoutMillis;
     private final double memoryWarningPercent;
     private final double diskWarningPercent;
+    private final MacOsMemoryPressureReader macOsMemoryPressure = new MacOsMemoryPressureReader();
 
     public DefaultSystemHealthReader(
             Path diskPath,
@@ -90,6 +91,12 @@ public final class DefaultSystemHealthReader implements SystemHealthReader {
         if (ManagementFactory.getOperatingSystemMXBean() instanceof com.sun.management.OperatingSystemMXBean extended) {
             try {
                 addUsage(result, extended.getTotalMemorySize(), extended.getFreeMemorySize());
+                macOsMemoryPressure.readAvailablePercent().ifPresent(availablePercent -> {
+                    result.put("raw_used_percent", result.get("used_percent"));
+                    result.put("available_percent", round(availablePercent));
+                    result.put("used_percent", round(100.0 - availablePercent));
+                    result.put("measurement", "memory_pressure");
+                });
             } catch (RuntimeException | InternalError exception) {
                 result.put("status", "UNKNOWN");
             }

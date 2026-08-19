@@ -54,7 +54,7 @@ class ExistingChatModelProviderTest {
         assertEquals(ChatModelId.EXISTING, provider.id());
         assertEquals(true, provider.capabilities().streaming());
         assertEquals(true, provider.capabilities().toolCalling());
-        assertEquals(false, provider.capabilities().vision());
+        assertEquals(true, provider.capabilities().vision());
     }
 
     private ChatResponse response(String text) {

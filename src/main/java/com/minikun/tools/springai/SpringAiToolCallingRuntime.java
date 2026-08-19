@@ -172,6 +172,10 @@ public final class SpringAiToolCallingRuntime {
                 .temperature(source.getTemperature())
                 .topK(source.getTopK())
                 .topP(source.getTopP());
+        if (source instanceof OllamaChatOptions sourceOllama
+                && target instanceof OllamaChatOptions.Builder targetOllama) {
+            targetOllama.thinkOption(sourceOllama.getThinkOption());
+        }
     }
 
     private boolean hasToolCalls(ChatResponse response) {

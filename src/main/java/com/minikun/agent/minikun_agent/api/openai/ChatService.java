@@ -110,6 +110,9 @@ import com.minikun.runtime.ModelsFormatter;
 import com.minikun.runtime.ModelsService;
 import com.minikun.runtime.VersionFormatter;
 import com.minikun.runtime.VersionService;
+import com.minikun.vision.VisionInput;
+import com.minikun.vision.VisionInputException;
+import com.minikun.vision.VisionInputService;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -189,6 +192,9 @@ public class ChatService {
 
     @Autowired
     private BrowserContentService browserContentService;
+
+    @Autowired(required = false)
+    private VisionInputService visionInputService;
 
     public ChatService(
             ActiveChatModelProvider activeChatModelProvider,
@@ -343,7 +349,8 @@ public class ChatService {
     private long contextBudgetCharacters = 24_000L;
 
     public ChatCompletionResponse chatCompletion(ChatCompletionRequest request, ConversationId conversationId) {
-        ChatMessage userMessage = userMessage(request);
+        VisionInput visionInput = visionInput(request);
+        ChatMessage userMessage = userMessage(request, visionInput);
         var commandResponse = commandResponse(request, userMessage);
         if (commandResponse != null) {
             log.info("process=command event=completed");
@@ -358,10 +365,18 @@ public class ChatService {
         try {
             Optional<ToolEvidence> verifiedToolResult = routeTool(
                     userMessage, conversationId, memoryOwnerId(request, conversationId));
+            if (verifiedToolResult.map(ToolEvidence::finalResponse).orElse(false)) {
+                String content = verifiedToolResult.get().content();
+                persistDeterministicToolTurn(request, conversationId, userMessage, content,
+                        memoryOwnerId(request, conversationId), transaction.requestId(), false);
+                transaction.success();
+                return responseForContent(request, content);
+            }
             ChatExecutionContext context;
             try {
                 context = prepareChatExecution(
-                        request, conversationId, userMessage, transaction, false, verifiedToolResult.orElse(null));
+                        request, conversationId, userMessage, transaction, false, verifiedToolResult.orElse(null),
+                        visionInput);
             } catch (BrowserContentException exception) {
                 String content = browserFailureMessage(userMessage.content(), exception);
                 if (shouldPersistConversation(request)) {
@@ -410,7 +425,8 @@ public class ChatService {
     }
 
     public Flux<String> chatCompletionStream(ChatCompletionRequest request, ConversationId conversationId) {
-        ChatMessage userMessage = userMessage(request);
+        VisionInput visionInput = visionInput(request);
+        ChatMessage userMessage = userMessage(request, visionInput);
         String command = commandOutput(userMessage);
         if (command != null) {
             return commandStream(command, request);
@@ -429,11 +445,19 @@ public class ChatService {
 
         Optional<ToolEvidence> verifiedToolResult = routeTool(
                 userMessage, conversationId, memoryOwnerId(request, conversationId));
+        if (verifiedToolResult.map(ToolEvidence::finalResponse).orElse(false)) {
+            String content = verifiedToolResult.get().content();
+            persistDeterministicToolTurn(request, conversationId, userMessage, content,
+                    memoryOwnerId(request, conversationId), transaction.requestId(), true);
+            transaction.success();
+            return commandStream(content, request);
+        }
 
         ChatExecutionContext context;
         try {
             context = prepareChatExecution(
-                request, conversationId, userMessage, transaction, true, verifiedToolResult.orElse(null));
+                request, conversationId, userMessage, transaction, true, verifiedToolResult.orElse(null),
+                visionInput);
         } catch (BrowserContentException exception) {
             String content = browserFailureMessage(userMessage.content(), exception);
             if (shouldPersistConversation(request)) {
@@ -508,7 +532,8 @@ public class ChatService {
             ChatMessage userMessage,
             ChatTransactionLogger.Transaction transaction,
             boolean streaming,
-            ToolEvidence verifiedToolResult) {
+            ToolEvidence verifiedToolResult,
+            VisionInput visionInput) {
         boolean persistConversation = shouldPersistConversation(request);
         List<ChatMessage> history = conversationMemoryService.load(conversationId);
         log.info("process=conversation_history event=loaded messages={}{}", history.size(),
@@ -524,7 +549,7 @@ public class ChatService {
         PreparedImages preparedImages = prepareImages(knowledgeSelection);
         Prompt prompt = promptFor(
                 request, history, knowledgeSelection, preparedImages.awareness(), verifiedToolResult,
-                memoryOwnerId(request, conversationId));
+                memoryOwnerId(request, conversationId), visionInput);
         log.info("process=prompt event=composed{}", streaming ? " stream=true" : "");
         return new ChatExecutionContext(
                 prompt, conversationId, persistConversation, memoryOwnerId(request, conversationId),
@@ -618,6 +643,23 @@ public class ChatService {
             }
         }
         return Optional.empty();
+    }
+
+    private void persistDeterministicToolTurn(
+            ChatCompletionRequest request,
+            ConversationId conversationId,
+            ChatMessage userMessage,
+            String assistantContent,
+            String ownerId,
+            String requestId,
+            boolean streaming) {
+        if (!shouldPersistConversation(request)) return;
+        conversationMemoryService.append(conversationId, userMessage);
+        conversationMemoryService.append(conversationId, new ChatMessage("assistant", assistantContent));
+        log.info("process=conversation event=deterministic_tool_turn_persisted{}",
+                streaming ? " stream=true" : "");
+        publishTurnCompleted(ownerId, conversationId, requestId);
+        // Operational snapshots are intentionally excluded from long-term reflection.
     }
 
     private ChatCompletionResponse responseForContent(ChatCompletionRequest request, String content) {
@@ -733,8 +775,9 @@ public class ChatService {
             KnowledgePipelineSelection knowledgeSelection,
             ImageAwareness imageAwareness,
             ToolEvidence verifiedToolResult,
-            String ownerId) {
-        var userMessage = userMessage(request);
+            String ownerId,
+            VisionInput visionInput) {
+        var userMessage = userMessage(request, visionInput);
         String runtime = request.messages().stream()
                 .filter(message -> "system".equals(message.role()))
                 .map(com.minikun.agent.minikun_agent.api.openai.dto.Message::content)
@@ -779,7 +822,7 @@ public class ChatService {
                 new RuntimeContext(runtime),
                 conversationContent.isBlank() ? null : new ConversationContext(conversationContent),
                 promptKnowledge,
-                capabilitiesFor(knowledgeSelection, imageAwareness, verifiedToolResult),
+                capabilitiesFor(knowledgeSelection, imageAwareness, verifiedToolResult, visionInput),
                 new com.minikun.pcs.model.UserMessage(userMessage.content()),
                 promptSearchSignals,
                 promptSearchContext,
@@ -791,7 +834,7 @@ public class ChatService {
             contextRuntime = new PersonalContextRuntime(promptComposer, dynamicGenerationOptionsFactory);
         }
         if (contextRuntime == null) {
-            return toSpringPrompt(promptComposer.compose(promptRequest), options);
+            return withVisionMedia(toSpringPrompt(promptComposer.compose(promptRequest), options), visionInput);
         }
         ModelCapability capability = dynamicTokenBudgetEnabled && modelCapabilityRegistry != null
                 ? modelCapabilityRegistry.get(activeChatModelProvider.get().id())
@@ -814,7 +857,7 @@ public class ChatService {
                 result.snapshot().recoveryAttempts(),
                 result.snapshot().estimatedInputTokens(),
                 result.snapshot().allocatedOutputTokens());
-        return toSpringPrompt(result.prompt(), result.generationOptions());
+        return withVisionMedia(toSpringPrompt(result.prompt(), result.generationOptions()), visionInput);
     }
 
     private PersonalUserModel safeUserModel(String ownerId) {
@@ -1077,7 +1120,8 @@ public class ChatService {
     private List<CapabilityInstruction> capabilitiesFor(
             KnowledgePipelineSelection selection,
             ImageAwareness imageAwareness,
-            ToolEvidence verifiedToolResult) {
+            ToolEvidence verifiedToolResult,
+            VisionInput visionInput) {
         List<CapabilityInstruction> capabilities = new java.util.ArrayList<>();
         boolean hasBrowserContent = selection.selection().selectedCandidates().stream()
                 .anyMatch(candidate -> candidate.source() == KnowledgeSource.BROWSER);
@@ -1089,10 +1133,18 @@ public class ChatService {
         }
         if (imageAwareness != null && imageAwareness.hasImages()) {
             capabilities.add(new CapabilityInstruction("Retrieved Images",
-                    "Images were retrieved for this request and will be available to the user as response "
+                    "Search-result images were retrieved for this request and will be available to the user as response "
                             + "attachments. Count: " + imageAwareness.count()
-                            + ". The assistant cannot see, inspect, or analyze their visual contents "
+                            + ". These search-result attachments are not model inputs, so the assistant cannot "
+                            + "see, inspect, or analyze their visual contents "
                             + "and must not claim visual details unless trusted text explicitly provides them."));
+        }
+        if (visionInput != null && visionInput.hasImages()) {
+            capabilities.add(new CapabilityInstruction("User-provided Images",
+                    "The user attached " + visionInput.imageCount() + " image(s) to the current message. "
+                            + "Their visual contents are available directly to the model. Inspect them and answer "
+                            + "the user's request using visible evidence. Clearly state uncertainty when text or "
+                            + "details in an image are unreadable."));
         }
         if (verifiedToolResult != null) {
             String evidenceContent = "Tool: " + verifiedToolResult.toolName() + "\n"
@@ -1282,6 +1334,20 @@ public class ChatService {
         };
     }
 
+    private Prompt withVisionMedia(Prompt prompt, VisionInput visionInput) {
+        if (visionInput == null || !visionInput.hasImages()) {
+            return prompt;
+        }
+        Prompt multimodalPrompt = prompt.augmentUserMessage(user -> user.mutate()
+                .media(visionInput.media())
+                .build());
+        if (multimodalPrompt.getOptions() instanceof OllamaChatOptions ollamaOptions) {
+            return new Prompt(multimodalPrompt.getInstructions(),
+                    ollamaOptions.mutate().disableThinking().build());
+        }
+        return multimodalPrompt;
+    }
+
     private void appendAssistantText(StringBuilder content, ChatResponse response) {
         String text = response.getResult().getOutput().getText();
         if (text != null) {
@@ -1289,9 +1355,28 @@ public class ChatService {
         }
     }
 
-    private ChatMessage userMessage(ChatCompletionRequest request) {
+    private VisionInput visionInput(ChatCompletionRequest request) {
         int userMessageIndex = lastUserMessageIndex(request.messages());
-        return new ChatMessage("user", request.messages().get(userMessageIndex).content());
+        var message = request.messages().get(userMessageIndex);
+        if (!message.hasImageContent()) {
+            return VisionInput.EMPTY;
+        }
+        if (!activeChatModelProvider.get().capabilities().vision()) {
+            throw new VisionInputException("the active model does not support image input");
+        }
+        if (visionInputService == null) {
+            throw new VisionInputException("image input is not configured");
+        }
+        return visionInputService.resolve(message);
+    }
+
+    private ChatMessage userMessage(ChatCompletionRequest request, VisionInput visionInput) {
+        int userMessageIndex = lastUserMessageIndex(request.messages());
+        String content = request.messages().get(userMessageIndex).content();
+        if (!hasText(content) && visionInput != null && visionInput.hasImages()) {
+            content = "ช่วยวิเคราะห์รูปภาพที่แนบมา";
+        }
+        return new ChatMessage("user", content);
     }
 
     private Optional<CompletedConversation> completedConversation(String ownerId, ConversationId conversationId) {
@@ -1383,11 +1468,12 @@ public class ChatService {
 
     private int lastUserMessageIndex(List<com.minikun.agent.minikun_agent.api.openai.dto.Message> messages) {
         for (int index = messages.size() - 1; index >= 0; index--) {
-            if ("user".equals(messages.get(index).role()) && hasText(messages.get(index).content())) {
+            if ("user".equals(messages.get(index).role())
+                    && (hasText(messages.get(index).content()) || messages.get(index).hasImageContent())) {
                 return index;
             }
         }
-        throw new PromptException("chat request must contain a non-blank user message");
+        throw new PromptException("chat request must contain user text or an image");
     }
 
     private boolean hasText(String value) {

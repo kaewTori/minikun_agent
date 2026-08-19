@@ -106,3 +106,25 @@ CREATE TABLE IF NOT EXISTS minikun_reminder_action (
 
 CREATE INDEX IF NOT EXISTS idx_minikun_reminder_action_event
     ON minikun_reminder_action (event_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS minikun_guardian_action_audit (
+    id UUID PRIMARY KEY,
+    owner_id VARCHAR(255) NOT NULL,
+    conversation_id VARCHAR(255) NOT NULL,
+    action_id VARCHAR(128) NOT NULL,
+    status VARCHAR(32) NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL,
+    detail TEXT NOT NULL DEFAULT ''
+);
+
+CREATE INDEX IF NOT EXISTS idx_minikun_guardian_action_audit_owner
+    ON minikun_guardian_action_audit (owner_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS minikun_guardian_alert_state (
+    state_key VARCHAR(128) PRIMARY KEY,
+    observed_fingerprint VARCHAR(128) NOT NULL DEFAULT '',
+    notified_fingerprint VARCHAR(128) NOT NULL DEFAULT '',
+    status VARCHAR(32) NOT NULL DEFAULT 'UP',
+    consecutive_issues INTEGER NOT NULL DEFAULT 0,
+    last_notified_at TIMESTAMPTZ
+);

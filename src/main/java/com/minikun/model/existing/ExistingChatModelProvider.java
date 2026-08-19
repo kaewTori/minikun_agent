@@ -15,7 +15,7 @@ import reactor.core.publisher.Flux;
 
 @Component
 public final class ExistingChatModelProvider implements ChatModelProvider {
-    private static final ModelCapabilities CAPABILITIES = new ModelCapabilities(true, true, false);
+    private static final ModelCapabilities CAPABILITIES = new ModelCapabilities(true, true, true);
 
     private final ChatModel chatModel;
 

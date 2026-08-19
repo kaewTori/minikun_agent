@@ -31,14 +31,13 @@ trap 'rm -f "$staged_jar"' EXIT HUP INT TERM
 cp "$app_root/target/minikun_agent-1.0.0.jar" "$staged_jar"
 mv "$staged_jar" "$local_app/target/minikun_agent-1.0.0.jar"
 trap - EXIT HUP INT TERM
-cp "$workspace_root/java/script/minikun-agent.sh" "$local_script/minikun-agent.sh"
+source_launcher="$workspace_root/java/script/minikun-agent.sh"
+# The legacy shared launcher contains an environment-file loader. Deploy only
+# its stable bootstrap and explicit runtime configuration sections so Mini-kun
+# never reads an environment file.
+sed -n '1,7p;/^export MCS_ROOT/,$p' "$source_launcher" > "$local_script/minikun-agent.sh"
 chmod 700 "$local_script/minikun-agent.sh"
 ditto "$workspace_root/config/minikun-agent/mcs" "$local_root/config/minikun-agent/mcs"
-
-if [ -f "$workspace_root/.env" ]; then
-  cp "$workspace_root/.env" "$local_root/.env"
-  chmod 600 "$local_root/.env"
-fi
 
 cp "$plist" "$HOME/Library/LaunchAgents/$label.plist"
 launchctl bootout "gui/$(id -u)/$label" 2>/dev/null || true

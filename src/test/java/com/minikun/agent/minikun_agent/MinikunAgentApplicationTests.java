@@ -1,6 +1,7 @@
 package com.minikun.agent.minikun_agent;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -30,6 +31,7 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.http.MediaType;
 
 @SpringBootTest(properties = {
 	"spring.autoconfigure.exclude=org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration,org.springframework.ai.model.chat.memory.repository.jdbc.autoconfigure.JdbcChatMemoryRepositoryAutoConfiguration",
@@ -83,6 +85,25 @@ class MinikunAgentApplicationTests {
 	}
 
 	@Test
+	void contextWiresVisionInputAndRejectsUnsupportedImageThroughHttp() throws Exception {
+		org.junit.jupiter.api.Assertions.assertNotNull(
+				applicationContext.getBean(com.minikun.vision.VisionInputService.class));
+
+		mockMvc.perform(post("/v1/chat/completions")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+						{"model":"mini-kun","messages":[{"role":"user","content":[
+						  {"type":"text","text":"describe"},
+						  {"type":"image_url","image_url":{"url":"data:image/gif;base64,R0lGODlh"}}
+						]}]}
+						"""))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.error.code").value("invalid_image"))
+				.andExpect(jsonPath("$.error.message").value(
+						"unsupported image media type; use JPEG, PNG, or WebP"));
+	}
+
+	@Test
 	void contextRegistersNativeCapabilityTools() {
 		Set<String> names = toolRegistry.definitions().stream()
 				.map(com.minikun.tools.ToolDefinition::name)
@@ -95,6 +116,7 @@ class MinikunAgentApplicationTests {
 		org.junit.jupiter.api.Assertions.assertTrue(names.contains("web.open_url"));
 		org.junit.jupiter.api.Assertions.assertTrue(names.contains("service.health"));
 		org.junit.jupiter.api.Assertions.assertTrue(names.contains("system.health"));
+		org.junit.jupiter.api.Assertions.assertTrue(names.contains("homelab.guardian"));
 	}
 
 	@Test

@@ -2,8 +2,17 @@ package com.minikun.tools;
 
 import java.util.Objects;
 
-/** A tool result that is ready to be carried into the MCS/PCS answer turn. */
-public record ToolEvidence(String toolName, boolean success, String content, boolean requiresConfirmation) {
+/** A tool result that can either inform the model or be returned as a deterministic final answer. */
+public record ToolEvidence(
+        String toolName,
+        boolean success,
+        String content,
+        boolean requiresConfirmation,
+        boolean finalResponse) {
+    public ToolEvidence(String toolName, boolean success, String content, boolean requiresConfirmation) {
+        this(toolName, success, content, requiresConfirmation, false);
+    }
+
     public ToolEvidence {
         if (toolName == null || toolName.isBlank()) {
             throw new IllegalArgumentException("tool name must not be blank");
@@ -24,5 +33,13 @@ public record ToolEvidence(String toolName, boolean success, String content, boo
 
     public static ToolEvidence pendingConfirmation(String toolName, String content) {
         return new ToolEvidence(toolName, true, content, true);
+    }
+
+    public static ToolEvidence finalVerified(String toolName, String content) {
+        return new ToolEvidence(toolName, true, content, false, true);
+    }
+
+    public static ToolEvidence finalFailed(String toolName, String content) {
+        return new ToolEvidence(toolName, false, content, false, true);
     }
 }

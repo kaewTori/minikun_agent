@@ -84,6 +84,12 @@ import com.minikun.proactive.DailyBriefingScheduler;
 import com.minikun.calendar.ExternalCalendarConfiguration;
 import com.minikun.calendar.ExternalCalendarController;
 import com.minikun.calendar.ExternalCalendarReminderScheduler;
+import com.minikun.vision.VisionInputService;
+import com.minikun.guardian.GuardianConfiguration;
+import com.minikun.guardian.HomelabGuardianScheduler;
+import com.minikun.tools.HomelabGuardianTool;
+import com.minikun.tools.GuardianConfirmationRouter;
+import com.minikun.tools.HomelabGuardianRouter;
 
 @SpringBootApplication
 @EnableScheduling
@@ -100,6 +106,9 @@ import com.minikun.calendar.ExternalCalendarReminderScheduler;
 		TokenBudgetRuntimeConfiguration.class,
 		TitleGenerationConfiguration.class, TitleGenerationService.class,
 		ContextRuntimeConfiguration.class,
+		VisionInputService.class,
+		GuardianConfiguration.class,
+		HomelabGuardianScheduler.class,
 		MemoryManagementService.class, MemoryManagementController.class,
 		WeatherConfiguration.class,
 		ExternalCalendarConfiguration.class, ExternalCalendarController.class,
@@ -112,6 +121,7 @@ import com.minikun.calendar.ExternalCalendarReminderScheduler;
 		WebSearchTool.class, WebOpenUrlTool.class, WeatherToolRouter.class, LocationResolveTool.class,
 		PlannerManageTool.class, CalendarManageTool.class, MemoryManageTool.class,
 		ServiceHealthTool.class, SystemHealthTool.class,
+		HomelabGuardianTool.class, HomelabGuardianRouter.class, GuardianConfirmationRouter.class,
 		PlannerConfirmationRouter.class, RelativeReminderToolRouter.class, AbsoluteReminderToolRouter.class,
 		ReminderContextToolRouter.class,
 		JdbcPlannerConfirmationStore.class, PlannerConfirmationService.class,
