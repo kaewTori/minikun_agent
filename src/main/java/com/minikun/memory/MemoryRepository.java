@@ -3,6 +3,7 @@ package com.minikun.memory;
 import com.minikun.memory.model.AcceptedMemory;
 import com.minikun.memory.model.Memory;
 import com.minikun.memory.model.MemoryId;
+import com.minikun.memory.model.MemoryUpdate;
 
 import java.util.List;
 
@@ -27,6 +28,10 @@ public interface MemoryRepository {
 
     default boolean deleteByOwner(String ownerId, MemoryId memoryId) {
         throw new UnsupportedOperationException("memory deletion is not implemented");
+    }
+
+    default boolean updateByOwner(String ownerId, MemoryId memoryId, MemoryUpdate update) {
+        throw new UnsupportedOperationException("memory update is not implemented");
     }
 
     default int deleteAllByOwner(String ownerId) {

@@ -6,6 +6,7 @@ import com.minikun.memory.model.MemoryCategory;
 import com.minikun.memory.model.Memory;
 import com.minikun.memory.model.MemoryId;
 import com.minikun.memory.model.MemorySource;
+import com.minikun.memory.model.MemoryUpdate;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.stereotype.Service;
 
@@ -35,6 +36,13 @@ public final class MemoryManagementService {
     public boolean delete(String ownerId, MemoryId memoryId) {
         validateOwner(ownerId);
         return repository.deleteByOwner(ownerId, Objects.requireNonNull(memoryId, "memory id must not be null"));
+    }
+
+    public boolean update(String ownerId, MemoryId memoryId, MemoryUpdate update) {
+        validateOwner(ownerId);
+        return repository.updateByOwner(ownerId,
+                Objects.requireNonNull(memoryId, "memory id must not be null"),
+                Objects.requireNonNull(update, "memory update must not be null"));
     }
 
     public boolean remember(

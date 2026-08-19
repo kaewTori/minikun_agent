@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.minikun.agent</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/sh</string>
+        <string>/Users/kaewtori/Library/Application Support/Minikun/java/script/minikun-agent.sh</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/kaewtori/Library/Application Support/Minikun/java/minikun_agent</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>JAVA_BIN</key>
+        <string>/usr/bin/java</string>
+    </dict>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
+
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+
+    <key>ProcessType</key>
+    <string>Background</string>
+
+    <key>StandardOutPath</key>
+    <string>/Users/kaewtori/Library/Logs/Minikun/launchd.out.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/kaewtori/Library/Logs/Minikun/launchd.err.log</string>
+</dict>
+</plist>

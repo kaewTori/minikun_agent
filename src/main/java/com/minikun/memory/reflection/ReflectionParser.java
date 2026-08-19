@@ -33,12 +33,11 @@ public final class ReflectionParser {
 
     public List<MemoryCandidate> parse(String response, CompletedConversation conversation) {
         try {
-
-            log.info("response data is {}", response);
-
+            String payload = jsonPayload(response);
+            log.debug("process=memory_reflection event=response_received length={}", payload.length());
             JsonNode root = objectMapper.reader()
                     .with(DeserializationFeature.FAIL_ON_READING_DUP_TREE_KEY)
-                    .readTree(response);
+                    .readTree(payload);
             JsonNode memories = memoriesNode(root);
             List<MemoryCandidate> result = new ArrayList<>();
             for (JsonNode memory : memories) {
@@ -70,6 +69,30 @@ public final class ReflectionParser {
         } catch (Exception exception) {
             throw new MemoryException("reflection response is not valid JSON", exception);
         }
+    }
+
+    private String jsonPayload(String response) {
+        String normalized = response == null ? "" : response.trim();
+        if (!normalized.startsWith("```")) {
+            return normalized;
+        }
+        int openingEnd = normalized.indexOf('\n');
+        if (openingEnd < 0) {
+            throw invalid("fenced response does not contain JSON");
+        }
+        String opening = normalized.substring(0, openingEnd).trim();
+        if (!"```".equals(opening) && !"```json".equalsIgnoreCase(opening)) {
+            throw invalid("fenced response must use a json code fence");
+        }
+        int closingStart = normalized.lastIndexOf("```");
+        if (closingStart <= openingEnd || !normalized.substring(closingStart + 3).trim().isEmpty()) {
+            throw invalid("fenced response must contain only JSON");
+        }
+        String payload = normalized.substring(openingEnd + 1, closingStart).trim();
+        if (payload.isBlank()) {
+            throw invalid("fenced response does not contain JSON");
+        }
+        return payload;
     }
 
     private JsonNode memoriesNode(JsonNode root) {

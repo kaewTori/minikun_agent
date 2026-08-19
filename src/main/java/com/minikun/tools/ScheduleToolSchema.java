@@ -10,7 +10,7 @@ final class ScheduleToolSchema {
     static Map<String, ToolParameter> parameters() {
         return Map.of(
                 "action", new ToolParameter("action", ToolParameterType.STRING, true,
-                        "One of create, list, update, or cancel."),
+                        "One of create, list, update, cancel, acknowledge, or snooze."),
                 "title", new ToolParameter("title", ToolParameterType.STRING, false,
                         "Short event or reminder title."),
                 "note", new ToolParameter("note", ToolParameterType.STRING, false,
@@ -26,6 +26,6 @@ final class ScheduleToolSchema {
                 "event_id", new ToolParameter("event_id", ToolParameterType.STRING, false,
                         "Existing event UUID for update or cancel."),
                 "confirmed", new ToolParameter("confirmed", ToolParameterType.BOOLEAN, false,
-                        "Must be true to apply create, update, or cancel."));
+                        "Must be true to apply create, update, cancel, or snooze."));
     }
 }

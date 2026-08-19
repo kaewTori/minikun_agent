@@ -6,6 +6,7 @@ import com.minikun.memory.model.MemoryCategory;
 import com.minikun.memory.model.MemoryId;
 import com.minikun.memory.model.MemorySource;
 import com.minikun.memory.model.AcceptedMemory;
+import com.minikun.memory.model.MemoryUpdate;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
@@ -14,6 +15,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class MemoryManagementServiceTest {
     @Test
@@ -53,12 +55,28 @@ class MemoryManagementServiceTest {
         assertEquals(MemorySource.USER_DIRECTIVE, repository.saved.source());
     }
 
+    @Test
+    void updatesMemoryOnlyWithinTheRequestedOwnerScope() {
+        InMemoryRepository repository = new InMemoryRepository();
+        MemoryManagementService service = new MemoryManagementService(repository);
+        MemoryId id = MemoryId.generate();
+
+        assertTrue(service.update("default", id,
+                new MemoryUpdate(MemoryCategory.PROFILE, "อยู่เชียงใหม่", 1.0, "user correction")));
+        assertEquals("default", repository.updatedOwner);
+        assertEquals(id, repository.updatedId);
+        assertEquals("อยู่เชียงใหม่", repository.updated.content());
+    }
+
     private static final class InMemoryRepository implements MemoryRepository {
         private final List<Memory> memories = new ArrayList<>();
         private final List<String> listOwners = new ArrayList<>();
         private String deletedOwner;
         private MemoryId deletedId;
         private AcceptedMemory saved;
+        private String updatedOwner;
+        private MemoryId updatedId;
+        private MemoryUpdate updated;
 
         @Override
         public boolean save(com.minikun.memory.model.AcceptedMemory memory) {
@@ -76,6 +94,14 @@ class MemoryManagementServiceTest {
         public boolean deleteByOwner(String ownerId, MemoryId memoryId) {
             deletedOwner = ownerId;
             deletedId = memoryId;
+            return true;
+        }
+
+        @Override
+        public boolean updateByOwner(String ownerId, MemoryId memoryId, MemoryUpdate update) {
+            updatedOwner = ownerId;
+            updatedId = memoryId;
+            updated = update;
             return true;
         }
     }

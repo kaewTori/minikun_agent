@@ -19,6 +19,7 @@ class ContextBudgetTest {
                 ContextBudgetSection.CHARACTER,
                 ContextBudgetSection.RUNTIME,
                 ContextBudgetSection.CONVERSATION,
+                ContextBudgetSection.USER_MODEL,
                 ContextBudgetSection.MEMORY,
                 ContextBudgetSection.KNOWLEDGE,
                 ContextBudgetSection.CAPABILITIES,

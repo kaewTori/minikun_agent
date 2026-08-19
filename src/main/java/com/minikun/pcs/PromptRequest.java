@@ -7,6 +7,7 @@ import com.minikun.pcs.model.KnowledgeContext;
 import com.minikun.pcs.model.RuntimeContext;
 import com.minikun.pcs.model.UserMessage;
 import com.minikun.personality.signal.PersonaSelectionSignals;
+import com.minikun.personality.model.PersonalUserModel;
 
 import java.util.List;
 
@@ -22,7 +23,26 @@ public record PromptRequest(
         KnowledgeSelection knowledgeSelection,
         KnowledgeConsolidation knowledgeConsolidation,
         ContextBudget contextBudget,
-        PersonaSelectionSignals personaSelectionSignals) {
+        PersonaSelectionSignals personaSelectionSignals,
+        PersonalUserModel personalUserModel) {
+    public PromptRequest(
+            CharacterSpecification character,
+            RuntimeContext runtime,
+            ConversationContext conversation,
+            KnowledgeContext knowledge,
+            List<CapabilityInstruction> capabilities,
+            UserMessage userMessage,
+            SearchSelectionSignals searchSelectionSignals,
+            SearchContext searchContext,
+            KnowledgeSelection knowledgeSelection,
+            KnowledgeConsolidation knowledgeConsolidation,
+            ContextBudget contextBudget,
+            PersonaSelectionSignals personaSelectionSignals) {
+        this(character, runtime, conversation, knowledge, capabilities, userMessage,
+                searchSelectionSignals, searchContext, knowledgeSelection, knowledgeConsolidation,
+                contextBudget, personaSelectionSignals, PersonalUserModel.EMPTY);
+    }
+
     public PromptRequest(
             CharacterSpecification character,
             RuntimeContext runtime,
@@ -120,5 +140,6 @@ public record PromptRequest(
             ? KnowledgeConsolidation.EMPTY : knowledgeConsolidation;
         personaSelectionSignals = personaSelectionSignals == null
             ? PersonaSelectionSignals.EMPTY : personaSelectionSignals;
+        personalUserModel = personalUserModel == null ? PersonalUserModel.EMPTY : personalUserModel;
     }
 }

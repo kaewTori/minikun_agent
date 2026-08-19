@@ -10,6 +10,8 @@ import com.minikun.pcs.model.Prompt;
 import com.minikun.pcs.model.PromptRole;
 import com.minikun.pcs.model.RuntimeContext;
 import com.minikun.pcs.model.UserMessage;
+import com.minikun.personality.model.PersonalUserModel;
+import com.minikun.personality.model.UserProfile;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Path;
@@ -42,6 +44,22 @@ class PromptComposerTest {
         assertTrue(system.indexOf("[Knowledge]") < system.indexOf("[Capabilities]"));
             assertTrue(system.indexOf("[Runtime]") < system.indexOf("[Knowledge]"));
         assertEquals("Answer this", prompt.messages().get(1).content());
+    }
+
+    @Test
+    void rendersPersonalUserModelAsSeparateBackgroundContext() {
+        PersonalUserModel userModel = new PersonalUserModel("default",
+                new UserProfile("default", "พี่", "th", "concise", "Asia/Bangkok"),
+                List.of(), List.of(), java.time.Instant.now());
+        PromptRequest request = new PromptRequest(character(), new RuntimeContext("now"), null, null,
+                List.of(), new UserMessage("hello"), SearchSelectionSignals.EMPTY, SearchContext.EMPTY,
+                KnowledgeSelection.EMPTY, KnowledgeConsolidation.EMPTY, null,
+                com.minikun.personality.signal.PersonaSelectionSignals.EMPTY, userModel);
+
+        String system = new PromptComposer().compose(request).messages().getFirst().content();
+
+        assertTrue(system.contains("[Personal User Context]"));
+        assertTrue(system.contains("display_name: พี่"));
     }
 
     @Test

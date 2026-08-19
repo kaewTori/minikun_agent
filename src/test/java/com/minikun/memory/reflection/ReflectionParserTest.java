@@ -30,6 +30,28 @@ class ReflectionParserTest {
         assertEquals("conversation-1", memories.getFirst().conversationId());
     }
 
+    @Test
+    void parsesJsonCodeFenceReturnedByChatModels() {
+        var memories = parser.parse("""
+                ```json
+                [{"category":"PROFILE","content":"Uses macOS","confidence":0.9,"reason":"User stated it"}]
+                ```
+                """, CONVERSATION);
+
+        assertEquals(1, memories.size());
+        assertEquals("Uses macOS", memories.getFirst().content());
+    }
+
+    @Test
+    void rejectsCodeFenceWithTrailingProse() {
+        assertThrows(MemoryException.class, () -> parser.parse("""
+                ```json
+                []
+                ```
+                Here is the result.
+                """, CONVERSATION));
+    }
+
         @Test
         void parsesObjectResponseFromJsonObjectMode() {
                 var memories = parser.parse("""

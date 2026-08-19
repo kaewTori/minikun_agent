@@ -1,8 +1,6 @@
 package com.minikun.search.dictionary;
 
 import com.minikun.search.AliasDictionary;
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -16,11 +14,6 @@ public final class ImmutableAliasDictionary implements AliasDictionary {
     @Override
     public List<String> aliasesOf(String canonicalQuery) {
         Objects.requireNonNull(canonicalQuery, "canonical query must not be null");
-        List<String> aliases = ALIASES.getOrDefault(canonicalQuery, List.of());
-        List<String> freshAliases = new ArrayList<>(aliases.size());
-        for (String alias : aliases) {
-            freshAliases.add(new String(alias));
-        }
-        return Collections.unmodifiableList(freshAliases);
+        return ImmutableDictionaryLookup.copyValues(ALIASES.get(canonicalQuery));
     }
 }

@@ -55,8 +55,27 @@ class PlannerServiceTest {
         assertEquals(Instant.parse("2026-08-18T01:30:00Z"), store.events.getFirst().nextNotifyAt());
     }
 
+    @Test
+    void acknowledgesAndCreatesOneShotSnoozedReminder() {
+        InMemoryPlannerStore store = new InMemoryPlannerStore();
+        PlannerService planner = new PlannerService(store, Clock.fixed(NOW, ZoneId.of("UTC")));
+        ConversationId conversation = new ConversationId("conversation");
+        PlannerEvent original = planner.create(conversation, "ประชุมทีม", "bring notes",
+                "2026-08-18T09:00:00", "Asia/Bangkok", 15, "NONE");
+
+        assertTrue(planner.acknowledge(conversation, original.id()));
+        PlannerEvent snoozed = planner.snooze(conversation, original.id(),
+                "2026-08-18T10:00:00", "Asia/Bangkok");
+
+        assertEquals(2, store.events.size());
+        assertEquals(Instant.parse("2026-08-18T03:00:00Z"), snoozed.nextNotifyAt());
+        assertEquals(PlannerRecurrence.NONE, snoozed.recurrence());
+        assertEquals(List.of("ACKNOWLEDGED", "SNOOZED"), store.actions);
+    }
+
     private static final class InMemoryPlannerStore implements PlannerStore {
         private final List<PlannerEvent> events = new ArrayList<>();
+        private final List<String> actions = new ArrayList<>();
 
         @Override
         public PlannerEvent create(PlannerEvent event) {
@@ -95,6 +114,12 @@ class PlannerServiceTest {
         @Override
         public void markDelivered(PlannerEvent event, Instant now) {
             // Not needed by this focused persistence contract test.
+        }
+
+        @Override
+        public void recordAction(UUID actionId, String conversationId, UUID eventId,
+                String action, Instant snoozedUntil, Instant createdAt) {
+            actions.add(action);
         }
     }
 

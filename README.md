@@ -9,7 +9,7 @@
   - streaming ผ่าน Server-Sent Events (`stream: true`)
 - Embeddings API สำหรับข้อความเดี่ยวหรือ array ของข้อความ
 - เก็บ short-term conversation history ด้วย Spring AI Chat Memory และ PostgreSQL
-- สกัดและเรียกคืน long-term memory จาก PostgreSQL
+- สกัด long-term memory จาก PostgreSQL และเรียกคืนเชิงความหมายด้วย embedding พร้อม lexical fallback
 - ประกอบ prompt ผ่าน Provider Composition System (PCS)
 - ค้นเว็บผ่าน SearXNG พร้อม cache บน Valkey
 - เลือกว่าจะค้นเว็บหรือไม่ผ่าน rule/LLM decision mode
@@ -18,9 +18,11 @@
 - ส่ง language/category/time-range/safe-search options ไปยัง SearXNG พร้อม ranking และ URL deduplication
 - Actuator health และ metrics
 - คำสั่ง runtime และ diagnostics ที่จัดการในระดับ application
-- Native function tools: `time.get_current_time`, `weather.get_forecast`, `web.search`, `web.open_url`, `calculator.add` และ `planner.manage`
+- Native function tools: `time.get_current_time`, `weather.get_forecast`, `web.search`, `web.open_url`, `calculator.add`, `planner.manage`, `calendar.manage` และ `task.manage`
 - ผลลัพธ์จาก tool จะถูกส่งกลับเข้า prompt ของ MCS/PCS เพื่อให้โมเดลตอบต่อด้วยตัวตน บริบท และน้ำเสียงเดิมของมินิคุง
 - เก็บ reminder ใน PostgreSQL และส่ง notification ผ่าน ntfy พร้อม daily weather digest เวลา 07:00 (`Asia/Bangkok`)
+- เชื่อม private iCalendar feed จาก Google, Apple หรือ Outlook เพื่ออ่าน agenda และเตือนก่อนนัด
+- มี proactive safety policy สำหรับ quiet hours และ daily briefing ที่รวมอากาศ นัดหมาย งาน และสิ่งค้างเวลา 08:00 (`Asia/Bangkok`)
 - Personal Context Runtime สำหรับ context budget, dynamic max-tokens และ bounded recovery
 - ตรวจสอบ ลบรายรายการ และล้าง long-term memory แบบ owner-scoped ผ่าน `/v1/memory`
 
@@ -140,10 +142,30 @@ Actuator ที่เปิดให้เข้าถึงคือ `/actuator
 | `MINIKUN_TIME_DEFAULT_ZONE` | `Asia/Bangkok` | timezone เริ่มต้นของ `time.get_current_time` |
 | `MINIKUN_PLANNER_ENABLED` | `true` | เปิด planner, reminder scheduler และ daily weather notification |
 | `MINIKUN_PLANNER_POLL_INTERVAL_MS` | `30000` | รอบตรวจ reminder ที่ถึงเวลาแล้ว |
+| `MINIKUN_TASK_ENABLED` | `true` | เปิด goal/task store, tool และ follow-up scheduler |
+| `MINIKUN_TASK_POLL_INTERVAL_MS` | `30000` | รอบตรวจ task follow-up ที่ถึงเวลาแล้ว |
+| `MINIKUN_TASK_MANAGEMENT_TOKEN` | ใช้ค่า memory token ถ้ามี | token สำหรับ Task API ที่ใช้โดย dashboard/automation |
+| `MINIKUN_CALENDAR_EXTERNAL_ENABLED` | `false` | เปิด private iCalendar feed แบบ read-only |
+| `MINIKUN_CALENDAR_EXTERNAL_FEED_URL` | ว่าง | private HTTPS `.ics` URL จาก Google, Apple หรือ Outlook |
+| `MINIKUN_CALENDAR_EXTERNAL_ZONE` | `Asia/Bangkok` | timezone สำหรับ floating/all-day external events |
+| `MINIKUN_CALENDAR_EXTERNAL_CACHE_TTL` | `5m` | อายุ cache ก่อนดาวน์โหลด feed ใหม่ |
+| `MINIKUN_CALENDAR_EXTERNAL_REMINDERS_ENABLED` | `true` | ส่ง reminder สำหรับ timed external events |
+| `MINIKUN_CALENDAR_EXTERNAL_REMINDERS_BEFORE` | `15m` | ระยะเตือนก่อน external event |
+| `MINIKUN_CALENDAR_MANAGEMENT_TOKEN` | ใช้ค่า task/memory token ถ้ามี | token สำหรับ External Calendar API |
+| `MINIKUN_PROACTIVE_ENABLED` | `true` | เปิดการแจ้งเตือนที่ agent เริ่มเองทั้งหมด |
+| `MINIKUN_PROACTIVE_ZONE` | `Asia/Bangkok` | timezone ที่ใช้คำนวณ quiet hours |
+| `MINIKUN_PROACTIVE_QUIET_HOURS_START` | `22:00` | เวลาเริ่มช่วงห้ามรบกวน |
+| `MINIKUN_PROACTIVE_QUIET_HOURS_END` | `07:00` | เวลาสิ้นสุดช่วงห้ามรบกวน |
+| `MINIKUN_PROACTIVE_BRIEFING_ENABLED` | `true` | เปิด daily briefing งานค้าง |
+| `MINIKUN_PROACTIVE_BRIEFING_OWNER_ID` | `default` | owner ที่ใช้สร้าง daily briefing ใน deployment แบบ single-user |
+| `MINIKUN_PROACTIVE_BRIEFING_TIME` | `08:00` | เวลาท้องถิ่นที่ส่ง daily briefing |
 | `MINIKUN_NTFY_ENABLED` | `true` | เปิด/ปิดการส่ง ntfy |
 | `MINIKUN_NTFY_TOKEN` | ว่าง | Bearer token สำหรับ ntfy topic ถ้าตั้ง access control |
 | `MINIKUN_NTFY_REMINDER_TOPIC` | topic ที่กำหนดใน `application.properties` | topic สำหรับ reminder |
 | `MINIKUN_NTFY_WEATHER_TOPIC` | topic ที่กำหนดใน `application.properties` | topic สำหรับ daily weather |
+| `MINIKUN_NOTIFICATION_MANAGEMENT_TOKEN` | ใช้ค่า task/memory token ถ้ามี | token สำหรับอ่านประวัติการส่ง notification |
+| `MINIKUN_NOTIFICATION_SCHEDULER_STALE_AFTER` | `2m` | ระยะที่ scheduler ไม่ poll ก่อน health เปลี่ยนเป็น `DOWN` |
+| `MINIKUN_NOTIFICATION_SCHEDULER_FAILURE_THRESHOLD` | `3` | จำนวน delivery failure ติดต่อกันก่อน health เปลี่ยนเป็น `DOWN` |
 | `MINIKUN_WEATHER_ALERT_LOCATION` | `Bangkok` | สถานที่ของ daily weather digest |
 | `MINIKUN_WEATHER_ALERT_ZONE` | `Asia/Bangkok` | timezone ของ daily weather digest |
 | `MINIKUN_WEATHER_ALERT_TIME` | `07:00` | เวลาส่ง daily weather digest |
@@ -193,6 +215,8 @@ events.addEventListener("cooperative-review", event => {
 | `MINIKUN_MEMORY_RECALL_MAXIMUM_COUNT` | `10` | จำนวน long-term memories ที่เรียกคืนสูงสุด |
 | `MINIKUN_MEMORY_RECALL_MAXIMUM_CHARACTERS` | `4000` | ขนาด Knowledge context สูงสุด |
 | `MINIKUN_MEMORY_REFLECTION_ENABLED` | `true` | เปิด memory reflection หลังจบ conversation |
+| `MINIKUN_MEMORY_SEMANTIC_ENABLED` | `true` | ใช้ embedding จัดอันดับ long-term memory ตามความหมาย |
+| `MINIKUN_MEMORY_SEMANTIC_WEIGHT` | `0.85` | น้ำหนัก semantic similarity เทียบกับ confidence |
 | `MINIKUN_DIAGNOSTICS_CONVERSATIONAL_ENABLED` | `false` | เปิด diagnostics แบบ conversational |
 | `MINIKUN_CONTEXT_BUDGET_CHARACTERS` | `24000` | character budget สำหรับ prompt context |
 | `MINIKUN_TOKEN_BUDGET_RESERVED_OUTPUT_TOKENS` | `256` | output reserve ก่อนคำนวณ dynamic max-tokens |
@@ -298,6 +322,22 @@ curl -H "X-Minikun-Memory-Token: $MINIKUN_MEMORY_MANAGEMENT_TOKEN" \
 ```
 หากตั้ง `MINIKUN_MEMORY_MANAGEMENT_TOKEN` ต้องส่ง header `X-Minikun-Memory-Token` ทุก request
 
+### Personal user model
+
+ระบบรวม profile, active preferences และ long-term memories ที่ยังอยู่ในอายุการใช้งานไว้เป็น owner-scoped user model สำหรับใช้ประกอบ prompt:
+
+```sh
+curl -H "X-Minikun-Memory-Token: $MINIKUN_MEMORY_MANAGEMENT_TOKEN" \
+  'http://127.0.0.1:8080/v1/user-model?owner_id=default'
+curl -X DELETE -H "X-Minikun-Memory-Token: $MINIKUN_MEMORY_MANAGEMENT_TOKEN" \
+  'http://127.0.0.1:8080/v1/user-model?owner_id=default'
+```
+
+ค่า `MINIKUN_USER_MODEL_MEMORY_MAX_AGE`, `MINIKUN_USER_MODEL_PREFERENCE_MAX_AGE`,
+`MINIKUN_USER_MODEL_MAXIMUM_MEMORIES` และ `MINIKUN_USER_MODEL_MINIMUM_CONFIDENCE`
+ใช้ควบคุม lifecycle ของข้อมูลที่ส่งเข้า prompt การแก้ memory รายการเดิมทำได้ผ่าน
+`PUT /v1/memory/{id}` หรือ `memory.manage` action `update` โดยยังจำกัดตาม owner เดิม
+
 ## Memory และ prompt composition
 
 Short-term history ถูกผูกกับ `ConversationId` และเก็บผ่าน Spring AI JDBC Chat Memory ใน PostgreSQL ส่วน long-term memory ถูกเก็บในตาราง `minikun_memory` ตาม schema ใน [`memory-schema.sql`](src/main/resources/memory-schema.sql)
@@ -306,7 +346,73 @@ Short-term history ถูกผูกกับ `ConversationId` และเก�
 
 เมื่อมี tool result ที่ยืนยันแล้ว ระบบจะใส่ผลลัพธ์นั้นไว้ใน context ของ prompt และให้โมเดลสร้างคำตอบสุดท้ายเองตาม MCS แทนการส่งข้อความสำเร็จรูปจาก tool โดยตรง
 
-`planner.manage` รองรับ `create`, `list`, `update` และ `cancel` สำหรับ reminder โดยการเขียน/แก้ไข/ยกเลิกต้องผ่าน confirmation ก่อนเสมอ งานที่บันทึกแล้วจะถูกส่งไปยัง ntfy เมื่อถึงเวลา และรายการที่ตั้งซ้ำแบบ `DAILY` หรือ `WEEKLY` จะเลื่อนรอบถัดไปอัตโนมัติ
+`task.manage` แยกงานค้างและเป้าหมายออกจาก reminder โดยรองรับสถานะ `OPEN`, `IN_PROGRESS`,
+`BLOCKED`, `DONE` และ `CANCELLED` รวมถึง `next_action`, `waiting_for`, due date และ follow-up
+ที่ส่ง notification ได้ งานที่ยัง active จะถูกนำไปเป็นส่วนหนึ่งของ personal user context เพื่อให้มินิคุง
+ต่อบทสนทนาและติดตามงานได้ตรงกับ owner เดิม การเปลี่ยนสถานะหรือการสร้างงานต้องยืนยันก่อนเสมอ
+ถ้าข้อความเริ่มต้นด้วยรูปแบบที่ชัดเจน เช่น `ฝากจำ...`, `อย่าลืม...`, `ต้องทำ...` หรือ `todo:`
+มินิคุงจะเสนอให้เพิ่มเป็น task อัตโนมัติ แต่จะไม่บันทึกจนกว่าจะได้รับการยืนยัน
+
+Trusted automation สามารถอ่านและจัดการ task ผ่าน `/v1/tasks` โดยส่ง header
+`X-Minikun-Task-Token` และระบุ `owner_id` ทุกครั้ง เช่น:
+
+```sh
+curl -H "X-Minikun-Task-Token: $MINIKUN_TASK_MANAGEMENT_TOKEN" \
+  'http://127.0.0.1:8080/v1/tasks?owner_id=default&status=OPEN'
+curl -X POST -H "X-Minikun-Task-Token: $MINIKUN_TASK_MANAGEMENT_TOKEN" \
+  'http://127.0.0.1:8080/v1/tasks/<task-id>/complete?owner_id=default'
+```
+
+`planner.manage` รองรับ `create`, `list`, `update`, `cancel`, `acknowledge` และ `snooze`
+สำหรับ reminder โดยการสร้าง แก้ไข ยกเลิก และ snooze ต้องผ่าน confirmation ก่อนเสมอ
+งานที่บันทึกแล้วจะถูกส่งไปยัง ntfy เมื่อถึงเวลา และรายการที่ตั้งซ้ำแบบ `DAILY` หรือ `WEEKLY`
+จะเลื่อนรอบถัดไปอัตโนมัติ Explicit reminder ที่ผู้ใช้ตั้งเวลาเองจะส่งตามเวลานั้นแม้ตรงกับ quiet hours
+
+Notification client สามารถรับทราบหรือเลื่อน reminder ผ่าน API ได้ด้วย:
+
+```sh
+curl -X POST -H "X-Minikun-Notification-Token: $MINIKUN_NOTIFICATION_MANAGEMENT_TOKEN" \
+  'http://127.0.0.1:8080/v1/reminders/<event-id>/acknowledge?conversation_id=<conversation-id>'
+curl -X POST -H "Content-Type: application/json" \
+  -H "X-Minikun-Notification-Token: $MINIKUN_NOTIFICATION_MANAGEMENT_TOKEN" \
+  -d '{"conversationId":"<conversation-id>","until":"2026-08-20T10:30:00+07:00","timezone":"Asia/Bangkok"}' \
+  'http://127.0.0.1:8080/v1/reminders/<event-id>/snooze'
+```
+
+### External Calendar
+
+เปิดใช้ด้วย private iCalendar URL ซึ่งเป็นข้อมูลลับและควรเก็บใน `.env` เท่านั้น:
+
+```sh
+MINIKUN_CALENDAR_EXTERNAL_ENABLED=true
+MINIKUN_CALENDAR_EXTERNAL_FEED_URL=https://calendar-provider.example/private.ics
+```
+
+`calendar.manage` action `list` จะรวม local planner กับ external events โดย external calendar เป็น read-only
+และรองรับ recurring event, timezone, all-day event รวมถึง reminder ก่อนนัด ระบบจะไม่เขียนกลับไปยัง provider
+ดู agenda ล่วงหน้าได้ผ่าน:
+
+```sh
+curl -H "X-Minikun-Calendar-Token: $MINIKUN_CALENDAR_MANAGEMENT_TOKEN" \
+  'http://127.0.0.1:8080/v1/calendar/events?days=14'
+```
+
+Proactive agent ใช้ `minikun.proactive.*` เป็น safety boundary กลาง: ปิดได้ทั้งระบบ,
+งดส่งเฉพาะ notification ที่ agent เริ่มเอง เช่น task follow-up, daily briefing และ weather digest ใน quiet hours
+ส่วน daily briefing จะรวมสภาพอากาศ นัดหมายจาก local/external calendar งานที่ลงมือได้ และสิ่งที่กำลังรอ
+ส่งไม่เกินหนึ่งครั้งต่อวัน และเก็บสถานะการส่งใน PostgreSQL หากแหล่งข้อมูลภายนอกส่วนใดล้ม
+briefing จะใช้ข้อมูลส่วนที่เหลือต่อโดยไม่ล้มทั้งฉบับ
+
+ผลการส่งทุกครั้งถูกเก็บใน `minikun_notification_delivery` และเรียกดูได้ผ่าน
+`GET /v1/notifications` โดยกรอง `source_type`, `source_id`, `status` และ `limit` ได้ เช่น:
+
+```sh
+curl -H "X-Minikun-Notification-Token: $MINIKUN_NOTIFICATION_MANAGEMENT_TOKEN" \
+  'http://127.0.0.1:8080/v1/notifications?source_type=PLANNER&limit=20'
+```
+
+Actuator health รวมสถานะ `notificationSchedulerMonitor` และ metrics กลุ่ม
+`minikun.notification.*` สำหรับตรวจว่า scheduler ยัง poll อยู่และมีการส่งล้มเหลวติดต่อกันหรือไม่
 
 รายละเอียดเพิ่มเติม:
 
@@ -329,7 +435,7 @@ Short-term history ถูกผูกกับ `ConversationId` และเก�
 
 ```sh
 cd /Volumes/minikun/homelab/java
-./script/deploy-minikun-agent.sh
+./minikun_agent/deploy/deploy-minikun-agent.sh
 ```
 
 ตัวรัน production อยู่ที่ [`script/minikun-agent.sh`](../script/minikun-agent.sh) โดยจะอ่าน `.env` จาก root workspace และใช้ค่าหลักดังนี้:

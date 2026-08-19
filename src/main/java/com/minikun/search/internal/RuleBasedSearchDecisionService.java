@@ -4,6 +4,7 @@ import com.minikun.search.SearchDecisionService;
 import com.minikun.search.model.SearchDecision;
 import com.minikun.search.model.SearchDecisionReason;
 import java.util.List;
+import java.util.Locale;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
@@ -33,7 +34,7 @@ public final class RuleBasedSearchDecisionService implements SearchDecisionServi
                 decision = new SearchDecision(false, "", SearchDecisionReason.GENERAL_KNOWLEDGE);
                 return decision;
             }
-            String normalized = query.trim().toLowerCase();
+            String normalized = query.trim().toLowerCase(Locale.ROOT);
             boolean shouldSearch = KEYWORDS.stream().anyMatch(normalized::contains);
             decision = new SearchDecision(
                     shouldSearch,

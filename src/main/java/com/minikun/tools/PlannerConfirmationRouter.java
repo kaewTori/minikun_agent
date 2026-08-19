@@ -31,7 +31,8 @@ public final class PlannerConfirmationRouter implements ToolRequestRouter {
         if (!isConfirmation(userText)) {
             return Optional.empty();
         }
-        Optional<PendingPlannerConfirmation> pending = confirmations.find(conversationId);
+        Optional<PendingPlannerConfirmation> pending = confirmations.find(conversationId)
+                .filter(value -> !value.action().startsWith("task."));
         if (pending.isEmpty()) {
             return Optional.empty();
         }

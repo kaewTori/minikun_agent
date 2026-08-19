@@ -52,6 +52,8 @@ import com.minikun.memory.event.SafeObservationPublisher;
 import com.minikun.memory.ReflectionService;
 import com.minikun.personality.model.MoodSnapshot;
 import com.minikun.personality.runtime.AdaptivePersonaService;
+import com.minikun.personality.profile.UserModelService;
+import com.minikun.personality.model.PersonalUserModel;
 import com.minikun.memory.model.CompletedConversation;
 import com.minikun.model.ChatModelId;
 import com.minikun.model.ChatModelProvider;
@@ -172,6 +174,9 @@ public class ChatService {
 
     @Autowired(required = false)
     private AdaptivePersonaService adaptivePersonaService;
+
+    @Autowired(required = false)
+    private UserModelService userModelService;
 
     @Autowired(required = false)
     private CooperativeChatModelService cooperativeChatModelService;
@@ -351,7 +356,8 @@ public class ChatService {
         ChatTransactionLogger.Transaction transaction = transactionLogger.start(
                 "chatcmpl-" + UUID.randomUUID(), model, false, request.messages().size());
         try {
-            Optional<ToolEvidence> verifiedToolResult = routeTool(userMessage, conversationId);
+            Optional<ToolEvidence> verifiedToolResult = routeTool(
+                    userMessage, conversationId, memoryOwnerId(request, conversationId));
             ChatExecutionContext context;
             try {
                 context = prepareChatExecution(
@@ -421,7 +427,8 @@ public class ChatService {
         StringBuilder assistantContent = new StringBuilder();
         AtomicReference<ModelUsage> modelUsage = new AtomicReference<>(ModelUsage.empty());
 
-        Optional<ToolEvidence> verifiedToolResult = routeTool(userMessage, conversationId);
+        Optional<ToolEvidence> verifiedToolResult = routeTool(
+                userMessage, conversationId, memoryOwnerId(request, conversationId));
 
         ChatExecutionContext context;
         try {
@@ -516,7 +523,8 @@ public class ChatService {
                 classifierContext(history));
         PreparedImages preparedImages = prepareImages(knowledgeSelection);
         Prompt prompt = promptFor(
-                request, history, knowledgeSelection, preparedImages.awareness(), verifiedToolResult);
+                request, history, knowledgeSelection, preparedImages.awareness(), verifiedToolResult,
+                memoryOwnerId(request, conversationId));
         log.info("process=prompt event=composed{}", streaming ? " stream=true" : "");
         return new ChatExecutionContext(
                 prompt, conversationId, persistConversation, memoryOwnerId(request, conversationId),
@@ -595,12 +603,13 @@ public class ChatService {
                 .orElse(null);
     }
 
-    private Optional<ToolEvidence> routeTool(ChatMessage userMessage, ConversationId conversationId) {
+    private Optional<ToolEvidence> routeTool(
+            ChatMessage userMessage, ConversationId conversationId, String ownerId) {
         if (!toolsEnabled || toolRequestRouters == null || toolRequestRouters.isEmpty()) {
             return Optional.empty();
         }
         for (ToolRequestRouter router : toolRequestRouters) {
-            Optional<ToolEvidence> result = router.route(userMessage.content(), conversationId);
+            Optional<ToolEvidence> result = router.route(userMessage.content(), conversationId, ownerId);
             if (result.isPresent()) {
                 ToolEvidence evidence = result.get();
                 log.info("process=tool_route event=completed tool={} success={}",
@@ -723,7 +732,8 @@ public class ChatService {
             List<ChatMessage> history,
             KnowledgePipelineSelection knowledgeSelection,
             ImageAwareness imageAwareness,
-            ToolEvidence verifiedToolResult) {
+            ToolEvidence verifiedToolResult,
+            String ownerId) {
         var userMessage = userMessage(request);
         String runtime = request.messages().stream()
                 .filter(message -> "system".equals(message.role()))
@@ -756,9 +766,11 @@ public class ChatService {
                 ? KnowledgeConsolidation.EMPTY : knowledgeSelection.consolidation();
         KnowledgeContext promptKnowledge = factFirstToolTurn
                 ? new KnowledgeContext("") : knowledgeSelection.selection().knowledgeContext();
+        PersonalUserModel userModel = userModelService == null
+                ? PersonalUserModel.EMPTY : safeUserModel(ownerId);
         var personaSignals = adaptivePersonaService == null
                 ? com.minikun.personality.signal.PersonaSelectionSignals.EMPTY
-                : adaptivePersonaService.evaluate("default", userMessage.content(),
+                : adaptivePersonaService.evaluate(ownerId, userMessage.content(),
                         promptSearchSignals.searchRequested(),
                         (toolsEnabled && toolCallingRuntime != null) || verifiedToolResult != null,
                         false, MoodSnapshot.DEFAULT).signals();
@@ -772,7 +784,7 @@ public class ChatService {
                 promptSearchSignals,
                 promptSearchContext,
                 promptKnowledgeSelection,
-                promptKnowledgeConsolidation, null, personaSignals);
+                promptKnowledgeConsolidation, null, personaSignals, userModel);
         GenerationOptions options = generationOptions(request);
         PersonalContextRuntime contextRuntime = personalContextRuntime;
         if (contextRuntime == null && dynamicTokenBudgetEnabled && dynamicGenerationOptionsFactory != null) {
@@ -803,6 +815,16 @@ public class ChatService {
                 result.snapshot().estimatedInputTokens(),
                 result.snapshot().allocatedOutputTokens());
         return toSpringPrompt(result.prompt(), result.generationOptions());
+    }
+
+    private PersonalUserModel safeUserModel(String ownerId) {
+        try {
+            return userModelService.snapshot(ownerId);
+        } catch (RuntimeException exception) {
+            log.warn("User model snapshot failed; continuing without personal context owner_id={}", ownerId,
+                    exception);
+            return PersonalUserModel.EMPTY;
+        }
     }
 
     private GenerationOptions generationOptions(ChatCompletionRequest request) {

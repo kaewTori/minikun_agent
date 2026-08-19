@@ -17,6 +17,7 @@ import com.minikun.memory.model.Memory;
 import com.minikun.memory.model.MemoryCategory;
 import com.minikun.memory.model.MemoryId;
 import com.minikun.memory.model.MemorySource;
+import com.minikun.memory.model.MemoryUpdate;
 
 @Slf4j
 final class JdbcMemoryRepository implements MemoryRepository {
@@ -80,7 +81,7 @@ final class JdbcMemoryRepository implements MemoryRepository {
         try {
             return java.util.HexFormat.of().formatHex(
                     java.security.MessageDigest.getInstance("SHA-256").digest(
-                            (memory.conversationId() + "\u0000" + memory.category() + "\u0000"
+                            (memory.ownerId() + "\u0000" + memory.category() + "\u0000"
                                     + memory.content().trim().replaceAll("\\s+", " ")
                                     .toLowerCase(java.util.Locale.ROOT))
                                     .getBytes(java.nio.charset.StandardCharsets.UTF_8)));
@@ -144,6 +145,35 @@ final class JdbcMemoryRepository implements MemoryRepository {
         java.util.Objects.requireNonNull(memoryId, "memory id must not be null");
         return jdbcTemplate.update(
                 "DELETE FROM minikun_memory WHERE owner_id = ? AND id = ?",
+                ownerId, memoryId.value()) > 0;
+    }
+
+    @Override
+    public boolean updateByOwner(String ownerId, MemoryId memoryId, MemoryUpdate update) {
+        validateOwner(ownerId);
+        java.util.Objects.requireNonNull(memoryId, "memory id must not be null");
+        java.util.Objects.requireNonNull(update, "memory update must not be null");
+        List<Memory> existing = jdbcTemplate.query("""
+                SELECT owner_id, conversation_id, id, category, source, content, created_at, confidence, reason
+                FROM minikun_memory WHERE owner_id = ? AND id = ?
+                """, (resultSet, rowNumber) -> new Memory(
+                resultSet.getString("owner_id"), resultSet.getString("conversation_id"),
+                new MemoryId(resultSet.getObject("id", java.util.UUID.class)),
+                MemoryCategory.valueOf(resultSet.getString("category")),
+                MemorySource.valueOf(resultSet.getString("source")), resultSet.getString("content"),
+                resultSet.getTimestamp("created_at").toInstant(), resultSet.getDouble("confidence"),
+                resultSet.getString("reason")), ownerId, memoryId.value());
+        if (existing.isEmpty()) {
+            return false;
+        }
+        Memory current = existing.getFirst();
+        String fingerprint = fingerprint(new AcceptedMemory(ownerId, current.conversationId(), update.category(),
+                update.content(), update.confidence(), update.reason(), current.source()));
+        return jdbcTemplate.update("""
+                UPDATE minikun_memory
+                SET category = ?, content = ?, confidence = ?, reason = ?, fingerprint = ?
+                WHERE owner_id = ? AND id = ?
+                """, update.category().name(), update.content(), update.confidence(), update.reason(), fingerprint,
                 ownerId, memoryId.value()) > 0;
     }
 

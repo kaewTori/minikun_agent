@@ -30,6 +30,11 @@ public final class PlannerConfirmationService {
 
     public PendingPlannerConfirmation save(
             ConversationId conversationId, String action, Map<String, Object> arguments) {
+        return save(conversationId, "default", action, arguments);
+    }
+
+    public PendingPlannerConfirmation save(
+            ConversationId conversationId, String ownerId, String action, Map<String, Object> arguments) {
         Map<String, Object> normalized = new LinkedHashMap<>();
         arguments.forEach((key, value) -> {
             if (key != null && !"confirmed".equals(key) && value != null) {
@@ -38,13 +43,17 @@ public final class PlannerConfirmationService {
         });
         Instant now = clock.instant();
         PendingPlannerConfirmation confirmation = new PendingPlannerConfirmation(
-                conversationId.value(), action, normalized, now, now.plus(CONFIRMATION_TTL));
+                conversationId.value(), owner(ownerId), action, normalized, now, now.plus(CONFIRMATION_TTL));
         store.save(confirmation);
         return confirmation;
     }
 
     public Optional<PendingPlannerConfirmation> find(ConversationId conversationId) {
         return store.find(conversationId.value(), clock.instant());
+    }
+
+    public Optional<PendingPlannerConfirmation> find(ConversationId conversationId, String ownerId) {
+        return store.find(conversationId.value(), owner(ownerId), clock.instant());
     }
 
     public Map<String, Object> confirmedArguments(PendingPlannerConfirmation confirmation) {
@@ -55,5 +64,12 @@ public final class PlannerConfirmationService {
 
     public void clear(ConversationId conversationId) {
         store.clear(conversationId.value());
+    }
+
+    private String owner(String value) {
+        if (value == null || value.isBlank() || "*".equals(value)) {
+            throw new IllegalArgumentException("owner id must not be blank or wildcard");
+        }
+        return value.trim();
     }
 }

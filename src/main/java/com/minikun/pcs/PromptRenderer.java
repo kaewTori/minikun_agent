@@ -34,6 +34,7 @@ final class PromptRenderer {
         sections.add(CorePromptFragments.persona(request.character(), selectedModules));
         sections.add(section("Runtime", request.runtime().content()));
         addOptional(sections, "Conversation", request.conversation() == null ? null : request.conversation().content());
+        addOptional(sections, "Personal User Context", request.personalUserModel().promptContent());
         String knowledge = request.knowledgeSelection().selectedCandidates().isEmpty()
             ? request.knowledge() == null ? null : request.knowledge().content()
             : request.knowledgeSelection().knowledgeContext().content();
@@ -64,6 +65,7 @@ final class PromptRenderer {
         addProcessedCharacter(sections, contents);
         addProcessedRequired(sections, "Runtime", ContextBudgetSection.RUNTIME, contents);
         addProcessedOptional(sections, "Conversation", ContextBudgetSection.CONVERSATION, contents);
+        addProcessedOptional(sections, "Personal User Context", ContextBudgetSection.USER_MODEL, contents);
         addProcessedOptional(sections, "Memory", ContextBudgetSection.MEMORY, contents);
         addProcessedOptional(sections, "Knowledge", ContextBudgetSection.KNOWLEDGE, contents);
         addProcessedOptional(sections, "Capabilities", ContextBudgetSection.CAPABILITIES, contents);

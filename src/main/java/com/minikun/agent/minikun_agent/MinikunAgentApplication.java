@@ -57,16 +57,33 @@ import com.minikun.tools.PlannerConfirmationRouter;
 import com.minikun.tools.RelativeReminderToolRouter;
 import com.minikun.tools.AbsoluteReminderToolRouter;
 import com.minikun.tools.ReminderContextToolRouter;
+import com.minikun.tools.TaskConfirmationRouter;
+import com.minikun.tools.TaskManageTool;
+import com.minikun.tools.TaskCaptureToolRouter;
 import com.minikun.tools.springai.SpringAiToolCallingRuntime;
 import com.minikun.notification.NtfyNotificationService;
+import com.minikun.notification.JdbcNotificationDeliveryStore;
+import com.minikun.notification.NotificationDeliveryController;
+import com.minikun.notification.NotificationDeliveryService;
+import com.minikun.notification.NotificationSchedulerMonitor;
 import com.minikun.planner.JdbcPlannerStore;
 import com.minikun.planner.JdbcPlannerConfirmationStore;
 import com.minikun.planner.PlannerConfirmationService;
 import com.minikun.planner.PlannerNotificationScheduler;
 import com.minikun.planner.PlannerService;
+import com.minikun.planner.ReminderActionController;
+import com.minikun.task.JdbcTaskStore;
+import com.minikun.task.TaskFollowUpScheduler;
+import com.minikun.task.TaskService;
+import com.minikun.task.TaskController;
 import com.minikun.weather.DailyWeatherNotificationScheduler;
 import com.minikun.weather.WeatherConfiguration;
 import com.minikun.systemhealth.SystemHealthConfiguration;
+import com.minikun.proactive.ProactiveNotificationPolicy;
+import com.minikun.proactive.DailyBriefingScheduler;
+import com.minikun.calendar.ExternalCalendarConfiguration;
+import com.minikun.calendar.ExternalCalendarController;
+import com.minikun.calendar.ExternalCalendarReminderScheduler;
 
 @SpringBootApplication
 @EnableScheduling
@@ -85,6 +102,9 @@ import com.minikun.systemhealth.SystemHealthConfiguration;
 		ContextRuntimeConfiguration.class,
 		MemoryManagementService.class, MemoryManagementController.class,
 		WeatherConfiguration.class,
+		ExternalCalendarConfiguration.class, ExternalCalendarController.class,
+		ExternalCalendarReminderScheduler.class,
+		ProactiveNotificationPolicy.class,
 		SystemHealthConfiguration.class,
 		CurrentTimeToolRouter.class,
 		DefaultToolRegistry.class, DefaultToolExecutor.class,
@@ -95,8 +115,14 @@ import com.minikun.systemhealth.SystemHealthConfiguration;
 		PlannerConfirmationRouter.class, RelativeReminderToolRouter.class, AbsoluteReminderToolRouter.class,
 		ReminderContextToolRouter.class,
 		JdbcPlannerConfirmationStore.class, PlannerConfirmationService.class,
-		NtfyNotificationService.class, JdbcPlannerStore.class, PlannerService.class,
+		NtfyNotificationService.class, JdbcNotificationDeliveryStore.class,
+		NotificationDeliveryService.class, NotificationDeliveryController.class,
+		NotificationSchedulerMonitor.class,
+		JdbcPlannerStore.class, PlannerService.class, ReminderActionController.class,
 		PlannerNotificationScheduler.class, DailyWeatherNotificationScheduler.class,
+		JdbcTaskStore.class, TaskService.class, TaskManageTool.class, TaskConfirmationRouter.class,
+		TaskCaptureToolRouter.class, TaskController.class,
+		TaskFollowUpScheduler.class, DailyBriefingScheduler.class,
 		SpringAiToolCallingRuntime.class})
 public class MinikunAgentApplication {
 

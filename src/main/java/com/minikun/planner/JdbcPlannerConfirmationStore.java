@@ -37,25 +37,36 @@ public final class JdbcPlannerConfirmationStore implements PlannerConfirmationSt
         }
         jdbc.update("""
                 INSERT INTO minikun_planner_pending_confirmation
-                    (conversation_id, action, arguments_json, created_at, expires_at)
-                VALUES (?, ?, ?, ?, ?)
+                    (conversation_id, owner_id, action, arguments_json, created_at, expires_at)
+                VALUES (?, ?, ?, ?, ?, ?)
                 ON CONFLICT (conversation_id) DO UPDATE SET
+                    owner_id = EXCLUDED.owner_id,
                     action = EXCLUDED.action,
                     arguments_json = EXCLUDED.arguments_json,
                     created_at = EXCLUDED.created_at,
                     expires_at = EXCLUDED.expires_at
                 """,
-                confirmation.conversationId(), confirmation.action(), arguments,
+                confirmation.conversationId(), confirmation.ownerId(), confirmation.action(), arguments,
                 timestamp(confirmation.createdAt()), timestamp(confirmation.expiresAt()));
     }
 
     @Override
     public Optional<PendingPlannerConfirmation> find(String conversationId, Instant now) {
         List<PendingPlannerConfirmation> confirmations = jdbc.query("""
-                SELECT conversation_id, action, arguments_json, created_at, expires_at
+                SELECT conversation_id, owner_id, action, arguments_json, created_at, expires_at
                 FROM minikun_planner_pending_confirmation
                 WHERE conversation_id = ? AND expires_at > ?
                 """, this::map, conversationId, timestamp(now));
+        return confirmations.stream().findFirst();
+    }
+
+    @Override
+    public Optional<PendingPlannerConfirmation> find(String conversationId, String ownerId, Instant now) {
+        List<PendingPlannerConfirmation> confirmations = jdbc.query("""
+                SELECT conversation_id, owner_id, action, arguments_json, created_at, expires_at
+                FROM minikun_planner_pending_confirmation
+                WHERE conversation_id = ? AND owner_id = ? AND expires_at > ?
+                """, this::map, conversationId, ownerId, timestamp(now));
         return confirmations.stream().findFirst();
     }
 
@@ -71,6 +82,7 @@ public final class JdbcPlannerConfirmationStore implements PlannerConfirmationSt
                     objectMapper.getTypeFactory().constructMapType(Map.class, String.class, Object.class));
             return new PendingPlannerConfirmation(
                     resultSet.getString("conversation_id"),
+                    resultSet.getString("owner_id"),
                     resultSet.getString("action"),
                     arguments,
                     resultSet.getTimestamp("created_at").toInstant(),

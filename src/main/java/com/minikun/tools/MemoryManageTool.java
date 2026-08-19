@@ -3,6 +3,7 @@ package com.minikun.tools;
 import com.minikun.memory.management.MemoryManagementService;
 import com.minikun.memory.model.MemoryCategory;
 import com.minikun.memory.model.MemoryId;
+import com.minikun.memory.model.MemoryUpdate;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
@@ -19,11 +20,11 @@ public final class MemoryManageTool implements Tool {
             "memory.manage",
             "Manage explicit long-term memories for the current user. "
                     + "Use remember when the user says to remember something, list to inspect memories, "
-                    + "and forget to delete one memory by its UUID. Never invent a memory UUID. "
+                    + "update to correct one memory, and forget to delete one memory by its UUID. Never invent a memory UUID. "
                     + "The owner is taken from the authenticated chat context.",
             Map.of(
                     "action", new ToolParameter("action", ToolParameterType.STRING, true,
-                            "One of remember, list, or forget."),
+                            "One of remember, list, update, or forget."),
                     "content", new ToolParameter("content", ToolParameterType.STRING, false,
                             "The fact or preference to remember."),
                     "category", new ToolParameter("category", ToolParameterType.STRING, false,
@@ -51,9 +52,10 @@ public final class MemoryManageTool implements Tool {
             return switch (action) {
                 case "remember" -> remember(context, arguments);
                 case "list" -> list(context, arguments);
+                case "update" -> update(context, arguments);
                 case "forget" -> forget(context, arguments);
                 default -> ToolResult.failure(ToolErrorCode.INVALID_ARGUMENTS,
-                        "memory action must be remember, list, or forget");
+                        "memory action must be remember, list, update, or forget");
             };
         } catch (IllegalArgumentException exception) {
             return ToolResult.failure(ToolErrorCode.INVALID_ARGUMENTS, exception.getMessage());
@@ -97,6 +99,24 @@ public final class MemoryManageTool implements Tool {
                 "action", "forget",
                 "memory_id", value,
                 "deleted", memories.delete(context.ownerId(), id)));
+    }
+
+    private ToolResult update(ToolCallContext context, Map<String, Object> arguments) {
+        String value = text(arguments, "memory_id");
+        if (value.isBlank()) {
+            throw new IllegalArgumentException("memory_id is required for update");
+        }
+        MemoryId id;
+        try {
+            id = new MemoryId(UUID.fromString(value));
+        } catch (IllegalArgumentException exception) {
+            throw new IllegalArgumentException("memory_id must be a valid UUID");
+        }
+        MemoryCategory category = category(arguments);
+        String content = text(arguments, "content");
+        boolean updated = memories.update(context.ownerId(), id,
+                new MemoryUpdate(category, content, 1.0, "ผู้ใช้แก้ไข memory โดยตรง"));
+        return ToolResult.success(Map.of("action", "update", "memory_id", value, "updated", updated));
     }
 
     private MemoryCategory category(Map<String, Object> arguments) {

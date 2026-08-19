@@ -38,6 +38,8 @@ public final class ContextItemAssembler {
                 REQUIRED_PRIORITY, true));
         addOptional(items, ContextBudgetSection.CONVERSATION,
                 request.conversation() == null ? null : request.conversation().content(), 3);
+        addOptional(items, ContextBudgetSection.USER_MODEL,
+                request.personalUserModel().promptContent(), 1);
         addKnowledge(items, request);
         addCapabilities(items, request.capabilities());
         UserMessage userMessage = request.userMessage();

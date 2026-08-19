@@ -4,6 +4,7 @@ public enum ContextBudgetSection {
     CHARACTER,
     RUNTIME,
     CONVERSATION,
+    USER_MODEL,
     MEMORY,
     KNOWLEDGE,
     CAPABILITIES,

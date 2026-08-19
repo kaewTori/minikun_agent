@@ -73,6 +73,18 @@ public final class JdbcPlannerStore implements PlannerStore {
     }
 
     @Override
+    public List<PlannerEvent> listUpcoming(Instant from, Instant to) {
+        return jdbc.query("""
+                SELECT id, conversation_id, title, note, starts_at, timezone,
+                       remind_before_minutes, recurrence, status, next_notify_at, created_at, updated_at
+                FROM minikun_planner_event
+                WHERE status = 'ACTIVE' AND starts_at >= ? AND starts_at < ?
+                ORDER BY starts_at ASC
+                LIMIT 100
+                """, this::map, timestamp(from), timestamp(to));
+    }
+
+    @Override
     public PlannerEvent update(PlannerEvent event) {
         jdbc.update("""
                 UPDATE minikun_planner_event
@@ -112,6 +124,22 @@ public final class JdbcPlannerStore implements PlannerStore {
                 WHERE id = ? AND status = 'ACTIVE'
                 """, timestamp(event.startsAt().plusSeconds(days * 24 * 60 * 60)),
                 timestamp(event.nextNotifyAt().plusSeconds(days * 24 * 60 * 60)), timestamp(now), event.id());
+    }
+
+    @Override
+    public void recordAction(
+            UUID actionId,
+            String conversationId,
+            UUID eventId,
+            String action,
+            Instant snoozedUntil,
+            Instant createdAt) {
+        jdbc.update("""
+                INSERT INTO minikun_reminder_action
+                    (id, conversation_id, event_id, action, snoozed_until, created_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """, actionId, conversationId, eventId, action,
+                snoozedUntil == null ? null : timestamp(snoozedUntil), timestamp(createdAt));
     }
 
     private PlannerEvent map(ResultSet resultSet, int rowNum) throws SQLException {

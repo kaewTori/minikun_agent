@@ -104,8 +104,47 @@ public final class PlannerService {
         return store.cancel(id, conversationId.value(), clock.instant());
     }
 
+    public boolean acknowledge(ConversationId conversationId, UUID id) {
+        Objects.requireNonNull(conversationId, "conversation id must not be null");
+        Optional<PlannerEvent> event = store.find(id, conversationId.value());
+        if (event.isEmpty()) return false;
+        Instant now = clock.instant();
+        store.recordAction(UUID.randomUUID(), conversationId.value(), id, "ACKNOWLEDGED", null, now);
+        return true;
+    }
+
+    public PlannerEvent snooze(
+            ConversationId conversationId,
+            UUID id,
+            String until,
+            String timezone) {
+        Objects.requireNonNull(conversationId, "conversation id must not be null");
+        PlannerEvent original = store.find(id, conversationId.value())
+                .orElseThrow(() -> new IllegalArgumentException("planner event was not found"));
+        ZoneId zone = timezone == null || timezone.isBlank() ? original.timezone() : zone(timezone);
+        Instant snoozedUntil = parseDateTime(until, zone);
+        Instant now = clock.instant();
+        if (!snoozedUntil.isAfter(now)) {
+            throw new IllegalArgumentException("snooze time must be in the future");
+        }
+        PlannerEvent snoozed = new PlannerEvent(
+                UUID.randomUUID(), conversationId.value(), original.title(),
+                "Snoozed from " + original.id() + (original.note().isBlank() ? "" : ". " + original.note()),
+                snoozedUntil, zone, 0, PlannerRecurrence.NONE, "ACTIVE", snoozedUntil, now, now);
+        PlannerEvent saved = store.create(snoozed);
+        store.recordAction(UUID.randomUUID(), conversationId.value(), id, "SNOOZED", snoozedUntil, now);
+        return saved;
+    }
+
     public List<PlannerEvent> due(Instant now) {
         return store.findDue(now);
+    }
+
+    public List<PlannerEvent> upcoming(Instant from, Instant to) {
+        Objects.requireNonNull(from, "planner range start must not be null");
+        Objects.requireNonNull(to, "planner range end must not be null");
+        if (!to.isAfter(from)) throw new IllegalArgumentException("planner range end must be after start");
+        return store.listUpcoming(from, to);
     }
 
     public void markDelivered(PlannerEvent event, Instant now) {

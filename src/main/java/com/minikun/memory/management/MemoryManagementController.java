@@ -2,6 +2,7 @@ package com.minikun.memory.management;
 
 import com.minikun.memory.model.Memory;
 import com.minikun.memory.model.MemoryId;
+import com.minikun.memory.model.MemoryUpdate;
 import com.minikun.memory.MemoryRepository;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.http.ResponseEntity;
@@ -11,6 +12,8 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.server.ResponseStatusException;
@@ -50,6 +53,17 @@ public final class MemoryManagementController {
         authorize(token);
         boolean deleted = service.delete(ownerId, new MemoryId(id));
         return deleted ? ResponseEntity.noContent().build() : ResponseEntity.notFound().build();
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<Void> update(
+            @RequestParam(defaultValue = "default") String ownerId,
+            @PathVariable UUID id,
+            @RequestBody MemoryUpdate update,
+            @RequestHeader(value = "X-Minikun-Memory-Token", required = false) String token) {
+        authorize(token);
+        boolean updated = service.update(ownerId, new MemoryId(id), update);
+        return updated ? ResponseEntity.noContent().build() : ResponseEntity.notFound().build();
     }
 
     @DeleteMapping

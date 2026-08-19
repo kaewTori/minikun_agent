@@ -173,18 +173,19 @@ public class SearchConfiguration {
             AcronymDictionary acronymDictionary,
             AliasDictionary aliasDictionary) {
         return new RuleBasedSearchQueryExpansionService(List.of(
-                new IdentityExpansionRule(),
-                new SynonymExpansionRule(synonymDictionary),
-                new AcronymExpansionRule(acronymDictionary),
-                new AliasExpansionRule(aliasDictionary)));
+            new IdentityExpansionRule(),
+            new SynonymExpansionRule(synonymDictionary),
+            new AcronymExpansionRule(acronymDictionary),
+            new AliasExpansionRule(aliasDictionary)));
     }
 
-        @Bean
-        SearchDecisionProvider searchDecisionProvider(TaskModelProvider taskModelProvider,
+    @Bean
+    SearchDecisionProvider searchDecisionProvider(
+            TaskModelProvider taskModelProvider,
             ObjectMapper objectMapper,
             @Value("${minikun.search.decision.timeout:PT5S}") Duration timeout) {
         return new TaskModelSearchDecisionProvider(taskModelProvider, objectMapper, timeout);
-        }
+    }
 
     @Bean
     SearchDecisionPromptBuilder searchDecisionPromptBuilder() {

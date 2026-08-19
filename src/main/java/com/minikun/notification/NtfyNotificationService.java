@@ -14,7 +14,7 @@ import org.springframework.stereotype.Component;
 
 /** Publishes server-side notifications to the configured ntfy topics. */
 @Component
-public final class NtfyNotificationService {
+public final class NtfyNotificationService implements NotificationTransport {
     private static final Logger LOGGER = LoggerFactory.getLogger(NtfyNotificationService.class);
 
     private final HttpClient httpClient;
@@ -38,6 +38,7 @@ public final class NtfyNotificationService {
                 .build();
     }
 
+    @Override
     public void publish(NotificationChannel channel, String title, String message, int priority, String tags) {
         Objects.requireNonNull(channel, "notification channel must not be null");
         Objects.requireNonNull(title, "notification title must not be null");

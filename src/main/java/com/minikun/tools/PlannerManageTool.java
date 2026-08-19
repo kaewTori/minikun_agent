@@ -18,7 +18,8 @@ public final class PlannerManageTool implements Tool {
     private static final ToolDefinition DEFINITION = new ToolDefinition(
             "planner.manage",
             "Create, list, update, or cancel reminders and schedule entries. "
-                    + "For create, update, and cancel, first show the proposed change and ask the user for confirmation. "
+                    + "Acknowledge delivered reminders or snooze them to a new time. "
+                    + "For create, update, cancel, and snooze, first show the proposed change and ask for confirmation. "
                     + "Only execute the write after confirmed=true. Convert natural-language dates into ISO-8601 local date-time "
                     + "using Asia/Bangkok unless the user specifies another IANA timezone.",
             ScheduleToolSchema.parameters());
@@ -48,8 +49,10 @@ public final class PlannerManageTool implements Tool {
                         "events", planner.describeAll(planner.list(context.conversationId()))));
                 case "update" -> update(context, arguments, confirmed);
                 case "cancel" -> cancel(context, arguments, confirmed);
+                case "acknowledge" -> acknowledge(context, arguments);
+                case "snooze" -> snooze(context, arguments, confirmed);
                 default -> ToolResult.failure(ToolErrorCode.INVALID_ARGUMENTS,
-                        "planner action must be create, list, update, or cancel");
+                        "planner action must be create, list, update, cancel, acknowledge, or snooze");
             };
         } catch (IllegalArgumentException exception) {
             return ToolResult.failure(ToolErrorCode.INVALID_ARGUMENTS, exception.getMessage());
@@ -113,6 +116,28 @@ public final class PlannerManageTool implements Tool {
         boolean cancelled = planner.cancel(context.conversationId(), id);
         confirmations.clear(context.conversationId());
         return ToolResult.success(Map.of("cancelled", cancelled, "event_id", id.toString()));
+    }
+
+    private ToolResult acknowledge(ToolCallContext context, Map<String, Object> arguments) {
+        UUID id = id(arguments);
+        boolean acknowledged = planner.acknowledge(context.conversationId(), id);
+        return ToolResult.success(Map.of("acknowledged", acknowledged, "event_id", id.toString()));
+    }
+
+    private ToolResult snooze(ToolCallContext context, Map<String, Object> arguments, boolean confirmed) {
+        UUID id = id(arguments);
+        if (!confirmed) {
+            confirmations.save(context.conversationId(), "snooze", arguments);
+            return ToolResult.success(Map.of(
+                    "requires_confirmation", true,
+                    "message", "จะเลื่อนการแจ้งเตือนไปเป็น " + text(arguments, "at")
+                            + " ครับ พี่สาวยืนยันให้มินิคุงเลื่อนไหมครับ",
+                    "event_id", id.toString(),
+                    "snooze_until", text(arguments, "at")));
+        }
+        var event = planner.snooze(context.conversationId(), id, text(arguments, "at"), text(arguments, "timezone"));
+        confirmations.clear(context.conversationId());
+        return ToolResult.success(Map.of("snoozed", true, "event", planner.describe(event)));
     }
 
     private UUID id(Map<String, Object> arguments) {
