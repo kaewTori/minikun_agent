@@ -18,7 +18,7 @@
 - ส่ง language/category/time-range/safe-search options ไปยัง SearXNG พร้อม ranking และ URL deduplication
 - Actuator health และ metrics
 - คำสั่ง runtime และ diagnostics ที่จัดการในระดับ application
-- Native function tools: `time.get_current_time`, `weather.get_forecast`, `web.search`, `web.open_url`, `calculator.add`, `planner.manage`, `calendar.manage` และ `task.manage`
+- Native function tools: `time.get_current_time`, `weather.get_forecast`, `web.search`, `web.open_url`, `calculator.add`, `planner.manage`, `calendar.manage`, `task.manage`, `homelab.guardian` และ `computer.local`
 - ผลลัพธ์จาก tool จะถูกส่งกลับเข้า prompt ของ MCS/PCS เพื่อให้โมเดลตอบต่อด้วยตัวตน บริบท และน้ำเสียงเดิมของมินิคุง
 - เก็บ reminder ใน PostgreSQL และส่ง notification ผ่าน ntfy พร้อม daily weather digest เวลา 07:00 (`Asia/Bangkok`)
 - เชื่อม private iCalendar feed จาก Google, Apple หรือ Outlook เพื่ออ่าน agenda และเตือนก่อนนัด
@@ -381,7 +381,7 @@ curl -X POST -H "Content-Type: application/json" \
 
 ### External Calendar
 
-เปิดใช้ด้วย private iCalendar URL ซึ่งเป็นข้อมูลลับและควรเก็บใน `.env` เท่านั้น:
+เปิดใช้ด้วย private iCalendar URL ผ่านค่ารันไทม์ใน LaunchAgent plist หรือ system environment:
 
 ```sh
 MINIKUN_CALENDAR_EXTERNAL_ENABLED=true
@@ -402,6 +402,19 @@ Proactive agent ใช้ `minikun.proactive.*` เป็น safety boundary ก
 ส่วน daily briefing จะรวมสภาพอากาศ นัดหมายจาก local/external calendar งานที่ลงมือได้ และสิ่งที่กำลังรอ
 ส่งไม่เกินหนึ่งครั้งต่อวัน และเก็บสถานะการส่งใน PostgreSQL หากแหล่งข้อมูลภายนอกส่วนใดล้ม
 briefing จะใช้ข้อมูลส่วนที่เหลือต่อโดยไม่ล้มทั้งฉบับ
+
+### Local Computer Agent
+
+`computer.local` เข้าถึงได้เฉพาะ logical roots ที่กำหนดใน `minikun.computer.roots`
+โดย path ทุกค่าต้องเป็น relative path ภายใน root เท่านั้น ค่าเริ่มต้นเปิด `documents` และ `downloads`
+
+- อ่าน/list/search/inspect folder ได้ทันที โดยจำกัด depth, จำนวนไฟล์ และขนาดเนื้อหา
+- ปกปิด token, password และ secret ก่อนส่งเนื้อหาเข้า model
+- ไม่อ่าน hidden path, environment configuration file, key store หรือ symbolic link ที่ออกนอก root
+- write/replace/move/recoverable trash/open app/open URL/fixed workflow ต้อง preview และยืนยันในข้อความถัดไป
+- ไม่รองรับ hard delete หรือ shell command จาก model
+- application และ workflow ต้องอยู่ใน allowlist ของ `application.properties`
+- audit เก็บ operation/target/status แต่ไม่เก็บเนื้อหาไฟล์หรือ clipboard
 
 ผลการส่งทุกครั้งถูกเก็บใน `minikun_notification_delivery` และเรียกดูได้ผ่าน
 `GET /v1/notifications` โดยกรอง `source_type`, `source_id`, `status` และ `limit` ได้ เช่น:
@@ -438,7 +451,8 @@ cd /Volumes/minikun/homelab/java
 ./minikun_agent/deploy/deploy-minikun-agent.sh
 ```
 
-ตัวรัน production อยู่ที่ [`script/minikun-agent.sh`](../script/minikun-agent.sh) โดยจะอ่าน `.env` จาก root workspace และใช้ค่าหลักดังนี้:
+สคริปต์ deploy จะสร้างตัวรัน production ไว้ใน `~/Library/Application Support/Minikun/java/script`
+และรับค่ารันไทม์จาก `application.properties`, LaunchAgent plist หรือ system environment โดยใช้ค่าหลักดังนี้:
 
 - Java binary: `program/jdk/Contents/Home/bin/java` หรือค่าจาก `JAVA_BIN`
 - JAR: `target/minikun_agent-1.0.0.jar`

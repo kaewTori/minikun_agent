@@ -402,6 +402,10 @@ public class ChatService {
                     ? callChatModel(context.prompt(), "chat_model", transaction.requestId(), context.conversationId())
                     : callModel(context.prompt(), context.conversationId(), context.ownerId(), transaction.requestId());
             String content = response.getResult().getOutput().getText();
+            if (!hasText(content)) {
+                log.warn("process=model_response event=blank request_id={}", transaction.requestId());
+                content = "ขออภัยครับ โมเดลยังไม่ได้ส่งคำตอบที่สมบูรณ์ กรุณาลองสั่งอีกครั้งครับ";
+            }
             if (context.persistConversation()) {
                 conversationMemoryService.append(context.conversationId(), new ChatMessage("assistant", content));
                 log.info("process=conversation event=assistant_message_persisted");

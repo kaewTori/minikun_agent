@@ -128,3 +128,17 @@ CREATE TABLE IF NOT EXISTS minikun_guardian_alert_state (
     consecutive_issues INTEGER NOT NULL DEFAULT 0,
     last_notified_at TIMESTAMPTZ
 );
+
+CREATE TABLE IF NOT EXISTS minikun_computer_audit (
+    id UUID PRIMARY KEY,
+    owner_id VARCHAR(255) NOT NULL,
+    conversation_id VARCHAR(255) NOT NULL,
+    operation VARCHAR(64) NOT NULL,
+    target TEXT NOT NULL DEFAULT '',
+    status VARCHAR(32) NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL,
+    detail TEXT NOT NULL DEFAULT ''
+);
+
+CREATE INDEX IF NOT EXISTS idx_minikun_computer_audit_owner
+    ON minikun_computer_audit (owner_id, created_at DESC);

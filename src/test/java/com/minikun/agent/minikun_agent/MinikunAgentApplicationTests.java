@@ -117,6 +117,7 @@ class MinikunAgentApplicationTests {
 		org.junit.jupiter.api.Assertions.assertTrue(names.contains("service.health"));
 		org.junit.jupiter.api.Assertions.assertTrue(names.contains("system.health"));
 		org.junit.jupiter.api.Assertions.assertTrue(names.contains("homelab.guardian"));
+		org.junit.jupiter.api.Assertions.assertTrue(names.contains("computer.local"));
 	}
 
 	@Test

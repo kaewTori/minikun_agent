@@ -90,6 +90,10 @@ import com.minikun.guardian.HomelabGuardianScheduler;
 import com.minikun.tools.HomelabGuardianTool;
 import com.minikun.tools.GuardianConfirmationRouter;
 import com.minikun.tools.HomelabGuardianRouter;
+import com.minikun.computer.ComputerConfiguration;
+import com.minikun.tools.LocalComputerTool;
+import com.minikun.tools.ComputerConfirmationRouter;
+import com.minikun.tools.LocalComputerRouter;
 
 @SpringBootApplication
 @EnableScheduling
@@ -108,6 +112,7 @@ import com.minikun.tools.HomelabGuardianRouter;
 		ContextRuntimeConfiguration.class,
 		VisionInputService.class,
 		GuardianConfiguration.class,
+		ComputerConfiguration.class,
 		HomelabGuardianScheduler.class,
 		MemoryManagementService.class, MemoryManagementController.class,
 		WeatherConfiguration.class,
@@ -122,6 +127,7 @@ import com.minikun.tools.HomelabGuardianRouter;
 		PlannerManageTool.class, CalendarManageTool.class, MemoryManageTool.class,
 		ServiceHealthTool.class, SystemHealthTool.class,
 		HomelabGuardianTool.class, HomelabGuardianRouter.class, GuardianConfirmationRouter.class,
+		LocalComputerTool.class, LocalComputerRouter.class, ComputerConfirmationRouter.class,
 		PlannerConfirmationRouter.class, RelativeReminderToolRouter.class, AbsoluteReminderToolRouter.class,
 		ReminderContextToolRouter.class,
 		JdbcPlannerConfirmationStore.class, PlannerConfirmationService.class,

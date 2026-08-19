@@ -230,6 +230,20 @@ class ChatServiceChatOrchestrationTest {
     }
 
     @Test
+    void blankModelResponseReturnsSafeMessageInsteadOfHttpFailure() {
+        ChatModel chatModel = mock(ChatModel.class);
+        ConversationMemoryService conversation = mock(ConversationMemoryService.class);
+        when(conversation.load(any())).thenReturn(List.of());
+        when(chatModel.call(any(Prompt.class))).thenReturn(response(""));
+
+        ChatCompletionResponse result = service(chatModel, conversation)
+                .chatCompletion(request(), new ConversationId("blank-response"));
+
+        assertTrue(result.choices().getFirst().message().content().contains("ยังไม่ได้ส่งคำตอบที่สมบูรณ์"));
+        verify(conversation, org.mockito.Mockito.times(2)).append(any(), any());
+    }
+
+    @Test
     void blockingUsesConfiguredTinyGradProvider() {
         ChatModelProvider tinyGradProvider = mock(ChatModelProvider.class);
         ConversationMemoryService conversation = mock(ConversationMemoryService.class);
