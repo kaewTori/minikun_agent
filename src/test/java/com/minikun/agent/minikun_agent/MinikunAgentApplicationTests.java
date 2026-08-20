@@ -1,6 +1,7 @@
 package com.minikun.agent.minikun_agent;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -37,7 +38,8 @@ import org.springframework.http.MediaType;
 	"spring.autoconfigure.exclude=org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration,org.springframework.ai.model.chat.memory.repository.jdbc.autoconfigure.JdbcChatMemoryRepositoryAutoConfiguration",
 	"minikun.memory.persistence.enabled=false",
 	"minikun.planner.enabled=false",
-	"minikun.task.enabled=false"
+	"minikun.task.enabled=false",
+	"minikun.personal-knowledge.enabled=false"
 })
 @AutoConfigureMockMvc
 @Import(TestChatMemoryConfiguration.class)
@@ -85,6 +87,35 @@ class MinikunAgentApplicationTests {
 	}
 
 	@Test
+	void contextWiresOwnerScopedAdaptiveCompanionApi() throws Exception {
+		org.junit.jupiter.api.Assertions.assertNotNull(
+				applicationContext.getBean(com.minikun.personality.learning.AdaptivePreferenceLearningService.class));
+
+		mockMvc.perform(get("/v1/adaptation").param("owner_id", "test-owner"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.ownerId").value("test-owner"))
+				.andExpect(jsonPath("$.enabled").value(true))
+				.andExpect(jsonPath("$.activePreferences").isArray())
+				.andExpect(jsonPath("$.evidence").isArray());
+
+		mockMvc.perform(post("/v1/adaptation/feedback")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+						{"owner_id":"test-owner","dimension":"response_length",
+						 "value":"concise","positive":true}
+						"""))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.activePreferences[0].key").value("adaptive.response_length"))
+				.andExpect(jsonPath("$.activePreferences[0].value").value("concise"));
+
+		mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+				.delete("/v1/adaptation").param("owner_id", "test-owner"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.deletedSignals").value(1))
+				.andExpect(jsonPath("$.deletedPreferences").value(1));
+	}
+
+	@Test
 	void contextWiresVisionInputAndRejectsUnsupportedImageThroughHttp() throws Exception {
 		org.junit.jupiter.api.Assertions.assertNotNull(
 				applicationContext.getBean(com.minikun.vision.VisionInputService.class));
@@ -104,6 +135,31 @@ class MinikunAgentApplicationTests {
 	}
 
 	@Test
+	void contextWiresLocalVoiceStatusWithoutExposingAudioStorage() throws Exception {
+		org.junit.jupiter.api.Assertions.assertNotNull(
+				applicationContext.getBean(com.minikun.voice.VoiceService.class));
+		org.junit.jupiter.api.Assertions.assertNotNull(
+				applicationContext.getBean(com.minikun.voice.VoiceHealthIndicator.class));
+
+		mockMvc.perform(get("/v1/audio/status"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.enabled").value(true))
+				.andExpect(jsonPath("$.localOnly").value(true))
+				.andExpect(jsonPath("$.storesAudio").value(false))
+				.andExpect(jsonPath("$.defaultVoice").value("minikun"));
+	}
+
+	@Test
+	void voiceTranscriptionRejectsSpoofedAudioBeforeInvokingRuntime() throws Exception {
+		org.springframework.mock.web.MockMultipartFile file = new org.springframework.mock.web.MockMultipartFile(
+				"file", "voice.wav", "audio/wav", "not-a-wave".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+
+		mockMvc.perform(multipart("/v1/audio/transcriptions").file(file))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.error.code").value("invalid_audio"));
+	}
+
+	@Test
 	void contextRegistersNativeCapabilityTools() {
 		Set<String> names = toolRegistry.definitions().stream()
 				.map(com.minikun.tools.ToolDefinition::name)
@@ -118,6 +174,20 @@ class MinikunAgentApplicationTests {
 		org.junit.jupiter.api.Assertions.assertTrue(names.contains("system.health"));
 		org.junit.jupiter.api.Assertions.assertTrue(names.contains("homelab.guardian"));
 		org.junit.jupiter.api.Assertions.assertTrue(names.contains("computer.local"));
+		org.junit.jupiter.api.Assertions.assertTrue(names.contains("communication.assist"));
+	}
+
+	@Test
+	void contextWiresDraftOnlyCommunicationAssistantStatus() throws Exception {
+		org.junit.jupiter.api.Assertions.assertNotNull(
+				applicationContext.getBean(com.minikun.communication.CommunicationService.class));
+
+		mockMvc.perform(get("/v1/communication/status"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.enabled").value(true))
+				.andExpect(jsonPath("$.storesContent").value(false))
+				.andExpect(jsonPath("$.sendSupported").value(false))
+				.andExpect(jsonPath("$.actions[0]").value("draft"));
 	}
 
 	@Test

@@ -7,6 +7,7 @@ public class KnowledgeSelectionProperties {
     private SourceProperties memory = SourceProperties.unbounded();
     private SourceProperties search = SourceProperties.unbounded();
     private SourceProperties browser = SourceProperties.unbounded();
+    private SourceProperties personal = SourceProperties.unbounded();
 
     public SourceProperties getMemory() {
         return memory;
@@ -32,8 +33,17 @@ public class KnowledgeSelectionProperties {
         this.browser = browser;
     }
 
+    public SourceProperties getPersonal() {
+        return personal;
+    }
+
+    public void setPersonal(SourceProperties personal) {
+        this.personal = personal;
+    }
+
     public KnowledgeSelectionPolicy toPolicy() {
-        return new KnowledgeSelectionPolicy(memory.toPolicy(), search.toPolicy(), browser.toPolicy());
+        return new KnowledgeSelectionPolicy(
+                memory.toPolicy(), search.toPolicy(), browser.toPolicy(), personal.toPolicy());
     }
 
     public static class SourceProperties {

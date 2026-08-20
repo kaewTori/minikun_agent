@@ -8,6 +8,7 @@ import java.util.Objects;
 /** Higher values are retained longer when optional context is selected. */
 public final class DefaultContextSourcePriorityPolicy implements ContextSourcePriorityPolicy {
     private static final Map<KnowledgeSource, Integer> DEFAULT_PRIORITIES = Map.of(
+            KnowledgeSource.PERSONAL, 4,
             KnowledgeSource.MEMORY, 3,
             KnowledgeSource.SEARCH, 2,
             KnowledgeSource.BROWSER, 1);

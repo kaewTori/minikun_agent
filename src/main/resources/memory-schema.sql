@@ -40,3 +40,17 @@ CREATE TABLE IF NOT EXISTS minikun_user_preference (
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (owner_id, preference_key)
 );
+
+CREATE TABLE IF NOT EXISTS minikun_adaptation_signal (
+    owner_id VARCHAR(255) NOT NULL,
+    dimension VARCHAR(64) NOT NULL,
+    candidate_value VARCHAR(64) NOT NULL,
+    observations INTEGER NOT NULL DEFAULT 0,
+    explicit_observations INTEGER NOT NULL DEFAULT 0,
+    score DOUBLE PRECISION NOT NULL DEFAULT 0.0,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (owner_id, dimension, candidate_value)
+);
+
+CREATE INDEX IF NOT EXISTS idx_minikun_adaptation_owner_updated
+    ON minikun_adaptation_signal (owner_id, updated_at DESC);

@@ -69,8 +69,15 @@ public final class SpringAiToolCallingRuntime {
         // OllamaChatModel casts chat options to OllamaChatOptions. The generic
         // DefaultToolCallingChatOptions is not compatible with that adapter,
         // even though both implement ToolCallingChatOptions.
-        OllamaChatOptions.Builder optionsBuilder = OllamaChatOptions.builder();
-        copyChatOptions(prompt.getOptions(), optionsBuilder);
+        OllamaChatOptions.Builder optionsBuilder;
+        if (prompt.getOptions() instanceof OllamaChatOptions ollamaOptions) {
+            // Preserve every request-scoped Ollama option (especially numCtx). Rebuilding
+            // from the generic ChatOptions view silently resets Ollama-specific settings.
+            optionsBuilder = ollamaOptions.mutate();
+        } else {
+            optionsBuilder = OllamaChatOptions.builder();
+            copyChatOptions(prompt.getOptions(), optionsBuilder);
+        }
         ToolCallingChatOptions options = optionsBuilder
                 .toolCallbacks(callbacks)
                 .toolContext(Map.of("conversationId", conversationId.value(), "ownerId", ownerId))
@@ -172,10 +179,6 @@ public final class SpringAiToolCallingRuntime {
                 .temperature(source.getTemperature())
                 .topK(source.getTopK())
                 .topP(source.getTopP());
-        if (source instanceof OllamaChatOptions sourceOllama
-                && target instanceof OllamaChatOptions.Builder targetOllama) {
-            targetOllama.thinkOption(sourceOllama.getThinkOption());
-        }
     }
 
     private boolean hasToolCalls(ChatResponse response) {

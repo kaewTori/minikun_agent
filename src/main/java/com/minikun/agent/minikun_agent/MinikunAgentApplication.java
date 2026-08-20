@@ -94,6 +94,12 @@ import com.minikun.computer.ComputerConfiguration;
 import com.minikun.tools.LocalComputerTool;
 import com.minikun.tools.ComputerConfirmationRouter;
 import com.minikun.tools.LocalComputerRouter;
+import com.minikun.voice.VoiceConfiguration;
+import com.minikun.voice.VoiceController;
+import com.minikun.voice.VoiceExceptionHandler;
+import com.minikun.knowledge.PersonalKnowledgeConfiguration;
+import com.minikun.personality.config.PersonalityConfiguration;
+import com.minikun.communication.CommunicationConfiguration;
 
 @SpringBootApplication
 @EnableScheduling
@@ -113,6 +119,10 @@ import com.minikun.tools.LocalComputerRouter;
 		VisionInputService.class,
 		GuardianConfiguration.class,
 		ComputerConfiguration.class,
+		VoiceConfiguration.class, VoiceController.class, VoiceExceptionHandler.class,
+		PersonalKnowledgeConfiguration.class,
+		PersonalityConfiguration.class,
+		CommunicationConfiguration.class,
 		HomelabGuardianScheduler.class,
 		MemoryManagementService.class, MemoryManagementController.class,
 		WeatherConfiguration.class,

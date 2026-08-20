@@ -27,4 +27,19 @@ class PersonalUserModelTest {
         assertTrue(prompt.contains("[goal] กำลังทำ homelab"));
         assertTrue(prompt.contains("background context"));
     }
+
+    @Test
+    void rendersLearnedStyleAsOverridableAdaptiveDefaults() {
+        var model = new PersonalUserModel("owner-a", UserProfile.EMPTY,
+                List.of(
+                        new Preference("owner-a", "food", "ไม่เผ็ด", 1, Instant.now()),
+                        new Preference("owner-a", "adaptive.response_length", "concise", .9, Instant.now())),
+                List.of(), Instant.now());
+
+        String prompt = model.promptContent();
+
+        assertTrue(prompt.contains("Preferences:\n- food: ไม่เผ็ด"));
+        assertTrue(prompt.contains("Adaptive response defaults:\n- response_length: concise"));
+        assertTrue(prompt.contains("current request always wins"));
+    }
 }

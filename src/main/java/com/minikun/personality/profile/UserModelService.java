@@ -6,6 +6,7 @@ import com.minikun.personality.model.PersonalUserModel;
 import com.minikun.personality.model.Preference;
 import com.minikun.personality.model.UserProfile;
 import com.minikun.personality.preference.PreferenceStore;
+import com.minikun.personality.learning.AdaptationSignalStore;
 import com.minikun.task.PersonalTask;
 import com.minikun.task.TaskService;
 import java.time.Clock;
@@ -35,6 +36,9 @@ public final class UserModelService {
 
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private TaskService taskService;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private AdaptationSignalStore adaptationSignalStore;
 
     public UserModelService(
             MemoryRepository memoryRepository,
@@ -89,8 +93,9 @@ public final class UserModelService {
         String owner = normalizeOwner(ownerId);
         int preferences = preferenceStore.deleteAll(owner);
         int memories = memoryRepository.deleteAllByOwner(owner);
+        int adaptationSignals = adaptationSignalStore == null ? 0 : adaptationSignalStore.deleteAll(owner);
         profileStore.save(new UserProfile(owner, "", "", "", ""));
-        return new ForgetResult(owner, preferences, memories, true);
+        return new ForgetResult(owner, preferences, memories, adaptationSignals, true);
     }
 
     private String normalizeOwner(String ownerId) {
@@ -101,6 +106,7 @@ public final class UserModelService {
     }
 
     public record ForgetResult(String ownerId, int deletedPreferences, int deletedMemories,
+            int deletedAdaptationSignals,
             boolean profileCleared) {
     }
 }

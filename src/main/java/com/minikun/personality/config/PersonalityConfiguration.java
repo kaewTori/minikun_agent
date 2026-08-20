@@ -10,10 +10,27 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.jdbc.core.JdbcTemplate;
 import com.minikun.personality.runtime.AdaptivePersonaRuntime;
+import com.minikun.personality.runtime.AdaptivePersonaService;
+import com.minikun.personality.learning.AdaptationSignalStore;
+import com.minikun.personality.learning.AdaptivePreferenceLearningService;
+import com.minikun.personality.learning.InMemoryAdaptationSignalStore;
+import com.minikun.personality.learning.JdbcAdaptationSignalStore;
+import com.minikun.personality.learning.ResponsePreferenceDetector;
+import com.minikun.personality.management.AdaptationController;
+import com.minikun.personality.management.AdaptationExceptionHandler;
+import com.minikun.personality.management.UserModelController;
+import com.minikun.personality.profile.UserModelService;
+import com.minikun.memory.MemoryRepository;
+import java.time.Clock;
+import java.time.Duration;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Import;
 
 @Configuration
+@Import({AdaptivePreferenceLearningService.class,
+        AdaptationController.class, AdaptationExceptionHandler.class})
 public class PersonalityConfiguration {
     @Bean
     AdaptivePersonaRuntime adaptivePersonaRuntime() { return new AdaptivePersonaRuntime(); }
@@ -27,10 +44,53 @@ public class PersonalityConfiguration {
     PreferenceStore preferenceStore() { return new InMemoryPreferenceStore(); }
 
     @Bean
+    @ConditionalOnMissingBean(JdbcTemplate.class)
+    AdaptationSignalStore adaptationSignalStore() { return new InMemoryAdaptationSignalStore(); }
+
+    @Bean
     @ConditionalOnBean(JdbcTemplate.class)
     UserProfileStore jdbcUserProfileStore(JdbcTemplate jdbc) { return new JdbcUserProfileStore(jdbc); }
 
     @Bean
     @ConditionalOnBean(JdbcTemplate.class)
     PreferenceStore jdbcPreferenceStore(JdbcTemplate jdbc) { return new JdbcPreferenceStore(jdbc); }
+
+    @Bean
+    @ConditionalOnBean(JdbcTemplate.class)
+    AdaptationSignalStore jdbcAdaptationSignalStore(JdbcTemplate jdbc) {
+        return new JdbcAdaptationSignalStore(jdbc);
+    }
+
+    @Bean
+    ResponsePreferenceDetector responsePreferenceDetector() { return new ResponsePreferenceDetector(); }
+
+    @Bean
+    @ConditionalOnBean(MemoryRepository.class)
+    UserModelService userModelService(
+            MemoryRepository memories,
+            UserProfileStore profiles,
+            PreferenceStore preferences,
+            Clock clock,
+            @Value("${minikun.user-model.maximum-memories:20}") int maximumMemories,
+            @Value("${minikun.user-model.memory-max-age:365d}") Duration memoryMaxAge,
+            @Value("${minikun.user-model.preference-max-age:365d}") Duration preferenceMaxAge,
+            @Value("${minikun.user-model.minimum-confidence:0.5}") double minimumConfidence) {
+        return new UserModelService(memories, profiles, preferences, clock, maximumMemories,
+                memoryMaxAge, preferenceMaxAge, minimumConfidence);
+    }
+
+    @Bean
+    @ConditionalOnBean(UserModelService.class)
+    AdaptivePersonaService adaptivePersonaService(
+            AdaptivePersonaRuntime runtime,
+            UserModelService userModelService,
+            AdaptivePreferenceLearningService learningService) {
+        return new AdaptivePersonaService(runtime, userModelService, learningService);
+    }
+
+    @Bean
+    @ConditionalOnBean(UserModelService.class)
+    UserModelController userModelController(UserModelService userModelService) {
+        return new UserModelController(userModelService);
+    }
 }

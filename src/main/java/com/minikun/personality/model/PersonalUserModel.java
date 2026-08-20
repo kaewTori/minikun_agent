@@ -4,7 +4,10 @@ import com.minikun.memory.model.Memory;
 import com.minikun.task.PersonalTask;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.stream.Collectors;
+import com.minikun.personality.learning.AdaptationDimensions;
 
 /**
  * A bounded, prompt-safe projection of the information Mini-kun knows about
@@ -58,8 +61,28 @@ public record PersonalUserModel(
             append(content, "timezone", profile.timezone());
         }
         if (!preferences.isEmpty()) {
-            content.append("Preferences:\n");
-            preferences.forEach(preference -> append(content, preference.key(), preference.value()));
+            List<Preference> explicitPreferences = preferences.stream()
+                    .filter(preference -> !preference.key().startsWith("adaptive."))
+                    .toList();
+            if (!explicitPreferences.isEmpty()) {
+                content.append("Preferences:\n");
+                explicitPreferences.forEach(preference -> append(content, preference.key(), preference.value()));
+            }
+            Map<String, String> adaptivePreferences = preferences.stream()
+                    .filter(preference -> preference.key().startsWith("adaptive."))
+                    .filter(preference -> AdaptationDimensions.supported(
+                            preference.key().substring("adaptive.".length()), preference.value()))
+                    .collect(Collectors.toMap(
+                            preference -> preference.key().substring("adaptive.".length()),
+                            Preference::value,
+                            (first, second) -> second,
+                            java.util.TreeMap::new));
+            if (!adaptivePreferences.isEmpty()) {
+                content.append("Adaptive response defaults:\n");
+                adaptivePreferences.forEach((key, value) -> append(content, key, value));
+                content.append("Apply adaptive defaults only when the current user request does not specify a "
+                        + "different style. The current request always wins.\n");
+            }
         }
         if (!memories.isEmpty()) {
             content.append("Long-term facts:\n");

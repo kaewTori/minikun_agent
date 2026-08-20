@@ -12,6 +12,7 @@ import com.minikun.memory.model.MemorySource;
 import com.minikun.personality.model.Preference;
 import com.minikun.personality.model.UserProfile;
 import com.minikun.personality.preference.InMemoryPreferenceStore;
+import com.minikun.personality.learning.InMemoryAdaptationSignalStore;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -60,11 +61,17 @@ class UserModelServiceTest {
                 memory("owner-a", "remove", NOW, .9), memory("owner-b", "keep", NOW, .9))));
         var service = new UserModelService(repository, profiles, preferences, Clock.fixed(NOW, ZoneOffset.UTC),
                 20, java.time.Duration.ofDays(365), java.time.Duration.ofDays(365), .5);
+        var adaptationSignals = new InMemoryAdaptationSignalStore();
+        adaptationSignals.record("owner-a", "language", "th", 1, true, .25, NOW);
+        org.springframework.test.util.ReflectionTestUtils.setField(
+                service, "adaptationSignalStore", adaptationSignals);
 
         var result = service.forget("owner-a");
 
         assertEquals(1, result.deletedPreferences());
         assertEquals(1, result.deletedMemories());
+        assertEquals(1, result.deletedAdaptationSignals());
+        assertTrue(adaptationSignals.findByOwner("owner-a").isEmpty());
         assertTrue(!profiles.find("owner-a").available());
         assertEquals(1, repository.findByOwner("owner-b", 20).size());
     }

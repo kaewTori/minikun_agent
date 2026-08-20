@@ -12,6 +12,7 @@ workspace_root="$(CDPATH= cd -- "$app_root/../.." && pwd)"
 local_root="$HOME/Library/Application Support/Minikun"
 local_app="$local_root/java/minikun_agent"
 local_script="$local_root/java/script"
+local_voice="$local_root/python/voice"
 label="com.minikun.agent"
 plist="$app_root/deploy/$label.plist"
 
@@ -21,8 +22,10 @@ cd "$app_root"
 mkdir -p \
   "$local_app/target" \
   "$local_script" \
+  "$local_voice" \
   "$local_root/config/minikun-agent/mcs" \
   "$local_root/logs" \
+  "$HOME/Documents/Minikun Knowledge" \
   "$HOME/Library/Logs/Minikun" \
   "$HOME/Library/LaunchAgents"
 
@@ -37,7 +40,18 @@ source_launcher="$workspace_root/java/script/minikun-agent.sh"
 # never reads an environment file.
 sed -n '1,7p;/^export MCS_ROOT/,$p' "$source_launcher" > "$local_script/minikun-agent.sh"
 chmod 700 "$local_script/minikun-agent.sh"
+cp "$app_root/voice/whisper_transcribe.py" "$local_voice/whisper_transcribe.py"
+chmod 700 "$local_voice/whisper_transcribe.py"
 ditto "$workspace_root/config/minikun-agent/mcs" "$local_root/config/minikun-agent/mcs"
+knowledge_readme="$HOME/Documents/Minikun Knowledge/README.md"
+if [ ! -f "$knowledge_readme" ]; then
+  cp "$app_root/deploy/knowledge/README.md" "$knowledge_readme"
+elif cmp -s "$app_root/deploy/knowledge/README.legacy.md" "$knowledge_readme"; then
+  # Migrate only the generated legacy onboarding document. Any user-edited
+  # knowledge README remains untouched.
+  cp "$knowledge_readme" "$knowledge_readme.legacy-backup"
+  cp "$app_root/deploy/knowledge/README.md" "$knowledge_readme"
+fi
 
 cp "$plist" "$HOME/Library/LaunchAgents/$label.plist"
 launchctl bootout "gui/$(id -u)/$label" 2>/dev/null || true

@@ -290,6 +290,7 @@ class ChatServiceChatOrchestrationTest {
         assertEquals(0.7, prompt.getValue().getOptions().getTemperature());
         assertEquals(200, prompt.getValue().getOptions().getMaxTokens());
         assertEquals(List.of("END"), prompt.getValue().getOptions().getStopSequences());
+        assertEquals(16_384, ((OllamaChatOptions) prompt.getValue().getOptions()).getNumCtx());
         assertEquals(new ChatCompletionResponse.Usage(12, 5, 17), response.usage());
         }
 

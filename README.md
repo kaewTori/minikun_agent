@@ -8,6 +8,10 @@
   - non-streaming JSON response
   - streaming ผ่าน Server-Sent Events (`stream: true`)
 - Embeddings API สำหรับข้อความเดี่ยวหรือ array ของข้อความ
+- Voice Companion แบบ local สำหรับ speech-to-text, text-to-speech และ voice turn ต่อเนื่อง
+- Personal Knowledge แบบ local สำหรับ index เอกสาร, hybrid retrieval และ citation ในบทสนทนา
+- Adaptive Companion ที่เรียนรู้ภาษา ความยาว รูปแบบ ระดับเทคนิค และโทนการตอบแบบ owner-scoped
+- Communication Assistant สำหรับ draft, rewrite, reply และ summarize โดยใช้โมเดลหลักแบบ draft-only
 - เก็บ short-term conversation history ด้วย Spring AI Chat Memory และ PostgreSQL
 - สกัด long-term memory จาก PostgreSQL และเรียกคืนเชิงความหมายด้วย embedding พร้อม lexical fallback
 - ประกอบ prompt ผ่าน Provider Composition System (PCS)
@@ -18,7 +22,7 @@
 - ส่ง language/category/time-range/safe-search options ไปยัง SearXNG พร้อม ranking และ URL deduplication
 - Actuator health และ metrics
 - คำสั่ง runtime และ diagnostics ที่จัดการในระดับ application
-- Native function tools: `time.get_current_time`, `weather.get_forecast`, `web.search`, `web.open_url`, `calculator.add`, `planner.manage`, `calendar.manage`, `task.manage`, `homelab.guardian` และ `computer.local`
+- Native function tools: `time.get_current_time`, `weather.get_forecast`, `web.search`, `web.open_url`, `calculator.add`, `planner.manage`, `calendar.manage`, `task.manage`, `homelab.guardian`, `computer.local`, `knowledge.personal` และ `communication.assist`
 - ผลลัพธ์จาก tool จะถูกส่งกลับเข้า prompt ของ MCS/PCS เพื่อให้โมเดลตอบต่อด้วยตัวตน บริบท และน้ำเสียงเดิมของมินิคุง
 - เก็บ reminder ใน PostgreSQL และส่ง notification ผ่าน ntfy พร้อม daily weather digest เวลา 07:00 (`Asia/Bangkok`)
 - เชื่อม private iCalendar feed จาก Google, Apple หรือ Outlook เพื่ออ่าน agenda และเตือนก่อนนัด
@@ -45,6 +49,9 @@ src/main/java/
 ├── api/                 OpenAI-compatible HTTP API และ conversation ID
 ├── conversation/        short-term conversation memory
 ├── memory/              long-term memory และ reflection
+├── knowledge/           personal document ingestion, indexing และ retrieval
+├── personality/         profile, preferences และ adaptive response learning
+├── communication/       draft/rewrite/reply/summarize แบบไม่ส่งออกภายนอก
 ├── pcs/                 Provider Composition System สำหรับสร้าง prompt
 ├── search/              search decision, query processing และ SearXNG
 ├── commands/            runtime commands
@@ -55,6 +62,7 @@ src/main/java/
 src/main/resources/
 ├── application.properties
 ├── memory-schema.sql
+├── personal-knowledge-schema.sql
 └── logback-spring.xml
 
 docs/
@@ -117,7 +125,7 @@ Actuator ที่เปิดให้เข้าถึงคือ `/actuator
 | `SPRING_DATASOURCE_PASSWORD` | ว่าง | PostgreSQL password |
 | `OLLAMA_BASE_URL` | `http://127.0.0.1:11434` | Ollama endpoint |
 | `SPRING_AI_OLLAMA_CHAT_OPTIONS_MODEL` | gemma model ใน properties | chat model หลัก |
-| `EMBEDDING_MODEL` | `nomic-embed-text` | embedding model |
+| `EMBEDDING_MODEL` | `qwen3-embedding:0.6b` | multilingual embedding model |
 | `OLLAMA_NUM_CTX` | `16384` | context window ของ Ollama |
 | `MINIKUN_MODEL_COOPERATION_ENABLED` | `true` | เปิด Ollama → TinyGrad precision pass |
 | `MINIKUN_MODEL_COOPERATION_MODE` | `hybrid` | `hybrid` แสดง Ollama ก่อนแล้วตรวจเบื้องหลัง, `blocking` รอตรวจให้เสร็จก่อนตอบ |
@@ -170,6 +178,10 @@ Actuator ที่เปิดให้เข้าถึงคือ `/actuator
 | `MINIKUN_WEATHER_ALERT_ZONE` | `Asia/Bangkok` | timezone ของ daily weather digest |
 | `MINIKUN_WEATHER_ALERT_TIME` | `07:00` | เวลาส่ง daily weather digest |
 
+Voice Companion กำหนดค่าผ่าน `minikun.voice.*` ใน `application.properties` โดยค่าเริ่มต้นใช้
+Whisper Large V3 Turbo Q4 ผ่าน MLX สำหรับถอดเสียงและเสียง `Kanya` ของ macOS สำหรับพูดภาษาไทย
+ไฟล์เสียงถูกจำกัดขนาด 10 MB และมีเฉพาะใน memory/temporary file ระหว่าง request เท่านั้น
+
 ในโหมด `hybrid` สามารถตรวจผล TinyGrad ตาม `conversation_id` ได้ที่
 `GET /v1/cooperation/reviews/{conversation_id}` โดยสถานะจะเป็น `PENDING`,
 `COMPLETED` หรือ `FAILED` ผลตรวจนี้ถูกเก็บแยกจาก conversation memory และเป็น in-memory
@@ -221,6 +233,11 @@ events.addEventListener("cooperative-review", event => {
 | `MINIKUN_CONTEXT_BUDGET_CHARACTERS` | `24000` | character budget สำหรับ prompt context |
 | `MINIKUN_TOKEN_BUDGET_RESERVED_OUTPUT_TOKENS` | `256` | output reserve ก่อนคำนวณ dynamic max-tokens |
 | `MINIKUN_MEMORY_MANAGEMENT_TOKEN` | ว่าง | token สำหรับป้องกัน API จัดการ memory |
+| `MINIKUN_ADAPTATION_MANAGEMENT_TOKEN` | ใช้ค่า memory token ถ้ามี | token สำหรับดู ให้ feedback และ reset Adaptive Companion |
+| `MINIKUN_COMMUNICATION_MANAGEMENT_TOKEN` | ใช้ค่า memory token ถ้ามี | token สำหรับ Communication Assistant API |
+
+โปรเจกต์นี้ไม่ใช้ไฟล์ `.env` การตั้งค่ารันไทม์ให้ใช้ `application.properties`, LaunchAgent plist
+หรือ system environment เท่านั้น
 
 Browser จะอ่านหลาย URL แบบ best-effort: URL ที่อ่านไม่ได้จะถูกบันทึกเป็น failure แต่ URL อื่นยังถูกส่งต่อให้ model ได้ ส่วน URL ที่ชี้ไปยัง localhost หรือ private address จะถูก block โดยค่าเริ่มต้นเพื่อป้องกัน SSRF; หากต้องการเปิด resource ภายในอย่างตั้งใจควรทำ allowlist แยกที่ browser worker/gateway แทนการปิด policy ทั้งหมด
 
@@ -298,10 +315,80 @@ curl http://127.0.0.1:8080/v1/models
 curl -X POST http://127.0.0.1:8080/v1/embeddings \
   -H 'Content-Type: application/json' \
   -d '{
-    "model": "nomic-embed-text",
+    "model": "qwen3-embedding:0.6b",
     "input": ["ข้อความแรก", "ข้อความที่สอง"]
   }'
 ```
+
+### Voice Companion
+
+ตรวจสถานะ provider:
+
+```sh
+curl http://127.0.0.1:8080/v1/audio/status
+```
+
+ถอดเสียงภาษาไทยแบบ local:
+
+```sh
+curl -X POST http://127.0.0.1:8080/v1/audio/transcriptions \
+  -F 'file=@voice.wav;type=audio/wav' \
+  -F 'language=th'
+```
+
+สร้างเสียงตอบกลับเป็น WAV:
+
+```sh
+curl -X POST http://127.0.0.1:8080/v1/audio/speech \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"minikun-tts","input":"สวัสดีครับ","voice":"minikun","response_format":"wav"}' \
+  --output minikun.wav
+```
+
+ส่งเสียงเข้า conversation เดิมและรับทั้งข้อความกับเสียง Base64 กลับมา:
+
+```sh
+curl -X POST http://127.0.0.1:8080/v1/audio/voice-turns \
+  -F 'file=@voice.wav;type=audio/wav' \
+  -F 'language=th' \
+  -F 'conversation_id=voice-demo' \
+  -F 'voice=minikun'
+```
+
+รูปแบบ input ที่รองรับคือ WAV, AIFF, MP3, M4A, MP4 และ CAF ส่วน output รองรับ WAV/AIFF
+ระบบใช้ executable และ model path ที่กำหนดตายตัว ไม่รับ shell command จาก request และไม่บันทึก
+audio หรือ transcript ใน voice layer; ข้อความจาก `voice-turns` จะเข้าสู่ conversation memory ตามกติกา chat ปกติ
+
+### Personal Knowledge
+
+ค่าเริ่มต้นเปิด root ชื่อ `knowledge` ที่ `~/Documents/Minikun Knowledge` การ index รับเฉพาะ
+relative path ภายใน root นี้:
+
+```sh
+curl -X POST http://127.0.0.1:8080/v1/knowledge/index \
+  -H 'Content-Type: application/json' \
+  -d '{"owner_id":"default","root":"knowledge","path":"","recursive":true,"force":false}'
+```
+
+ตรวจสถานะและค้นหาโดยตรง:
+
+```sh
+curl 'http://127.0.0.1:8080/v1/knowledge/status?owner_id=default'
+curl -X POST http://127.0.0.1:8080/v1/knowledge/search \
+  -H 'Content-Type: application/json' \
+  -d '{"owner_id":"default","query":"สถาปัตยกรรมมินิคุง","limit":5}'
+curl 'http://127.0.0.1:8080/v1/knowledge/sources?owner_id=default&limit=100'
+```
+
+ระบบแบ่งเอกสารเป็น chunk, เก็บ SHA-256 เพื่อข้ามไฟล์ที่ไม่เปลี่ยน และใช้ `qwen3-embedding:0.6b`
+ผ่าน Ollama สำหรับ semantic retrieval พร้อม lexical fallback หาก embedding ใช้งานไม่ได้ ผลค้นหาทุกชิ้นมี
+`knowledge://` citation และ top results จะถูกเรียกคืนเข้า knowledge pipeline ของบทสนทนาอัตโนมัติ
+
+รองรับไฟล์ UTF-8 เช่น Markdown, text, JSON, YAML, CSV, properties, source code, HTML, SQL,
+log และ iCalendar โดยจำกัดเริ่มต้น 2 MB ต่อไฟล์ ไม่ตาม symlink และไม่อ่าน hidden file, `.env`
+หรือไฟล์ credential การลบ source ทำผ่าน `DELETE /v1/knowledge/sources/{id}?owner_id=default`
+และลบเฉพาะ index/chunk ใน PostgreSQL ไม่ลบไฟล์ต้นฉบับ หากกำหนด management token ให้ส่ง
+`X-Minikun-Knowledge-Token`
 
 ### Memory management
 
@@ -337,6 +424,56 @@ curl -X DELETE -H "X-Minikun-Memory-Token: $MINIKUN_MEMORY_MANAGEMENT_TOKEN" \
 `MINIKUN_USER_MODEL_MAXIMUM_MEMORIES` และ `MINIKUN_USER_MODEL_MINIMUM_CONFIDENCE`
 ใช้ควบคุม lifecycle ของข้อมูลที่ส่งเข้า prompt การแก้ memory รายการเดิมทำได้ผ่าน
 `PUT /v1/memory/{id}` หรือ `memory.manage` action `update` โดยยังจำกัดตาม owner เดิม
+
+### Adaptive Companion
+
+ระบบเรียนรู้เฉพาะ response style ที่กำหนดไว้ล่วงหน้า โดยไม่เก็บข้อความแชตดิบ:
+
+- `language`: `th`, `en`
+- `response_length`: `concise`, `detailed`
+- `response_format`: `bullets`, `steps`, `prose`
+- `explanation_level`: `simple`, `technical`
+- `tone`: `casual`, `professional`
+
+พฤติกรรมทั่วไปต้องพบอย่างน้อย 3 ครั้งก่อนถูกเลื่อนเป็น preference ส่วนคำสั่งชัดเจน เช่น
+“ต่อไปตอบสั้นๆ” ใช้ได้ทันที ค่าที่เรียนรู้เป็นเพียง default และข้อความปัจจุบันมีสิทธิ์เหนือกว่าเสมอ
+PostgreSQL เก็บเฉพาะจำนวน observation, คะแนน, dimension และ candidate value
+
+ตรวจสอบ evidence กับ active preferences, ส่ง feedback หรือ reset เฉพาะสิ่งที่เรียนรู้:
+
+```sh
+curl 'http://127.0.0.1:8080/v1/adaptation?owner_id=default'
+curl -X POST http://127.0.0.1:8080/v1/adaptation/feedback \
+  -H 'Content-Type: application/json' \
+  -d '{"owner_id":"default","dimension":"response_length","value":"concise","positive":true}'
+curl -X DELETE 'http://127.0.0.1:8080/v1/adaptation?owner_id=default'
+```
+
+การ reset ไม่ลบ profile, memory หรือ preference ที่ผู้ใช้ตั้งเอง หากกำหนด management token ให้ส่ง
+`X-Minikun-Adaptation-Token` ส่วนการล้าง `/v1/user-model` จะล้าง adaptation evidence ด้วย
+เพื่อป้องกัน learned preference ถูกสร้างกลับมา
+
+### Communication Assistant
+
+มินิคุงช่วยร่าง (`draft`), ปรับข้อความ (`rewrite`), ตอบกลับ (`reply`) และสรุป
+(`summarize`) ได้ผ่าน native tool `communication.assist` หรือ REST API โดยเรียกโมเดลหลักที่ active อยู่
+ข้อมูล `content` และ `context` ถูกส่งเข้าโมเดลในฐานะ quoted source material, ไม่ถูกบันทึกเพิ่ม และไม่มี
+ความสามารถส่งอีเมล โพสต์ หรือข้อความออกไปเอง ผลลัพธ์ทุกครั้งจึงมี `draftOnly: true` และ
+`sendSupported: false` ระบบจะตัดรูปแบบ embedded instruction ที่ตรวจพบออกจาก source ก่อนเข้าโมเดล
+และเพิ่ม warning ในผลลัพธ์เพื่อให้ตรวจสอบได้
+
+```sh
+curl http://127.0.0.1:8080/v1/communication/status
+curl -X POST http://127.0.0.1:8080/v1/communication/assist \
+  -H 'Content-Type: application/json' \
+  -d '{"owner_id":"default","action":"draft","content":"ขอนัดคุยงานวันศุกร์",\
+       "audience":"ทีมงาน","channel":"email","tone":"professional",\
+       "language":"th","max_length":800}'
+```
+
+รองรับ channel `general`, `email`, `chat`, `sms`, `social`, `document` และ tone
+`default`, `casual`, `professional`, `warm`, `concise`, `persuasive`, `empathetic`
+หากกำหนด management token ให้ส่ง header `X-Minikun-Communication-Token`
 
 ## Memory และ prompt composition
 
@@ -406,7 +543,7 @@ briefing จะใช้ข้อมูลส่วนที่เหลือ�
 ### Local Computer Agent
 
 `computer.local` เข้าถึงได้เฉพาะ logical roots ที่กำหนดใน `minikun.computer.roots`
-โดย path ทุกค่าต้องเป็น relative path ภายใน root เท่านั้น ค่าเริ่มต้นเปิด `documents` และ `downloads`
+โดย path ทุกค่าต้องเป็น relative path ภายใน root เท่านั้น รายชื่อ root ปัจจุบันกำหนดใน `application.properties`
 
 - อ่าน/list/search/inspect folder ได้ทันที โดยจำกัด depth, จำนวนไฟล์ และขนาดเนื้อหา
 - ปกปิด token, password และ secret ก่อนส่งเนื้อหาเข้า model
@@ -459,6 +596,15 @@ cd /Volumes/minikun/homelab/java
 - profile: `prod`
 - heap: `512m` ถึง `2g`
 - log: `logs/application.log` และ `logs/transactions.log`
+
+ติดตั้ง Voice runtime ครั้งแรกก่อน deploy (ดาวน์โหลด Whisper Q4 ประมาณ 464 MB และติดตั้ง
+`mlx-whisper` ใน venv แยกใต้ Application Support):
+
+```sh
+./minikun_agent/deploy/install-voice-runtime.sh
+```
+
+การ deploy ครั้งถัดไปจะคัดลอก Python adapter รุ่นล่าสุดให้ แต่ไม่ดาวน์โหลดโมเดลซ้ำ
 
 หาก LaunchAgent รันจาก external volume แล้วพบ `Operation not permitted` ให้ตรวจสอบสิทธิ์ Privacy & Security ของ macOS สำหรับ process ที่ launchd เรียกใช้งาน
 

@@ -30,7 +30,7 @@ public final class UserModelController {
 
     @GetMapping
     public PersonalUserModel get(
-            @RequestParam(defaultValue = "default") String ownerId,
+            @RequestParam(name = "owner_id", defaultValue = "default") String ownerId,
             @RequestHeader(value = "X-Minikun-Memory-Token", required = false) String token) {
         authorize(token);
         return service.snapshot(ownerId);
@@ -38,7 +38,7 @@ public final class UserModelController {
 
     @DeleteMapping
     public Map<String, Object> forget(
-            @RequestParam(defaultValue = "default") String ownerId,
+            @RequestParam(name = "owner_id", defaultValue = "default") String ownerId,
             @RequestHeader(value = "X-Minikun-Memory-Token", required = false) String token) {
         authorize(token);
         UserModelService.ForgetResult result = service.forget(ownerId);
@@ -46,6 +46,7 @@ public final class UserModelController {
                 "owner_id", result.ownerId(),
                 "deleted_preferences", result.deletedPreferences(),
                 "deleted_memories", result.deletedMemories(),
+                "deleted_adaptation_signals", result.deletedAdaptationSignals(),
                 "profile_cleared", result.profileCleared());
     }
 

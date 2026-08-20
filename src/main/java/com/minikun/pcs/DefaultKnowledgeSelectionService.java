@@ -53,14 +53,25 @@ public final class DefaultKnowledgeSelectionService implements KnowledgeSelectio
     }
 
         @Override
-        public KnowledgeSelection select(
+    public KnowledgeSelection select(
             String userRequest,
             KnowledgeContext memoryKnowledge,
+            KnowledgeContext searchKnowledge,
+            List<KnowledgeCandidate> browserCandidates) {
+        return select(userRequest, memoryKnowledge, KnowledgeContext.empty(), searchKnowledge, browserCandidates);
+    }
+
+    @Override
+    public KnowledgeSelection select(
+            String userRequest,
+            KnowledgeContext memoryKnowledge,
+            KnowledgeContext personalKnowledge,
             KnowledgeContext searchKnowledge,
             List<KnowledgeCandidate> browserCandidates) {
         KnowledgeSelection selection = select(
             userRequest,
             candidatesFrom(memoryKnowledge, KnowledgeSource.MEMORY),
+            candidatesFrom(personalKnowledge, KnowledgeSource.PERSONAL),
             candidatesFrom(searchKnowledge, KnowledgeSource.SEARCH),
             browserCandidates);
         return new KnowledgeSelection(selection.selectedCandidates(), selection.rankingFallback(),
@@ -73,10 +84,22 @@ public final class DefaultKnowledgeSelectionService implements KnowledgeSelectio
             List<KnowledgeCandidate> memoryCandidates,
             List<KnowledgeCandidate> searchCandidates,
             List<KnowledgeCandidate> browserCandidates) {
+        return select(userRequest, memoryCandidates, List.of(), searchCandidates, browserCandidates);
+    }
+
+    private KnowledgeSelection select(
+            String userRequest,
+            List<KnowledgeCandidate> memoryCandidates,
+            List<KnowledgeCandidate> personalCandidates,
+            List<KnowledgeCandidate> searchCandidates,
+            List<KnowledgeCandidate> browserCandidates) {
         String normalizedRequest = Objects.requireNonNullElse(userRequest, "");
         SourceSelection memory = selectSource(
                 normalizedRequest, copyCandidates(memoryCandidates), KnowledgeSource.MEMORY,
                 policy.memory());
+        SourceSelection personal = selectSource(
+                normalizedRequest, copyCandidates(personalCandidates), KnowledgeSource.PERSONAL,
+                policy.personal());
         SourceSelection search = selectSource(
                 normalizedRequest, copyCandidates(searchCandidates), KnowledgeSource.SEARCH,
                 policy.search());
@@ -86,12 +109,14 @@ public final class DefaultKnowledgeSelectionService implements KnowledgeSelectio
                 applyPolicy(copyCandidates(browserCandidates), policy.browser()), false);
 
         List<KnowledgeCandidate> selected = new ArrayList<>(
-                memory.candidates().size() + search.candidates().size() + browser.candidates().size());
+                memory.candidates().size() + personal.candidates().size()
+                        + search.candidates().size() + browser.candidates().size());
         selected.addAll(memory.candidates());
+        selected.addAll(personal.candidates());
         selected.addAll(search.candidates());
         selected.addAll(browser.candidates());
         return new KnowledgeSelection(List.copyOf(selected),
-                memory.fallback() || search.fallback() || browser.fallback());
+                memory.fallback() || personal.fallback() || search.fallback() || browser.fallback());
     }
 
     private SourceSelection selectSource(
