@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.LinkedHashMap;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -20,38 +21,61 @@ import org.springframework.ai.model.tool.ToolCallingManager;
 import org.springframework.ai.model.tool.ToolExecutionResult;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.stereotype.Component;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 
 import com.minikun.agent.minikun_agent.conversation.ConversationId;
 import com.minikun.model.ActiveChatModelProvider;
 import com.minikun.model.ChatModelProvider;
 import com.minikun.tools.Tool;
 import com.minikun.tools.ToolExecutor;
+import com.minikun.agent.execution.AgentExecutionTracker;
+import com.minikun.agent.execution.AgentPlanningService;
+import com.minikun.agent.execution.AgentRun;
 
 @Component
 public final class SpringAiToolCallingRuntime {
-    private static final int MAX_TOOL_CONTINUATIONS = 4;
     private static final Logger LOGGER = LoggerFactory.getLogger(SpringAiToolCallingRuntime.class);
 
     private final ChatModelProvider chatModelProvider;
     private final ToolCallingManager toolCallingManager;
     private final List<ToolCallback> callbacks;
     private final ObjectMapper objectMapper;
+    private final AgentPlanningService planningService;
+    private final AgentExecutionTracker executionTracker;
+    private final int maxToolContinuations;
+
+    @Autowired
+    public SpringAiToolCallingRuntime(
+            ActiveChatModelProvider activeChatModelProvider,
+            List<Tool> tools,
+            ToolExecutor toolExecutor,
+            ObjectMapper objectMapper,
+            AgentPlanningService planningService,
+            AgentExecutionTracker executionTracker,
+            @Value("${minikun.agent.execution.max-tool-continuations:8}") int maxToolContinuations) {
+        this.chatModelProvider = Objects.requireNonNull(
+                activeChatModelProvider, "active chat model provider must not be null").get();
+        this.objectMapper = Objects.requireNonNull(objectMapper, "object mapper must not be null");
+        this.planningService = Objects.requireNonNull(planningService, "planning service must not be null");
+        this.executionTracker = Objects.requireNonNull(executionTracker, "execution tracker must not be null");
+        this.maxToolContinuations = Math.max(1, Math.min(maxToolContinuations, 20));
+        Objects.requireNonNull(tools, "tools must not be null");
+        this.callbacks = tools.stream()
+                .sorted((left, right) -> left.definition().name().compareTo(right.definition().name()))
+                .map(tool -> new SpringAiToolCallback(tool, toolExecutor, objectMapper, executionTracker))
+                .map(callback -> (ToolCallback) callback)
+                .toList();
+        this.toolCallingManager = ToolCallingManager.builder().build();
+    }
 
     public SpringAiToolCallingRuntime(
             ActiveChatModelProvider activeChatModelProvider,
             List<Tool> tools,
             ToolExecutor toolExecutor,
             ObjectMapper objectMapper) {
-        this.chatModelProvider = Objects.requireNonNull(
-                activeChatModelProvider, "active chat model provider must not be null").get();
-        this.objectMapper = Objects.requireNonNull(objectMapper, "object mapper must not be null");
-        Objects.requireNonNull(tools, "tools must not be null");
-        this.callbacks = tools.stream()
-                .sorted((left, right) -> left.definition().name().compareTo(right.definition().name()))
-                .map(tool -> new SpringAiToolCallback(tool, toolExecutor, objectMapper))
-                .map(callback -> (ToolCallback) callback)
-                .toList();
-        this.toolCallingManager = ToolCallingManager.builder().build();
+        this(activeChatModelProvider, tools, toolExecutor, objectMapper,
+                new AgentPlanningService(false, 8, 2000), AgentExecutionTracker.noop(), 4);
     }
 
     public ChatResponse call(Prompt prompt, ConversationId conversationId) {
@@ -78,38 +102,58 @@ public final class SpringAiToolCallingRuntime {
             optionsBuilder = OllamaChatOptions.builder();
             copyChatOptions(prompt.getOptions(), optionsBuilder);
         }
+        Optional<AgentRun> agentRun = planningService.plan(prompt)
+                .flatMap(plan -> executionTracker.start(ownerId, conversationId.value(), plan));
+        Prompt executionPrompt = agentRun.map(run -> planningService.enrich(prompt, run)).orElse(prompt);
+        Map<String, Object> toolContext = new LinkedHashMap<>();
+        toolContext.put("conversationId", conversationId.value());
+        toolContext.put("ownerId", ownerId);
+        agentRun.ifPresent(run -> toolContext.put("agentRunId", run.id().toString()));
         ToolCallingChatOptions options = optionsBuilder
                 .toolCallbacks(callbacks)
-                .toolContext(Map.of("conversationId", conversationId.value(), "ownerId", ownerId))
+                .toolContext(Map.copyOf(toolContext))
                 .build();
-        Prompt currentPrompt = new Prompt(prompt.getInstructions(), options);
-        ChatResponse response = chatModelProvider.chat(currentPrompt);
-        int continuationCount = 0;
-        while (hasToolCalls(response)) {
-            if (continuationCount >= MAX_TOOL_CONTINUATIONS) {
-                LOGGER.warn("process=tool_calling event=continuation_limit_reached conversation_id={} rounds={}",
-                        conversationId.value(), continuationCount);
-                return continuationLimitResponse();
-            }
+        Prompt currentPrompt = new Prompt(executionPrompt.getInstructions(), options);
+        try {
+            ChatResponse response = chatModelProvider.chat(currentPrompt);
+            int continuationCount = 0;
+            while (hasToolCalls(response)) {
+                if (continuationCount >= maxToolContinuations) {
+                    LOGGER.warn("process=tool_calling event=continuation_limit_reached conversation_id={} rounds={}",
+                            conversationId.value(), continuationCount);
+                    if (agentRun.isPresent()) {
+                        executionTracker.limitReached(agentRun.get().id(),
+                                "tool continuation limit reached after " + continuationCount + " rounds");
+                    }
+                    return continuationLimitResponse();
+                }
 
-            continuationCount++;
-            prepareCurrentCallIds(response);
-            ToolExecutionResult executionResult;
-            try {
-                executionResult = toolCallingManager.executeToolCalls(currentPrompt, response);
-            } finally {
-                clearCurrentCallIds();
+                continuationCount++;
+                prepareCurrentCallIds(response);
+                ToolExecutionResult executionResult;
+                try {
+                    executionResult = toolCallingManager.executeToolCalls(currentPrompt, response);
+                } finally {
+                    clearCurrentCallIds();
+                }
+                Optional<String> confirmationMessage = confirmationMessage(executionResult);
+                if (confirmationMessage.isPresent()) {
+                    agentRun.ifPresent(run -> executionTracker.waitingConfirmation(
+                            run.id(), confirmationMessage.get()));
+                    return assistantResponse(confirmationMessage.get());
+                }
+                LOGGER.debug("process=tool_calling event=continuation_completed conversation_id={} round={}",
+                        conversationId.value(), continuationCount);
+                currentPrompt = new Prompt(executionResult.conversationHistory(), options);
+                response = chatModelProvider.chat(currentPrompt);
             }
-            Optional<String> confirmationMessage = confirmationMessage(executionResult);
-            if (confirmationMessage.isPresent()) {
-                return assistantResponse(confirmationMessage.get());
-            }
-            LOGGER.debug("process=tool_calling event=continuation_completed conversation_id={} round={}",
-                    conversationId.value(), continuationCount);
-            currentPrompt = new Prompt(executionResult.conversationHistory(), options);
-            response = chatModelProvider.chat(currentPrompt);
+            ChatResponse finalResponse = response;
+            agentRun.ifPresent(run -> executionTracker.complete(run.id(), responseText(finalResponse)));
+            return response;
+        } catch (RuntimeException exception) {
+            agentRun.ifPresent(run -> executionTracker.fail(run.id(), exception.getClass().getSimpleName()));
+            throw exception;
         }
-        return response;
     }
 
     private void prepareCurrentCallIds(ChatResponse response) {
@@ -193,5 +237,11 @@ public final class SpringAiToolCallingRuntime {
                 .filter(generation -> generation.getOutput() != null)
                 .mapToInt(generation -> generation.getOutput().getToolCalls().size())
                 .sum();
+    }
+
+    private String responseText(ChatResponse response) {
+        if (response == null || response.getResult() == null || response.getResult().getOutput() == null
+                || response.getResult().getOutput().getText() == null) return "";
+        return response.getResult().getOutput().getText();
     }
 }

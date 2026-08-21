@@ -10,6 +10,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
+import java.time.Instant;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
@@ -19,6 +21,7 @@ import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
 import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.chat.model.ToolContext;
 import org.springframework.ai.ollama.api.OllamaChatOptions;
 import org.mockito.ArgumentCaptor;
 
@@ -36,6 +39,12 @@ import com.minikun.tools.DefaultToolExecutor;
 import com.minikun.tools.DefaultToolRegistry;
 import com.minikun.tools.Tool;
 import com.minikun.tools.ToolDefinition;
+import com.minikun.tools.ToolExecutor;
+import com.minikun.tools.ToolResult;
+import com.minikun.tools.ToolErrorCode;
+import com.minikun.agent.execution.AgentExecutionStep;
+import com.minikun.agent.execution.AgentExecutionTracker;
+import com.minikun.agent.execution.AgentStepStatus;
 
 class SpringAiToolCallingRuntimeTest {
     @Test
@@ -210,6 +219,38 @@ class SpringAiToolCallingRuntimeTest {
         assertEquals("calculator.add", callback.getToolDefinition().name());
         assertEquals("number", schema.get("properties").get("a").get("type").asText());
         assertEquals("[\"a\",\"b\"]", schema.get("required").toString());
+    }
+
+    @Test
+    void callbackRetriesTrackedTransientToolFailureAndReturnsSuccessfulAttempt() throws Exception {
+        CalculatorAddTool tool = new CalculatorAddTool();
+        ToolExecutor executor = mock(ToolExecutor.class);
+        AgentExecutionTracker tracker = mock(AgentExecutionTracker.class);
+        UUID runId = UUID.randomUUID();
+        Instant now = Instant.parse("2026-08-21T08:00:00Z");
+        AgentExecutionStep first = new AgentExecutionStep(UUID.randomUUID(), runId, 1, "call-1",
+                "calculator.add", "{\"a\":2,\"b\":3}", AgentStepStatus.RUNNING, 1,
+                "", "", "", now, now, null);
+        AgentExecutionStep second = new AgentExecutionStep(first.id(), runId, 1, "call-1",
+                "calculator.add", first.argumentsJson(), AgentStepStatus.RETRYING, 2,
+                "", "", "", now, now, null);
+        ToolResult failure = ToolResult.failure(ToolErrorCode.EXECUTION_FAILED, "temporary");
+        ToolResult success = ToolResult.success(5);
+        when(tracker.beginStep(any(), any(), any(), any())).thenReturn(first, second);
+        when(tracker.shouldRetry(failure, 1)).thenReturn(true);
+        when(executor.execute(any(), any())).thenReturn(failure, success);
+        SpringAiToolCallback callback = new SpringAiToolCallback(tool, executor, new ObjectMapper(), tracker);
+        callback.setCurrentCallId("call-1");
+
+        var result = new ObjectMapper().readTree(callback.call("{\"a\":2,\"b\":3}",
+                new ToolContext(Map.of("agentRunId", runId.toString(), "conversationId", "conversation",
+                        "ownerId", "owner"))));
+
+        assertEquals(true, result.get("success").asBoolean());
+        assertEquals(5, result.get("result").asInt());
+        verify(executor, times(2)).execute(any(), any());
+        verify(tracker).finishStep(runId, "call-1", failure, true);
+        verify(tracker).finishStep(runId, "call-1", success, false);
     }
 
         @Test

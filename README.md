@@ -12,6 +12,7 @@
 - Personal Knowledge แบบ local สำหรับ index เอกสาร, hybrid retrieval และ citation ในบทสนทนา
 - Adaptive Companion ที่เรียนรู้ภาษา ความยาว รูปแบบ ระดับเทคนิค และโทนการตอบแบบ owner-scoped
 - Communication Assistant สำหรับ draft, rewrite, reply และ summarize โดยใช้โมเดลหลักแบบ draft-only
+- Agent Planner + Execution Loop สำหรับคำสั่งหลายขั้น พร้อม state, retry, confirmation stop และ resume จาก PostgreSQL
 - เก็บ short-term conversation history ด้วย Spring AI Chat Memory และ PostgreSQL
 - สกัด long-term memory จาก PostgreSQL และเรียกคืนเชิงความหมายด้วย embedding พร้อม lexical fallback
 - ประกอบ prompt ผ่าน Provider Composition System (PCS)
@@ -156,6 +157,12 @@ Actuator ที่เปิดให้เข้าถึงคือ `/actuator
 | `MINIKUN_TASK_ENABLED` | `true` | เปิด goal/task store, tool และ follow-up scheduler |
 | `MINIKUN_TASK_POLL_INTERVAL_MS` | `30000` | รอบตรวจ task follow-up ที่ถึงเวลาแล้ว |
 | `MINIKUN_TASK_MANAGEMENT_TOKEN` | ใช้ค่า memory token ถ้ามี | token สำหรับ Task API ที่ใช้โดย dashboard/automation |
+| `MINIKUN_AGENT_EXECUTION_ENABLED` | `true` | เปิดแผนและ execution tracking สำหรับคำสั่งหลายขั้น |
+| `MINIKUN_AGENT_MAX_PLANNED_STEPS` | `8` | จำนวนขั้นในแผนภายในสูงสุด |
+| `MINIKUN_AGENT_MAX_TOOL_STEPS` | `12` | จำนวน tool calls ที่บันทึกได้สูงสุดต่อ run |
+| `MINIKUN_AGENT_MAX_TOOL_CONTINUATIONS` | `8` | จำนวนรอบ tool continuation สูงสุดก่อนหยุดอย่างปลอดภัย |
+| `MINIKUN_AGENT_MAX_RETRIES` | `1` | จำนวน retry อัตโนมัติสำหรับ `EXECUTION_FAILED` ต่อ tool call |
+| `MINIKUN_AGENT_MANAGEMENT_TOKEN` | ใช้ค่า task/memory token ถ้ามี | token สำหรับอ่านและ resume Agent Run API |
 | `MINIKUN_CALENDAR_EXTERNAL_ENABLED` | `false` | เปิด private iCalendar feed แบบ read-only |
 | `MINIKUN_CALENDAR_EXTERNAL_FEED_URL` | ว่าง | private HTTPS `.ics` URL จาก Google, Apple หรือ Outlook |
 | `MINIKUN_CALENDAR_EXTERNAL_ZONE` | `Asia/Bangkok` | timezone สำหรับ floating/all-day external events |
@@ -318,6 +325,31 @@ curl -X POST http://127.0.0.1:8080/v1/chat/completions \
 
 ```sh
 curl http://127.0.0.1:8080/v1/models
+```
+
+### Agent Planner + Execution Loop
+
+เมื่อข้อความมีลำดับชัดเจน เช่น `จากนั้น`, `แล้วค่อย`, `ทำตามแผน` หรือมี action อย่างน้อย
+3 รายการ ระบบจะสร้าง bounded plan ภายในและบันทึก run/แต่ละ tool call ลง PostgreSQL โดยมีสถานะ
+`PLANNED`, `RUNNING`, `WAITING_CONFIRMATION`, `COMPLETED`, `COMPLETED_WITH_ERRORS`,
+`FAILED` และ `LIMIT_REACHED` คำสั่งเขียนที่ต้องยืนยันจะหยุดทันทีและไม่ถูก retry หรือ resume
+โดยข้าม confirmation policy ส่วน tool ที่ล้มเหลวด้วย `EXECUTION_FAILED` จะ retry ตามจำนวนที่กำหนด
+
+ตรวจรายการและรายละเอียดแต่ละ run:
+
+```sh
+curl -H "X-Minikun-Agent-Token: $MINIKUN_AGENT_MANAGEMENT_TOKEN" \
+  'http://127.0.0.1:8080/v1/agent/runs?owner_id=default&limit=20'
+curl -H "X-Minikun-Agent-Token: $MINIKUN_AGENT_MANAGEMENT_TOKEN" \
+  'http://127.0.0.1:8080/v1/agent/runs/<run-id>?owner_id=default'
+```
+
+run ที่จบแล้วแต่มี failed tool step สามารถ replay จาก arguments ที่บันทึกไว้ได้ การ replay
+ยังใช้ tool policy เดิมทุกอย่างและ owner ต้องตรงกัน:
+
+```sh
+curl -X POST -H "X-Minikun-Agent-Token: $MINIKUN_AGENT_MANAGEMENT_TOKEN" \
+  'http://127.0.0.1:8080/v1/agent/runs/<run-id>/resume?owner_id=default'
 ```
 
 ### Embeddings

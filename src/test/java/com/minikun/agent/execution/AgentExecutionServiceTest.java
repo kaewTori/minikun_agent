@@ -1,0 +1,79 @@
+package com.minikun.agent.execution;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.minikun.tools.ToolErrorCode;
+import com.minikun.tools.ToolResult;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.util.List;
+import java.util.Map;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+
+class AgentExecutionServiceTest {
+    private InMemoryAgentExecutionStore store;
+    private AgentExecutionService service;
+
+    @BeforeEach
+    void setUp() {
+        store = new InMemoryAgentExecutionStore();
+        service = new AgentExecutionService(store, new ObjectMapper(),
+                Clock.fixed(Instant.parse("2026-08-21T08:00:00Z"), ZoneOffset.UTC), 1, 12);
+    }
+
+    @Test
+    void retriesTransientFailureOnceAndCompletesRun() {
+        AgentRun run = start("owner-a");
+        AgentExecutionStep first = service.beginStep(run.id(), "call-1", "example.tool", Map.of("value", 1));
+        ToolResult failure = ToolResult.failure(ToolErrorCode.EXECUTION_FAILED, "temporary failure");
+
+        assertEquals(1, first.attempts());
+        assertTrue(service.shouldRetry(failure, first.attempts()));
+        service.finishStep(run.id(), "call-1", failure, true);
+        AgentExecutionStep second = service.beginStep(run.id(), "call-1", "example.tool", Map.of("value", 1));
+        assertEquals(2, second.attempts());
+        assertTrue(!service.shouldRetry(failure, second.attempts()));
+        service.finishStep(run.id(), "call-1", ToolResult.success(Map.of("ok", true)), false);
+        service.complete(run.id(), "done");
+
+        AgentExecutionService.AgentRunDetails details = service.details("owner-a", run.id());
+        assertEquals(AgentRunStatus.COMPLETED, details.run().status());
+        assertEquals(AgentStepStatus.COMPLETED, details.steps().get(0).status());
+        assertEquals(2, details.steps().get(0).attempts());
+    }
+
+    @Test
+    void waitsForConfirmationAndDoesNotMarkRunComplete() {
+        AgentRun run = start("owner-a");
+        service.beginStep(run.id(), "call-1", "write.tool", Map.of());
+        service.finishStep(run.id(), "call-1",
+                ToolResult.success(Map.of("requires_confirmation", true)), false);
+
+        AgentExecutionService.AgentRunDetails details = service.details("owner-a", run.id());
+        assertEquals(AgentRunStatus.WAITING_CONFIRMATION, details.run().status());
+        assertEquals(AgentStepStatus.WAITING_CONFIRMATION, details.steps().get(0).status());
+    }
+
+    @Test
+    void recordsPermanentToolFailureAndEnforcesOwnerIsolation() {
+        AgentRun run = start("owner-a");
+        service.beginStep(run.id(), "call-1", "example.tool", Map.of());
+        service.finishStep(run.id(), "call-1",
+                ToolResult.failure(ToolErrorCode.INVALID_ARGUMENTS, "bad input"), false);
+        service.complete(run.id(), "could not finish one action");
+
+        assertEquals(AgentRunStatus.COMPLETED_WITH_ERRORS, service.find("owner-a", run.id()).status());
+        assertThrows(IllegalArgumentException.class, () -> service.find("owner-b", run.id()));
+        assertEquals(List.of(), service.list("owner-b", null, 20));
+    }
+
+    private AgentRun start(String owner) {
+        return service.start(owner, "conversation", new AgentPlanDraft(
+                "do multiple operations", List.of("inspect", "execute", "verify"))).orElseThrow();
+    }
+}

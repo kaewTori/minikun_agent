@@ -101,6 +101,7 @@ import com.minikun.voice.VoiceExceptionHandler;
 import com.minikun.knowledge.PersonalKnowledgeConfiguration;
 import com.minikun.personality.config.PersonalityConfiguration;
 import com.minikun.communication.CommunicationConfiguration;
+import com.minikun.agent.execution.AgentExecutionConfiguration;
 
 @SpringBootApplication
 @EnableScheduling
@@ -125,6 +126,7 @@ import com.minikun.communication.CommunicationConfiguration;
 		PersonalKnowledgeConfiguration.class,
 		PersonalityConfiguration.class,
 		CommunicationConfiguration.class,
+		AgentExecutionConfiguration.class,
 		HomelabGuardianScheduler.class,
 		MemoryManagementService.class, MemoryManagementController.class,
 		WeatherConfiguration.class,

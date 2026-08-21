@@ -6,6 +6,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.UUID;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -23,18 +25,27 @@ import com.minikun.tools.ToolExecutor;
 import com.minikun.tools.ToolParameter;
 import com.minikun.tools.ToolParameterType;
 import com.minikun.tools.ToolResult;
+import com.minikun.agent.execution.AgentExecutionStep;
+import com.minikun.agent.execution.AgentExecutionTracker;
 
 public final class SpringAiToolCallback implements ToolCallback {
     private final Tool tool;
     private final ToolExecutor executor;
     private final ObjectMapper objectMapper;
     private final ToolDefinition definition;
+    private final AgentExecutionTracker executionTracker;
     private final ThreadLocal<Deque<String>> currentCallIds = new ThreadLocal<>();
 
     public SpringAiToolCallback(Tool tool, ToolExecutor executor, ObjectMapper objectMapper) {
+        this(tool, executor, objectMapper, AgentExecutionTracker.noop());
+    }
+
+    public SpringAiToolCallback(Tool tool, ToolExecutor executor, ObjectMapper objectMapper,
+            AgentExecutionTracker executionTracker) {
         this.tool = Objects.requireNonNull(tool, "tool must not be null");
         this.executor = Objects.requireNonNull(executor, "tool executor must not be null");
         this.objectMapper = Objects.requireNonNull(objectMapper, "object mapper must not be null");
+        this.executionTracker = Objects.requireNonNull(executionTracker, "execution tracker must not be null");
         this.definition = ToolDefinition.builder()
                 .name(tool.definition().name())
                 .description(tool.definition().description())
@@ -60,9 +71,19 @@ public final class SpringAiToolCallback implements ToolCallback {
             String conversationValue = value(toolContext, "conversationId", "tool-call");
             String ownerValue = value(toolContext, "ownerId", "default");
             String toolCallId = callId();
-            ToolResult result = executor.execute(
-                    new ToolCallContext(new ConversationId(conversationValue), toolCallId, ownerValue),
-                    new ToolCall(toolCallId, tool.definition().name(), arguments));
+            Optional<UUID> runId = uuid(toolContext, "agentRunId");
+            AgentExecutionStep step = runId.map(id -> executionTracker.beginStep(
+                    id, toolCallId, tool.definition().name(), arguments)).orElse(null);
+            ToolResult result;
+            while (true) {
+                result = executor.execute(
+                        new ToolCallContext(new ConversationId(conversationValue), toolCallId, ownerValue),
+                        new ToolCall(toolCallId, tool.definition().name(), arguments));
+                boolean retry = step != null && executionTracker.shouldRetry(result, step.attempts());
+                if (runId.isPresent()) executionTracker.finishStep(runId.get(), toolCallId, result, retry);
+                if (!retry) break;
+                step = executionTracker.beginStep(runId.get(), toolCallId, tool.definition().name(), arguments);
+            }
             return objectMapper.writeValueAsString(modelFacingResult(result));
         } catch (JsonProcessingException | IllegalArgumentException exception) {
             return errorResult(ToolErrorCode.INVALID_ARGUMENTS, "invalid tool arguments");
@@ -128,6 +149,16 @@ public final class SpringAiToolCallback implements ToolCallback {
             return fallback;
         }
         return context.getContext().get(key).toString();
+    }
+
+    private Optional<UUID> uuid(ToolContext context, String key) {
+        String value = value(context, key, "");
+        if (value.isBlank()) return Optional.empty();
+        try {
+            return Optional.of(UUID.fromString(value));
+        } catch (IllegalArgumentException exception) {
+            return Optional.empty();
+        }
     }
 
     private String errorResult(ToolErrorCode errorCode, String message) {

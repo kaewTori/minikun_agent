@@ -142,3 +142,46 @@ CREATE TABLE IF NOT EXISTS minikun_computer_audit (
 
 CREATE INDEX IF NOT EXISTS idx_minikun_computer_audit_owner
     ON minikun_computer_audit (owner_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS minikun_agent_run (
+    id UUID PRIMARY KEY,
+    owner_id VARCHAR(255) NOT NULL,
+    conversation_id VARCHAR(255) NOT NULL,
+    objective TEXT NOT NULL,
+    planned_steps_json TEXT NOT NULL DEFAULT '[]',
+    status VARCHAR(32) NOT NULL,
+    current_step INTEGER NOT NULL DEFAULT 0,
+    max_steps INTEGER NOT NULL,
+    summary TEXT NOT NULL DEFAULT '',
+    failure_reason TEXT NOT NULL DEFAULT '',
+    created_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL,
+    completed_at TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS idx_minikun_agent_run_owner
+    ON minikun_agent_run (owner_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_minikun_agent_run_conversation
+    ON minikun_agent_run (conversation_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS minikun_agent_step (
+    id UUID PRIMARY KEY,
+    run_id UUID NOT NULL REFERENCES minikun_agent_run(id) ON DELETE CASCADE,
+    step_index INTEGER NOT NULL,
+    tool_call_id VARCHAR(255) NOT NULL,
+    tool_name VARCHAR(255) NOT NULL,
+    arguments_json TEXT NOT NULL DEFAULT '{}',
+    status VARCHAR(32) NOT NULL,
+    attempts INTEGER NOT NULL DEFAULT 1,
+    result_json TEXT NOT NULL DEFAULT '',
+    error_code VARCHAR(64) NOT NULL DEFAULT '',
+    error TEXT NOT NULL DEFAULT '',
+    started_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL,
+    completed_at TIMESTAMPTZ,
+    UNIQUE (run_id, tool_call_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_minikun_agent_step_run
+    ON minikun_agent_step (run_id, step_index);
