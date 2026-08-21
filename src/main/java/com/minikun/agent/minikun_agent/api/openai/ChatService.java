@@ -497,7 +497,7 @@ public class ChatService {
         Flux<ChatResponse> modelResponses = verifiedToolResult.isPresent()
             ? streamChatModel(context.prompt(), context.conversationId())
             : toolsEnabled && toolCallingRuntime != null
-            ? Flux.defer(() -> Flux.just(toolCallingRuntime.call(
+            ? Flux.defer(() -> Flux.just(reviewToolRuntimeDraft(
                     context.prompt(), context.conversationId(), context.ownerId())))
             : streamChatModel(context.prompt(), context.conversationId());
         Flux<String> chunks = modelResponses
@@ -1597,12 +1597,22 @@ public class ChatService {
         if (toolsEnabled && toolCallingRuntime != null) {
             long started = System.nanoTime();
             try {
-                return toolCallingRuntime.call(prompt, conversationId, ownerId);
+                return reviewToolRuntimeDraft(prompt, conversationId, ownerId);
             } finally {
                 logModelDuration("chat_model", started, requestId);
             }
         }
         return callChatModel(prompt, "chat_model", requestId, conversationId);
+    }
+
+    private ChatResponse reviewToolRuntimeDraft(
+            Prompt prompt, ConversationId conversationId, String ownerId) {
+        ChatResponse draft = toolCallingRuntime.call(prompt, conversationId, ownerId);
+        return cooperativeChatModelService == null
+                ? draft
+                : cooperativeChatModelService.reviewDraft(
+                        chatModelProvider(), prompt, draft,
+                        conversationId == null ? "unknown" : conversationId.value());
     }
 
     private ChatModelProvider chatModelProvider() {

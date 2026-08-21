@@ -28,7 +28,8 @@ public class CooperativeReviewController {
     @GetMapping(value = "/{conversationId}/events", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<ServerSentEvent<CooperativeReviewStore.Review>> events(@PathVariable String conversationId) {
         return store.events(conversationId)
-                .takeUntil(review -> "COMPLETED".equals(review.status()) || "FAILED".equals(review.status()))
+                .takeUntil(review -> "COMPLETED".equals(review.status())
+                        || "REJECTED".equals(review.status()) || "FAILED".equals(review.status()))
                 .map(review -> ServerSentEvent.<CooperativeReviewStore.Review>builder()
                         .event("cooperative-review")
                         .data(review)

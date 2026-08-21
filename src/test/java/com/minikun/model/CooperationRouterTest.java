@@ -25,6 +25,43 @@ class CooperationRouterTest {
     }
 
     @Test
+    void routesJavaCapacityPlanningToExpert() {
+        CooperationRoutingDecision decision = router.decide(
+                "มินิคุง เรามี micro service ที่เป็น jdk25 spring boot 4.1 start แบบ bare metal "
+                        + "บนเครื่อง ram32 gb และต้อง start จำนวน 130 app เราจะต้อง config java ยังไง");
+
+        assertEquals(CooperationRisk.MEDIUM, decision.risk());
+        assertEquals("calculation_request", decision.reason());
+        assertTrue(decision.needsExpert());
+    }
+
+    @Test
+    void routesCodeWorkToExpertWithoutQuestionMarkOrPrecisionKeyword() {
+        CooperationRoutingDecision decision = router.decide("อธิบาย lifecycle ของ Spring bean");
+
+        assertEquals(CooperationRisk.MEDIUM, decision.risk());
+        assertEquals("technical_work", decision.reason());
+        assertTrue(decision.needsExpert());
+    }
+
+    @Test
+    void routesResourceCalculationToExpert() {
+        CooperationRoutingDecision decision = router.decide("แบ่ง RAM 32 GB ให้ 130 instances");
+
+        assertEquals(CooperationRisk.MEDIUM, decision.risk());
+        assertEquals("calculation_request", decision.reason());
+        assertTrue(decision.needsExpert());
+    }
+
+    @Test
+    void doesNotTreatAnOrdinaryCountAsCalculation() {
+        CooperationRoutingDecision decision = router.decide("เมื่อวานเจอแมว 2 ตัวแล้วไปกินอาหาร");
+
+        assertEquals(CooperationRisk.LOW, decision.risk());
+        assertTrue(!decision.needsExpert());
+    }
+
+    @Test
     void routesHighRiskDomainToBlockingExpert() {
         CooperationRoutingDecision decision = router.decide("ยานี้มีผลข้างเคียงอะไรบ้าง");
 

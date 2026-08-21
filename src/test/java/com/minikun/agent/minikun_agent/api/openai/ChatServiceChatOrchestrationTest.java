@@ -41,6 +41,9 @@ import com.minikun.model.ActiveChatModelProvider;
 import com.minikun.model.ActiveModelConfiguration;
 import com.minikun.model.ChatModelId;
 import com.minikun.model.ChatModelProvider;
+import com.minikun.model.CooperationRouter;
+import com.minikun.model.CooperativeChatModelService;
+import com.minikun.model.CooperativeReviewStore;
 import com.minikun.model.DefaultChatModelProviderRegistry;
 import com.minikun.model.DefaultActiveChatModelProvider;
 import com.minikun.model.ModelCapabilities;
@@ -76,6 +79,7 @@ import com.minikun.tools.ToolEvidence;
 import com.minikun.tools.ToolRequestRouter;
 import com.minikun.tools.WeatherForecastTool;
 import com.minikun.tools.WeatherToolRouter;
+import com.minikun.tools.springai.SpringAiToolCallingRuntime;
 import com.minikun.weather.WeatherReport;
 import com.minikun.vision.VisionInputService;
 
@@ -258,6 +262,52 @@ class ChatServiceChatOrchestrationTest {
 
         assertEquals("tinygrad answer", result.choices().get(0).message().content());
         verify(tinyGradProvider).chat(any(Prompt.class));
+    }
+
+    @Test
+    void toolsEnabledTechnicalQuestionStillReceivesTinyGradReview() throws Exception {
+        ChatModel frontLineModel = mock(ChatModel.class);
+        ChatModelProvider frontLine = new ExistingChatModelProvider(frontLineModel);
+        ChatModelProvider verifier = mock(ChatModelProvider.class);
+        when(verifier.id()).thenReturn(ChatModelId.TINYGRAD);
+        when(verifier.capabilities()).thenReturn(new ModelCapabilities(true, false, false));
+        when(verifier.chat(any(Prompt.class))).thenReturn(
+                response("คำตอบผ่านการตรวจ สำหรับ JDK25 Spring Boot 130 apps บน RAM 32 GB"));
+        ConversationMemoryService conversation = mock(ConversationMemoryService.class);
+        when(conversation.load(any())).thenReturn(List.of());
+        ChatService service = service(frontLine, conversation);
+        SpringAiToolCallingRuntime toolRuntime = mock(SpringAiToolCallingRuntime.class);
+        when(toolRuntime.call(any(Prompt.class), any(ConversationId.class), any(String.class)))
+                .thenReturn(response("ollama tool-runtime draft"));
+        CooperativeChatModelService cooperation = new CooperativeChatModelService(
+                new DefaultChatModelProviderRegistry(List.of(frontLine, verifier)),
+                new CooperativeReviewStore(),
+                new CooperationRouter(),
+                new com.minikun.model.CooperativeQualityGate(true, 0.85, 0.08),
+                true,
+                "blocking",
+                Duration.ofSeconds(2),
+                12_000);
+        setField(service, "toolsEnabled", true);
+        setField(service, "toolCallingRuntime", toolRuntime);
+        setField(service, "cooperativeChatModelService", cooperation);
+        String question = "เรามี JDK25 Spring Boot 130 apps บน RAM 32 GB ต้อง config Java ยังไง";
+        ChatCompletionRequest request = new ChatCompletionRequest(
+                "test-model",
+                List.of(new Message("user", question)),
+                "technical-tools",
+                false,
+                null,
+                null,
+                null);
+
+        ChatCompletionResponse result = service.chatCompletion(
+                request, new ConversationId("technical-tools"));
+
+        assertEquals("คำตอบผ่านการตรวจ สำหรับ JDK25 Spring Boot 130 apps บน RAM 32 GB",
+                result.choices().getFirst().message().content());
+        verify(toolRuntime).call(any(Prompt.class), any(ConversationId.class), any(String.class));
+        verify(verifier).chat(any(Prompt.class));
     }
 
         @Test

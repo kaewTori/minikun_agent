@@ -23,6 +23,10 @@ public final class CooperativeReviewStore {
         publish(new Review(conversationId, "COMPLETED", draft, revised, null, Instant.now()));
     }
 
+    public void rejected(String conversationId, String draft, String revised, String reason) {
+        publish(new Review(conversationId, "REJECTED", draft, revised, reason, Instant.now()));
+    }
+
     public void failed(String conversationId, String draft, String reason) {
         publish(new Review(conversationId, "FAILED", draft, null, reason, Instant.now()));
     }

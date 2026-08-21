@@ -129,7 +129,10 @@ Actuator ที่เปิดให้เข้าถึงคือ `/actuator
 | `OLLAMA_NUM_CTX` | `16384` | context window ของ Ollama |
 | `MINIKUN_MODEL_COOPERATION_ENABLED` | `true` | เปิด Ollama → TinyGrad precision pass |
 | `MINIKUN_MODEL_COOPERATION_MODE` | `hybrid` | `hybrid` แสดง Ollama ก่อนแล้วตรวจเบื้องหลัง, `blocking` รอตรวจให้เสร็จก่อนตอบ |
-| `MINIKUN_MODEL_COOPERATION_TIMEOUT` | `PT20S` | timeout เฉพาะ TinyGrad verification; timeout แล้ว fallback ตาม mode |
+| `MINIKUN_MODEL_COOPERATION_TIMEOUT` | `PT300S` | timeout เฉพาะ TinyGrad verification; timeout แล้ว fallback ตาม mode |
+| `MINIKUN_MODEL_COOPERATION_QUALITY_GATE_ENABLED` | `true` | ตรวจ revised answer หลัง TinyGrad ก่อนนำไปใช้ |
+| `MINIKUN_MODEL_COOPERATION_QUALITY_GATE_MAX_MEMORY_UTILIZATION` | `0.85` | สัดส่วน RAM สูงสุดที่ข้อเสนอ JVM fleet ใช้ได้ก่อนถูก reject |
+| `MINIKUN_MODEL_COOPERATION_QUALITY_GATE_ARITHMETIC_TOLERANCE` | `0.08` | tolerance สำหรับตรวจสมการ memory ที่ reviewer แสดง |
 | `MINIKUN_TINYGRAD_MODEL` | `Qwen3.6` | model ที่ TinyGrad ใช้ตรวจ/เสริมคำตอบ |
 | `MINIKUN_TINYGRAD_BASE_URL` | `http://localhost:8001/v1` | TinyGrad OpenAI-compatible endpoint |
 | `VALKEY_URL` | `redis://127.0.0.1:6379` | Valkey/Redis endpoint |
@@ -184,7 +187,9 @@ Whisper Large V3 Turbo Q4 ผ่าน MLX สำหรับถอดเสี�
 
 ในโหมด `hybrid` สามารถตรวจผล TinyGrad ตาม `conversation_id` ได้ที่
 `GET /v1/cooperation/reviews/{conversation_id}` โดยสถานะจะเป็น `PENDING`,
-`COMPLETED` หรือ `FAILED` ผลตรวจนี้ถูกเก็บแยกจาก conversation memory และเป็น in-memory
+`COMPLETED`, `REJECTED` หรือ `FAILED` โดย `REJECTED` หมายถึง TinyGrad ตอบสำเร็จแต่
+deterministic quality gate พบว่าเปลี่ยนข้อเท็จจริง คำนวณไม่สอดคล้อง หรือเสนอ memory budget
+เกินทรัพยากรรวม ระบบจึงไม่ใช้ revised answer นั้น ผลตรวจนี้ถูกเก็บแยกจาก conversation memory และเป็น in-memory
 จึงเหมาะกับ feedback แบบทันทีระหว่าง runtime; หากต้องการ persistence ควรย้าย store ไป PostgreSQL/Valkey ภายหลัง
 สำหรับ UI ที่ต้องการรับผลทันทีโดยไม่ polling ให้เปิด SSE ที่
 `GET /v1/cooperation/reviews/{conversation_id}/events` โดย stream จะจบเมื่อสถานะเป็น
@@ -195,6 +200,7 @@ const events = new EventSource(`/v1/cooperation/reviews/${conversationId}/events
 events.addEventListener("cooperative-review", event => {
   const review = JSON.parse(event.data);
   if (review.status === "COMPLETED") showRevisedAnswer(review.revised);
+  if (review.status === "REJECTED") showReviewFailure(review.error);
   if (review.status === "FAILED") showReviewFailure(review.error);
   if (review.status !== "PENDING") events.close();
 });
@@ -203,8 +209,15 @@ events.addEventListener("cooperative-review", event => {
 การ route ปัจจุบันใช้กฎแบบเร็ว 3 ระดับ: `LOW` ให้ Ollama ตอบทันที,
 `MEDIUM` ให้ Ollama ตอบก่อนแล้ว TinyGrad ตรวจเบื้องหลัง และ `HIGH` รอ TinyGrad
 ก่อนส่งคำตอบ เช่น สุขภาพ การเงิน กฎหมาย ความปลอดภัย และข้อมูล credential
+คำถามที่มีการคำนวณ, sizing/capacity planning หรือการวิเคราะห์งานด้านโค้ดและระบบ
+เช่น Java/JVM, Spring, API, database, architecture, memory และ performance จะถูกส่งเข้า
+TinyGrad อย่างน้อยระดับ `MEDIUM` เสมอ แม้เปิด native tool calling อยู่ก็ตาม
 คำขอเชิงสร้างสรรค์ เช่น แต่งนิยาย เรื่องสั้น ฟิค roleplay บทกวี และ worldbuilding
 จะถูกจัดเป็น `creative_request` และส่งให้ Ollama โดยตรง ไม่ส่งเข้า TinyGrad
+
+ก่อนปล่อยคำตอบในโหมด `hybrid` ระบบจะ preflight ข้อเท็จจริงและ capacity constraints ที่ตรวจได้
+แบบ deterministic หาก draft ไม่ผ่าน ระบบจะเปลี่ยนเป็น blocking review อัตโนมัติ และถ้าทั้ง draft
+กับ revised answer ไม่ผ่าน จะตอบด้วย safe capacity bound แทนการส่ง JVM flags ที่ขัดกับทรัพยากรรวม
 | `MINIKUN_SEARCH_CACHE_ENABLED` | `true` | เปิด/ปิด search cache |
 | `MINIKUN_SEARCH_CACHE_TTL` | `PT5M` | อายุ search cache |
 | `MINIKUN_SEARCH_SAFESEARCH` | `true` | ส่ง safe-search option ให้ SearXNG |

@@ -28,6 +28,7 @@ import com.minikun.model.DefaultActiveChatModelProvider;
 import com.minikun.model.CooperativeChatModelService;
 import com.minikun.model.CooperativeReviewStore;
 import com.minikun.model.CooperationRouter;
+import com.minikun.model.CooperativeQualityGate;
 import com.minikun.model.existing.ExistingChatModelProvider;
 import com.minikun.model.tinygrad.TinyGradChatModelProvider;
 import com.minikun.model.tinygrad.TinyGradConfiguration;
@@ -112,7 +113,8 @@ import com.minikun.communication.CommunicationConfiguration;
 		DefaultChatModelProviderRegistry.class, ActiveModelConfigurationSetup.class,
 		DefaultActiveChatModelProvider.class, ExistingChatModelProvider.class,
 		TinyGradChatModelProvider.class, TinyGradConfiguration.class, TaskModelConfiguration.class,
-		CooperativeReviewStore.class, CooperationRouter.class, CooperativeChatModelService.class,
+		CooperativeReviewStore.class, CooperationRouter.class, CooperativeQualityGate.class,
+		CooperativeChatModelService.class,
 		TokenBudgetRuntimeConfiguration.class,
 		TitleGenerationConfiguration.class, TitleGenerationService.class,
 		ContextRuntimeConfiguration.class,
