@@ -15,6 +15,7 @@ public record PersonalTask(
         String description,
         TaskStatus status,
         UUID parentId,
+        UUID goalId,
         Instant dueAt,
         ZoneId timezone,
         String nextAction,
@@ -44,6 +45,14 @@ public record PersonalTask(
         if (status != TaskStatus.DONE && completedAt != null) {
             throw new IllegalArgumentException("active task must not have completedAt");
         }
+    }
+
+    public PersonalTask(UUID id, String ownerId, String conversationId, TaskKind kind, String title,
+            String description, TaskStatus status, UUID parentId, Instant dueAt, ZoneId timezone,
+            String nextAction, String waitingFor, Instant followUpAt, Instant lastFollowUpAt,
+            Instant createdAt, Instant updatedAt, Instant completedAt) {
+        this(id, ownerId, conversationId, kind, title, description, status, parentId, null, dueAt, timezone,
+                nextAction, waitingFor, followUpAt, lastFollowUpAt, createdAt, updatedAt, completedAt);
     }
 
     public boolean active() {

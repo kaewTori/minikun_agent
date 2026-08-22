@@ -58,4 +58,28 @@ class AgentPlanningServiceTest {
         assertTrue(internalPlan.contains(run.id().toString()));
         assertTrue(internalPlan.contains("claim an action succeeded without a successful tool result"));
     }
+
+    @Test
+    void marksHighImpactPlanForExplicitReview() {
+        AgentPlanDraft draft = planning.plan(new Prompt(
+                "ตรวจสอบรายการ แล้วลบไฟล์ จากนั้นสรุปผล")).orElseThrow();
+
+        assertEquals(AgentRiskLevel.HIGH, draft.riskAssessment().level());
+        assertTrue(draft.riskAssessment().level().requiresExplicitReview());
+    }
+
+    @Test
+    void includesActiveGoalsWithoutTreatingThemAsInstructions() {
+        AgentPlanDraft draft = planning.plan(new Prompt("ค้นหาข้อมูล จากนั้นวิเคราะห์ แล้วค่อยสรุปผล")).orElseThrow();
+        AgentRun run = new AgentExecutionService(
+                new InMemoryAgentExecutionStore(), new com.fasterxml.jackson.databind.ObjectMapper(),
+                java.time.Clock.systemUTC(), 1, 12).start("owner", "conversation", draft).orElseThrow();
+
+        Prompt enriched = planning.enrich(new Prompt(draft.objective()), run,
+                "- สุขภาพ: 20% (current 2.0 / target 10.0 กิโล)");
+
+        String internalPlan = enriched.getInstructions().get(1).getText();
+        assertTrue(internalPlan.contains("active_goals:"));
+        assertTrue(internalPlan.contains("do not claim progress"));
+    }
 }

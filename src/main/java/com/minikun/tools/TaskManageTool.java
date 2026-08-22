@@ -47,7 +47,9 @@ public final class TaskManageTool implements Tool {
         parameters.put("follow_up_at", new ToolParameter("follow_up_at", ToolParameterType.STRING, false,
                             "When Mini-kun should follow up if the task remains open."));
         parameters.put("parent_id", new ToolParameter("parent_id", ToolParameterType.STRING, false,
-                            "Optional parent goal UUID."));
+                "Optional parent goal UUID."));
+        parameters.put("goal_id", new ToolParameter("goal_id", ToolParameterType.STRING, false,
+                "Optional explicit goal UUID this task advances."));
         parameters.put("confirmed", new ToolParameter("confirmed", ToolParameterType.BOOLEAN, false,
                             "Must be true to apply a write."));
         return Map.copyOf(parameters);
@@ -105,7 +107,7 @@ public final class TaskManageTool implements Tool {
         var task = tasks.create(context.ownerId(), context.conversationId().value(), text(arguments, "kind"),
                 text(arguments, "title"), text(arguments, "description"), text(arguments, "due_at"),
                 text(arguments, "timezone"), text(arguments, "next_action"), text(arguments, "waiting_for"),
-                text(arguments, "follow_up_at"), text(arguments, "parent_id"));
+                text(arguments, "follow_up_at"), text(arguments, "parent_id"), text(arguments, "goal_id"));
         confirmations.clear(context.conversationId());
         return ToolResult.success(Map.of("saved", true, "task", tasks.describe(task)));
     }
@@ -152,7 +154,7 @@ public final class TaskManageTool implements Tool {
         return new TaskPatch(nullable(arguments, "title"), nullable(arguments, "description"),
                 status.isBlank() ? null : TaskStatus.parse(status), instant(arguments, "due_at"),
                 zone(arguments, "timezone"), nullable(arguments, "next_action"), nullable(arguments, "waiting_for"),
-                instant(arguments, "follow_up_at"));
+                instant(arguments, "follow_up_at"), nullableUuid(arguments, "goal_id"));
     }
 
     private java.time.Instant instant(Map<String, Object> arguments, String key) {
@@ -168,6 +170,13 @@ public final class TaskManageTool implements Tool {
     private UUID id(Map<String, Object> arguments) {
         try { return UUID.fromString(text(arguments, "task_id")); }
         catch (IllegalArgumentException exception) { throw new IllegalArgumentException("task_id must be a valid UUID"); }
+    }
+
+    private UUID nullableUuid(Map<String, Object> arguments, String key) {
+        String value = text(arguments, key);
+        if (value.isBlank()) return null;
+        try { return UUID.fromString(value); }
+        catch (IllegalArgumentException exception) { throw new IllegalArgumentException(key + " must be a valid UUID"); }
     }
 
     private String text(Map<String, Object> arguments, String key) {

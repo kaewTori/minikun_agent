@@ -48,6 +48,19 @@ class TaskServiceTest {
         assertTrue(done.completedAt() != null);
     }
 
+    @Test
+    void linksTaskToExplicitGoal() {
+        var store = new InMemoryTaskStore();
+        var service = new TaskService(store, Clock.fixed(NOW, ZoneOffset.UTC));
+        UUID goalId = UUID.randomUUID();
+
+        PersonalTask task = service.create("owner-a", "conversation-a", "TASK", "เดิน", "", "", "",
+                "เดิน 30 นาที", "", "", "", goalId.toString());
+
+        assertEquals(goalId, task.goalId());
+        assertEquals(goalId.toString(), service.describe(task).get("goal_id"));
+    }
+
     private static final class InMemoryTaskStore implements TaskStore {
         private final List<PersonalTask> tasks = new ArrayList<>();
 

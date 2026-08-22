@@ -14,6 +14,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -32,6 +33,8 @@ import com.minikun.planner.PlannerService;
 import com.minikun.weather.WeatherProvider;
 import com.minikun.weather.WeatherReport;
 import com.minikun.weather.WeatherRequest;
+import com.minikun.goal.GoalService;
+import com.minikun.goal.PersonalGoal;
 
 /** Sends one concise daily view of open work after the configured local time. */
 @Component
@@ -58,7 +61,9 @@ public final class DailyBriefingScheduler {
     private final LocalTime sendAt;
     private final String weatherLocation;
     private final String weatherCountryCode;
+    private final GoalService goals;
 
+    @Autowired
     public DailyBriefingScheduler(
             TaskService tasks,
             PlannerService planner,
@@ -73,7 +78,8 @@ public final class DailyBriefingScheduler {
             @Value("${minikun.proactive.briefing.zone:Asia/Bangkok}") String zone,
             @Value("${minikun.proactive.briefing.time:08:00}") String sendAt,
             @Value("${minikun.weather.alert.location:Bangkok}") String weatherLocation,
-            @Value("${minikun.weather.alert.country-code:TH}") String weatherCountryCode) {
+            @Value("${minikun.weather.alert.country-code:TH}") String weatherCountryCode,
+            ObjectProvider<GoalService> goals) {
         this.tasks = Objects.requireNonNull(tasks, "task service must not be null");
         this.planner = Objects.requireNonNull(planner, "planner service must not be null");
         this.externalCalendar = Objects.requireNonNull(externalCalendar, "external calendar provider must not be null");
@@ -86,6 +92,7 @@ public final class DailyBriefingScheduler {
         this.ownerId = requireOwner(ownerId);
         this.weatherLocation = Objects.requireNonNullElse(weatherLocation, "Bangkok").trim();
         this.weatherCountryCode = Objects.requireNonNullElse(weatherCountryCode, "TH").trim();
+        this.goals = goals == null ? null : goals.getIfAvailable();
         try {
             this.zone = ZoneId.of(Objects.requireNonNullElse(zone, "Asia/Bangkok").trim());
             this.sendAt = LocalTime.parse(Objects.requireNonNullElse(sendAt, "08:00").trim());
@@ -93,6 +100,16 @@ public final class DailyBriefingScheduler {
             throw new IllegalArgumentException("invalid daily briefing timezone or time", exception);
         }
         this.monitor.register(SCHEDULER);
+    }
+
+    /** Backward-compatible constructor for focused tests and lightweight callers. */
+    public DailyBriefingScheduler(
+            TaskService tasks, PlannerService planner, ObjectProvider<ExternalCalendarService> externalCalendar,
+            WeatherProvider weather, NotificationDispatcher notifications, NotificationSchedulerMonitor monitor,
+            JdbcTemplate jdbc, ProactiveNotificationPolicy policy, Clock clock, String ownerId, String zone,
+            String sendAt, String weatherLocation, String weatherCountryCode) {
+        this(tasks, planner, externalCalendar, weather, notifications, monitor, jdbc, policy, clock, ownerId, zone,
+                sendAt, weatherLocation, weatherCountryCode, null);
     }
 
     @Scheduled(fixedDelayString = "${minikun.proactive.briefing.poll-interval-ms:30000}")
@@ -118,8 +135,11 @@ public final class DailyBriefingScheduler {
         Instant dayEnd = today.plusDays(1).atStartOfDay(zone).toInstant();
         List<PlannerEvent> localEvents = planner.upcoming(dayStart, dayEnd).stream().limit(12).toList();
         List<ExternalCalendarEvent> externalEvents = externalEvents(dayStart, dayEnd);
+        List<PersonalGoal> openGoals = goals == null ? List.of() : goals.syncOpenProgress(ownerId).stream()
+                .filter(PersonalGoal::open).sorted(java.util.Comparator.comparing(PersonalGoal::nextReviewAt,
+                        java.util.Comparator.nullsLast(java.util.Comparator.naturalOrder()))).limit(8).toList();
         WeatherReport weatherReport = weather();
-        if (openTasks.isEmpty() && localEvents.isEmpty() && externalEvents.isEmpty() && weatherReport == null) {
+        if (openTasks.isEmpty() && openGoals.isEmpty() && localEvents.isEmpty() && externalEvents.isEmpty() && weatherReport == null) {
             markSent(today, now);
             return;
         }
@@ -127,7 +147,7 @@ public final class DailyBriefingScheduler {
             notifications.publish(new NotificationRequest(
                     "BRIEFING", ownerId + ":" + today, NotificationChannel.REMINDER,
                     "Mini-kun daily briefing",
-                    message(openTasks, localEvents, externalEvents, weatherReport, today),
+                    message(openTasks, openGoals, localEvents, externalEvents, weatherReport, today),
                     3, "sunrise,calendar,checklist"));
             markSent(today, now);
             monitor.delivered(SCHEDULER, clock.instant());
@@ -142,6 +162,16 @@ public final class DailyBriefingScheduler {
 
     String message(
             List<PersonalTask> tasks,
+            List<PlannerEvent> localEvents,
+            List<ExternalCalendarEvent> externalEvents,
+            WeatherReport weatherReport,
+            LocalDate date) {
+        return message(tasks, List.of(), localEvents, externalEvents, weatherReport, date);
+    }
+
+    String message(
+            List<PersonalTask> tasks,
+            List<PersonalGoal> goals,
             List<PlannerEvent> localEvents,
             List<ExternalCalendarEvent> externalEvents,
             WeatherReport weatherReport,
@@ -178,6 +208,17 @@ public final class DailyBriefingScheduler {
         if (!waiting.isEmpty()) {
             message.append("\n\n⏳ สิ่งที่กำลังรอ");
             appendTasks(message, waiting);
+        }
+        if (!goals.isEmpty()) {
+            message.append("\n\n🎯 เป้าหมายที่กำลังดูแล");
+            for (PersonalGoal goal : goals) {
+                message.append("\n• ").append(goal.title()).append(" — ")
+                        .append(goal.progressPercent()).append("%");
+                if (!goal.metric().isBlank()) {
+                    message.append(" (").append(goal.currentValue()).append("/").append(goal.targetValue())
+                            .append(" ").append(goal.metric()).append(")");
+                }
+            }
         }
         return message.toString();
     }

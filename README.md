@@ -383,6 +383,11 @@ curl http://127.0.0.1:8080/v1/models
 `FAILED` และ `LIMIT_REACHED` คำสั่งเขียนที่ต้องยืนยันจะหยุดทันทีและไม่ถูก retry หรือ resume
 โดยข้าม confirmation policy ส่วน tool ที่ล้มเหลวด้วย `EXECUTION_FAILED` จะ retry ตามจำนวนที่กำหนด
 
+ทุก plan จะถูกประเมินความเสี่ยงแบบ deterministic เป็น `LOW`, `MEDIUM`, `HIGH` หรือ `CRITICAL`
+และบันทึก `risk_level` กับเหตุผลไว้ใน agent run ด้วย งานที่มีผลกระทบภายนอก งานลบข้อมูล
+งานการเงิน หรือการเปลี่ยนแปลงระบบจะถูกกำหนดให้ต้องผ่าน explicit review/confirmation เสมอ
+การประเมินนี้เป็น safety gate เพิ่มเติม ไม่ได้แทน confirmation policy ของแต่ละ tool
+
 ตรวจรายการและรายละเอียดแต่ละ run:
 
 ```sh
@@ -401,6 +406,51 @@ curl -X POST -H "X-Minikun-Agent-Token: $MINIKUN_AGENT_MANAGEMENT_TOKEN" \
 ```
 
 ### Companion Mode
+
+### Goals และ Daily Care
+
+มินิคุงมี goal state แยกจาก task เพื่อดูแลเป้าหมายระยะยาวแบบ owner-scoped โดยเก็บสถานะ,
+progress, metric, current/target value และเวลาทบทวนถัดไป เป้าหมายที่เปิดอยู่จะถูกรวมใน
+daily briefing พร้อมงานและนัดหมาย
+
+ตัวอย่าง API:
+
+```sh
+curl 'http://127.0.0.1:8080/v1/goals?owner_id=default'
+curl -X POST -H 'Content-Type: application/json' \
+  -d '{"conversationId":"home","title":"อ่านหนังสือ","metric":"บท","targetValue":12,"progressPercent":0,"timezone":"Asia/Bangkok"}' \
+  'http://127.0.0.1:8080/v1/goals?owner_id=default'
+curl -X PUT -H 'Content-Type: application/json' \
+  -d '{"progressPercent":50,"currentValue":6}' \
+  'http://127.0.0.1:8080/v1/goals/<goal-id>/progress?owner_id=default'
+```
+
+Task สามารถผูกกับ goal ได้ด้วย `goal_id` (แยกจาก `parent_id`) ทั้งผ่าน `/v1/tasks`
+และ tool `task.manage` เมื่อ task ที่ผูกไว้เสร็จ มินิคุงจะ reconcile progress ของ goal
+ใน daily briefing โดยคำนวณจากจำนวน linked tasks ที่เสร็จแล้ว
+
+การเปลี่ยนแปลง goal ใช้ `X-Minikun-Goal-Token` เมื่อกำหนด
+`MINIKUN_GOAL_MANAGEMENT_TOKEN` และ progress 100% จะปิด goal อัตโนมัติ
+
+เมื่อถึง `next_review_at` ระบบจะส่ง goal review notification แบบ idempotent
+ผ่าน `GoalReviewScheduler` และไม่ส่งซ้ำสำหรับรอบ review เดิม สามารถดูภาพรวมส่วนตัวได้ที่:
+
+```sh
+curl -H "X-Minikun-Personal-Token: $MINIKUN_PERSONAL_STATUS_TOKEN" \
+  'http://127.0.0.1:8080/v1/personal/status?owner_id=default'
+```
+
+snapshot นี้รวมจำนวน task ที่เปิดอยู่/เกินกำหนด, goal ที่ต้องทบทวน และ agent run ที่กำลังรอ confirmation
+
+ดู next action ที่เล็กที่สุดของแต่ละเป้าหมายได้ที่:
+
+```sh
+curl -H "X-Minikun-Personal-Token: $MINIKUN_PERSONAL_STATUS_TOKEN" \
+  'http://127.0.0.1:8080/v1/personal/next-actions?owner_id=default&limit=5'
+```
+
+ระบบจะให้ priority กับ task ที่ถูก block หรือเลยกำหนดก่อน ถ้า goal ยังไม่มี task
+จะเสนอ action แรกให้เท่านั้น โดยไม่สร้าง task หรือเปลี่ยน goal อัตโนมัติ
 
 เปลี่ยนรูปแบบการตอบใน conversation ปัจจุบันด้วยข้อความธรรมชาติ เช่น `เข้าโหมดคู่หู`,
 `เข้าโหมดทำงาน` หรือ `เปิดโหมดโฟกัส` โหมดจะคงอยู่เฉพาะ owner และ conversation เดิม

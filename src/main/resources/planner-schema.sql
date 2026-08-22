@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS minikun_task (
     description TEXT NOT NULL DEFAULT '',
     status VARCHAR(16) NOT NULL DEFAULT 'OPEN',
     parent_id UUID,
+    goal_id UUID,
     due_at TIMESTAMPTZ,
     timezone VARCHAR(64) NOT NULL DEFAULT 'Asia/Bangkok',
     next_action TEXT NOT NULL DEFAULT '',
@@ -57,11 +58,41 @@ CREATE TABLE IF NOT EXISTS minikun_task (
     completed_at TIMESTAMPTZ
 );
 
+ALTER TABLE minikun_task ADD COLUMN IF NOT EXISTS goal_id UUID;
+
 CREATE INDEX IF NOT EXISTS idx_minikun_task_owner_status
     ON minikun_task (owner_id, status, due_at);
 
 CREATE INDEX IF NOT EXISTS idx_minikun_task_follow_up
     ON minikun_task (status, follow_up_at, last_follow_up_at);
+
+CREATE TABLE IF NOT EXISTS minikun_goal (
+    id UUID PRIMARY KEY,
+    owner_id VARCHAR(255) NOT NULL,
+    conversation_id VARCHAR(255) NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    status VARCHAR(16) NOT NULL DEFAULT 'ACTIVE',
+    progress_percent INTEGER NOT NULL DEFAULT 0,
+    metric VARCHAR(255) NOT NULL DEFAULT '',
+    current_value DOUBLE PRECISION NOT NULL DEFAULT 0,
+    target_value DOUBLE PRECISION NOT NULL DEFAULT 0,
+    next_review_at TIMESTAMPTZ,
+    timezone VARCHAR(64) NOT NULL DEFAULT 'Asia/Bangkok',
+    created_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL,
+    completed_at TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS idx_minikun_goal_owner_status
+    ON minikun_goal (owner_id, status, next_review_at);
+
+CREATE TABLE IF NOT EXISTS minikun_goal_review_notification (
+    goal_id UUID NOT NULL,
+    review_at TIMESTAMPTZ NOT NULL,
+    notified_at TIMESTAMPTZ NOT NULL,
+    PRIMARY KEY (goal_id, review_at)
+);
 
 CREATE TABLE IF NOT EXISTS minikun_proactive_briefing_state (
     briefing_key VARCHAR(128) PRIMARY KEY,
@@ -149,6 +180,8 @@ CREATE TABLE IF NOT EXISTS minikun_agent_run (
     conversation_id VARCHAR(255) NOT NULL,
     objective TEXT NOT NULL,
     planned_steps_json TEXT NOT NULL DEFAULT '[]',
+    risk_level VARCHAR(16) NOT NULL DEFAULT 'LOW',
+    risk_reasons_json TEXT NOT NULL DEFAULT '[]',
     status VARCHAR(32) NOT NULL,
     current_step INTEGER NOT NULL DEFAULT 0,
     max_steps INTEGER NOT NULL,
@@ -158,6 +191,10 @@ CREATE TABLE IF NOT EXISTS minikun_agent_run (
     updated_at TIMESTAMPTZ NOT NULL,
     completed_at TIMESTAMPTZ
 );
+
+-- Keep existing home-use databases compatible when the agent execution schema evolves.
+ALTER TABLE minikun_agent_run ADD COLUMN IF NOT EXISTS risk_level VARCHAR(16) NOT NULL DEFAULT 'LOW';
+ALTER TABLE minikun_agent_run ADD COLUMN IF NOT EXISTS risk_reasons_json TEXT NOT NULL DEFAULT '[]';
 
 CREATE INDEX IF NOT EXISTS idx_minikun_agent_run_owner
     ON minikun_agent_run (owner_id, created_at DESC);

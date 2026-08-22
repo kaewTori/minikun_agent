@@ -26,12 +26,12 @@ public final class JdbcTaskStore implements TaskStore {
     public PersonalTask create(PersonalTask task) {
         jdbc.update("""
                 INSERT INTO minikun_task
-                    (id, owner_id, conversation_id, kind, title, description, status, parent_id,
+                    (id, owner_id, conversation_id, kind, title, description, status, parent_id, goal_id,
                      due_at, timezone, next_action, waiting_for, follow_up_at, last_follow_up_at,
                      created_at, updated_at, completed_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, task.id(), task.ownerId(), task.conversationId(), task.kind().name(), task.title(),
-                task.description(), task.status().name(), task.parentId(), timestamp(task.dueAt()),
+                task.description(), task.status().name(), task.parentId(), task.goalId(), timestamp(task.dueAt()),
                 task.timezone().getId(), task.nextAction(), task.waitingFor(), timestamp(task.followUpAt()),
                 timestamp(task.lastFollowUpAt()), timestamp(task.createdAt()), timestamp(task.updatedAt()),
                 timestamp(task.completedAt()));
@@ -41,7 +41,7 @@ public final class JdbcTaskStore implements TaskStore {
     @Override
     public Optional<PersonalTask> find(UUID id, String ownerId) {
         return jdbc.query("""
-                SELECT id, owner_id, conversation_id, kind, title, description, status, parent_id,
+                SELECT id, owner_id, conversation_id, kind, title, description, status, parent_id, goal_id,
                        due_at, timezone, next_action, waiting_for, follow_up_at, last_follow_up_at,
                        created_at, updated_at, completed_at
                 FROM minikun_task WHERE id = ? AND owner_id = ?
@@ -52,14 +52,14 @@ public final class JdbcTaskStore implements TaskStore {
     public List<PersonalTask> list(String ownerId, TaskStatus status) {
         if (status == null) {
             return jdbc.query("""
-                    SELECT id, owner_id, conversation_id, kind, title, description, status, parent_id,
+                    SELECT id, owner_id, conversation_id, kind, title, description, status, parent_id, goal_id,
                            due_at, timezone, next_action, waiting_for, follow_up_at, last_follow_up_at,
                            created_at, updated_at, completed_at
-                    FROM minikun_task WHERE owner_id = ? ORDER BY status, due_at NULLS LAST, created_at
+                FROM minikun_task WHERE owner_id = ? ORDER BY status, due_at NULLS LAST, created_at
                     """, this::map, ownerId);
         }
         return jdbc.query("""
-                SELECT id, owner_id, conversation_id, kind, title, description, status, parent_id,
+                SELECT id, owner_id, conversation_id, kind, title, description, status, parent_id, goal_id,
                        due_at, timezone, next_action, waiting_for, follow_up_at, last_follow_up_at,
                        created_at, updated_at, completed_at
                 FROM minikun_task WHERE owner_id = ? AND status = ?
@@ -70,7 +70,7 @@ public final class JdbcTaskStore implements TaskStore {
     @Override
     public List<PersonalTask> findDueFollowUps(Instant now) {
         return jdbc.query("""
-                SELECT id, owner_id, conversation_id, kind, title, description, status, parent_id,
+                SELECT id, owner_id, conversation_id, kind, title, description, status, parent_id, goal_id,
                        due_at, timezone, next_action, waiting_for, follow_up_at, last_follow_up_at,
                        created_at, updated_at, completed_at
                 FROM minikun_task
@@ -86,11 +86,11 @@ public final class JdbcTaskStore implements TaskStore {
         jdbc.update("""
                 UPDATE minikun_task
                 SET title = ?, description = ?, status = ?, due_at = ?, timezone = ?, next_action = ?,
-                    waiting_for = ?, follow_up_at = ?, updated_at = ?, completed_at = ?
+                    waiting_for = ?, follow_up_at = ?, goal_id = ?, updated_at = ?, completed_at = ?
                 WHERE id = ? AND owner_id = ?
                 """, task.title(), task.description(), task.status().name(), timestamp(task.dueAt()),
                 task.timezone().getId(), task.nextAction(), task.waitingFor(), timestamp(task.followUpAt()),
-                timestamp(task.updatedAt()), timestamp(task.completedAt()), task.id(), task.ownerId());
+                task.goalId(), timestamp(task.updatedAt()), timestamp(task.completedAt()), task.id(), task.ownerId());
         return task;
     }
 
@@ -114,7 +114,7 @@ public final class JdbcTaskStore implements TaskStore {
         return new PersonalTask(
                 UUID.fromString(rs.getString("id")), rs.getString("owner_id"), rs.getString("conversation_id"),
                 TaskKind.valueOf(rs.getString("kind")), rs.getString("title"), rs.getString("description"),
-                TaskStatus.valueOf(rs.getString("status")), uuid(rs, "parent_id"), instant(rs, "due_at"),
+                TaskStatus.valueOf(rs.getString("status")), uuid(rs, "parent_id"), uuid(rs, "goal_id"), instant(rs, "due_at"),
                 ZoneId.of(rs.getString("timezone")), rs.getString("next_action"), rs.getString("waiting_for"),
                 instant(rs, "follow_up_at"), instant(rs, "last_follow_up_at"), instant(rs, "created_at"),
                 instant(rs, "updated_at"), instant(rs, "completed_at"));

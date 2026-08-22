@@ -32,6 +32,7 @@ import com.minikun.tools.ToolExecutor;
 import com.minikun.agent.execution.AgentExecutionTracker;
 import com.minikun.agent.execution.AgentPlanningService;
 import com.minikun.agent.execution.AgentRun;
+import com.minikun.goal.GoalService;
 
 @Component
 public final class SpringAiToolCallingRuntime {
@@ -44,6 +45,7 @@ public final class SpringAiToolCallingRuntime {
     private final AgentPlanningService planningService;
     private final AgentExecutionTracker executionTracker;
     private final int maxToolContinuations;
+    private final GoalService goalService;
 
     @Autowired
     public SpringAiToolCallingRuntime(
@@ -53,13 +55,15 @@ public final class SpringAiToolCallingRuntime {
             ObjectMapper objectMapper,
             AgentPlanningService planningService,
             AgentExecutionTracker executionTracker,
-            @Value("${minikun.agent.execution.max-tool-continuations:8}") int maxToolContinuations) {
+            @Value("${minikun.agent.execution.max-tool-continuations:8}") int maxToolContinuations,
+            org.springframework.beans.factory.ObjectProvider<GoalService> goalService) {
         this.chatModelProvider = Objects.requireNonNull(
                 activeChatModelProvider, "active chat model provider must not be null").get();
         this.objectMapper = Objects.requireNonNull(objectMapper, "object mapper must not be null");
         this.planningService = Objects.requireNonNull(planningService, "planning service must not be null");
         this.executionTracker = Objects.requireNonNull(executionTracker, "execution tracker must not be null");
         this.maxToolContinuations = Math.max(1, Math.min(maxToolContinuations, 20));
+        this.goalService = goalService == null ? null : goalService.getIfAvailable();
         Objects.requireNonNull(tools, "tools must not be null");
         this.callbacks = tools.stream()
                 .sorted((left, right) -> left.definition().name().compareTo(right.definition().name()))
@@ -75,7 +79,7 @@ public final class SpringAiToolCallingRuntime {
             ToolExecutor toolExecutor,
             ObjectMapper objectMapper) {
         this(activeChatModelProvider, tools, toolExecutor, objectMapper,
-                new AgentPlanningService(false, 8, 2000), AgentExecutionTracker.noop(), 4);
+                new AgentPlanningService(false, 8, 2000), AgentExecutionTracker.noop(), 4, null);
     }
 
     public ChatResponse call(Prompt prompt, ConversationId conversationId) {
@@ -104,7 +108,9 @@ public final class SpringAiToolCallingRuntime {
         }
         Optional<AgentRun> agentRun = planningService.plan(prompt)
                 .flatMap(plan -> executionTracker.start(ownerId, conversationId.value(), plan));
-        Prompt executionPrompt = agentRun.map(run -> planningService.enrich(prompt, run)).orElse(prompt);
+        String activeGoals = agentRun.isPresent() && goalService != null
+                ? goalService.activeSummary(ownerId, 8, 2400) : "";
+        Prompt executionPrompt = agentRun.map(run -> planningService.enrich(prompt, run, activeGoals)).orElse(prompt);
         Map<String, Object> toolContext = new LinkedHashMap<>();
         toolContext.put("conversationId", conversationId.value());
         toolContext.put("ownerId", ownerId);

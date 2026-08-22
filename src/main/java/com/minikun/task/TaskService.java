@@ -29,6 +29,13 @@ public final class TaskService {
     public PersonalTask create(String ownerId, String conversationId, String kind, String title,
             String description, String dueAt, String timezone, String nextAction, String waitingFor,
             String followUpAt, String parentId) {
+        return create(ownerId, conversationId, kind, title, description, dueAt, timezone, nextAction,
+                waitingFor, followUpAt, parentId, null);
+    }
+
+    public PersonalTask create(String ownerId, String conversationId, String kind, String title,
+            String description, String dueAt, String timezone, String nextAction, String waitingFor,
+            String followUpAt, String parentId, String goalId) {
         String owner = owner(ownerId);
         ZoneId zone = zone(timezone);
         Instant now = clock.instant();
@@ -40,7 +47,7 @@ public final class TaskService {
         PersonalTask task = new PersonalTask(
                 UUID.randomUUID(), owner, require(conversationId, "conversation id"),
                 TaskKind.parse(kind), require(title, "title"), nullable(description), TaskStatus.OPEN,
-                optionalUuid(parentId), due, zone, nullable(nextAction), nullable(waitingFor), followUp, null,
+                optionalUuid(parentId), optionalUuid(goalId), due, zone, nullable(nextAction), nullable(waitingFor), followUp, null,
                 now, now, null);
         return store.create(task);
     }
@@ -69,7 +76,7 @@ public final class TaskService {
         PersonalTask updated = new PersonalTask(current.id(), current.ownerId(), current.conversationId(),
                 current.kind(), patch.title() == null || patch.title().isBlank() ? current.title() : patch.title().trim(),
                 patch.description() == null ? current.description() : patch.description().trim(), status,
-                current.parentId(), patch.dueAt() == null ? current.dueAt() : patch.dueAt(),
+                current.parentId(), patch.goalId() == null ? current.goalId() : patch.goalId(), patch.dueAt() == null ? current.dueAt() : patch.dueAt(),
                 patch.timezone() == null ? current.timezone() : patch.timezone(),
                 patch.nextAction() == null ? current.nextAction() : patch.nextAction().trim(),
                 patch.waitingFor() == null ? current.waitingFor() : patch.waitingFor().trim(),
@@ -106,6 +113,7 @@ public final class TaskService {
         result.put("due_at", task.dueAt() == null ? null : task.dueAt().toString());
         result.put("timezone", task.timezone().getId());
         result.put("next_action", task.nextAction());
+        result.put("goal_id", task.goalId() == null ? null : task.goalId().toString());
         result.put("waiting_for", task.waitingFor());
         result.put("follow_up_at", task.followUpAt() == null ? null : task.followUpAt().toString());
         return result;

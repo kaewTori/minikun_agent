@@ -19,6 +19,7 @@ import com.minikun.diagnostics.DiagnosticsPromptBuilder;
 import com.minikun.diagnostics.DiagnosticsService;
 import com.minikun.diagnostics.MeterRegistryMetricsReader;
 import com.minikun.guardian.GuardianConfiguration;
+import com.minikun.goal.GoalConfiguration;
 import com.minikun.guardian.HomelabGuardianScheduler;
 import com.minikun.investment.InvestmentService;
 import com.minikun.investment.JdbcInvestmentStore;
@@ -47,6 +48,7 @@ import com.minikun.notification.NtfyNotificationService;
 import com.minikun.pcs.KnowledgeSelectionConfiguration;
 import com.minikun.pcs.MinikunPersonaProvider;
 import com.minikun.personality.config.PersonalityConfiguration;
+import com.minikun.personalcare.PersonalCareConfiguration;
 import com.minikun.planner.JdbcPlannerConfirmationStore;
 import com.minikun.planner.JdbcPlannerStore;
 import com.minikun.planner.PlannerConfirmationService;
@@ -95,6 +97,7 @@ import com.minikun.tools.SystemHealthTool;
 import com.minikun.tools.TaskCaptureToolRouter;
 import com.minikun.tools.TaskConfirmationRouter;
 import com.minikun.tools.TaskManageTool;
+import com.minikun.tools.NextActionTool;
 import com.minikun.tools.WeatherForecastTool;
 import com.minikun.tools.WeatherToolRouter;
 import com.minikun.tools.WebOpenUrlTool;
@@ -110,7 +113,7 @@ import com.minikun.weather.WeatherConfiguration;
 /** Explicit module graph kept separate from the executable application entry point. */
 @Configuration(proxyBeanMethods = false)
 @Import({
-        MemoryConfiguration.class, ConversationSummaryConfiguration.class,
+        MemoryConfiguration.class, ConversationSummaryConfiguration.class, GoalConfiguration.class,
         SearchConfiguration.class, BrowserConfiguration.class,
         MeterRegistryMetricsReader.class, DiagnosticsService.class, DiagnosticsFormatter.class,
         DiagnosticsPromptBuilder.class, MinikunPersonaProvider.class, KnowledgeSelectionConfiguration.class,
@@ -124,7 +127,7 @@ import com.minikun.weather.WeatherConfiguration;
         TitleGenerationConfiguration.class, TitleGenerationService.class, ContextRuntimeConfiguration.class,
         VisionInputService.class, GuardianConfiguration.class, ComputerConfiguration.class,
         VoiceConfiguration.class, VoiceController.class, VoiceExceptionHandler.class,
-        PersonalKnowledgeConfiguration.class, PersonalityConfiguration.class,
+        PersonalKnowledgeConfiguration.class, PersonalityConfiguration.class, PersonalCareConfiguration.class,
         CommunicationConfiguration.class, AgentExecutionConfiguration.class, HomelabGuardianScheduler.class,
         MemoryManagementService.class, MemoryManagementController.class, WeatherConfiguration.class,
         ExternalCalendarConfiguration.class, ExternalCalendarController.class,
@@ -133,6 +136,7 @@ import com.minikun.weather.WeatherConfiguration;
         DefaultToolExecutor.class, CalculatorAddTool.class, WeatherForecastTool.class, CurrentTimeTool.class,
         WebSearchTool.class, WebOpenUrlTool.class, WeatherToolRouter.class, LocationResolveTool.class,
         PlannerManageTool.class, CalendarManageTool.class, MemoryManageTool.class, ServiceHealthTool.class,
+        NextActionTool.class,
         SystemHealthTool.class, HomelabGuardianTool.class, HomelabGuardianRouter.class,
         GuardianConfirmationRouter.class, LocalComputerTool.class, LocalComputerRouter.class,
         ComputerConfirmationRouter.class, PlannerConfirmationRouter.class, RelativeReminderToolRouter.class,

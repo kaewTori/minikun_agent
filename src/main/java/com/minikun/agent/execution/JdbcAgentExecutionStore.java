@@ -30,11 +30,11 @@ public final class JdbcAgentExecutionStore implements AgentExecutionStore {
     public AgentRun createRun(AgentRun run) {
         jdbc.update("""
                 INSERT INTO minikun_agent_run
-                    (id, owner_id, conversation_id, objective, planned_steps_json, status, current_step,
+                    (id, owner_id, conversation_id, objective, planned_steps_json, risk_level, risk_reasons_json, status, current_step,
                      max_steps, summary, failure_reason, created_at, updated_at, completed_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, run.id(), run.ownerId(), run.conversationId(), run.objective(), json(run.plannedSteps()),
-                run.status().name(), run.currentStep(), run.maxSteps(), run.summary(), run.failureReason(),
+                run.riskAssessment().level().name(), json(run.riskAssessment().reasons()), run.status().name(), run.currentStep(), run.maxSteps(), run.summary(), run.failureReason(),
                 timestamp(run.createdAt()), timestamp(run.updatedAt()), timestamp(run.completedAt()));
         return run;
     }
@@ -115,6 +115,8 @@ public final class JdbcAgentExecutionStore implements AgentExecutionStore {
     private AgentRun mapRun(ResultSet rs, int row) throws SQLException {
         return new AgentRun(uuid(rs, "id"), rs.getString("owner_id"), rs.getString("conversation_id"),
                 rs.getString("objective"), steps(rs.getString("planned_steps_json")),
+                new AgentRiskAssessment(AgentRiskLevel.valueOf(rs.getString("risk_level")),
+                        steps(rs.getString("risk_reasons_json"))),
                 AgentRunStatus.valueOf(rs.getString("status")), rs.getInt("current_step"),
                 rs.getInt("max_steps"), rs.getString("summary"), rs.getString("failure_reason"),
                 instant(rs, "created_at"), instant(rs, "updated_at"), instant(rs, "completed_at"));

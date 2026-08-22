@@ -41,7 +41,7 @@ public final class AgentExecutionService implements AgentExecutionTracker {
     public Optional<AgentRun> start(String ownerId, String conversationId, AgentPlanDraft plan) {
         Instant now = clock.instant();
         return Optional.of(store.createRun(new AgentRun(UUID.randomUUID(), owner(ownerId),
-                require(conversationId, "conversation id"), plan.objective(), plan.steps(), AgentRunStatus.PLANNED,
+                require(conversationId, "conversation id"), plan.objective(), plan.steps(), plan.riskAssessment(), AgentRunStatus.PLANNED,
                 0, maxSteps, "", "", now, now, null)));
     }
 
@@ -154,7 +154,7 @@ public final class AgentExecutionService implements AgentExecutionTracker {
     private AgentRun updateRun(AgentRun run, AgentRunStatus status, int currentStep, String summary,
             String failure, Instant completedAt) {
         return store.updateRun(new AgentRun(run.id(), run.ownerId(), run.conversationId(), run.objective(),
-                run.plannedSteps(), status, currentStep, run.maxSteps(), summary, failure,
+                run.plannedSteps(), run.riskAssessment(), status, currentStep, run.maxSteps(), summary, failure,
                 run.createdAt(), clock.instant(), completedAt));
     }
 

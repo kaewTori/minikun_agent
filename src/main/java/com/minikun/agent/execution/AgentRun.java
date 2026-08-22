@@ -11,6 +11,7 @@ public record AgentRun(
         String conversationId,
         String objective,
         List<String> plannedSteps,
+        AgentRiskAssessment riskAssessment,
         AgentRunStatus status,
         int currentStep,
         int maxSteps,
@@ -26,6 +27,7 @@ public record AgentRun(
         conversationId = require(conversationId, "conversation id");
         objective = require(objective, "objective");
         plannedSteps = plannedSteps == null ? List.of() : List.copyOf(plannedSteps);
+        Objects.requireNonNull(riskAssessment, "risk assessment must not be null");
         Objects.requireNonNull(status, "agent run status must not be null");
         if (currentStep < 0 || maxSteps < 1) throw new IllegalArgumentException("invalid agent step bounds");
         summary = Objects.requireNonNullElse(summary, "").trim();
