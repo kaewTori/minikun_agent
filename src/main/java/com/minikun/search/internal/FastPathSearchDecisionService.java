@@ -15,8 +15,10 @@ public final class FastPathSearchDecisionService implements SearchDecisionServic
     private static final Pattern LIVE_INFORMATION = Pattern.compile(
             "(ค้นหา|เสิร์ช|ข่าว|อากาศ|พยากรณ์|ราคา|หุ้น|คริปโต|คะแนน|ผลการแข่งขัน|ตารางแข่ง|"
                     + "เที่ยวบิน|จราจร|ร้าน|ใกล้ฉัน|ที่ไหน|ใครเป็น|ล่าสุด|ปัจจุบัน|สุขภาพ|ยา|การแพทย์|"
+                    + "ค้นคว้า|วิจัย|เจาะลึก|สืบค้น|ตรวจสอบข้อเท็จจริง|"
                     + "กฎหมาย|ภาษี|ลงทุน|การเงิน|search|look\\s*up|news|weather|forecast|price|stock|crypto|"
                     + "score|schedule|flight|traffic|near me|current|latest|health|medical|legal|tax|invest|finance|"
+                    + "research|investigat(?:e|ion)|fact[- ]?check|deep\\s+dive|"
                     + "https?://|www\\.)",
             Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
     private static final Pattern CASUAL_CONVERSATION = Pattern.compile(

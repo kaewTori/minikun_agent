@@ -6,13 +6,16 @@ import java.util.List;
 import com.minikun.pcs.KnowledgeSource;
 import com.minikun.pcs.model.CapabilityInstruction;
 import com.minikun.personality.companion.CompanionModeContext;
+import com.minikun.research.ResearchStorytellingAdvisor;
 import com.minikun.tools.ToolEvidence;
 import com.minikun.vision.VisionInput;
 
 /** Builds prompt capability instructions from already-resolved request context. */
 final class ChatCapabilityFactory {
+    private final ResearchStorytellingAdvisor researchStorytellingAdvisor = new ResearchStorytellingAdvisor();
 
     List<CapabilityInstruction> create(
+            String userMessage,
             ChatKnowledgeSelection selection,
             ImageAwareness imageAwareness,
             ToolEvidence verifiedToolResult,
@@ -24,6 +27,8 @@ final class ChatCapabilityFactory {
         addConversationStyle(capabilities, conversationStyleInstruction);
         addInteractionMode(capabilities, interactionMode);
         addKnowledgeCapabilities(capabilities, selection, imageAwareness);
+        capabilities.addAll(researchStorytellingAdvisor.advise(
+                userMessage, selection.selection(), selection.researchTrace()));
         addVisionCapability(capabilities, visionInput);
         addToolCapability(capabilities, verifiedToolResult, nativeToolsAvailable);
         return List.copyOf(capabilities);

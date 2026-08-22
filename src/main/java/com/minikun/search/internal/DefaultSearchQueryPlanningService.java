@@ -16,8 +16,10 @@ import java.util.regex.Pattern;
 public final class DefaultSearchQueryPlanningService implements SearchQueryPlanningService {
     private static final Pattern SPACE = Pattern.compile("\\s+");
     private static final List<String> THAI_PREFIXES = List.of(
+            "ช่วยค้นคว้าเรื่อง", "ช่วยค้นคว้า", "ค้นคว้าเรื่อง", "วิจัยเรื่อง", "เจาะลึกเรื่อง",
             "ช่วยค้นหา", "ช่วยหา", "ค้นหาให้หน่อย", "อยากรู้ว่า", "ช่วยบอกหน่อยว่า", "ขอข้อมูล");
     private static final List<String> ENGLISH_PREFIXES = List.of(
+            "please do deep research on", "deep research on", "research", "investigate",
             "please search for", "search for", "find out", "look up", "can you tell me", "i want to know");
     private static final List<String> THAI_STOPWORDS = List.of("หน่อย", "ให้หน่อย", "ครับ", "ค่ะ", "นะ", "ที");
     private static final List<String> ENGLISH_STOPWORDS = List.of(
@@ -60,6 +62,7 @@ public final class DefaultSearchQueryPlanningService implements SearchQueryPlann
             return new SearchQueryPlan(false, original.isBlank() ? " " : original, "", List.of(), List.of(),
                     detectLanguage(original), "general", "", 1.0, "search_not_requested");
         }
+        boolean researchIntent = isResearchIntent(original);
         String primary = stripConversationalPrefix(original);
         boolean contextual = isFollowUp(primary, conversationContext);
         if (contextual) {
@@ -78,7 +81,7 @@ public final class DefaultSearchQueryPlanningService implements SearchQueryPlann
             primary = String.join(" ", terms);
         }
         String timeRange = detectTimeRange(primary);
-        String intent = detectIntent(primary, timeRange, decision);
+        String intent = detectIntent(primary, timeRange, decision, researchIntent);
         String reason = contextual ? "contextual_query" : "deterministic_core_query";
         return new SearchQueryPlan(true, original, primary, alternateQueries(primary, terms, language, intent).stream()
                 .limit(maxAlternates).toList(), terms,
@@ -132,6 +135,15 @@ public final class DefaultSearchQueryPlanningService implements SearchQueryPlann
 
     private List<String> alternateQueries(String primary, List<String> terms, String language, String intent) {
         List<String> alternates = new ArrayList<>();
+        if ("research".equals(intent)) {
+            if ("th".equals(language)) {
+                alternates.add(primary + " แหล่งข้อมูลทางการ");
+                alternates.add(primary + " แหล่งข้อมูลปฐมภูมิ รายงาน");
+            } else {
+                alternates.add(primary + " official source");
+                alternates.add(primary + " primary source report");
+            }
+        }
         String compact = String.join(" ", terms).trim();
         if (terms.size() >= 2 && !primary.equals(compact) && !compact.equalsIgnoreCase(primary)) {
             alternates.add(compact);
@@ -195,13 +207,20 @@ public final class DefaultSearchQueryPlanningService implements SearchQueryPlann
         return "";
     }
 
-    private String detectIntent(String value, String timeRange, SearchDecision decision) {
+    private String detectIntent(
+            String value,
+            String timeRange,
+            SearchDecision decision,
+            boolean researchIntent) {
         if (decision.reason() == SearchDecisionReason.IMAGE_REQUEST) {
             return "images";
         }
         String lower = value.toLowerCase(Locale.ROOT);
         if (!timeRange.isBlank() || lower.contains("ข่าว") || lower.contains("news")) {
             return "current_information";
+        }
+        if (researchIntent) {
+            return "research";
         }
         if (lower.contains("เปรียบเทียบ") || lower.contains("เทียบกับ")
                 || lower.contains(" compare ") || lower.contains(" versus ") || lower.contains(" vs ")) {
@@ -211,6 +230,15 @@ public final class DefaultSearchQueryPlanningService implements SearchQueryPlann
             return "recommendation";
         }
         return "fact_lookup";
+    }
+
+    private boolean isResearchIntent(String value) {
+        String lower = value.toLowerCase(Locale.ROOT);
+        return lower.contains("ค้นคว้า") || lower.contains("วิจัย") || lower.contains("เจาะลึก")
+                || lower.contains("สืบค้น") || lower.contains("ตรวจสอบข้อเท็จจริง")
+                || lower.contains("research") || lower.contains("investigate")
+                || lower.contains("fact-check") || lower.contains("fact check")
+                || lower.contains("deep dive");
     }
 
     private String normalize(String value) {

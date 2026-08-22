@@ -93,4 +93,18 @@ class DefaultSearchQueryPlanningServiceTest {
         assertEquals("comparison", plan.intent());
         assertTrue(plan.alternateQueries().stream().anyMatch(query -> query.contains("vs")));
     }
+
+    @Test
+    void plansResearchQueriesForPrimaryAndOfficialSources() {
+        SearchQueryPlan plan = planner.plan(
+                "ช่วยค้นคว้าเรื่องพลังงานแสงอาทิตย์ในไทย",
+                new SearchDecision(true, "ช่วยค้นคว้าเรื่องพลังงานแสงอาทิตย์ในไทย",
+                        SearchDecisionReason.FACT_LOOKUP));
+
+        assertEquals("research", plan.intent());
+        assertFalse(plan.primaryQuery().contains("ช่วยค้นคว้า"));
+        assertEquals(2, plan.alternateQueries().size());
+        assertTrue(plan.alternateQueries().stream().anyMatch(query -> query.contains("แหล่งข้อมูลทางการ")));
+        assertTrue(plan.alternateQueries().stream().anyMatch(query -> query.contains("แหล่งข้อมูลปฐมภูมิ")));
+    }
 }

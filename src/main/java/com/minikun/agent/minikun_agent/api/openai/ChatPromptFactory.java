@@ -150,6 +150,7 @@ final class ChatPromptFactory {
                 conversationContent.isBlank() ? null : new ConversationContext(conversationContent),
                 promptKnowledge,
                 capabilityFactory.create(
+                        userMessage.content(),
                         input.knowledgeSelection(), input.imageAwareness(), input.verifiedToolResult(),
                         input.visionInput(), input.interactionMode(), conversationStyle.instruction(),
                         configuration.nativeToolsAvailable()),

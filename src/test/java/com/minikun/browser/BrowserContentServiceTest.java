@@ -78,4 +78,20 @@ class BrowserContentServiceTest {
         assertTrue(result.candidates().isEmpty());
         assertEquals("http://127.0.0.1:8080/health", result.failures().get(0).url());
     }
+
+    @Test
+    void readsDiscoveredUrlsWithinBothRequestedAndConfiguredBounds() {
+        AtomicInteger calls = new AtomicInteger();
+        BrowserContentService service = new BrowserContentService(url -> {
+            calls.incrementAndGet();
+            return new BrowserContent(url, "usable discovered source content", "text/html", false);
+        }, true, 2);
+
+        BrowserReadResult result = service.readUrls(List.of(
+                "https://one.example", "https://two.example", "https://three.example"), 3);
+
+        assertEquals(2, calls.get());
+        assertEquals(List.of("https://one.example", "https://two.example"),
+                result.candidates().stream().map(com.minikun.pcs.KnowledgeCandidate::provenance).toList());
+    }
 }

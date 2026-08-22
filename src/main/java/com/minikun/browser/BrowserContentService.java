@@ -128,6 +128,22 @@ public final class BrowserContentService {
         return new BrowserReadResult(candidates, failures);
     }
 
+    /** Reads a bounded set of URLs discovered by another trusted pipeline stage. */
+    public BrowserReadResult readUrls(List<String> urls, int requestedLimit) {
+        if (urls == null || urls.isEmpty() || requestedLimit < 1) {
+            return new BrowserReadResult(List.of(), List.of());
+        }
+        List<String> bounded = urls.stream()
+                .filter(url -> url != null && !url.isBlank())
+                .map(String::trim)
+                .distinct()
+                .limit(Math.min(maxUrls, requestedLimit))
+                .toList();
+        return bounded.isEmpty()
+                ? new BrowserReadResult(List.of(), List.of())
+                : readPartial(String.join("\n", bounded));
+    }
+
     private UrlReadResult readOne(int index, String requestedUrl) {
         try {
             urlPolicy.validate(new URI(requestedUrl));
@@ -163,7 +179,7 @@ public final class BrowserContentService {
             recordOutcome("success", started);
             LOGGER.info("Browser render succeeded url_index={} truncated={}", index, rendered.truncated());
             return new UrlReadResult(new KnowledgeCandidate(
-                    "browser-" + index, KnowledgeSource.BROWSER, content, index), null);
+                    "browser-" + index, KnowledgeSource.BROWSER, content, index, sourceUrl), null);
         } catch (BrowserContentException exception) {
             recordOutcome("failure", started);
             return new UrlReadResult(null, new BrowserReadFailure(requestedUrl, exception.getMessage()));

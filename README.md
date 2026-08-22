@@ -10,6 +10,8 @@
 - Embeddings API สำหรับข้อความเดี่ยวหรือ array ของข้อความ
 - Voice Companion แบบ local สำหรับ speech-to-text, text-to-speech และ voice turn ต่อเนื่อง
 - Personal Knowledge แบบ local สำหรับ index เอกสาร, hybrid retrieval และ citation ในบทสนทนา
+- Autonomous Deep Research แบบ bounded สำหรับวาง subquestions, ค้นซ้ำตาม evidence gap, เปิดแหล่งต้นฉบับ และระบุข้อจำกัด
+- Storytelling advisor สำหรับจัดคำตอบเป็น explanation, comparison, timeline, analysis หรือ narrative ตามเจตนา
 - Adaptive Companion ที่เรียนรู้ภาษา ความยาว รูปแบบ ระดับเทคนิค และโทนการตอบแบบ owner-scoped
 - Natural Conversation Advisor ที่ใช้เจตนา บริบทต่อเนื่อง และสัญญาณอารมณ์เพื่อปรับคำตอบโดยไม่เก็บข้อความเพิ่ม
 - Companion Mode แบบ conversation-scoped สำหรับสลับพฤติกรรมระหว่าง `companion`, `work` และ `focus`
@@ -59,6 +61,7 @@ src/main/java/
 ├── communication/       draft/rewrite/reply/summarize แบบไม่ส่งออกภายนอก
 ├── investment/          policy, immutable ledger, portfolio analysis และ thesis journal
 ├── pcs/                 Provider Composition System สำหรับสร้าง prompt
+├── research/            ตรวจ research intent, มาตรฐานหลักฐาน และโครงสร้างการเล่าเรื่อง
 ├── search/              search decision, query processing และ SearXNG
 ├── commands/            runtime commands
 ├── context/             Personal Context Runtime และ context snapshots
@@ -253,6 +256,13 @@ TinyGrad อย่างน้อยระดับ `MEDIUM` เสมอ แม
 | `MINIKUN_BROWSER_BLOCK_PRIVATE_ADDRESSES` | `true` | ป้องกัน browser worker เข้าถึง localhost/private network |
 | `MINIKUN_BROWSER_MAX_CONTENT_CHARACTERS` | `12000` | ขนาดเนื้อหาสูงสุดต่อ URL ก่อนใส่เข้า Knowledge context |
 | `MINIKUN_BROWSER_MAX_CONCURRENCY` | `3` | จำนวน URL ที่ browser worker อ่านพร้อมกัน |
+| `MINIKUN_RESEARCH_SOURCE_READ_LIMIT` | `3` | จำนวนแหล่งต้นฉบับจากผลค้นหาที่เปิดอ่านใน deep-research path (`0` เพื่อปิด stage นี้) |
+| `MINIKUN_RESEARCH_AUTONOMOUS_ENABLED` | `true` | เปิด plan-search-read-evaluate loop สำหรับ explicit deep research |
+| `MINIKUN_RESEARCH_AUTONOMOUS_MAX_ITERATIONS` | `3` | จำนวนรอบประเมินและค้นซ้ำสูงสุด (`1-5`) |
+| `MINIKUN_RESEARCH_AUTONOMOUS_MAX_QUERIES` | `8` | จำนวน query รวมสูงสุดต่อ research turn (`1-20`) |
+| `MINIKUN_RESEARCH_AUTONOMOUS_MAX_FOLLOW_UP_QUERIES` | `3` | จำนวน gap queries ที่ evaluator สร้างได้ต่อรอบ (`1-4`) |
+| `MINIKUN_RESEARCH_AUTONOMOUS_EVALUATION_MAX_CHARACTERS` | `12000` | evidence budget สำหรับ coverage evaluator |
+| `MINIKUN_RESEARCH_AUTONOMOUS_TIMEOUT` | `PT60S` | deadline รวมของ autonomous research loop |
 | `SPRING_AI_CHAT_MEMORY_MAX_MESSAGES` | `20` | จำนวนข้อความ short-term memory สูงสุด |
 | `MINIKUN_MEMORY_RECALL_MAXIMUM_COUNT` | `10` | จำนวน long-term memories ที่เรียกคืนสูงสุด |
 | `MINIKUN_MEMORY_RECALL_MAXIMUM_CHARACTERS` | `4000` | ขนาด Knowledge context สูงสุด |
@@ -274,6 +284,34 @@ Browser จะอ่านหลาย URL แบบ best-effort: URL ที่�
 External context planner จะเลือก action ระหว่าง `MEMORY_ONLY`, `OPEN_EXPLICIT_URL`, `SEARCH_WEB`, `SEARCH_THEN_OPEN` และ `IMAGE_SEARCH` ก่อนเรียก external runtime โดย browser content ที่เป็นหน้า error หรือ login/access-blocked จะถูกคัดออกจาก Knowledge context
 
 Search และ Browser มี source-quality gate แบบ conservative สำหรับตรวจหน้า error, access-blocked และข้อความที่มีลักษณะ prompt injection; เนื้อหาที่สั้นหรือข้อมูลน้อยจะถูกติดป้ายคุณภาพต่ำแต่ยังคงไว้ เพื่อไม่ให้ snippet ที่ถูกต้องแต่สั้นถูกทิ้งโดยอัตโนมัติ
+
+### Deep Research และ Storytelling
+
+ข้อความที่ระบุเจตนาอย่าง `ค้นคว้า`, `วิจัย`, `เจาะลึก`, `research`, `fact-check` หรือ
+`deep dive` จะเข้า autonomous research loop แบบ bounded:
+
+1. task model แยก objective เป็น subquestions และ standalone search queries
+2. Search executor ค้น query ชุดแรกแบบ parallel และเก็บ URL provenance ใน evidence ledger
+3. Browser executor เปิดแหล่งต้นฉบับตาม source budget
+4. task model ประเมิน coverage จากหลักฐานที่ได้ โดยไม่สร้างคำตอบสุดท้าย
+5. หากยังมีช่องว่าง evaluator จะสร้าง follow-up queries แล้ววนกลับไปค้นรอบถัดไป
+6. loop หยุดเมื่อหลักฐานเพียงพอ, ไม่มี query ใหม่, ถึงเพดานรอบ/query หรือหมด deadline
+
+final model จะได้รับเฉพาะ evidence, execution trace และ unresolved gaps สำหรับสังเคราะห์คำตอบ ไม่ได้รับ
+hidden reasoning ของ planner/evaluator หาก task model วางแผนหรือประเมินไม่ได้ ระบบจะเก็บหลักฐานจาก
+deterministic seed query และส่งต่อแบบ fail-open แทนการทำให้ทั้งคำขอล้มเหลว หาก browser worker อ่านบางหน้าไม่ได้
+ระบบจะใช้แหล่งที่เหลือและ search snippets ต่อ
+
+เมื่อมี Search, Browser หรือ Personal Knowledge ใน context โมเดลจะได้รับ evidence contract ที่กำหนดให้:
+
+- แยกข้อเท็จจริง การอนุมาน และความไม่แน่ใจ
+- วาง citation ติดกับข้อกล่าวอ้างที่หลักฐานรองรับ โดยใช้ URL หรือ `knowledge://` ที่มีอยู่จริงเท่านั้น
+- แสดงข้อมูลที่ขัดแย้งพร้อมอ้างทั้งสองฝ่าย และระบุเมื่อหลักฐานไม่พอ
+- ไม่สร้าง citation, คำพูด, เหตุการณ์, แรงจูงใจ หรือความสัมพันธ์เชิงเหตุผลที่ไม่มีในหลักฐาน
+
+คำขอให้เล่า อธิบาย เปรียบเทียบ วิเคราะห์ หรือเรียงประวัติจะเลือกโครงสร้างตอบแบบ dynamic ได้แก่
+`STORY`, `EXPLANATION`, `COMPARISON`, `ANALYSIS` และ `TIMELINE` โดยคงภาษา น้ำเสียง และตัวตนจาก MCS
+เหมือนเดิม คำถามทั่วไปที่ไม่มี intent เหล่านี้จะไม่เพิ่ม prompt overhead และยังใช้ fast path เดิม
 
 ดูค่าทั้งหมดและ default เพิ่มเติมได้ที่ [`application.properties`](src/main/resources/application.properties)
 

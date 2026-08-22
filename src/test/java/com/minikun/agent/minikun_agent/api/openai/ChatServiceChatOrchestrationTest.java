@@ -700,6 +700,61 @@ class ChatServiceChatOrchestrationTest {
     }
 
     @Test
+    void researchStorytellingContractReachesTheFinalModelPrompt() throws Exception {
+        ChatModel chatModel = mock(ChatModel.class);
+        ConversationMemoryService conversation = mock(ConversationMemoryService.class);
+        SearchService searchService = mock(SearchService.class);
+        SearchDecisionService decisionService = mock(SearchDecisionService.class);
+        when(conversation.load(any())).thenReturn(List.of());
+        when(chatModel.call(any(Prompt.class))).thenReturn(response("research answer"));
+        when(decisionService.decide(any())).thenReturn(new SearchDecision(
+                true, "ระบบพลังงาน", com.minikun.search.model.SearchDecisionReason.FACT_LOOKUP));
+        String sourceUrl = "https://official.example/energy-report";
+        when(searchService.search(any())).thenReturn(new KnowledgeContext(
+                "Energy report (" + sourceUrl + "): evidence about ระบบพลังงาน",
+                List.of(new KnowledgeCandidate(
+                        "search-0", KnowledgeSource.SEARCH,
+                        "Energy report (" + sourceUrl + "): evidence about ระบบพลังงาน",
+                        0, sourceUrl))));
+        ChatService service = service(chatModel, conversation, searchService, decisionService);
+        setField(service, "searchEnabled", true);
+        setField(service, "searchTimeout", Duration.ofSeconds(10));
+        setField(service, "searchQueryPlanningEnabled", false);
+        setField(service, "autonomousResearchService",
+                (com.minikun.research.AutonomousResearchService) researchRequest ->
+                        new com.minikun.research.AutonomousResearchResult(
+                                new KnowledgeContext(
+                                        "Energy report (" + sourceUrl + "): evidence about ระบบพลังงาน",
+                                        List.of(new KnowledgeCandidate(
+                                                "research-search-0", KnowledgeSource.SEARCH,
+                                                "Energy report (" + sourceUrl + "): evidence about ระบบพลังงาน",
+                                                0, sourceUrl))),
+                                List.of(),
+                                new com.minikun.research.ResearchTrace(
+                                        "research energy", List.of("primary evidence"),
+                                        List.of("energy official", "energy independent"), 2,
+                                        com.minikun.research.ResearchStopReason.SUFFICIENT,
+                                        List.of(), true)));
+        ChatCompletionRequest request = new ChatCompletionRequest(
+                "mini-kun",
+                List.of(new Message("user", "ช่วยค้นคว้าระบบพลังงานแล้วเล่าเป็นเรื่องให้เข้าใจง่าย")),
+                "research-story", false, null, null, null);
+
+        service.chatCompletion(request, new ConversationId("research-story"));
+
+        ArgumentCaptor<Prompt> prompt = ArgumentCaptor.forClass(Prompt.class);
+        verify(chatModel).call(prompt.capture());
+        String text = promptText(prompt.getValue());
+        assertTrue(text.contains("Deep research workflow"));
+        assertTrue(text.contains("Evidence and citations"));
+        assertTrue(text.contains("Autonomous research loop result"));
+        assertTrue(text.contains("Autonomous research iterations: 2"));
+        assertTrue(text.contains("Narrative craft: STORY"));
+        assertTrue(text.contains(sourceUrl));
+        assertTrue(text.contains("Never invent, repair, or guess a citation"));
+    }
+
+    @Test
     void streamingPromptReceivesImageAwarenessWithoutChangingDoneContract() throws Exception {
         ChatModel chatModel = mock(ChatModel.class);
         ConversationMemoryService conversation = mock(ConversationMemoryService.class);

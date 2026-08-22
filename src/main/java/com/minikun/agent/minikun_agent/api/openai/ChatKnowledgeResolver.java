@@ -23,8 +23,14 @@ import com.minikun.pcs.KnowledgeConsolidation;
 import com.minikun.pcs.KnowledgeConsolidationService;
 import com.minikun.pcs.KnowledgeSelection;
 import com.minikun.pcs.KnowledgeSelectionService;
+import com.minikun.pcs.KnowledgeSource;
 import com.minikun.pcs.SearchSelectionSignals;
 import com.minikun.pcs.model.KnowledgeContext;
+import com.minikun.research.ResearchIntentDetector;
+import com.minikun.research.AutonomousResearchRequest;
+import com.minikun.research.AutonomousResearchResult;
+import com.minikun.research.AutonomousResearchService;
+import com.minikun.research.ResearchTrace;
 import com.minikun.search.SearchContextAwarenessService;
 import com.minikun.search.SearchDecisionService;
 import com.minikun.search.SearchQueryPlanningService;
@@ -54,9 +60,11 @@ final class ChatKnowledgeResolver {
     private final KnowledgeConsolidationService knowledgeConsolidationService;
     private final SearchSelectionSignalMapper searchSelectionSignalMapper;
     private final BrowserContentService browserContentService;
+    private final AutonomousResearchService autonomousResearchService;
     private final ChatPerformanceMetrics performanceMetrics;
     private final Configuration configuration;
     private final ExternalContextPlanner externalContextPlanner = new ExternalContextPlanner();
+    private final ResearchIntentDetector researchIntentDetector = new ResearchIntentDetector();
 
     ChatKnowledgeResolver(
             ObjectProvider<MemoryRecallService> memoryRecallService,
@@ -69,6 +77,7 @@ final class ChatKnowledgeResolver {
             KnowledgeConsolidationService knowledgeConsolidationService,
             SearchSelectionSignalMapper searchSelectionSignalMapper,
             BrowserContentService browserContentService,
+            AutonomousResearchService autonomousResearchService,
             ChatPerformanceMetrics performanceMetrics,
             Configuration configuration) {
         this.memoryRecallService = memoryRecallService;
@@ -81,6 +90,7 @@ final class ChatKnowledgeResolver {
         this.knowledgeConsolidationService = knowledgeConsolidationService;
         this.searchSelectionSignalMapper = searchSelectionSignalMapper;
         this.browserContentService = browserContentService;
+        this.autonomousResearchService = autonomousResearchService;
         this.performanceMetrics = performanceMetrics;
         this.configuration = configuration;
     }
@@ -181,6 +191,34 @@ final class ChatKnowledgeResolver {
                     browserCandidates, searchSignals);
         }
 
+        if (researchIntentDetector.detect(query).deepResearch() && autonomousResearchService != null) {
+            try {
+                AutonomousResearchResult research = autonomousResearchService.research(
+                        new AutonomousResearchRequest(
+                                query,
+                                request.classifierContext(),
+                                plan.primaryQuery(),
+                                plan.alternateQueries(),
+                                plan.language(),
+                                plan.timeRange(),
+                                configuration.safeSearch(),
+                                Math.max(1, Math.min(100, configuration.searchResultLimit())),
+                                configuration.researchSourceReadLimit(),
+                                Instant.now().plus(configuration.autonomousResearchTimeout())));
+                if (research.trace().autonomous()) {
+                    List<KnowledgeCandidate> explicitBrowserCandidates = joinBrowser(browserFuture);
+                    List<KnowledgeCandidate> allBrowserCandidates = mergeBrowserCandidates(
+                            explicitBrowserCandidates, research.browserCandidates());
+                    recordStage("search", searchStarted, "autonomous_success");
+                    return selection(
+                            request, memoryKnowledge, personalKnowledge, plannedDecision, true,
+                            research.searchKnowledge(), allBrowserCandidates, searchSignals, research.trace());
+                }
+            } catch (RuntimeException exception) {
+                log.warn("Autonomous research failed; using deterministic research fallback", exception);
+            }
+        }
+
         List<KnowledgeCandidate> browserCandidates = List.of();
         try {
             SearchRequest searchRequest = new SearchRequest(
@@ -196,6 +234,10 @@ final class ChatKnowledgeResolver {
                     CompletableFuture.supplyAsync(() -> searchService.search(searchRequest));
             browserCandidates = joinBrowser(browserFuture);
             KnowledgeContext searchKnowledge = searchFuture.join();
+            if (researchIntentDetector.detect(query).deepResearch()) {
+                browserCandidates = mergeBrowserCandidates(
+                        browserCandidates, readResearchSourceCandidates(searchKnowledge));
+            }
             log.info("Search completed knowledgeCharacters={}",
                     searchKnowledge == null ? 0 : searchKnowledge.content().length());
             recordStage("search", searchStarted, "success");
@@ -257,6 +299,20 @@ final class ChatKnowledgeResolver {
             KnowledgeContext searchKnowledge,
             List<KnowledgeCandidate> browserCandidates,
             SearchSelectionSignals searchSignals) {
+        return selection(request, memoryKnowledge, personalKnowledge, decision, searchAttempted,
+                searchKnowledge, browserCandidates, searchSignals, ResearchTrace.EMPTY);
+    }
+
+    private ChatKnowledgeSelection selection(
+            Request request,
+            KnowledgeContext memoryKnowledge,
+            KnowledgeContext personalKnowledge,
+            SearchDecision decision,
+            boolean searchAttempted,
+            KnowledgeContext searchKnowledge,
+            List<KnowledgeCandidate> browserCandidates,
+            SearchSelectionSignals searchSignals,
+            ResearchTrace researchTrace) {
         KnowledgeSelection selected = knowledgeSelectionService.select(
                 request.query(), memoryKnowledge, personalKnowledge, searchKnowledge, browserCandidates);
         log.info("process=knowledge_selection event=completed selected={} fallback={}",
@@ -268,7 +324,8 @@ final class ChatKnowledgeResolver {
                 searchContextAwarenessService.observe(
                         request.query(), request.conversationContextAvailable(),
                         combine(memoryKnowledge, personalKnowledge), decision,
-                        searchAttempted, searchKnowledge));
+                        searchAttempted, searchKnowledge),
+                researchTrace);
     }
 
     private KnowledgeConsolidation consolidate(KnowledgeSelection selection) {
@@ -302,6 +359,53 @@ final class ChatKnowledgeResolver {
             }
             throw exception;
         }
+    }
+
+    private List<KnowledgeCandidate> readResearchSourceCandidates(KnowledgeContext searchKnowledge) {
+        if (browserContentService == null || configuration.researchSourceReadLimit() < 1
+                || searchKnowledge == null || searchKnowledge.candidates().isEmpty()) {
+            return List.of();
+        }
+        List<String> urls = searchKnowledge.candidates().stream()
+                .filter(candidate -> candidate.source() == KnowledgeSource.SEARCH)
+                .map(KnowledgeCandidate::provenance)
+                .filter(value -> value != null && !value.isBlank())
+                .distinct()
+                .toList();
+        if (urls.isEmpty()) {
+            return List.of();
+        }
+        try {
+            BrowserReadResult result = browserContentService.readUrls(
+                    urls, configuration.researchSourceReadLimit());
+            log.info("process=research_source_read event=completed requested={} candidates={} failures={}",
+                    Math.min(urls.size(), configuration.researchSourceReadLimit()),
+                    result.candidates().size(), result.failures().size());
+            result.failures().forEach(failure ->
+                    log.warn("process=research_source_read event=url_failed url={} reason={}",
+                            failure.url(), failure.reason()));
+            return result.candidates();
+        } catch (RuntimeException exception) {
+            log.warn("Research source reading failed; continuing with search snippets", exception);
+            return List.of();
+        }
+    }
+
+    private List<KnowledgeCandidate> mergeBrowserCandidates(
+            List<KnowledgeCandidate> first,
+            List<KnowledgeCandidate> second) {
+        List<KnowledgeCandidate> merged = new java.util.ArrayList<>();
+        java.util.Set<String> seenProvenance = new java.util.LinkedHashSet<>();
+        java.util.stream.Stream.concat(first.stream(), second.stream()).forEach(candidate -> {
+            String key = candidate.provenance().isBlank() ? candidate.content() : candidate.provenance();
+            if (seenProvenance.add(key)) {
+                int index = merged.size();
+                merged.add(new KnowledgeCandidate(
+                        "browser-" + index, KnowledgeSource.BROWSER, candidate.content(), index,
+                        candidate.provenance()));
+            }
+        });
+        return List.copyOf(merged);
     }
 
     private String categoryFor(SearchDecision decision, String intent) {
@@ -373,6 +477,17 @@ final class ChatKnowledgeResolver {
             boolean queryPlanningEnabled,
             int searchResultLimit,
             int memoryRetrievalLimit,
-            int personalKnowledgeLimit) {
+            int personalKnowledgeLimit,
+            int researchSourceReadLimit,
+            Duration autonomousResearchTimeout) {
+        Configuration {
+            if (researchSourceReadLimit < 0 || researchSourceReadLimit > 10) {
+                throw new IllegalArgumentException("research source read limit must be between 0 and 10");
+            }
+            if (autonomousResearchTimeout == null || autonomousResearchTimeout.isZero()
+                    || autonomousResearchTimeout.isNegative()) {
+                throw new IllegalArgumentException("autonomous research timeout must be positive");
+            }
+        }
     }
 }

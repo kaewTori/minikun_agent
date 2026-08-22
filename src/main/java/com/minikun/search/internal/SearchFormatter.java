@@ -33,7 +33,8 @@ final class SearchFormatter {
             }
             String content = result.title() + " (" + result.source().canonicalUri() + "): " + result.content();
             candidates.add(new KnowledgeCandidate(
-                "search-" + index, KnowledgeSource.SEARCH, content, index));
+                "search-" + index, KnowledgeSource.SEARCH, content, index,
+                result.source().canonicalUri()));
         }
         return KnowledgeContext.fromCandidates(candidates);
     }

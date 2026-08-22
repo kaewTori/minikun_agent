@@ -62,6 +62,18 @@ class FastPathSearchDecisionServiceTest {
     }
 
     @Test
+    void explicitResearchUsesSearchFastPath() {
+        SearchDecisionService delegate = query -> new com.minikun.search.model.SearchDecision(false, query);
+        SearchDecisionService service = new FastPathSearchDecisionService(
+                delegate, new RuleBasedSearchDecisionService(null));
+
+        var decision = service.decide("ช่วยค้นคว้าเรื่องแบตเตอรี่แบบเจาะลึก");
+
+        assertTrue(decision.shouldSearch());
+        assertEquals(SearchDecisionReason.CURRENT_INFORMATION, decision.reason());
+    }
+
+    @Test
     void sendsHighRiskConversationToTheConfiguredDecisionProvider() {
         java.util.concurrent.atomic.AtomicBoolean delegated = new java.util.concurrent.atomic.AtomicBoolean();
         SearchDecisionService service = new FastPathSearchDecisionService(

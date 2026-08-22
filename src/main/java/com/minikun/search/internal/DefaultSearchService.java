@@ -189,20 +189,36 @@ public final class DefaultSearchService implements SearchService {
         }
     }
 
-            private KnowledgeContext combineCachedContexts(List<KnowledgeContext> contexts, SearchRequest request) {
+    private KnowledgeContext combineCachedContexts(List<KnowledgeContext> contexts, SearchRequest request) {
         String content = contexts.stream()
-            .map(KnowledgeContext::content)
-            .filter(value -> !value.isBlank())
-            .reduce((left, right) -> left + "\n" + right)
-            .orElse("");
-            java.util.Set<String> seenUrls = new java.util.HashSet<>();
-            List<com.minikun.pcs.model.ImageSource> images = contexts.stream()
+                .map(KnowledgeContext::content)
+                .filter(value -> !value.isBlank())
+                .reduce((left, right) -> left + "\n" + right)
+                .orElse("");
+        java.util.LinkedHashMap<String, com.minikun.pcs.KnowledgeCandidate> distinctCandidates =
+                new java.util.LinkedHashMap<>();
+        contexts.stream().flatMap(context -> context.candidates().stream()).forEach(candidate -> {
+            String key = candidate.provenance().isBlank() ? candidate.content() : candidate.provenance();
+            distinctCandidates.putIfAbsent(key, candidate);
+        });
+        List<com.minikun.pcs.KnowledgeCandidate> candidates = new ArrayList<>();
+        for (com.minikun.pcs.KnowledgeCandidate candidate : distinctCandidates.values()) {
+            int index = candidates.size();
+            candidates.add(new com.minikun.pcs.KnowledgeCandidate(
+                    "cached-search-" + index, candidate.source(), candidate.content(),
+                    candidate.sourcePosition(), candidate.provenance()));
+            if (candidates.size() == request.resultLimit()) {
+                break;
+            }
+        }
+        java.util.Set<String> seenUrls = new java.util.HashSet<>();
+        List<com.minikun.pcs.model.ImageSource> images = contexts.stream()
                 .flatMap(context -> context.images().stream())
                 .filter(image -> seenUrls.add(image.url().trim()))
                 .limit(request.resultLimit())
                 .toList();
-        return new KnowledgeContext(content, List.of(), images);
-        }
+        return new KnowledgeContext(content, List.copyOf(candidates), images);
+    }
 
     private Timer.Sample startTimer() {
         try {

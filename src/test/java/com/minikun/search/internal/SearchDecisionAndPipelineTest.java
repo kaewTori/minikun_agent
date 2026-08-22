@@ -31,10 +31,11 @@ class SearchDecisionAndPipelineTest {
         assertTrue(service.decide("What is the latest Java release?").shouldSearch());
         assertTrue(service.decide("ข่าววันนี้เป็นอย่างไร").shouldSearch());
         assertTrue(service.decide("แนะนำร้านราเมง Tonkotsu Classic").shouldSearch());
+        assertTrue(service.decide("ช่วยค้นคว้าแบบเจาะลึกเรื่องพลังงานสะอาด").shouldSearch());
         assertFalse(service.decide("Explain dependency injection").shouldSearch());
         assertFalse(service.decide(" ").shouldSearch());
         assertEquals("latest Java", service.decide("  latest Java  ").query());
-        assertEquals(6, registry.get("minikun.search.decision.duration").timer().count());
+        assertEquals(7, registry.get("minikun.search.decision.duration").timer().count());
     }
 
     @Test
@@ -76,6 +77,17 @@ class SearchDecisionAndPipelineTest {
                 new SearchResponse(REQUEST_ID, SearchStatus.SUCCESS, List.of(), METADATA));
 
         assertEquals("", empty.content());
+    }
+
+    @Test
+    void formatterPreservesCanonicalUrlAsCandidateProvenance() {
+        SearchFormatter formatter = new SearchFormatter();
+        SearchResult source = result("Report", "https://example.org/report", "Evidence with sufficient detail");
+
+        KnowledgeContext context = formatter.format(
+                new SearchResponse(REQUEST_ID, SearchStatus.SUCCESS, List.of(source), METADATA));
+
+        assertEquals("https://example.org/report", context.candidates().getFirst().provenance());
     }
 
     private static SearchResult result(String title, String uri, String content) {

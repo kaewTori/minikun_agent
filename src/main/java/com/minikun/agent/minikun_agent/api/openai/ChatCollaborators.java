@@ -15,6 +15,7 @@ import com.minikun.model.capability.ModelCapabilityRegistry;
 import com.minikun.personality.companion.CompanionModeService;
 import com.minikun.personality.profile.UserModelService;
 import com.minikun.personality.runtime.AdaptivePersonaService;
+import com.minikun.research.AutonomousResearchService;
 import com.minikun.context.runtime.PersonalContextRuntime;
 import com.minikun.tokenbudget.config.TokenBudgetProperties;
 import com.minikun.tokenbudget.runtime.DynamicGenerationOptionsFactory;
@@ -43,6 +44,7 @@ final class ChatCollaborators {
     private final VisionInputService visionInputService;
     private final PersonalKnowledgeService personalKnowledgeService;
     private final ConversationSummaryService conversationSummaryService;
+    private final AutonomousResearchService autonomousResearchService;
 
     ChatCollaborators(
             ObjectProvider<SpringAiToolCallingRuntime> toolCallingRuntime,
@@ -62,7 +64,8 @@ final class ChatCollaborators {
             BrowserContentService browserContentService,
             ObjectProvider<VisionInputService> visionInputService,
             ObjectProvider<PersonalKnowledgeService> personalKnowledgeService,
-            ObjectProvider<ConversationSummaryService> conversationSummaryService) {
+            ObjectProvider<ConversationSummaryService> conversationSummaryService,
+            ObjectProvider<AutonomousResearchService> autonomousResearchService) {
         this.toolCallingRuntime = toolCallingRuntime.getIfAvailable();
         this.toolRequestRouters = toolRequestRouters.orderedStream().toList();
         this.dynamicGenerationOptionsFactory = dynamicGenerationOptionsFactory.getIfAvailable();
@@ -81,6 +84,7 @@ final class ChatCollaborators {
         this.visionInputService = visionInputService.getIfAvailable();
         this.personalKnowledgeService = personalKnowledgeService.getIfAvailable();
         this.conversationSummaryService = conversationSummaryService.getIfAvailable();
+        this.autonomousResearchService = autonomousResearchService.getIfAvailable();
     }
 
     SpringAiToolCallingRuntime toolCallingRuntime() { return toolCallingRuntime; }
@@ -101,4 +105,5 @@ final class ChatCollaborators {
     VisionInputService visionInputService() { return visionInputService; }
     PersonalKnowledgeService personalKnowledgeService() { return personalKnowledgeService; }
     ConversationSummaryService conversationSummaryService() { return conversationSummaryService; }
+    AutonomousResearchService autonomousResearchService() { return autonomousResearchService; }
 }

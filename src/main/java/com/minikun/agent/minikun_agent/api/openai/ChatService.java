@@ -58,6 +58,7 @@ import com.minikun.search.SearchQueryPlanningService;
 import com.minikun.search.SearchContextAwarenessService;
 import com.minikun.search.SearchService;
 import com.minikun.search.SearchSelectionSignalMapper;
+import com.minikun.research.AutonomousResearchService;
 import com.minikun.tools.springai.SpringAiToolCallingRuntime;
 import com.minikun.tools.ToolEvidence;
 import com.minikun.tools.ToolRequestRouter;
@@ -154,6 +155,8 @@ public class ChatService {
 
     private ConversationSummaryService conversationSummaryService;
 
+    private AutonomousResearchService autonomousResearchService;
+
     @Autowired
     void configureCollaborators(ChatCollaborators collaborators) {
         toolCallingRuntime = collaborators.toolCallingRuntime();
@@ -174,6 +177,7 @@ public class ChatService {
         visionInputService = collaborators.visionInputService();
         personalKnowledgeService = collaborators.personalKnowledgeService();
         conversationSummaryService = collaborators.conversationSummaryService();
+        autonomousResearchService = collaborators.autonomousResearchService();
     }
 
     public ChatService(
@@ -315,6 +319,12 @@ public class ChatService {
 
     @Value("${minikun.search.result-limit:8}")
     private int configuredSearchResultLimit;
+
+    @Value("${minikun.research.source-read-limit:3}")
+    private int configuredResearchSourceReadLimit;
+
+    @Value("${minikun.research.autonomous.timeout:PT60S}")
+    private java.time.Duration configuredAutonomousResearchTimeout = java.time.Duration.ofSeconds(60);
 
     @Value("${minikun.model.generation.temperature:0.5}")
     private double configuredGenerationTemperature;
@@ -712,6 +722,7 @@ public class ChatService {
                 knowledgeConsolidationService,
                 searchSelectionSignalMapper,
                 browserContentService,
+                autonomousResearchService,
                 performanceMetrics,
                 new ChatKnowledgeResolver.Configuration(
                         searchEnabled,
@@ -720,7 +731,9 @@ public class ChatService {
                         searchQueryPlanningEnabled,
                         configuredSearchResultLimit,
                         configuredMemoryRetrievalLimit,
-                        configuredPersonalKnowledgeLimit));
+                        configuredPersonalKnowledgeLimit,
+                        configuredResearchSourceReadLimit,
+                        configuredAutonomousResearchTimeout));
     }
 
     private ChatPromptFactory promptFactory() {

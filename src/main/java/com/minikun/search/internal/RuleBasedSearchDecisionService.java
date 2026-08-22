@@ -18,7 +18,8 @@ public final class RuleBasedSearchDecisionService implements SearchDecisionServi
     private static final List<String> KEYWORDS = List.of(
             "search", "ค้นหา", "แนะนำ", "ร้าน", "เมนู", "อาหาร", "ราคา", "ที่ไหน", "อยู่ที่ไหน",
             "ข่าว", "ล่าสุด", "วันนี้", "ปัจจุบัน", "ข้อมูล", "current", "latest", "news", "recommend",
-            "where", "who is", "what is");
+            "where", "who is", "what is", "ค้นคว้า", "วิจัย", "เจาะลึก", "สืบค้น",
+            "ตรวจสอบข้อเท็จจริง", "research", "investigate", "fact-check", "deep dive");
     private final MeterRegistry meterRegistry;
 
     public RuleBasedSearchDecisionService(MeterRegistry meterRegistry) {

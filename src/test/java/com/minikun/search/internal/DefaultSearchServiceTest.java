@@ -267,6 +267,29 @@ class DefaultSearchServiceTest {
     }
 
     @Test
+    void multiQueryCacheHitPreservesCandidateProvenanceForResearchReading() {
+        var candidate = new com.minikun.pcs.KnowledgeCandidate(
+                "search-0", com.minikun.pcs.KnowledgeSource.SEARCH,
+                "Report (https://example.org/report): evidence", 0,
+                "https://example.org/report");
+        KnowledgeContext cached = new KnowledgeContext("cached evidence", List.of(candidate));
+        RecordingCache cache = new RecordingCache(Optional.of(cached));
+        SearchQueryExpansionService expansionService = query -> new ExpandedSearchQuery(
+                query.originalQuery(), query.rewrittenQuery(),
+                List.of(query.rewrittenQuery(), "official source"));
+        SearchManager manager = request -> {
+            throw new AssertionError("manager must not be called on a complete cache hit");
+        };
+
+        KnowledgeContext result = new DefaultSearchService(
+                manager, cache, true, true, new DefaultSearchQueryRewriteService(),
+                expansionService, new SimpleMeterRegistry()).search(REQUEST);
+
+        assertEquals(1, result.candidates().size());
+        assertEquals("https://example.org/report", result.candidates().getFirst().provenance());
+    }
+
+    @Test
     void canonicalSynonymAndAcronymQueriesReachManagerAndCacheInOrder() {
         KnowledgeContext live = new KnowledgeContext("live");
         RecordingCache cache = new RecordingCache(Optional.empty());
