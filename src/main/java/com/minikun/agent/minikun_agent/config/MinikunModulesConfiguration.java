@@ -19,6 +19,8 @@ import com.minikun.diagnostics.DiagnosticsService;
 import com.minikun.diagnostics.MeterRegistryMetricsReader;
 import com.minikun.guardian.GuardianConfiguration;
 import com.minikun.guardian.HomelabGuardianScheduler;
+import com.minikun.investment.InvestmentService;
+import com.minikun.investment.JdbcInvestmentStore;
 import com.minikun.knowledge.PersonalKnowledgeConfiguration;
 import com.minikun.memory.internal.MemoryConfiguration;
 import com.minikun.memory.management.MemoryManagementController;
@@ -76,6 +78,9 @@ import com.minikun.tools.DefaultToolRegistry;
 import com.minikun.tools.GuardianConfirmationRouter;
 import com.minikun.tools.HomelabGuardianRouter;
 import com.minikun.tools.HomelabGuardianTool;
+import com.minikun.tools.InvestmentAnalyzeTool;
+import com.minikun.tools.InvestmentConfirmationRouter;
+import com.minikun.tools.InvestmentManageTool;
 import com.minikun.tools.LocalComputerRouter;
 import com.minikun.tools.LocalComputerTool;
 import com.minikun.tools.LocationResolveTool;
@@ -136,7 +141,9 @@ import com.minikun.weather.WeatherConfiguration;
         ReminderActionController.class, PlannerNotificationScheduler.class,
         DailyWeatherNotificationScheduler.class, JdbcTaskStore.class, TaskService.class,
         TaskManageTool.class, TaskConfirmationRouter.class, TaskCaptureToolRouter.class, TaskController.class,
-        TaskFollowUpScheduler.class, DailyBriefingScheduler.class, SpringAiToolCallingRuntime.class
+        TaskFollowUpScheduler.class, DailyBriefingScheduler.class,
+        JdbcInvestmentStore.class, InvestmentService.class, InvestmentManageTool.class,
+        InvestmentAnalyzeTool.class, InvestmentConfirmationRouter.class, SpringAiToolCallingRuntime.class
 })
 public class MinikunModulesConfiguration {
 }

@@ -39,6 +39,7 @@ import org.springframework.http.MediaType;
 	"minikun.memory.persistence.enabled=false",
 	"minikun.planner.enabled=false",
 	"minikun.task.enabled=false",
+	"minikun.investment.enabled=false",
 	"minikun.agent.execution.enabled=false",
 	"minikun.personal-knowledge.enabled=false"
 })

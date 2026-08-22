@@ -14,6 +14,8 @@
 - Companion Mode แบบ conversation-scoped สำหรับสลับพฤติกรรมระหว่าง `companion`, `work` และ `focus`
 - Communication Assistant สำหรับ draft, rewrite, reply และ summarize โดยใช้โมเดลหลักแบบ draft-only
 - Agent Planner + Execution Loop สำหรับคำสั่งหลายขั้น พร้อม state, retry, confirmation stop และ resume จาก PostgreSQL
+- Investment Copilot แบบ owner-scoped สำหรับ policy, transaction ledger, average-cost portfolio,
+  decision journal และการจำลองซื้อโดยไม่เชื่อม broker หรือส่งคำสั่งซื้อขาย
 - เก็บ short-term conversation history ด้วย Spring AI Chat Memory และ PostgreSQL
 - สกัด long-term memory จาก PostgreSQL และเรียกคืนเชิงความหมายด้วย embedding พร้อม lexical fallback
 - ประกอบ prompt ผ่าน Provider Composition System (PCS)
@@ -24,7 +26,7 @@
 - ส่ง language/category/time-range/safe-search options ไปยัง SearXNG พร้อม ranking และ URL deduplication
 - Actuator health และ metrics
 - คำสั่ง runtime และ diagnostics ที่จัดการในระดับ application
-- Native function tools: `time.get_current_time`, `weather.get_forecast`, `web.search`, `web.open_url`, `calculator.add`, `planner.manage`, `calendar.manage`, `task.manage`, `homelab.guardian`, `computer.local`, `knowledge.personal` และ `communication.assist`
+- Native function tools: `time.get_current_time`, `weather.get_forecast`, `web.search`, `web.open_url`, `calculator.add`, `planner.manage`, `calendar.manage`, `task.manage`, `investment.manage`, `investment.analyze`, `homelab.guardian`, `computer.local`, `knowledge.personal` และ `communication.assist`
 - ผลลัพธ์จาก tool จะถูกส่งกลับเข้า prompt ของ MCS/PCS เพื่อให้โมเดลตอบต่อด้วยตัวตน บริบท และน้ำเสียงเดิมของมินิคุง
 - เก็บ reminder ใน PostgreSQL และส่ง notification ผ่าน ntfy พร้อม daily weather digest เวลา 07:00 (`Asia/Bangkok`)
 - เชื่อม private iCalendar feed จาก Google, Apple หรือ Outlook เพื่ออ่าน agenda และเตือนก่อนนัด
@@ -54,6 +56,7 @@ src/main/java/
 ├── knowledge/           personal document ingestion, indexing และ retrieval
 ├── personality/         profile, preferences และ adaptive response learning
 ├── communication/       draft/rewrite/reply/summarize แบบไม่ส่งออกภายนอก
+├── investment/          policy, immutable ledger, portfolio analysis และ thesis journal
 ├── pcs/                 Provider Composition System สำหรับสร้าง prompt
 ├── search/              search decision, query processing และ SearXNG
 ├── commands/            runtime commands
@@ -65,6 +68,7 @@ src/main/resources/
 ├── application.properties
 ├── memory-schema.sql
 ├── personal-knowledge-schema.sql
+├── investment-schema.sql
 └── logback-spring.xml
 
 docs/
@@ -156,6 +160,8 @@ Actuator ที่เปิดให้เข้าถึงคือ `/actuator
 | `MINIKUN_PLANNER_ENABLED` | `true` | เปิด planner, reminder scheduler และ daily weather notification |
 | `MINIKUN_PLANNER_POLL_INTERVAL_MS` | `30000` | รอบตรวจ reminder ที่ถึงเวลาแล้ว |
 | `MINIKUN_TASK_ENABLED` | `true` | เปิด goal/task store, tool และ follow-up scheduler |
+| `MINIKUN_INVESTMENT_ENABLED` | `true` | เปิด investment ledger, policy, thesis และ native tools |
+| `MINIKUN_INVESTMENT_DEFAULT_BASE_CURRENCY` | `THB` | สกุลเงินฐานเริ่มต้นของพอร์ตในเฟส single-currency |
 | `MINIKUN_TASK_POLL_INTERVAL_MS` | `30000` | รอบตรวจ task follow-up ที่ถึงเวลาแล้ว |
 | `MINIKUN_TASK_MANAGEMENT_TOKEN` | ใช้ค่า memory token ถ้ามี | token สำหรับ Task API ที่ใช้โดย dashboard/automation |
 | `MINIKUN_COMPANION_MODE_ENABLED` | `true` | เปิด interaction mode แบบ conversation-scoped |
