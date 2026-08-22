@@ -9,10 +9,11 @@ import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.DistributionSummary;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
+import com.minikun.model.ModelPerformanceMetrics;
 
 /** Low-cardinality latency metrics for the user-visible chat pipeline. */
 @Component
-public final class ChatPerformanceMetrics {
+public final class ChatPerformanceMetrics implements ModelPerformanceMetrics {
     static final String STAGE_DURATION = "minikun.chat.stage.duration";
     static final String FAST_PATH_REQUESTS = "minikun.chat.fast_path.requests";
     static final String GENERATION_PROFILES = "minikun.chat.generation.profile.requests";
@@ -33,6 +34,7 @@ public final class ChatPerformanceMetrics {
         record(stage, startedNanos, "success");
     }
 
+    @Override
     public void record(String stage, long startedNanos, String result) {
         try {
             Timer.builder(STAGE_DURATION)

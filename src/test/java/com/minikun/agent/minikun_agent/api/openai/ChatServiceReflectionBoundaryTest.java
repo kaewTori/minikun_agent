@@ -5,49 +5,18 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import java.lang.reflect.Method;
-import java.nio.file.Path;
-import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
-import org.springframework.ai.chat.model.ChatModel;
-import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.beans.factory.ObjectProvider;
 
-import com.minikun.agent.minikun_agent.api.openai.dto.Message;
 import com.minikun.agent.minikun_agent.conversation.ChatMessage;
 import com.minikun.agent.minikun_agent.conversation.ConversationId;
 import com.minikun.agent.minikun_agent.conversation.ConversationMemoryService;
-import com.minikun.model.DefaultChatModelProviderRegistry;
-import com.minikun.model.ActiveModelConfiguration;
-import com.minikun.model.ChatModelId;
-import com.minikun.model.DefaultActiveChatModelProvider;
-import com.minikun.model.existing.ExistingChatModelProvider;
-import com.minikun.character.CharacterLoader;
-import com.minikun.character.model.CharacterSpecification;
-import com.minikun.commands.CommandCatalog;
-import com.minikun.commands.CommandFormatter;
-import com.minikun.diagnostics.DiagnosticsFormatter;
-import com.minikun.diagnostics.DiagnosticsPromptBuilder;
-import com.minikun.diagnostics.DiagnosticsService;
 import com.minikun.memory.model.CompletedConversation;
-import com.minikun.memory.MemoryRecallService;
-import com.minikun.memory.MemoryService;
-import com.minikun.pcs.MinikunPersonaProvider;
-import com.minikun.pcs.PromptComposer;
-import com.minikun.runtime.CacheFormatter;
-import com.minikun.runtime.CacheService;
-import com.minikun.runtime.ModelsFormatter;
-import com.minikun.runtime.ModelsService;
-import com.minikun.runtime.VersionFormatter;
-import com.minikun.runtime.VersionService;
-import com.minikun.search.SearchDecisionService;
-import com.minikun.search.SearchService;
 
 class ChatServiceReflectionBoundaryTest {
-    private static final Path MCS_ROOT = Path.of("../../config/minikun-agent/mcs");
     private static final ConversationId CONVERSATION_ID = new ConversationId("conversation-1");
 
     @Test
@@ -129,41 +98,9 @@ class ChatServiceReflectionBoundaryTest {
         return memory;
     }
 
-    @SuppressWarnings("unchecked")
-    private Optional<CompletedConversation> select(ConversationMemoryService memory) throws Exception {
-        ChatService service = service(memory);
-        Method method = ChatService.class.getDeclaredMethod(
-                "completedConversation", String.class, ConversationId.class);
-        method.setAccessible(true);
-        return (Optional<CompletedConversation>) method.invoke(service, "owner-1", CONVERSATION_ID);
-    }
-
-    private ChatService service(ConversationMemoryService memory) {
-        CharacterSpecification character = new CharacterLoader(MCS_ROOT).load();
-        return new ChatService(
-                new DefaultActiveChatModelProvider(
-                        new ActiveModelConfiguration(ChatModelId.EXISTING),
-                        new DefaultChatModelProviderRegistry(List.of(new ExistingChatModelProvider(mock(ChatModel.class))))),
-                mock(EmbeddingModel.class),
-                mock(ChatTransactionLogger.class),
-                memory,
-                mock(ObjectProvider.class),
-                character,
-                new PromptComposer(),
-                mock(SearchService.class),
-                mock(SearchDecisionService.class),
-                new com.minikun.search.SearchSelectionSignalMapper(),
-                mock(DiagnosticsService.class),
-                new DiagnosticsFormatter(),
-                new DiagnosticsPromptBuilder(new MinikunPersonaProvider(character)),
-                new CommandCatalog(),
-                new CommandFormatter(),
-                mock(VersionService.class),
-                mock(VersionFormatter.class),
-                mock(ModelsService.class),
-                mock(ModelsFormatter.class),
-                mock(CacheService.class),
-                mock(CacheFormatter.class),
-                mock(ObjectProvider.class));
+    private Optional<CompletedConversation> select(ConversationMemoryService memory) {
+        ChatTurnFinalizer finalizer = new ChatTurnFinalizer(
+                memory, mock(ObjectProvider.class), null, null, false);
+        return finalizer.completedConversation("owner-1", CONVERSATION_ID);
     }
 }

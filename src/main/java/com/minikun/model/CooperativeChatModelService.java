@@ -19,7 +19,6 @@ import org.springframework.stereotype.Service;
 
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
-import com.minikun.agent.minikun_agent.api.openai.ChatPerformanceMetrics;
 
 /** Lets Ollama answer first and uses TinyGrad as a precision pass when useful. */
 @Service
@@ -35,7 +34,7 @@ public final class CooperativeChatModelService {
     private final int maxDraftCharacters;
 
     @Autowired(required = false)
-    private ChatPerformanceMetrics performanceMetrics;
+    private ModelPerformanceMetrics performanceMetrics;
 
     public CooperativeChatModelService(
             ChatModelProviderRegistry registry,
