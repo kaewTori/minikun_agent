@@ -45,6 +45,7 @@ final class ChatCollaborators {
     private final PersonalKnowledgeService personalKnowledgeService;
     private final ConversationSummaryService conversationSummaryService;
     private final AutonomousResearchService autonomousResearchService;
+    private final ChatExplainabilitySink explainabilitySink;
 
     ChatCollaborators(
             ObjectProvider<SpringAiToolCallingRuntime> toolCallingRuntime,
@@ -65,7 +66,8 @@ final class ChatCollaborators {
             ObjectProvider<VisionInputService> visionInputService,
             ObjectProvider<PersonalKnowledgeService> personalKnowledgeService,
             ObjectProvider<ConversationSummaryService> conversationSummaryService,
-            ObjectProvider<AutonomousResearchService> autonomousResearchService) {
+            ObjectProvider<AutonomousResearchService> autonomousResearchService,
+            ObjectProvider<ChatExplainabilitySink> explainabilitySink) {
         this.toolCallingRuntime = toolCallingRuntime.getIfAvailable();
         this.toolRequestRouters = toolRequestRouters.orderedStream().toList();
         this.dynamicGenerationOptionsFactory = dynamicGenerationOptionsFactory.getIfAvailable();
@@ -85,6 +87,7 @@ final class ChatCollaborators {
         this.personalKnowledgeService = personalKnowledgeService.getIfAvailable();
         this.conversationSummaryService = conversationSummaryService.getIfAvailable();
         this.autonomousResearchService = autonomousResearchService.getIfAvailable();
+        this.explainabilitySink = explainabilitySink.getIfAvailable();
     }
 
     SpringAiToolCallingRuntime toolCallingRuntime() { return toolCallingRuntime; }
@@ -106,4 +109,5 @@ final class ChatCollaborators {
     PersonalKnowledgeService personalKnowledgeService() { return personalKnowledgeService; }
     ConversationSummaryService conversationSummaryService() { return conversationSummaryService; }
     AutonomousResearchService autonomousResearchService() { return autonomousResearchService; }
+    ChatExplainabilitySink explainabilitySink() { return explainabilitySink; }
 }

@@ -39,14 +39,71 @@ final class ConversationHistoryWindow {
 
         List<ChatMessage> clientHistory = usable(requestHistory(request), excludedMessage);
         List<ChatMessage> storedHistory = completedStoredHistory(usable(serverHistory, excludedMessage));
-        Source source = clientHistory.isEmpty()
-                ? storedHistory.isEmpty() ? Source.NONE : Source.SERVER
-                : Source.CLIENT;
-        List<ChatMessage> selectedSource = source == Source.CLIENT ? clientHistory : storedHistory;
+        HistorySelection selection = reconcile(storedHistory, clientHistory);
+        Source source = selection.source();
+        List<ChatMessage> selectedSource = selection.messages();
         List<ChatMessage> recentSource = recent(selectedSource, maximumMessages);
         Result result = window(recentSource, source, maximumCharacters);
         return new Result(result.content(), source, selectedSource.size(), result.selectedMessages(),
                 Math.max(0, selectedSource.size() - result.selectedMessages()));
+    }
+
+    /**
+     * Keeps the visible client transcript authoritative when histories diverge, while
+     * recovering older persisted turns when the client only sends a recent suffix.
+     */
+    private HistorySelection reconcile(
+            List<ChatMessage> storedHistory,
+            List<ChatMessage> clientHistory) {
+        if (clientHistory.isEmpty()) {
+            return storedHistory.isEmpty()
+                    ? new HistorySelection(List.of(), Source.NONE)
+                    : new HistorySelection(storedHistory, Source.SERVER);
+        }
+        if (storedHistory.isEmpty()) {
+            return new HistorySelection(clientHistory, Source.CLIENT);
+        }
+
+        int overlap = suffixPrefixOverlap(storedHistory, clientHistory);
+        if (overlap == clientHistory.size()) {
+            return new HistorySelection(storedHistory, Source.SERVER);
+        }
+        if (overlap > 0) {
+            List<ChatMessage> merged = new ArrayList<>(storedHistory.size()
+                    + clientHistory.size() - overlap);
+            merged.addAll(storedHistory);
+            merged.addAll(clientHistory.subList(overlap, clientHistory.size()));
+            return new HistorySelection(List.copyOf(merged), Source.MERGED);
+        }
+
+        // An edited branch or unrelated persisted transcript must never leak into the
+        // conversation currently visible to the user.
+        return new HistorySelection(clientHistory, Source.CLIENT);
+    }
+
+    private int suffixPrefixOverlap(
+            List<ChatMessage> storedHistory,
+            List<ChatMessage> clientHistory) {
+        int maximum = Math.min(storedHistory.size(), clientHistory.size());
+        for (int length = maximum; length > 0; length--) {
+            int storedStart = storedHistory.size() - length;
+            boolean matches = true;
+            for (int offset = 0; offset < length; offset++) {
+                if (!sameMessage(storedHistory.get(storedStart + offset), clientHistory.get(offset))) {
+                    matches = false;
+                    break;
+                }
+            }
+            if (matches) {
+                return length;
+            }
+        }
+        return 0;
+    }
+
+    private boolean sameMessage(ChatMessage left, ChatMessage right) {
+        return left.role().equalsIgnoreCase(right.role())
+                && left.content().strip().equals(right.content().strip());
     }
 
     private List<ChatMessage> recent(List<ChatMessage> messages, int maximumMessages) {
@@ -175,7 +232,11 @@ final class ConversationHistoryWindow {
     enum Source {
         CLIENT,
         SERVER,
+        MERGED,
         NONE
+    }
+
+    private record HistorySelection(List<ChatMessage> messages, Source source) {
     }
 
     record Result(

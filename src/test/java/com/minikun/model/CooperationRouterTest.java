@@ -9,10 +9,11 @@ class CooperationRouterTest {
     private final CooperationRouter router = new CooperationRouter();
 
     @Test
-    void routesOrdinaryConversationToOllamaOnly() {
+    void routesStorytellingToCreativeOllamaPath() {
         CooperationRoutingDecision decision = router.decide("ช่วยเล่าเรื่องแมวให้ฟังหน่อย");
 
         assertEquals(CooperationRisk.LOW, decision.risk());
+        assertEquals("creative_request", decision.reason());
         assertTrue(!decision.needsExpert());
     }
 

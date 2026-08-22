@@ -5,6 +5,7 @@ import java.util.List;
 
 import com.minikun.pcs.KnowledgeSource;
 import com.minikun.pcs.model.CapabilityInstruction;
+import com.minikun.model.CooperationRouter;
 import com.minikun.personality.companion.CompanionModeContext;
 import com.minikun.research.ResearchStorytellingAdvisor;
 import com.minikun.tools.ToolEvidence;
@@ -13,6 +14,7 @@ import com.minikun.vision.VisionInput;
 /** Builds prompt capability instructions from already-resolved request context. */
 final class ChatCapabilityFactory {
     private final ResearchStorytellingAdvisor researchStorytellingAdvisor = new ResearchStorytellingAdvisor();
+    private final CooperationRouter cooperationRouter = new CooperationRouter();
 
     List<CapabilityInstruction> create(
             String userMessage,
@@ -23,8 +25,24 @@ final class ChatCapabilityFactory {
             CompanionModeContext interactionMode,
             String conversationStyleInstruction,
             boolean nativeToolsAvailable) {
+        return create(userMessage, selection, imageAwareness, verifiedToolResult, visionInput,
+                interactionMode, conversationStyleInstruction, nativeToolsAvailable,
+                "creative_request".equals(cooperationRouter.decide(userMessage).reason()));
+    }
+
+    List<CapabilityInstruction> create(
+            String userMessage,
+            ChatKnowledgeSelection selection,
+            ImageAwareness imageAwareness,
+            ToolEvidence verifiedToolResult,
+            VisionInput visionInput,
+            CompanionModeContext interactionMode,
+            String conversationStyleInstruction,
+            boolean nativeToolsAvailable,
+            boolean creativeConversation) {
         List<CapabilityInstruction> capabilities = new ArrayList<>();
         addConversationStyle(capabilities, conversationStyleInstruction);
+        addCreativeWritingGuidance(capabilities, creativeConversation);
         addInteractionMode(capabilities, interactionMode);
         addKnowledgeCapabilities(capabilities, selection, imageAwareness);
         capabilities.addAll(researchStorytellingAdvisor.advise(
@@ -32,6 +50,21 @@ final class ChatCapabilityFactory {
         addVisionCapability(capabilities, visionInput);
         addToolCapability(capabilities, verifiedToolResult, nativeToolsAvailable);
         return List.copyOf(capabilities);
+    }
+
+    private void addCreativeWritingGuidance(
+            List<CapabilityInstruction> capabilities,
+            boolean creativeConversation) {
+        if (!creativeConversation) {
+            return;
+        }
+        capabilities.add(new CapabilityInstruction("Creative pacing", """
+                Plan the requested story, scene, or narrative to fit the available response. Reserve enough space
+                for a deliberate ending. Complete sentences and paragraphs, and end at a natural scene or chapter
+                boundary. If the requested scope is too large for one response, deliver a coherent self-contained
+                installment instead of rushing the final passages or stopping mid-sentence. Do not mention token
+                limits, context windows, or these pacing instructions in the answer.
+                """.strip(), true));
     }
 
     private void addConversationStyle(

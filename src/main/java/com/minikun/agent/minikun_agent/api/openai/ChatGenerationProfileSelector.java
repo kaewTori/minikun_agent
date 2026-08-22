@@ -16,6 +16,7 @@ public final class ChatGenerationProfileSelector {
     private final int generalMaxTokens;
     private final int workMaxTokens;
     private final int technicalMaxTokens;
+    private final int creativeMaxTokens;
 
     public ChatGenerationProfileSelector(
             CooperationRouter cooperationRouter,
@@ -24,7 +25,8 @@ public final class ChatGenerationProfileSelector {
             @Value("${minikun.model.generation.profiles.focus-max-tokens:512}") int focusMaxTokens,
             @Value("${minikun.model.generation.profiles.general-max-tokens:768}") int generalMaxTokens,
             @Value("${minikun.model.generation.profiles.work-max-tokens:1536}") int workMaxTokens,
-            @Value("${minikun.model.generation.profiles.technical-max-tokens:2048}") int technicalMaxTokens) {
+            @Value("${minikun.model.generation.profiles.technical-max-tokens:2048}") int technicalMaxTokens,
+            @Value("${minikun.model.generation.profiles.creative-max-tokens:4096}") int creativeMaxTokens) {
         this.cooperationRouter = cooperationRouter;
         this.enabled = enabled;
         this.companionMaxTokens = positive(companionMaxTokens, "companion max tokens");
@@ -32,20 +34,33 @@ public final class ChatGenerationProfileSelector {
         this.generalMaxTokens = positive(generalMaxTokens, "general max tokens");
         this.workMaxTokens = positive(workMaxTokens, "work max tokens");
         this.technicalMaxTokens = positive(technicalMaxTokens, "technical max tokens");
+        this.creativeMaxTokens = positive(creativeMaxTokens, "creative max tokens");
     }
 
     public Selection select(
             String userText, CompanionMode mode, boolean toolOrVisionRequest, int configuredMaximum) {
+        return select(userText, mode, toolOrVisionRequest, false, configuredMaximum);
+    }
+
+    Selection select(
+            String userText,
+            CompanionMode mode,
+            boolean toolOrVisionRequest,
+            boolean creativeConversation,
+            int configuredMaximum) {
         int applicationMaximum = positive(configuredMaximum, "configured generation max tokens");
         if (!enabled) {
             return new Selection("default", applicationMaximum);
         }
         CooperationRoutingDecision route = cooperationRouter.decide(userText);
+        if ("creative_request".equals(route.reason())) {
+            return selection("creative", creativeMaxTokens, applicationMaximum);
+        }
         if (route.needsExpert()) {
             return selection("technical", technicalMaxTokens, applicationMaximum);
         }
-        if ("creative_request".equals(route.reason())) {
-            return new Selection("creative", applicationMaximum);
+        if (creativeConversation) {
+            return selection("creative", creativeMaxTokens, applicationMaximum);
         }
         if (toolOrVisionRequest || mode == CompanionMode.WORK) {
             return selection("work", workMaxTokens, applicationMaximum);
@@ -57,6 +72,10 @@ public final class ChatGenerationProfileSelector {
             return selection("companion", companionMaxTokens, applicationMaximum);
         }
         return selection("general", generalMaxTokens, applicationMaximum);
+    }
+
+    boolean isCreativeRequest(String userText) {
+        return "creative_request".equals(cooperationRouter.decide(userText).reason());
     }
 
     private Selection selection(String profile, int profileMaximum, int applicationMaximum) {

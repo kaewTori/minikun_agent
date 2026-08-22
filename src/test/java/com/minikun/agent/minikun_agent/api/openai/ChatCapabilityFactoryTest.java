@@ -56,4 +56,19 @@ class ChatCapabilityFactoryTest {
         assertTrue(text.contains("missing counter-evidence"));
         assertTrue(text.contains("mandatory limitations"));
     }
+
+    @Test
+    void creativeContinuationKeepsNaturalEndingGuidanceFromConversationState() {
+        var capabilities = new ChatCapabilityFactory().create(
+                "ต่อเลย", new ChatKnowledgeSelection(
+                        KnowledgeSelection.EMPTY, KnowledgeConsolidation.EMPTY,
+                        SearchSelectionSignals.EMPTY, SearchContext.EMPTY),
+                null, null, null, null, "", false, true);
+        String text = capabilities.stream().map(capability -> capability.name() + "\n" + capability.content())
+                .reduce((left, right) -> left + "\n" + right).orElse("");
+
+        assertTrue(text.contains("Creative pacing"));
+        assertTrue(text.contains("Reserve enough space"));
+        assertTrue(text.contains("scene or chapter"));
+    }
 }

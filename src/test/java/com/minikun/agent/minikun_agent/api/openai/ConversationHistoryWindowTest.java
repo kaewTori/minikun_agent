@@ -35,6 +35,51 @@ class ConversationHistoryWindowTest {
     }
 
     @Test
+    void partialClientTranscriptRecoversOlderStoredTurns() {
+        List<ChatMessage> stored = List.of(
+                new ChatMessage("user", "วางโครงเรื่องนักเดินทาง"),
+                new ChatMessage("assistant", "ตัวเอกชื่อรินและกลัวทะเล"),
+                new ChatMessage("user", "เริ่มตอนแรกเลย"),
+                new ChatMessage("assistant", "รินพบจดหมายในขวดแก้ว"));
+        ChatCompletionRequest request = request(List.of(
+                new Message("user", "เริ่มตอนแรกเลย"),
+                new Message("assistant", "รินพบจดหมายในขวดแก้ว"),
+                new Message("user", "เล่าต่อจากตรงนั้น")));
+
+        ConversationHistoryWindow.Result result = window.build(
+                request, stored, ignored -> false, 2_000);
+
+        assertEquals(ConversationHistoryWindow.Source.SERVER, result.source());
+        assertTrue(result.content().contains("วางโครงเรื่องนักเดินทาง"));
+        assertTrue(result.content().contains("ตัวเอกชื่อรินและกลัวทะเล"));
+        assertTrue(result.content().contains("รินพบจดหมายในขวดแก้ว"));
+    }
+
+    @Test
+    void overlappingClientAndStoredHistoriesAreMergedWithoutDuplicates() {
+        List<ChatMessage> stored = List.of(
+                new ChatMessage("user", "กำหนดโลกแฟนตาซี"),
+                new ChatMessage("assistant", "เมืองนี้ไม่มีดวงอาทิตย์"),
+                new ChatMessage("user", "ตัวเอกเป็นใคร"),
+                new ChatMessage("assistant", "ช่างทำนาฬิกาชื่อลิน"));
+        ChatCompletionRequest request = request(List.of(
+                new Message("user", "ตัวเอกเป็นใคร"),
+                new Message("assistant", "ช่างทำนาฬิกาชื่อลิน"),
+                new Message("user", "เพิ่มคู่หูให้ลิน"),
+                new Message("assistant", "คู่หูคืออีกากลไกชื่อคราม"),
+                new Message("user", "เริ่มเรื่องเลย")));
+
+        ConversationHistoryWindow.Result result = window.build(
+                request, stored, ignored -> false, 2_000);
+
+        assertEquals(ConversationHistoryWindow.Source.MERGED, result.source());
+        assertTrue(result.content().contains("กำหนดโลกแฟนตาซี"));
+        assertTrue(result.content().contains("คู่หูคืออีกากลไกชื่อคราม"));
+        assertEquals(result.content().indexOf("ช่างทำนาฬิกาชื่อลิน"),
+                result.content().lastIndexOf("ช่างทำนาฬิกาชื่อลิน"));
+    }
+
+    @Test
     void longHistoryKeepsNewestMessagesWithinBudget() {
         List<ChatMessage> history = List.of(
                 new ChatMessage("user", "oldest-" + "ก".repeat(100)),

@@ -29,11 +29,13 @@
 - ส่ง language/category/time-range/safe-search options ไปยัง SearXNG พร้อม ranking และ URL deduplication
 - Actuator health และ metrics
 - คำสั่ง runtime และ diagnostics ที่จัดการในระดับ application
-- Native function tools: `time.get_current_time`, `weather.get_forecast`, `web.search`, `web.open_url`, `calculator.add`, `planner.manage`, `calendar.manage`, `task.manage`, `investment.manage`, `investment.analyze`, `homelab.guardian`, `computer.local`, `knowledge.personal` และ `communication.assist`
+- Native function tools: `time.get_current_time`, `weather.get_forecast`, `web.search`, `web.open_url`, `calculator.add`, `planner.manage`, `calendar.manage`, `task.manage`, `investment.manage`, `investment.analyze`, `homelab.guardian`, `computer.local`, `knowledge.personal`, `communication.assist` และ `personal.loop`
 - ผลลัพธ์จาก tool จะถูกส่งกลับเข้า prompt ของ MCS/PCS เพื่อให้โมเดลตอบต่อด้วยตัวตน บริบท และน้ำเสียงเดิมของมินิคุง
 - เก็บ reminder ใน PostgreSQL และส่ง notification ผ่าน ntfy
 - เชื่อม private iCalendar feed จาก Google, Apple หรือ Outlook เพื่ออ่าน agenda และเตือนก่อนนัด
 - มี proactive safety policy สำหรับ quiet hours และ daily briefing ที่รวมอากาศ นัดหมาย งาน และสิ่งค้างเวลา 08:00 (`Asia/Bangkok`)
+- Closed-loop Personal Agent สำหรับ weekly review, outcome learning, universal inbox,
+  safe automation recipes, incident correlation, explainability และ personal timeline
 - Personal Context Runtime สำหรับ context budget, dynamic max-tokens และ bounded recovery
 - ตรวจสอบ ลบรายรายการ และล้าง long-term memory แบบ owner-scoped ผ่าน `/v1/memory`
 
@@ -269,7 +271,13 @@ TinyGrad อย่างน้อยระดับ `MEDIUM` เสมอ แม
 | `MINIKUN_MEMORY_SEMANTIC_WEIGHT` | `0.85` | น้ำหนัก semantic similarity เทียบกับ confidence |
 | `MINIKUN_DIAGNOSTICS_CONVERSATIONAL_ENABLED` | `false` | เปิด diagnostics แบบ conversational |
 | `MINIKUN_CONTEXT_BUDGET_CHARACTERS` | `24000` | character budget สำหรับ prompt context |
+| `MINIKUN_CONTEXT_BUDGET_CREATIVE_CHARACTERS` | `40000` | character budget ที่ใช้กับการแต่งเรื่องและเล่าเรื่อง เพื่อรักษาเนื้อหาตอนก่อนหน้าได้มากขึ้น |
 | `MINIKUN_TOKEN_BUDGET_RESERVED_OUTPUT_TOKENS` | `256` | output reserve ก่อนคำนวณ dynamic max-tokens |
+| `MINIKUN_MODEL_GENERATION_MAX_TOKENS` | `4096` | เพดาน output รวมของแอป |
+| `MINIKUN_GENERATION_CREATIVE_MAX_TOKENS` | `4096` | เพดาน output สำหรับการแต่งเรื่อง เล่าเรื่อง และนิทาน |
+| `MINIKUN_CREATIVE_CONTINUATION_ENABLED` | `true` | ต่อคำตอบงานสร้างสรรค์อัตโนมัติเมื่อโมเดลจบด้วย `finish_reason=length` |
+| `MINIKUN_CREATIVE_CONTINUATION_TAIL_CHARACTERS` | `12000` | ปลายข้อความเดิมที่ใช้สร้างรอยต่ออย่างต่อเนื่อง |
+| `MINIKUN_CREATIVE_CONTINUATION_MAX_TOKENS` | `1024` | งบสำหรับปิดฉากอย่างเป็นธรรมชาติหลังคำตอบชนเพดาน |
 | `MINIKUN_MEMORY_MANAGEMENT_TOKEN` | ว่าง | token สำหรับป้องกัน API จัดการ memory |
 | `MINIKUN_ADAPTATION_MANAGEMENT_TOKEN` | ใช้ค่า memory token ถ้ามี | token สำหรับดู ให้ feedback และ reset Adaptive Companion |
 | `MINIKUN_COMMUNICATION_MANAGEMENT_TOKEN` | ใช้ค่า memory token ถ้ามี | token สำหรับ Communication Assistant API |
@@ -717,6 +725,45 @@ curl -H "X-Minikun-Notification-Token: $MINIKUN_NOTIFICATION_MANAGEMENT_TOKEN" \
 
 Actuator health รวมสถานะ `notificationSchedulerMonitor` และ metrics กลุ่ม
 `minikun.notification.*` สำหรับตรวจว่า scheduler ยัง poll อยู่และมีการส่งล้มเหลวติดต่อกันหรือไม่
+
+### Closed-loop Personal Agent
+
+Personal Loop เชื่อม goal, task, agent run, Guardian และ conversation provenance ให้เป็นวงจร
+`ทบทวน → เสนอ → ยืนยัน → ลงมือ → ติดตามผล → เรียนรู้` โดยทุกข้อมูลแยกตาม `owner_id`
+และไม่เก็บ raw prompt หรือ hidden reasoning ใน explainability trace
+
+- Weekly Review สรุปผลงาน ความเสี่ยง และสร้าง next-action proposal สูงสุด 3 รายการ
+  แต่จะไม่เปลี่ยน task จนกว่าจะยืนยัน proposal แยกรายการ
+- Outcome Learning เก็บ lifecycle ของคำแนะนำและเรียนรู้จากคะแนน 1–5 ที่เจ้าของให้เองเท่านั้น
+- Universal Inbox รับ `TEXT`, `VOICE`, `LINK` หรือ `FILE`, จัดประเภทและแสดง preview ก่อน commit
+- Safe Automation รองรับ trigger/action แบบ allowlist โดยระดับความเสี่ยงคำนวณจาก server;
+  action ที่เปลี่ยน state เช่น `CREATE_TASK` ต้องยืนยันทุกครั้ง
+- Incident Commander รวม Guardian findings เป็น fingerprint, probable cause และ incident timeline
+- Explainability แสดง source identifier, tool และ routing decision ที่ใช้จริง โดยไม่เก็บเนื้อหา retrieval
+- Personal Timeline รวม lifecycle event กับ task, goal และ agent run เป็น read model เดียว
+
+ตัวอย่าง capture และ commit ผ่าน Universal Inbox:
+
+```sh
+curl -X POST -H 'Content-Type: application/json' \
+  -H "X-Minikun-Personal-Token: $MINIKUN_PERSONAL_LOOP_TOKEN" \
+  -d '{"conversationId":"home","inputType":"TEXT","content":"todo: ตรวจ backup","metadata":{}}' \
+  'http://127.0.0.1:8080/v1/personal/inbox?owner_id=default'
+
+curl -X POST -H "X-Minikun-Personal-Token: $MINIKUN_PERSONAL_LOOP_TOKEN" \
+  'http://127.0.0.1:8080/v1/personal/inbox/<item-id>/commit?owner_id=default'
+```
+
+API หลักอยู่ใต้ `/v1/personal`:
+
+- `/weekly-reviews` และ `/weekly-reviews/proposals/{id}/decision`
+- `/outcomes`, `/outcomes/insights` และ `/outcomes/{id}/transition`
+- `/inbox`, `/automations`, `/automations/runs`
+- `/incidents`, `/explanations` และ `/timeline`
+
+schema อยู่ใน `personal-loop-schema.sql` และใช้ token จาก `MINIKUN_PERSONAL_LOOP_TOKEN`
+(fallback ไปยัง memory management token) การ schedule ค่าเริ่มต้นคือ Weekly Review วันอาทิตย์
+19:00 และ automation/incident poll ทุก 60 วินาที
 
 รายละเอียดเพิ่มเติม:
 

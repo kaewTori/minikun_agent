@@ -36,9 +36,10 @@ public final class CooperationRouter {
                     + "bug|debug|exception|stack.?trace|unit.?test|integration.?test)\\b)",
             Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
     private static final Pattern CREATIVE_REQUEST = Pattern.compile(
-            "(แต่งเรื่อง|แต่งนิยาย|เขียนนิยาย|เรื่องสั้น|นิยาย|ฟิค|บทละคร|บทกวี|กลอน|กวี|สวมบทบาท|โลกสมมติ|"
-                    + "creative writing|write a story|write fiction|short story|novel|fanfic|roleplay|poem|"
-                    + "poetry|screenplay|fictional|worldbuilding)",
+            "(แต่งเรื่อง|แต่งนิยาย|เขียนนิยาย|เล่าเรื่อง|เล่านิทาน|เรื่องสั้น|นิทาน|นิยาย|ฟิค|บทละคร|"
+                    + "บทกวี|กลอน|กวี|สวมบทบาท|โลกสมมติ|creative writing|write a story|write fiction|"
+                    + "tell (?:me )?a story|short story|novel|fanfic|roleplay|poem|poetry|screenplay|"
+                    + "fictional|storytelling|worldbuilding)",
             Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
     private static final Pattern CASUAL_CONVERSATION = Pattern.compile(
             "(สวัสดี|หวัดดี|เป็น(?:ยัง)?ไง|ขอบคุณ|ขอบใจ|ฝันดี|คิดถึง|เหงา|เหนื่อย|เครียด|เศร้า|ดีใจ|"

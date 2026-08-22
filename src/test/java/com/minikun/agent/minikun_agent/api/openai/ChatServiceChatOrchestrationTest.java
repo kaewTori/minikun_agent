@@ -25,6 +25,7 @@ import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
 import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.chat.metadata.ChatGenerationMetadata;
 import org.springframework.ai.chat.metadata.ChatResponseMetadata;
 import org.springframework.ai.chat.metadata.DefaultUsage;
 import org.springframework.ai.ollama.api.OllamaChatOptions;
@@ -123,7 +124,7 @@ class ChatServiceChatOrchestrationTest {
         ChatService service = service(chatModel, conversation);
         setField(service, "companionModeService", new CompanionModeService(true, 100));
         setField(service, "generationProfileSelector", new ChatGenerationProfileSelector(
-                new CooperationRouter(), true, 384, 512, 768, 1_536, 2_048));
+                new CooperationRouter(), true, 384, 512, 768, 1_536, 2_048, 4_096));
         setField(service, "configuredGenerationMaxTokens", 2_048);
 
         service.chatCompletion(new ChatCompletionRequest(
@@ -240,6 +241,91 @@ class ChatServiceChatOrchestrationTest {
         assertTrue(text.contains("question-11-"));
         assertTrue(text.contains("Earlier conversation omitted"));
         assertFalse(text.contains("question-0-"));
+    }
+
+    @Test
+    void creativeStoryTurnsReceiveLargerHistoryAndOutputBudgets() throws Exception {
+        ChatModel chatModel = mock(ChatModel.class);
+        ConversationMemoryService conversation = mock(ConversationMemoryService.class);
+        String previousStory = "story-start-" + "ก".repeat(8_500) + "-story-end";
+        when(conversation.load(any())).thenReturn(List.of(
+                new ChatMessage("user", "ช่วยแต่งเรื่องของริน"),
+                new ChatMessage("assistant", previousStory)));
+        when(chatModel.call(any(Prompt.class))).thenReturn(response("ตอนต่อไปครับ"));
+        ChatService service = service(chatModel, conversation);
+        setField(service, "generationProfileSelector", new ChatGenerationProfileSelector(
+                new CooperationRouter(), true, 384, 512, 768, 1_536, 2_048, 4_096));
+        setField(service, "configuredGenerationMaxTokens", 4_096);
+
+        service.chatCompletion(new ChatCompletionRequest(
+                "mini-kun", List.of(new Message("user", "ต่อจากตรงนั้นจนจบ")),
+                "creative-context", false, null, null, null),
+                new ConversationId("creative-context"));
+
+        ArgumentCaptor<Prompt> prompt = ArgumentCaptor.forClass(Prompt.class);
+        verify(chatModel).call(prompt.capture());
+        String text = promptText(prompt.getValue());
+        assertTrue(text.contains("story-start-"));
+        assertTrue(text.contains("-story-end"));
+        assertFalse(text.contains("message shortened"));
+        assertEquals(4_096, prompt.getValue().getOptions().getMaxTokens());
+    }
+
+    @Test
+    void lengthLimitedCreativeResponseIsCompletedAndPersistedAsOneNaturalTurn() throws Exception {
+        ChatModel chatModel = mock(ChatModel.class);
+        ConversationMemoryService conversation = mock(ConversationMemoryService.class);
+        when(conversation.load(any())).thenReturn(List.of());
+        when(chatModel.call(any(Prompt.class))).thenReturn(
+                response("รินผลักประตู", "length"),
+                response("ประตูและพบแสงเช้า", "stop"));
+        ChatService service = service(chatModel, conversation);
+        setField(service, "generationProfileSelector", new ChatGenerationProfileSelector(
+                new CooperationRouter(), true, 384, 512, 768, 1_536, 2_048, 4_096));
+        setField(service, "configuredGenerationMaxTokens", 4_096);
+
+        ChatCompletionResponse result = service.chatCompletion(new ChatCompletionRequest(
+                "mini-kun", List.of(new Message("user", "ช่วยแต่งเรื่องสั้นของริน")),
+                "creative-auto-continuation", false, null, null, null),
+                new ConversationId("creative-auto-continuation"));
+
+        assertEquals("รินผลักประตูและพบแสงเช้า", result.choices().get(0).message().content());
+        ArgumentCaptor<Prompt> prompts = ArgumentCaptor.forClass(Prompt.class);
+        verify(chatModel, org.mockito.Mockito.times(2)).call(prompts.capture());
+        assertEquals(1_024, prompts.getAllValues().get(1).getOptions().getMaxTokens());
+        verify(conversation).appendTurn(
+                new ConversationId("creative-auto-continuation"),
+                new ChatMessage("user", "ช่วยแต่งเรื่องสั้นของริน"),
+                new ChatMessage("assistant", "รินผลักประตูและพบแสงเช้า"));
+    }
+
+    @Test
+    void streamingCreativeContinuationFinishesBeforeTheStopChunk() throws Exception {
+        ChatModel chatModel = mock(ChatModel.class);
+        ConversationMemoryService conversation = mock(ConversationMemoryService.class);
+        when(conversation.load(any())).thenReturn(List.of());
+        when(chatModel.stream(any(Prompt.class))).thenReturn(
+                Flux.just(response("รินผลักประตู", "length")),
+                Flux.just(response("ประตูและพบแสงเช้า", "stop")));
+        ChatService service = service(chatModel, conversation);
+        setField(service, "generationProfileSelector", new ChatGenerationProfileSelector(
+                new CooperationRouter(), true, 384, 512, 768, 1_536, 2_048, 4_096));
+        setField(service, "configuredGenerationMaxTokens", 4_096);
+        ChatCompletionRequest request = new ChatCompletionRequest(
+                "mini-kun", List.of(new Message("user", "ช่วยแต่งเรื่องสั้นของริน")),
+                "creative-stream-continuation", true, null, null, null);
+
+        List<String> chunks = service.chatCompletionStream(
+                request, new ConversationId("creative-stream-continuation"))
+                .collectList().block();
+
+        assertTrue(chunks.stream().anyMatch(chunk -> chunk.contains("รินผลักประตู")));
+        assertTrue(chunks.stream().anyMatch(chunk -> chunk.contains("และพบแสงเช้า")));
+        assertEquals("[DONE]", chunks.get(chunks.size() - 1));
+        verify(conversation).appendTurn(
+                new ConversationId("creative-stream-continuation"),
+                new ChatMessage("user", "ช่วยแต่งเรื่องสั้นของริน"),
+                new ChatMessage("assistant", "รินผลักประตูและพบแสงเช้า"));
     }
 
     @Test
@@ -534,7 +620,7 @@ class ChatServiceChatOrchestrationTest {
         setField(service, "toolsEnabled", true);
         setField(service, "toolCallingRuntime", toolRuntime);
         setField(service, "generationProfileSelector", new ChatGenerationProfileSelector(
-                new CooperationRouter(), true, 384, 512, 768, 1_536, 2_048));
+                new CooperationRouter(), true, 384, 512, 768, 1_536, 2_048, 4_096));
         setField(service, "configuredGenerationMaxTokens", 2_048);
 
         service.chatCompletionStream(request(), new ConversationId("general-direct-stream"))
@@ -556,7 +642,7 @@ class ChatServiceChatOrchestrationTest {
         setField(service, "toolsEnabled", true);
         setField(service, "toolCallingRuntime", toolRuntime);
         setField(service, "generationProfileSelector", new ChatGenerationProfileSelector(
-                new CooperationRouter(), true, 384, 512, 768, 1_536, 2_048));
+                new CooperationRouter(), true, 384, 512, 768, 1_536, 2_048, 4_096));
         setField(service, "configuredGenerationMaxTokens", 2_048);
         ChatCompletionRequest technical = new ChatCompletionRequest(
                 "test-model", List.of(new Message("user", "ช่วย debug Spring Boot API นี้")),
@@ -873,6 +959,12 @@ class ChatServiceChatOrchestrationTest {
 
     private ChatResponse response(String text) {
         return new ChatResponse(List.of(new Generation(new AssistantMessage(text))));
+    }
+
+    private ChatResponse response(String text, String finishReason) {
+        return new ChatResponse(List.of(new Generation(
+                new AssistantMessage(text),
+                ChatGenerationMetadata.builder().finishReason(finishReason).build())));
     }
 
     private String promptText(Prompt prompt) {

@@ -179,6 +179,7 @@ class MinikunAgentApplicationTests {
 		org.junit.jupiter.api.Assertions.assertTrue(names.contains("homelab.guardian"));
 		org.junit.jupiter.api.Assertions.assertTrue(names.contains("computer.local"));
 		org.junit.jupiter.api.Assertions.assertTrue(names.contains("communication.assist"));
+		org.junit.jupiter.api.Assertions.assertTrue(names.contains("personal.loop"));
 	}
 
 	@Test
@@ -192,6 +193,36 @@ class MinikunAgentApplicationTests {
 				.andExpect(jsonPath("$.storesContent").value(false))
 				.andExpect(jsonPath("$.sendSupported").value(false))
 				.andExpect(jsonPath("$.actions[0]").value("draft"));
+	}
+
+	@Test
+	void contextWiresPreviewFirstPersonalLoopApiWithoutDatasource() throws Exception {
+		org.junit.jupiter.api.Assertions.assertNotNull(
+				applicationContext.getBean(com.minikun.personalloop.OutcomeLearningService.class));
+		org.junit.jupiter.api.Assertions.assertNotNull(
+				applicationContext.getBean(com.minikun.personalloop.ExplainabilityService.class));
+
+		MvcResult captured = mockMvc.perform(post("/v1/personal/inbox")
+				.param("owner_id", "test-owner")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+						{"conversationId":"home","inputType":"TEXT",
+						 "content":"บันทึกไอเดียสำหรับสวน","classification":"NOTE","metadata":{}}
+						"""))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.status").value("PREVIEW"))
+				.andExpect(jsonPath("$.classification").value("NOTE"))
+				.andReturn();
+		String id = new ObjectMapper().readTree(captured.getResponse().getContentAsString()).path("id").asText();
+
+		mockMvc.perform(post("/v1/personal/inbox/{id}/commit", id).param("owner_id", "test-owner"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.status").value("COMMITTED"))
+				.andExpect(jsonPath("$.targetType").value("NOTE"));
+
+		mockMvc.perform(get("/v1/personal/timeline").param("owner_id", "test-owner"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$[0].eventType").value("INBOX_COMMITTED"));
 	}
 
 	@Test

@@ -98,6 +98,22 @@ final class ChatPromptFactory {
     Result prepare(Request input) {
         ChatCompletionRequest request = input.request();
         ChatMessage userMessage = input.userMessage();
+        boolean creativeRequest = isCreativeConversation(input);
+        ChatGenerationOptionsResolver.Result generation = generationOptionsResolver.resolve(
+                request,
+                userMessage.content(),
+                input.interactionMode() == null ? null : input.interactionMode().mode(),
+                input.verifiedToolResult() != null
+                        || input.visionInput() != null && input.visionInput().hasImages(),
+                creativeRequest,
+                configuration.generationMaxTokens(),
+                configuration.generationTemperature(),
+                generationProfileSelector,
+                performanceMetrics);
+        long effectiveContextBudgetCharacters = creativeRequest
+                ? Math.max(configuration.contextBudgetCharacters(),
+                        configuration.creativeContextBudgetCharacters())
+                : configuration.contextBudgetCharacters();
         String runtime = request.messages().stream()
                 .filter(message -> "system".equals(message.role()))
                 .map(com.minikun.agent.minikun_agent.api.openai.dto.Message::content)
@@ -105,7 +121,7 @@ final class ChatPromptFactory {
                 .reduce((left, right) -> left + "\n\n" + right)
                 .orElse("Current date: " + LocalDate.now());
         long conversationBudget = new DefaultContextBudgetPolicy()
-                .allocate(configuration.contextBudgetCharacters())
+                .allocate(effectiveContextBudgetCharacters)
                 .allocation(ContextBudgetSection.CONVERSATION);
         String summarySection = summarySection(input.conversationSummary(), conversationBudget);
         long recentConversationBudget = Math.max(0L, conversationBudget
@@ -153,7 +169,7 @@ final class ChatPromptFactory {
                         userMessage.content(),
                         input.knowledgeSelection(), input.imageAwareness(), input.verifiedToolResult(),
                         input.visionInput(), input.interactionMode(), conversationStyle.instruction(),
-                        configuration.nativeToolsAvailable()),
+                        configuration.nativeToolsAvailable(), creativeRequest),
                 new com.minikun.pcs.model.UserMessage(userMessage.content()),
                 promptSearchSignals,
                 promptSearchContext,
@@ -162,17 +178,6 @@ final class ChatPromptFactory {
                 null,
                 personaSignals,
                 userModel);
-        ChatGenerationOptionsResolver.Result generation = generationOptionsResolver.resolve(
-                request,
-                userMessage.content(),
-                input.interactionMode() == null ? null : input.interactionMode().mode(),
-                input.verifiedToolResult() != null
-                        || input.visionInput() != null && input.visionInput().hasImages(),
-                configuration.generationMaxTokens(),
-                configuration.generationTemperature(),
-                generationProfileSelector,
-                performanceMetrics);
-
         PersonalContextRuntime contextRuntime = personalContextRuntime;
         if (contextRuntime == null
                 && configuration.dynamicTokenBudgetEnabled()
@@ -196,7 +201,7 @@ final class ChatPromptFactory {
                 generation.options(),
                 capability,
                 configuration.dynamicTokenBudgetEnabled(),
-                configuration.contextBudgetCharacters(),
+                effectiveContextBudgetCharacters,
                 configuredReservedOutputTokens,
                 configuration.generationMaxTokens());
         log.debug("process=context_runtime event=prepared requested_context_chars={} final_prompt_chars={} "
@@ -268,6 +273,29 @@ final class ChatPromptFactory {
         return hasText(content) && commandCatalog.findExact(content.trim()).isPresent();
     }
 
+    private boolean isCreativeConversation(Request input) {
+        if (generationProfileSelector == null) {
+            return false;
+        }
+        if (generationProfileSelector.isCreativeRequest(input.userMessage().content())
+                || generationProfileSelector.isCreativeRequest(input.conversationSummary())) {
+            return true;
+        }
+        boolean requestCreative = input.request().messages().stream()
+                .filter(message -> !"system".equalsIgnoreCase(message.role()))
+                .map(com.minikun.agent.minikun_agent.api.openai.dto.Message::content)
+                .filter(this::hasText)
+                .anyMatch(generationProfileSelector::isCreativeRequest);
+        if (requestCreative) {
+            return true;
+        }
+        return input.history() != null && input.history().stream()
+                .filter(java.util.Objects::nonNull)
+                .map(ChatMessage::content)
+                .filter(this::hasText)
+                .anyMatch(generationProfileSelector::isCreativeRequest);
+    }
+
     private boolean hasText(String value) {
         return value != null && !value.isBlank();
     }
@@ -294,6 +322,7 @@ final class ChatPromptFactory {
             boolean dynamicTokenBudgetEnabled,
             long reservedOutputTokens,
             long contextBudgetCharacters,
+            long creativeContextBudgetCharacters,
             int generationMaxTokens,
             double generationTemperature,
             int ollamaContextSize,

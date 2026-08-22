@@ -52,7 +52,6 @@ import com.minikun.pcs.PromptComposer;
 import com.minikun.pcs.PromptException;
 import com.minikun.pcs.KnowledgeConsolidationService;
 import com.minikun.pcs.KnowledgeSelectionService;
-import com.minikun.pcs.model.ImageSource;
 import com.minikun.search.SearchDecisionService;
 import com.minikun.search.SearchQueryPlanningService;
 import com.minikun.search.SearchContextAwarenessService;
@@ -157,6 +156,8 @@ public class ChatService {
 
     private AutonomousResearchService autonomousResearchService;
 
+    private ChatExplainabilityRecorder explainabilityRecorder = new ChatExplainabilityRecorder(null);
+
     @Autowired
     void configureCollaborators(ChatCollaborators collaborators) {
         toolCallingRuntime = collaborators.toolCallingRuntime();
@@ -178,6 +179,7 @@ public class ChatService {
         personalKnowledgeService = collaborators.personalKnowledgeService();
         conversationSummaryService = collaborators.conversationSummaryService();
         autonomousResearchService = collaborators.autonomousResearchService();
+        explainabilityRecorder = new ChatExplainabilityRecorder(collaborators.explainabilitySink());
     }
 
     public ChatService(
@@ -329,7 +331,7 @@ public class ChatService {
     @Value("${minikun.model.generation.temperature:0.5}")
     private double configuredGenerationTemperature;
 
-    @Value("${minikun.model.generation.max-tokens:2048}")
+    @Value("${minikun.model.generation.max-tokens:4096}")
     private int configuredGenerationMaxTokens;
 
     @Value("${spring.ai.ollama.chat.options.num-ctx:16384}")
@@ -343,6 +345,18 @@ public class ChatService {
 
     @Value("${minikun.context-budget.characters:24000}")
     private long contextBudgetCharacters = 24_000L;
+
+    @Value("${minikun.context-budget.creative-characters:40000}")
+    private long creativeContextBudgetCharacters = 40_000L;
+
+    @Value("${minikun.model.generation.creative-continuation.enabled:true}")
+    private boolean creativeContinuationEnabled = true;
+
+    @Value("${minikun.model.generation.creative-continuation.tail-characters:12000}")
+    private int creativeContinuationTailCharacters = 12_000;
+
+    @Value("${minikun.model.generation.creative-continuation.max-tokens:1024}")
+    private int creativeContinuationMaxTokens = 1_024;
 
     public ChatCompletionResponse chatCompletion(ChatCompletionRequest request, ConversationId conversationId) {
         VisionInput visionInput = visionInput(request);
@@ -367,9 +381,12 @@ public class ChatService {
                     userMessage, conversationId, memoryOwnerId(request, conversationId));
             if (verifiedToolResult.map(ToolEvidence::finalResponse).orElse(false)) {
                 String content = verifiedToolResult.get().content();
+                String ownerId = memoryOwnerId(request, conversationId);
                 turnFinalizer().persistDeterministic(
-                        conversationId, userMessage, content, memoryOwnerId(request, conversationId),
+                        conversationId, userMessage, content, ownerId,
                         transaction.requestId(), shouldPersistConversation(request), false);
+                recordExplainability(ownerId, conversationId, transaction.requestId(),
+                        ChatExplainabilityRecorder.forTool(verifiedToolResult.get()));
                 transaction.success();
                 return responseForContent(request, content);
             }
@@ -379,10 +396,13 @@ public class ChatService {
                         request, conversationId, userMessage, transaction, false, verifiedToolResult.orElse(null),
                         visionInput);
             } catch (BrowserContentException exception) {
-                String content = browserFailureMessage(userMessage.content(), exception);
+                String content = ChatBrowserFailureFormatter.format(
+                        userMessage.content(), exception, browserContentService);
                 turnFinalizer().persistDeterministic(
                         conversationId, userMessage, content, memoryOwnerId(request, conversationId),
                         transaction.requestId(), shouldPersistConversation(request), false);
+                recordExplainability(memoryOwnerId(request, conversationId), conversationId, transaction.requestId(),
+                        ChatExplainabilityRecorder.browserFailure());
                 transaction.success();
                 return responseForContent(request, content);
             }
@@ -391,6 +411,8 @@ public class ChatService {
                 turnFinalizer().complete(
                         context.conversationId(), userMessage, context.ownerId(), transaction.requestId(), content,
                         context.persistConversation(), false);
+                recordExplainability(context.ownerId(), context.conversationId(), transaction.requestId(),
+                        context.explainability());
                 transaction.success();
                 return responseForContent(request, content);
             }
@@ -403,8 +425,26 @@ public class ChatService {
                     : modelGateway().chatWithTools(
                             context.prompt(), context.conversationId(), context.ownerId(), transaction.requestId());
             ModelUsage usage = modelUsage(response);
-            recordModelUsage(usage, generationStarted);
             String content = response.getResult().getOutput().getText();
+            CreativeResponseContinuation continuation = creativeContinuation();
+            if (hasText(content) && continuation.shouldContinue(context.generationProfile(), response)) {
+                log.info("process=creative_continuation event=started request_id={} stream=false",
+                        transaction.requestId());
+                try {
+                    ChatResponse continued = modelGateway().chat(
+                            continuation.continuationPrompt(context.prompt(), content),
+                            "creative_continuation", transaction.requestId(), context.conversationId());
+                    content = continuation.appendWithoutRepeating(
+                            content, continued.getResult().getOutput().getText());
+                    usage = addModelUsage(usage, modelUsage(continued));
+                    log.info("process=creative_continuation event=completed request_id={} stream=false",
+                            transaction.requestId());
+                } catch (RuntimeException exception) {
+                    log.warn("process=creative_continuation event=failed request_id={} stream=false reason={}",
+                            transaction.requestId(), exception.getMessage());
+                }
+            }
+            recordModelUsage(usage, generationStarted);
             if (!hasText(content)) {
                 log.warn("process=model_response event=blank request_id={}", transaction.requestId());
                 content = "ขออภัยครับ โมเดลยังไม่ได้ส่งคำตอบที่สมบูรณ์ กรุณาลองสั่งอีกครั้งครับ";
@@ -412,6 +452,8 @@ public class ChatService {
             turnFinalizer().complete(
                     context.conversationId(), userMessage, context.ownerId(), transaction.requestId(), content,
                     context.persistConversation(), false);
+            recordExplainability(context.ownerId(), context.conversationId(), transaction.requestId(),
+                    context.explainability());
             ChatCompletionResponse result = responseFactory.completion(
                     transaction.requestId(), Instant.now().getEpochSecond(), model, content, usage,
                     context.attachments());
@@ -451,9 +493,12 @@ public class ChatService {
                 userMessage, conversationId, memoryOwnerId(request, conversationId));
         if (verifiedToolResult.map(ToolEvidence::finalResponse).orElse(false)) {
             String content = verifiedToolResult.get().content();
+            String ownerId = memoryOwnerId(request, conversationId);
             turnFinalizer().persistDeterministic(
-                    conversationId, userMessage, content, memoryOwnerId(request, conversationId),
+                    conversationId, userMessage, content, ownerId,
                     transaction.requestId(), shouldPersistConversation(request), true);
+            recordExplainability(ownerId, conversationId, transaction.requestId(),
+                    ChatExplainabilityRecorder.forTool(verifiedToolResult.get()));
             transaction.success();
             return commandStream(content, request);
         }
@@ -464,10 +509,13 @@ public class ChatService {
                 request, conversationId, userMessage, transaction, true, verifiedToolResult.orElse(null),
                 visionInput);
         } catch (BrowserContentException exception) {
-            String content = browserFailureMessage(userMessage.content(), exception);
+            String content = ChatBrowserFailureFormatter.format(
+                    userMessage.content(), exception, browserContentService);
             turnFinalizer().persistDeterministic(
                     conversationId, userMessage, content, memoryOwnerId(request, conversationId),
                     transaction.requestId(), shouldPersistConversation(request), true);
+            recordExplainability(memoryOwnerId(request, conversationId), conversationId, transaction.requestId(),
+                    ChatExplainabilityRecorder.browserFailure());
             transaction.success();
             return commandStream(content, request);
         }
@@ -476,26 +524,55 @@ public class ChatService {
             turnFinalizer().complete(
                     context.conversationId(), userMessage, context.ownerId(), transaction.requestId(), content,
                     context.persistConversation(), true);
+            recordExplainability(context.ownerId(), context.conversationId(), transaction.requestId(),
+                    context.explainability());
             transaction.success();
             return commandStream(content, request);
         }
         long modelStarted = System.nanoTime();
         String traceId = MDC.get("trace_id");
-        Flux<ChatResponse> modelResponses = verifiedToolResult.isPresent()
+        CreativeResponseContinuation continuation = creativeContinuation();
+        AtomicBoolean primaryLengthLimited = new AtomicBoolean();
+        Flux<ChatResponse> primaryResponses = verifiedToolResult.isPresent()
             ? modelGateway().stream(context.prompt(), context.conversationId())
             : toolsEnabled && toolCallingRuntime != null
                     && !directStreamingProfile(context.generationProfile())
             ? Flux.defer(() -> Flux.just(modelGateway().reviewToolRuntimeDraft(
                     context.prompt(), context.conversationId(), context.ownerId())))
             : modelGateway().stream(context.prompt(), context.conversationId());
+        primaryResponses = primaryResponses.doOnNext(response -> {
+            captureModelUsage(modelUsage, response);
+            if (continuation.shouldContinue(context.generationProfile(), response)) {
+                primaryLengthLimited.set(true);
+            }
+        });
+        Flux<ChatResponse> modelResponses = primaryResponses.concatWith(Flux.defer(() -> {
+            if (!primaryLengthLimited.get() || assistantContent.isEmpty()) {
+                return Flux.empty();
+            }
+            log.info("process=creative_continuation event=started request_id={} stream=true", requestId);
+            ModelUsage primaryUsage = modelUsage.get();
+            Prompt continuationPrompt = continuation.continuationPrompt(
+                    context.prompt(), assistantContent.toString());
+            return continuation.bufferedDelta(
+                            modelGateway().stream(continuationPrompt, context.conversationId()),
+                            assistantContent.toString())
+                    .doOnNext(response -> modelUsage.set(addModelUsage(primaryUsage, modelUsage(response))))
+                    .doOnComplete(() -> log.info(
+                            "process=creative_continuation event=completed request_id={} stream=true", requestId))
+                    .onErrorResume(exception -> {
+                        log.warn("process=creative_continuation event=failed request_id={} stream=true reason={}",
+                                requestId, exception.getMessage());
+                        return Flux.empty();
+                    });
+        }));
         Flux<String> chunks = modelResponses
                 .doOnNext(response -> recordFirstToken(
                         response, firstTokenRecorded, requestStarted, modelStarted))
                 .doOnNext(response -> appendAssistantText(assistantContent, response))
-                .doOnNext(response -> captureModelUsage(modelUsage, response))
                 .map(response -> responseFactory.contentChunk(response, id, created, model))
                 .filter(chunk -> !chunk.isBlank())
-                .doFinally(signal -> withTrace(traceId, () -> {
+                .doFinally(signal -> ChatTraceScope.run(traceId, () -> {
                     logModelDuration("chat_model_stream", modelStarted, requestId);
                     recordStage("model", modelStarted, signalResult(signal));
                     recordModelUsage(modelUsage.get(), modelStarted);
@@ -515,11 +592,13 @@ public class ChatService {
                         turnFinalizer().complete(
                                 context.conversationId(), userMessage, context.ownerId(), transaction.requestId(),
                                 assistantContent.toString(), context.persistConversation(), true);
+                        recordExplainability(context.ownerId(), context.conversationId(), transaction.requestId(),
+                                context.explainability());
                     }
-                    withTrace(traceId, transaction::success);
+                    ChatTraceScope.run(traceId, transaction::success);
                 })
-                .doOnError(exception -> withTrace(traceId, () -> transaction.failed(exception)))
-                .doOnCancel(() -> withTrace(traceId, transaction::cancelled))
+                .doOnError(exception -> ChatTraceScope.run(traceId, () -> transaction.failed(exception)))
+                .doOnCancel(() -> ChatTraceScope.run(traceId, transaction::cancelled))
                 .doFinally(signal -> recordStage("total", requestStarted, signalResult(signal)));
     }
 
@@ -556,7 +635,7 @@ public class ChatService {
                 new ChatKnowledgeResolver.Request(
                         userMessage.content(), transaction.requestId(), conversationId, ownerId,
                         hasConversationContext(history, request), classifierContext(history)));
-        PreparedImages preparedImages = prepareImages(knowledgeSelection);
+        ChatImagePreparer.Result preparedImages = ChatImagePreparer.prepare(knowledgeSelection);
         long promptStarted = System.nanoTime();
         ChatPromptFactory.Result preparedPrompt;
         String promptResult = "success";
@@ -582,24 +661,8 @@ public class ChatService {
         log.info("process=prompt event=composed{}", streaming ? " stream=true" : "");
         return new ChatExecutionContext(
                 preparedPrompt.prompt(), conversationId, persistConversation, ownerId,
-                preparedImages.attachments(), preparedPrompt.generationProfile());
-    }
-
-    private PreparedImages prepareImages(ChatKnowledgeSelection knowledgeSelection) {
-        try {
-            List<ImageSource> selectedImages = ImageAttachmentSelector.select(
-                    knowledgeSelection.selection().knowledgeContext().images());
-            List<ChatAttachment> attachments = ImageAttachmentMapper.map(selectedImages);
-            if (attachments.size() != selectedImages.size()) {
-                throw new IllegalStateException("image attachment count does not match selected image count");
-            }
-            ImageAwareness awareness = selectedImages.isEmpty()
-                    ? null : new ImageAwareness(selectedImages.size());
-            return new PreparedImages(awareness, attachments);
-        } catch (RuntimeException exception) {
-            log.warn("Image attachment selection failed; continuing without attachments", exception);
-            return PreparedImages.EMPTY;
-        }
+                preparedImages.attachments(), preparedPrompt.generationProfile(),
+                explainabilityRecorder.context(knowledgeSelection, verifiedToolResult, preparedPrompt.generationProfile()));
     }
 
     private ChatCommandHandler commandHandler() {
@@ -667,6 +730,21 @@ public class ChatService {
 
     private ModelUsage modelUsage(ChatResponse response) {
         return responseFactory.modelUsage(response);
+    }
+
+    private ModelUsage addModelUsage(ModelUsage first, ModelUsage second) {
+        ModelUsage left = first == null ? ModelUsage.empty() : first;
+        ModelUsage right = second == null ? ModelUsage.empty() : second;
+        return new ModelUsage(
+                Math.addExact(left.promptTokens(), right.promptTokens()),
+                Math.addExact(left.completionTokens(), right.completionTokens()));
+    }
+
+    private CreativeResponseContinuation creativeContinuation() {
+        return new CreativeResponseContinuation(
+                creativeContinuationEnabled,
+                creativeContinuationTailCharacters,
+                creativeContinuationMaxTokens);
     }
 
     private void captureModelUsage(AtomicReference<ModelUsage> target, ChatResponse response) {
@@ -758,6 +836,7 @@ public class ChatService {
                         dynamicTokenBudgetEnabled,
                         reservedOutputTokens,
                         contextBudgetCharacters,
+                        creativeContextBudgetCharacters,
                         configuredGenerationMaxTokens,
                         configuredGenerationTemperature,
                         configuredOllamaContextSize,
@@ -779,18 +858,9 @@ public class ChatService {
         return conversationSummaryService.summary(ownerId, conversationId).orElse("");
     }
 
-    private String browserFailureMessage(String userMessage, BrowserContentException exception) {
-        String url = "the supplied link";
-        if (browserContentService != null) {
-            try {
-                url = browserContentService.urlsIn(userMessage).stream()
-                        .findFirst().orElse(url);
-            } catch (BrowserContentException ignored) {
-                // The validation error itself is enough to explain the failure.
-            }
-        }
-        log.warn("Browser render failed url={} reason={}", url, exception.getMessage());
-        return "ไม่สามารถอ่านลิงก์ได้: " + url + " (" + exception.getMessage() + ")";
+    private void recordExplainability(String ownerId, ConversationId conversationId, String responseId,
+            ChatExplainabilityRecorder.Context context) {
+        explainabilityRecorder.record(ownerId, conversationId, responseId, context);
     }
 
     private record ChatExecutionContext(
@@ -799,15 +869,8 @@ public class ChatService {
             boolean persistConversation,
             String ownerId,
             List<ChatAttachment> attachments,
-            String generationProfile) {
-    }
-
-    private record PreparedImages(ImageAwareness awareness, List<ChatAttachment> attachments) {
-        private static final PreparedImages EMPTY = new PreparedImages(null, List.of());
-
-        private PreparedImages {
-            attachments = attachments == null ? List.of() : List.copyOf(attachments);
-        }
+            String generationProfile,
+            ChatExplainabilityRecorder.Context explainability) {
     }
 
     private boolean hasConversationContext(
@@ -832,18 +895,6 @@ public class ChatService {
                 .map(message -> message.role() + ": " + message.content())
                 .reduce((left, right) -> left + "\n" + right)
                 .orElse("");
-    }
-
-    private void restoreMdc(Map<String, String> previous) {
-        try {
-            if (previous == null) {
-                MDC.clear();
-            } else {
-                MDC.setContextMap(previous);
-            }
-        } catch (RuntimeException ignored) {
-            // MDC must not affect search execution.
-        }
     }
 
     private String effectiveConfiguredChatModel() {
@@ -986,20 +1037,6 @@ public class ChatService {
                 || "general".equals(profile)
                 || "focus".equals(profile)
                 || "creative".equals(profile);
-    }
-
-    private void withTrace(String traceId, Runnable action) {
-        Map<String, String> previous = MDC.getCopyOfContextMap();
-        try {
-            if (traceId == null || traceId.isBlank() || "-".equals(traceId)) {
-                MDC.remove("trace_id");
-            } else {
-                MDC.put("trace_id", traceId);
-            }
-            action.run();
-        } finally {
-            restoreMdc(previous);
-        }
     }
 
     private String modelName(String requestedModel, String configuredModel) {
