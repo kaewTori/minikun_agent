@@ -42,7 +42,7 @@ class NtfyNotificationServiceTest {
     void publishesToReminderTopicWithNtfyHeaders() {
         String topic = "http://127.0.0.1:" + server.getAddress().getPort() + "/reminder";
         NtfyNotificationService service = new NtfyNotificationService(
-                true, Duration.ofSeconds(2), "test-token", topic, topic);
+                true, Duration.ofSeconds(2), "test-token", topic);
 
         service.publish(NotificationChannel.REMINDER, "Mini-kun reminder", "พี่สาวครับ ถึงเวลาแล้ว",
                 4, "bell,calendar");

@@ -31,12 +31,6 @@ CREATE TABLE IF NOT EXISTS minikun_planner_pending_confirmation (
 ALTER TABLE minikun_planner_pending_confirmation
     ADD COLUMN IF NOT EXISTS owner_id VARCHAR(255) NOT NULL DEFAULT 'default';
 
-CREATE TABLE IF NOT EXISTS minikun_weather_alert_state (
-    alert_key VARCHAR(128) PRIMARY KEY,
-    last_sent_date DATE,
-    last_sent_at TIMESTAMPTZ
-);
-
 CREATE TABLE IF NOT EXISTS minikun_task (
     id UUID PRIMARY KEY,
     owner_id VARCHAR(255) NOT NULL,

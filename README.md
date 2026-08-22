@@ -31,7 +31,7 @@
 - คำสั่ง runtime และ diagnostics ที่จัดการในระดับ application
 - Native function tools: `time.get_current_time`, `weather.get_forecast`, `web.search`, `web.open_url`, `calculator.add`, `planner.manage`, `calendar.manage`, `task.manage`, `investment.manage`, `investment.analyze`, `homelab.guardian`, `computer.local`, `knowledge.personal` และ `communication.assist`
 - ผลลัพธ์จาก tool จะถูกส่งกลับเข้า prompt ของ MCS/PCS เพื่อให้โมเดลตอบต่อด้วยตัวตน บริบท และน้ำเสียงเดิมของมินิคุง
-- เก็บ reminder ใน PostgreSQL และส่ง notification ผ่าน ntfy พร้อม daily weather digest เวลา 07:00 (`Asia/Bangkok`)
+- เก็บ reminder ใน PostgreSQL และส่ง notification ผ่าน ntfy
 - เชื่อม private iCalendar feed จาก Google, Apple หรือ Outlook เพื่ออ่าน agenda และเตือนก่อนนัด
 - มี proactive safety policy สำหรับ quiet hours และ daily briefing ที่รวมอากาศ นัดหมาย งาน และสิ่งค้างเวลา 08:00 (`Asia/Bangkok`)
 - Personal Context Runtime สำหรับ context budget, dynamic max-tokens และ bounded recovery
@@ -161,7 +161,7 @@ Actuator ที่เปิดให้เข้าถึงคือ `/actuator
 | `MINIKUN_WEATHER_FORECAST_URL` | `https://api.open-meteo.com` | endpoint สำหรับ forecast |
 | `MINIKUN_WEATHER_TIMEOUT` | `10s` | timeout ของ geocoding และ forecast |
 | `MINIKUN_TIME_DEFAULT_ZONE` | `Asia/Bangkok` | timezone เริ่มต้นของ `time.get_current_time` |
-| `MINIKUN_PLANNER_ENABLED` | `true` | เปิด planner, reminder scheduler และ daily weather notification |
+| `MINIKUN_PLANNER_ENABLED` | `true` | เปิด planner และ reminder scheduler |
 | `MINIKUN_PLANNER_POLL_INTERVAL_MS` | `30000` | รอบตรวจ reminder ที่ถึงเวลาแล้ว |
 | `MINIKUN_TASK_ENABLED` | `true` | เปิด goal/task store, tool และ follow-up scheduler |
 | `MINIKUN_INVESTMENT_ENABLED` | `true` | เปิด investment ledger, policy, thesis และ native tools |
@@ -187,19 +187,17 @@ Actuator ที่เปิดให้เข้าถึงคือ `/actuator
 | `MINIKUN_PROACTIVE_ZONE` | `Asia/Bangkok` | timezone ที่ใช้คำนวณ quiet hours |
 | `MINIKUN_PROACTIVE_QUIET_HOURS_START` | `22:00` | เวลาเริ่มช่วงห้ามรบกวน |
 | `MINIKUN_PROACTIVE_QUIET_HOURS_END` | `07:00` | เวลาสิ้นสุดช่วงห้ามรบกวน |
-| `MINIKUN_PROACTIVE_BRIEFING_ENABLED` | `true` | เปิด daily briefing งานค้าง |
+| `MINIKUN_PROACTIVE_BRIEFING_ENABLED` | `true` | เปิด daily briefing ที่รวมอากาศ นัดหมาย งาน และสิ่งค้าง |
 | `MINIKUN_PROACTIVE_BRIEFING_OWNER_ID` | `default` | owner ที่ใช้สร้าง daily briefing ใน deployment แบบ single-user |
 | `MINIKUN_PROACTIVE_BRIEFING_TIME` | `08:00` | เวลาท้องถิ่นที่ส่ง daily briefing |
+| `MINIKUN_PROACTIVE_BRIEFING_WEATHER_LOCATION` | `Bangkok` | สถานที่สำหรับสรุปอากาศใน daily briefing |
+| `MINIKUN_PROACTIVE_BRIEFING_WEATHER_COUNTRY_CODE` | `TH` | country code สำหรับสรุปอากาศใน daily briefing |
 | `MINIKUN_NTFY_ENABLED` | `true` | เปิด/ปิดการส่ง ntfy |
 | `MINIKUN_NTFY_TOKEN` | ว่าง | Bearer token สำหรับ ntfy topic ถ้าตั้ง access control |
 | `MINIKUN_NTFY_REMINDER_TOPIC` | topic ที่กำหนดใน `application.properties` | topic สำหรับ reminder |
-| `MINIKUN_NTFY_WEATHER_TOPIC` | topic ที่กำหนดใน `application.properties` | topic สำหรับ daily weather |
 | `MINIKUN_NOTIFICATION_MANAGEMENT_TOKEN` | ใช้ค่า task/memory token ถ้ามี | token สำหรับอ่านประวัติการส่ง notification |
 | `MINIKUN_NOTIFICATION_SCHEDULER_STALE_AFTER` | `2m` | ระยะที่ scheduler ไม่ poll ก่อน health เปลี่ยนเป็น `DOWN` |
 | `MINIKUN_NOTIFICATION_SCHEDULER_FAILURE_THRESHOLD` | `3` | จำนวน delivery failure ติดต่อกันก่อน health เปลี่ยนเป็น `DOWN` |
-| `MINIKUN_WEATHER_ALERT_LOCATION` | `Bangkok` | สถานที่ของ daily weather digest |
-| `MINIKUN_WEATHER_ALERT_ZONE` | `Asia/Bangkok` | timezone ของ daily weather digest |
-| `MINIKUN_WEATHER_ALERT_TIME` | `07:00` | เวลาส่ง daily weather digest |
 
 Voice Companion กำหนดค่าผ่าน `minikun.voice.*` ใน `application.properties` โดยค่าเริ่มต้นใช้
 Whisper Large V3 Turbo Q4 ผ่าน MLX สำหรับถอดเสียงและเสียง `Kanya` ของ macOS สำหรับพูดภาษาไทย
@@ -691,7 +689,7 @@ curl -H "X-Minikun-Calendar-Token: $MINIKUN_CALENDAR_MANAGEMENT_TOKEN" \
 ```
 
 Proactive agent ใช้ `minikun.proactive.*` เป็น safety boundary กลาง: ปิดได้ทั้งระบบ,
-งดส่งเฉพาะ notification ที่ agent เริ่มเอง เช่น task follow-up, daily briefing และ weather digest ใน quiet hours
+งดส่งเฉพาะ notification ที่ agent เริ่มเอง เช่น task follow-up และ daily briefing ใน quiet hours
 ส่วน daily briefing จะรวมสภาพอากาศ นัดหมายจาก local/external calendar งานที่ลงมือได้ และสิ่งที่กำลังรอ
 ส่งไม่เกินหนึ่งครั้งต่อวัน และเก็บสถานะการส่งใน PostgreSQL หากแหล่งข้อมูลภายนอกส่วนใดล้ม
 briefing จะใช้ข้อมูลส่วนที่เหลือต่อโดยไม่ล้มทั้งฉบับ

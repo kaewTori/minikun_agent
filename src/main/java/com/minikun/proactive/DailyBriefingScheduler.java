@@ -77,8 +77,8 @@ public final class DailyBriefingScheduler {
             @Value("${minikun.proactive.briefing.owner-id:default}") String ownerId,
             @Value("${minikun.proactive.briefing.zone:Asia/Bangkok}") String zone,
             @Value("${minikun.proactive.briefing.time:08:00}") String sendAt,
-            @Value("${minikun.weather.alert.location:Bangkok}") String weatherLocation,
-            @Value("${minikun.weather.alert.country-code:TH}") String weatherCountryCode,
+            @Value("${minikun.proactive.briefing.weather.location:Bangkok}") String weatherLocation,
+            @Value("${minikun.proactive.briefing.weather.country-code:TH}") String weatherCountryCode,
             ObjectProvider<GoalService> goals) {
         this.tasks = Objects.requireNonNull(tasks, "task service must not be null");
         this.planner = Objects.requireNonNull(planner, "planner service must not be null");

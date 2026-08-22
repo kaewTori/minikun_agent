@@ -107,7 +107,6 @@ import com.minikun.vision.VisionInputService;
 import com.minikun.voice.VoiceConfiguration;
 import com.minikun.voice.VoiceController;
 import com.minikun.voice.VoiceExceptionHandler;
-import com.minikun.weather.DailyWeatherNotificationScheduler;
 import com.minikun.weather.WeatherConfiguration;
 
 /** Explicit module graph kept separate from the executable application entry point. */
@@ -145,7 +144,7 @@ import com.minikun.weather.WeatherConfiguration;
         NotificationDeliveryService.class, NotificationDeliveryController.class,
         NotificationSchedulerMonitor.class, JdbcPlannerStore.class, PlannerService.class,
         ReminderActionController.class, PlannerNotificationScheduler.class,
-        DailyWeatherNotificationScheduler.class, JdbcTaskStore.class, TaskService.class,
+        JdbcTaskStore.class, TaskService.class,
         TaskManageTool.class, TaskConfirmationRouter.class, TaskCaptureToolRouter.class, TaskController.class,
         TaskFollowUpScheduler.class, DailyBriefingScheduler.class,
         JdbcInvestmentStore.class, InvestmentService.class, InvestmentManageTool.class,

@@ -21,18 +21,15 @@ public final class NtfyNotificationService implements NotificationTransport {
     private final boolean enabled;
     private final String token;
     private final String reminderTopic;
-    private final String weatherTopic;
 
     public NtfyNotificationService(
             @Value("${minikun.ntfy.enabled:true}") boolean enabled,
             @Value("${minikun.ntfy.timeout:10s}") Duration timeout,
             @Value("${minikun.ntfy.token:}") String token,
-            @Value("${minikun.ntfy.reminder-topic:}") String reminderTopic,
-            @Value("${minikun.ntfy.weather-topic:}") String weatherTopic) {
+            @Value("${minikun.ntfy.reminder-topic:}") String reminderTopic) {
         this.enabled = enabled;
         this.token = Objects.requireNonNullElse(token, "").trim();
         this.reminderTopic = requireTopic(reminderTopic, "reminder topic");
-        this.weatherTopic = requireTopic(weatherTopic, "weather topic");
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Objects.requireNonNull(timeout, "ntfy timeout must not be null"))
                 .build();
@@ -52,7 +49,7 @@ public final class NtfyNotificationService implements NotificationTransport {
         }
         int safePriority = Math.max(1, Math.min(5, priority));
         HttpRequest.Builder request = HttpRequest.newBuilder()
-                .uri(URI.create(topic(channel)))
+                .uri(URI.create(reminderTopic))
                 .timeout(Duration.ofSeconds(30))
                 .header("Content-Type", "text/plain; charset=UTF-8")
                 .header("Title", asciiHeader(title))
@@ -75,10 +72,6 @@ public final class NtfyNotificationService implements NotificationTransport {
         } catch (Exception exception) {
             throw new IllegalStateException("ntfy notification failed", exception);
         }
-    }
-
-    private String topic(NotificationChannel channel) {
-        return channel == NotificationChannel.REMINDER ? reminderTopic : weatherTopic;
     }
 
     private String requireTopic(String value, String label) {
