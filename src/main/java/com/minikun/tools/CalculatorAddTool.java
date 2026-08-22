@@ -19,6 +19,8 @@ public final class CalculatorAddTool implements Tool {
         return DEFINITION;
     }
 
+    @Override public boolean requiresExplicitConfirmation(Map<String, Object> arguments) { return false; }
+
     @Override
     public ToolResult execute(ToolCallContext context, Map<String, Object> arguments) {
         BigDecimal first = decimal(arguments.get("a"));

@@ -2,6 +2,9 @@ package com.minikun.goal;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -11,6 +14,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import com.minikun.task.TaskStore;
 
 class GoalServiceTest {
     @Test
@@ -42,6 +46,20 @@ class GoalServiceTest {
         String summary = service.activeSummary("default", 8, 400);
 
         assertEquals("- สุขภาพ: 20% (current 2.0 / target 10.0 กิโล)", summary);
+    }
+
+    @Test
+    void loadsOwnerTasksOnceWhenSynchronizingMultipleGoals() {
+        InMemoryGoalStore store = new InMemoryGoalStore();
+        TaskStore tasks = mock(TaskStore.class);
+        when(tasks.list("default", null)).thenReturn(List.of());
+        GoalService service = new GoalService(store, Clock.systemUTC(), tasks);
+        service.create("default", "home", "เป้าหมายหนึ่ง", "", "", 0, 0, 0, null, "Asia/Bangkok");
+        service.create("default", "home", "เป้าหมายสอง", "", "", 0, 0, 0, null, "Asia/Bangkok");
+
+        assertEquals(2, service.syncOpenProgress("default").size());
+
+        verify(tasks).list("default", null);
     }
 
     private static final class InMemoryGoalStore implements GoalStore {

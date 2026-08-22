@@ -30,7 +30,7 @@ public final class NextActionService {
         int maximum = Math.max(1, Math.min(limit, 20));
         Instant now = clock.instant();
         List<PersonalTask> ownerTasks = tasks.list(ownerId, null);
-        return goals.syncOpenProgress(ownerId).stream()
+        return goals.syncOpenProgress(ownerId, ownerTasks).stream()
                 .filter(PersonalGoal::open)
                 .flatMap(goal -> recommendation(goal, ownerTasks, now).stream())
                 .sorted(Comparator.comparingInt(NextActionRecommendation::priority).reversed())

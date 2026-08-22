@@ -47,6 +47,12 @@ public final class PersonalKnowledgeTool implements Tool {
     }
 
     @Override
+    public boolean requiresExplicitConfirmation(Map<String, Object> arguments) {
+        String action = text(arguments, "action").toLowerCase(java.util.Locale.ROOT);
+        return "index".equals(action) || "reindex".equals(action);
+    }
+
+    @Override
     public ToolResult execute(ToolCallContext context, Map<String, Object> arguments) {
         try {
             String action = text(arguments, "action").toLowerCase(java.util.Locale.ROOT);

@@ -32,6 +32,8 @@ public final class InvestmentAnalyzeTool implements Tool {
         return DEFINITION;
     }
 
+    @Override public boolean requiresExplicitConfirmation(Map<String, Object> arguments) { return false; }
+
     @Override
     public ToolResult execute(ToolCallContext context, Map<String, Object> arguments) {
         String action = text(arguments, "action").toLowerCase(java.util.Locale.ROOT);

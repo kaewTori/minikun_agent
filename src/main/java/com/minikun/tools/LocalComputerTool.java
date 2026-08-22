@@ -64,6 +64,14 @@ public final class LocalComputerTool implements Tool {
     @Override public ToolDefinition definition() { return DEFINITION; }
 
     @Override
+    public boolean requiresExplicitConfirmation(Map<String, Object> arguments) {
+        return switch (text(arguments, "action").toLowerCase(java.util.Locale.ROOT)) {
+            case "write", "move", "trash", "open_path", "open_url", "open_app", "workflow" -> true;
+            default -> false;
+        };
+    }
+
+    @Override
     public ToolResult execute(ToolCallContext context, Map<String, Object> arguments) {
         try {
             String action = text(arguments, "action").toLowerCase(java.util.Locale.ROOT);

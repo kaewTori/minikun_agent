@@ -125,7 +125,8 @@ public final class DailyBriefingScheduler {
             return;
         }
 
-        List<PersonalTask> openTasks = tasks.list(ownerId, null).stream()
+        List<PersonalTask> ownerTasks = tasks.list(ownerId, null);
+        List<PersonalTask> openTasks = ownerTasks.stream()
                 .filter(PersonalTask::active)
                 .sorted(java.util.Comparator.comparing(PersonalTask::dueAt,
                         java.util.Comparator.nullsLast(java.util.Comparator.naturalOrder())))
@@ -135,7 +136,7 @@ public final class DailyBriefingScheduler {
         Instant dayEnd = today.plusDays(1).atStartOfDay(zone).toInstant();
         List<PlannerEvent> localEvents = planner.upcoming(dayStart, dayEnd).stream().limit(12).toList();
         List<ExternalCalendarEvent> externalEvents = externalEvents(dayStart, dayEnd);
-        List<PersonalGoal> openGoals = goals == null ? List.of() : goals.syncOpenProgress(ownerId).stream()
+        List<PersonalGoal> openGoals = goals == null ? List.of() : goals.syncOpenProgress(ownerId, ownerTasks).stream()
                 .filter(PersonalGoal::open).sorted(java.util.Comparator.comparing(PersonalGoal::nextReviewAt,
                         java.util.Comparator.nullsLast(java.util.Comparator.naturalOrder()))).limit(8).toList();
         WeatherReport weatherReport = weather();

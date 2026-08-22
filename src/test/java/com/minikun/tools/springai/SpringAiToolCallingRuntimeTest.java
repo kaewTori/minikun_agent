@@ -2,10 +2,12 @@ package com.minikun.tools.springai;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.never;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.util.List;
@@ -45,6 +47,9 @@ import com.minikun.tools.ToolErrorCode;
 import com.minikun.agent.execution.AgentExecutionStep;
 import com.minikun.agent.execution.AgentExecutionTracker;
 import com.minikun.agent.execution.AgentStepStatus;
+import com.minikun.planner.PlannerConfirmationService;
+import com.minikun.tools.ToolParameter;
+import com.minikun.tools.ToolParameterType;
 
 class SpringAiToolCallingRuntimeTest {
     @Test
@@ -219,6 +224,54 @@ class SpringAiToolCallingRuntimeTest {
         assertEquals("calculator.add", callback.getToolDefinition().name());
         assertEquals("number", schema.get("properties").get("a").get("type").asText());
         assertEquals("[\"a\",\"b\"]", schema.get("required").toString());
+    }
+
+    @Test
+    void highRiskCallbackPersistsConfirmationInsteadOfExecutingToolWithoutNativeGate() throws Exception {
+        Tool mutatingTool = new Tool() {
+            @Override public ToolDefinition definition() {
+                return new ToolDefinition("memory.write", "persist a local value", Map.of(
+                        "value", new ToolParameter("value", ToolParameterType.STRING, true, "value")));
+            }
+            @Override public boolean requiresExplicitConfirmation(Map<String, Object> arguments) { return true; }
+            @Override public ToolResult execute(com.minikun.tools.ToolCallContext context,
+                    Map<String, Object> arguments) { throw new AssertionError("must not execute before confirmation"); }
+        };
+        ToolExecutor executor = mock(ToolExecutor.class);
+        PlannerConfirmationService confirmations = mock(PlannerConfirmationService.class);
+        SpringAiToolCallback callback = new SpringAiToolCallback(mutatingTool, executor, new ObjectMapper(),
+                AgentExecutionTracker.noop(), confirmations);
+
+        var result = new ObjectMapper().readTree(callback.call("{\"value\":\"secret\"}", new ToolContext(Map.of(
+                "conversationId", "conversation", "ownerId", "owner", "riskExplicitReview", true))));
+
+        assertEquals(true, result.path("result").path("requires_confirmation").asBoolean());
+        verify(executor, never()).execute(any(), any());
+        verify(confirmations).save(any(), eq("owner"), eq("agent-risk.memory.write"), any());
+    }
+
+    @Test
+    void highRiskCallbackCannotAcceptModelSuppliedConfirmation() throws Exception {
+        Tool mutatingTool = new Tool() {
+            @Override public ToolDefinition definition() {
+                return new ToolDefinition("native.write", "write with native confirmation", Map.of(
+                        "confirmed", new ToolParameter("confirmed", ToolParameterType.BOOLEAN, false, "approval")));
+            }
+            @Override public boolean requiresExplicitConfirmation(Map<String, Object> arguments) { return true; }
+            @Override public ToolResult execute(com.minikun.tools.ToolCallContext context,
+                    Map<String, Object> arguments) { return ToolResult.success(arguments); }
+        };
+        ToolExecutor executor = mock(ToolExecutor.class);
+        when(executor.execute(any(), any())).thenAnswer(invocation -> {
+            com.minikun.tools.ToolCall call = invocation.getArgument(1);
+            return ToolResult.success(call.arguments());
+        });
+        SpringAiToolCallback callback = new SpringAiToolCallback(mutatingTool, executor, new ObjectMapper());
+
+        var result = new ObjectMapper().readTree(callback.call("{\"confirmed\":true}", new ToolContext(Map.of(
+                "conversationId", "conversation", "ownerId", "owner", "riskExplicitReview", true))));
+
+        assertEquals(false, result.path("result").path("confirmed").asBoolean());
     }
 
     @Test

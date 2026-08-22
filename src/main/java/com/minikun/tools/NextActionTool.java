@@ -25,6 +25,8 @@ public final class NextActionTool implements Tool {
 
     @Override public ToolDefinition definition() { return DEFINITION; }
 
+    @Override public boolean requiresExplicitConfirmation(Map<String, Object> arguments) { return false; }
+
     @Override public ToolResult execute(ToolCallContext context, Map<String, Object> arguments) {
         try {
             int limit = arguments != null && arguments.get("limit") instanceof Number number

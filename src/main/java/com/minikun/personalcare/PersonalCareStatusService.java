@@ -33,10 +33,12 @@ public final class PersonalCareStatusService {
 
     public Map<String, Object> snapshot(String ownerId) {
         Instant now = clock.instant();
-        var openTasks = tasks.list(ownerId, null).stream().filter(PersonalTask::active).toList();
-        var openGoals = goals.syncOpenProgress(ownerId);
+        var ownerTasks = tasks.list(ownerId, null);
+        var openTasks = ownerTasks.stream().filter(PersonalTask::active).toList();
+        var openGoals = goals.syncOpenProgress(ownerId, ownerTasks);
         var dueTasks = openTasks.stream().filter(task -> task.dueAt() != null && !task.dueAt().isAfter(now)).count();
-        var dueGoals = goals.dueForReview(ownerId, now).size();
+        var dueGoals = openGoals.stream()
+                .filter(goal -> goal.nextReviewAt() != null && !goal.nextReviewAt().isAfter(now)).count();
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("owner_id", ownerId);
         result.put("generated_at", now.toString());

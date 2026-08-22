@@ -27,6 +27,7 @@ import com.minikun.tools.ToolParameterType;
 import com.minikun.tools.ToolResult;
 import com.minikun.agent.execution.AgentExecutionStep;
 import com.minikun.agent.execution.AgentExecutionTracker;
+import com.minikun.planner.PlannerConfirmationService;
 
 public final class SpringAiToolCallback implements ToolCallback {
     private final Tool tool;
@@ -34,18 +35,25 @@ public final class SpringAiToolCallback implements ToolCallback {
     private final ObjectMapper objectMapper;
     private final ToolDefinition definition;
     private final AgentExecutionTracker executionTracker;
+    private final PlannerConfirmationService confirmations;
     private final ThreadLocal<Deque<String>> currentCallIds = new ThreadLocal<>();
 
     public SpringAiToolCallback(Tool tool, ToolExecutor executor, ObjectMapper objectMapper) {
-        this(tool, executor, objectMapper, AgentExecutionTracker.noop());
+        this(tool, executor, objectMapper, AgentExecutionTracker.noop(), null);
     }
 
     public SpringAiToolCallback(Tool tool, ToolExecutor executor, ObjectMapper objectMapper,
             AgentExecutionTracker executionTracker) {
+        this(tool, executor, objectMapper, executionTracker, null);
+    }
+
+    public SpringAiToolCallback(Tool tool, ToolExecutor executor, ObjectMapper objectMapper,
+            AgentExecutionTracker executionTracker, PlannerConfirmationService confirmations) {
         this.tool = Objects.requireNonNull(tool, "tool must not be null");
         this.executor = Objects.requireNonNull(executor, "tool executor must not be null");
         this.objectMapper = Objects.requireNonNull(objectMapper, "object mapper must not be null");
         this.executionTracker = Objects.requireNonNull(executionTracker, "execution tracker must not be null");
+        this.confirmations = confirmations;
         this.definition = ToolDefinition.builder()
                 .name(tool.definition().name())
                 .description(tool.definition().description())
@@ -66,15 +74,28 @@ public final class SpringAiToolCallback implements ToolCallback {
     @Override
     public String call(String toolInput, ToolContext toolContext) {
         try {
-            Map<String, Object> arguments = objectMapper.convertValue(
-                    objectMapper.readTree(toolInput == null || toolInput.isBlank() ? "{}" : toolInput), Map.class);
+            Map<String, Object> arguments = new LinkedHashMap<>(objectMapper.convertValue(
+                    objectMapper.readTree(toolInput == null || toolInput.isBlank() ? "{}" : toolInput), Map.class));
             String conversationValue = value(toolContext, "conversationId", "tool-call");
             String ownerValue = value(toolContext, "ownerId", "default");
             String toolCallId = callId();
             Optional<UUID> runId = uuid(toolContext, "agentRunId");
+            boolean requiresRiskReview = booleanValue(toolContext, "riskExplicitReview")
+                    && tool.requiresExplicitConfirmation(arguments);
+            boolean genericRiskConfirmation = requiresRiskReview
+                    && !tool.definition().parameters().containsKey("confirmed");
+            if (requiresRiskReview && !genericRiskConfirmation) {
+                // A model cannot self-approve a high-risk action in the proposal turn.
+                arguments.put("confirmed", false);
+            }
             AgentExecutionStep step = runId.map(id -> executionTracker.beginStep(
                     id, toolCallId, tool.definition().name(), arguments)).orElse(null);
             ToolResult result;
+            if (genericRiskConfirmation) {
+                result = createRiskConfirmation(conversationValue, ownerValue, toolCallId, runId, arguments);
+                if (runId.isPresent()) executionTracker.finishStep(runId.get(), toolCallId, result, false);
+                return objectMapper.writeValueAsString(modelFacingResult(result));
+            }
             while (true) {
                 result = executor.execute(
                         new ToolCallContext(new ConversationId(conversationValue), toolCallId, ownerValue),
@@ -159,6 +180,28 @@ public final class SpringAiToolCallback implements ToolCallback {
         } catch (IllegalArgumentException exception) {
             return Optional.empty();
         }
+    }
+
+    private boolean booleanValue(ToolContext context, String key) {
+        String value = value(context, key, "false");
+        return "true".equalsIgnoreCase(value);
+    }
+
+    private ToolResult createRiskConfirmation(String conversationId, String ownerId, String toolCallId,
+            Optional<UUID> runId, Map<String, Object> arguments) {
+        if (confirmations == null) {
+            return ToolResult.failure(ToolErrorCode.EXECUTION_FAILED,
+                    "risk confirmation storage is unavailable; no action was performed");
+        }
+        Map<String, Object> pending = new LinkedHashMap<>(arguments);
+        pending.put("_risk_tool_call_id", toolCallId);
+        runId.ifPresent(id -> pending.put("_risk_agent_run_id", id.toString()));
+        confirmations.save(new ConversationId(conversationId), ownerId,
+                "agent-risk." + tool.definition().name(), pending);
+        return ToolResult.success(Map.of(
+                "requires_confirmation", true,
+                "message", "แผนนี้มีการเปลี่ยนแปลงที่มีความเสี่ยงสูงและยังไม่ได้ดำเนินการครับ กรุณายืนยันก่อน",
+                "tool", tool.definition().name()));
     }
 
     private String errorResult(ToolErrorCode errorCode, String message) {

@@ -32,4 +32,20 @@ class AgentRiskAssessorTest {
         assertEquals(AgentRiskLevel.CRITICAL, result.level());
         assertTrue(result.level().requiresExplicitReview());
     }
+
+    @Test
+    void classifiesEnglishFinancialActionsAsCritical() {
+        AgentRiskAssessment result = assessor.assess(
+                "transfer all my money and then email the receipt", List.of("transfer money", "email receipt"));
+
+        assertEquals(AgentRiskLevel.CRITICAL, result.level());
+    }
+
+    @Test
+    void doesNotMatchRiskKeywordsInsideEnglishWords() {
+        AgentRiskAssessment result = assessor.assess(
+                "analyze PostgreSQL and summarize its query plan", List.of("inspect PostgreSQL", "summarize"));
+
+        assertEquals(AgentRiskLevel.LOW, result.level());
+    }
 }

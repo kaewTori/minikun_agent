@@ -69,6 +69,11 @@ public final class TaskManageTool implements Tool {
     }
 
     @Override
+    public boolean requiresExplicitConfirmation(Map<String, Object> arguments) {
+        return !"list".equalsIgnoreCase(text(arguments, "action"));
+    }
+
+    @Override
     public ToolResult execute(ToolCallContext context, Map<String, Object> arguments) {
         String action = text(arguments, "action").toLowerCase(java.util.Locale.ROOT);
         boolean confirmed = booleanValue(arguments, "confirmed");

@@ -53,6 +53,15 @@ public final class JdbcGoalStore implements GoalStore {
     }
 
     @Override
+    public List<PersonalGoal> dueForReview(String ownerId, Instant now, int limit) {
+        return jdbc.query("""
+                SELECT * FROM minikun_goal
+                WHERE owner_id = ? AND status = 'ACTIVE' AND next_review_at <= ?
+                ORDER BY next_review_at, created_at LIMIT ?
+                """, this::map, ownerId, timestamp(now), Math.max(1, Math.min(limit, 500)));
+    }
+
+    @Override
     public PersonalGoal update(PersonalGoal goal) {
         jdbc.update("""
                 UPDATE minikun_goal SET title = ?, description = ?, status = ?, progress_percent = ?,

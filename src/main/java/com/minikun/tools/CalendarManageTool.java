@@ -50,6 +50,11 @@ public final class CalendarManageTool implements Tool {
     }
 
     @Override
+    public boolean requiresExplicitConfirmation(Map<String, Object> arguments) {
+        return planner.requiresExplicitConfirmation(arguments);
+    }
+
+    @Override
     public ToolResult execute(ToolCallContext context, Map<String, Object> arguments) {
         ToolResult local = planner.execute(context, arguments);
         if (!local.success() || !"list".equalsIgnoreCase(text(arguments, "action")) || externalCalendar == null) {

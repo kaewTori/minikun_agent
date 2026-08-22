@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
@@ -54,20 +55,31 @@ public final class GoalService {
     /** Reconciles linked task completion into goal progress without touching manually tracked goals. */
     public List<PersonalGoal> syncOpenProgress(String ownerId) {
         if (tasks == null) return list(ownerId, GoalStatus.ACTIVE);
-        return list(ownerId, GoalStatus.ACTIVE).stream().map(goal -> syncProgress(ownerId, goal)).toList();
+        String owner = owner(ownerId);
+        return syncOpenProgress(owner, tasks.list(owner, null));
     }
 
-    public List<PersonalGoal> dueForReview(String ownerId, Instant now) {
+    /** Reuses an owner-task snapshot so dashboard and recommendation callers do not query the same rows twice. */
+    public List<PersonalGoal> syncOpenProgress(String ownerId, List<PersonalTask> ownerTasks) {
+        String owner = owner(ownerId);
+        if (tasks == null) return list(owner, GoalStatus.ACTIVE);
+        Map<UUID, List<PersonalTask>> byGoal = Objects.requireNonNull(ownerTasks, "owner tasks must not be null")
+                .stream()
+                .filter(task -> owner.equals(task.ownerId()) && task.goalId() != null
+                        && task.status() != TaskStatus.CANCELLED)
+                .collect(Collectors.groupingBy(PersonalTask::goalId));
+        return list(owner, GoalStatus.ACTIVE).stream()
+                .map(goal -> syncProgress(goal, byGoal.getOrDefault(goal.id(), List.of())))
+                .toList();
+    }
+
+    public List<PersonalGoal> dueForReview(String ownerId, Instant now, int limit) {
         Objects.requireNonNull(now, "review time must not be null");
-        return list(ownerId, GoalStatus.ACTIVE).stream()
-                .filter(goal -> goal.nextReviewAt() != null && !goal.nextReviewAt().isAfter(now))
-                .toList();
+        if (limit < 1 || limit > 500) throw new IllegalArgumentException("goal review limit must be between 1 and 500");
+        return store.dueForReview(owner(ownerId), now, limit);
     }
 
-    private PersonalGoal syncProgress(String ownerId, PersonalGoal goal) {
-        List<PersonalTask> linked = tasks.list(ownerId, null).stream()
-                .filter(task -> goal.id().equals(task.goalId()) && task.status() != TaskStatus.CANCELLED)
-                .toList();
+    private PersonalGoal syncProgress(PersonalGoal goal, List<PersonalTask> linked) {
         if (linked.isEmpty()) return goal;
         int completed = (int) linked.stream().filter(task -> task.status() == TaskStatus.DONE).count();
         int progress = Math.min(100, (completed * 100) / linked.size());

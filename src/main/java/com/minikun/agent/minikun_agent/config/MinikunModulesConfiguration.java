@@ -74,6 +74,7 @@ import com.minikun.tools.AbsoluteReminderToolRouter;
 import com.minikun.tools.CalculatorAddTool;
 import com.minikun.tools.CalendarManageTool;
 import com.minikun.tools.ComputerConfirmationRouter;
+import com.minikun.tools.AgentRiskConfirmationRouter;
 import com.minikun.tools.CurrentTimeTool;
 import com.minikun.tools.CurrentTimeToolRouter;
 import com.minikun.tools.DefaultToolExecutor;
@@ -145,7 +146,8 @@ import com.minikun.weather.WeatherConfiguration;
         NotificationSchedulerMonitor.class, JdbcPlannerStore.class, PlannerService.class,
         ReminderActionController.class, PlannerNotificationScheduler.class,
         JdbcTaskStore.class, TaskService.class,
-        TaskManageTool.class, TaskConfirmationRouter.class, TaskCaptureToolRouter.class, TaskController.class,
+        TaskManageTool.class, TaskConfirmationRouter.class, AgentRiskConfirmationRouter.class,
+        TaskCaptureToolRouter.class, TaskController.class,
         TaskFollowUpScheduler.class, DailyBriefingScheduler.class,
         JdbcInvestmentStore.class, InvestmentService.class, InvestmentManageTool.class,
         InvestmentAnalyzeTool.class, InvestmentConfirmationRouter.class, SpringAiToolCallingRuntime.class

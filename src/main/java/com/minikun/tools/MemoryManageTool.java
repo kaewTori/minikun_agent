@@ -46,6 +46,11 @@ public final class MemoryManageTool implements Tool {
     }
 
     @Override
+    public boolean requiresExplicitConfirmation(Map<String, Object> arguments) {
+        return !"list".equalsIgnoreCase(text(arguments, "action"));
+    }
+
+    @Override
     public ToolResult execute(ToolCallContext context, Map<String, Object> arguments) {
         String action = text(arguments, "action").toLowerCase(Locale.ROOT);
         try {

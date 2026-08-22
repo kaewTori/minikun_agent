@@ -58,6 +58,11 @@ public final class HomelabGuardianTool implements Tool {
     }
 
     @Override
+    public boolean requiresExplicitConfirmation(Map<String, Object> arguments) {
+        return "execute".equalsIgnoreCase(text(arguments, "action"));
+    }
+
+    @Override
     public ToolResult execute(ToolCallContext context, Map<String, Object> arguments) {
         try {
             return switch (text(arguments, "action").toLowerCase(java.util.Locale.ROOT)) {

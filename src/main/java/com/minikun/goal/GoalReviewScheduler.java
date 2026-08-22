@@ -54,12 +54,20 @@ public final class GoalReviewScheduler {
         monitor.polled(SCHEDULER, now);
         if (!policy.allows(now)) return;
         try {
-            List<PersonalGoal> due = goals.dueForReview(ownerId, now).stream().limit(8).toList();
+            List<PersonalGoal> due = goals.dueForReview(ownerId, now, 8);
             for (PersonalGoal goal : due) {
                 if (!claim(goal, now)) continue;
-                notifications.publish(new NotificationRequest("GOAL_REVIEW", goal.id().toString(),
-                        NotificationChannel.REMINDER, "Mini-kun goal review",
-                        message(goal), 3, "target,chart_with_upwards_trend"));
+                try {
+                    notifications.publish(new NotificationRequest("GOAL_REVIEW", goal.id().toString(),
+                            NotificationChannel.REMINDER, "Mini-kun goal review",
+                            message(goal), 3, "target,chart_with_upwards_trend"));
+                } catch (RuntimeException exception) {
+                    release(goal);
+                    monitor.failed(SCHEDULER, clock.instant());
+                    LOG.warn("process=goal_review event=delivery_failed owner_id={} goal_id={} reason={}",
+                            ownerId, goal.id(), exception.getMessage());
+                    continue;
+                }
                 monitor.delivered(SCHEDULER, clock.instant());
             }
         } catch (RuntimeException exception) {
@@ -80,5 +88,11 @@ public final class GoalReviewScheduler {
                 INSERT INTO minikun_goal_review_notification (goal_id, review_at, notified_at)
                 VALUES (?, ?, ?) ON CONFLICT (goal_id, review_at) DO NOTHING
                 """, goal.id(), Timestamp.from(goal.nextReviewAt()), Timestamp.from(now)) > 0;
+    }
+
+    private void release(PersonalGoal goal) {
+        jdbc.update("""
+                DELETE FROM minikun_goal_review_notification WHERE goal_id = ? AND review_at = ?
+                """, goal.id(), Timestamp.from(goal.nextReviewAt()));
     }
 }
