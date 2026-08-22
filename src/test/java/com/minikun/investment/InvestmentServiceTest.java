@@ -1,6 +1,7 @@
 package com.minikun.investment;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -15,9 +16,20 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import org.springframework.aop.framework.ProxyFactory;
 
 class InvestmentServiceTest {
     private static final Instant NOW = Instant.parse("2026-08-22T03:00:00Z");
+
+    @Test
+    void supportsClassBasedProxyingRequiredByTransactionalMethods() {
+        ProxyFactory proxyFactory = new ProxyFactory(service(new InMemoryInvestmentStore()));
+        proxyFactory.setProxyTargetClass(true);
+
+        assertDoesNotThrow(() -> {
+            proxyFactory.getProxy();
+        });
+    }
 
     @Test
     void calculatesAverageCostRealizedProfitAndPolicyWarningsWithoutMarketPrices() {

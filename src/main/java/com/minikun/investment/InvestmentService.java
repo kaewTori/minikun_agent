@@ -23,7 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 /** Deterministic investment ledger, policy, journal, and cost-basis analysis. */
 @Service
 @ConditionalOnProperty(name = "minikun.investment.enabled", havingValue = "true", matchIfMissing = true)
-public final class InvestmentService {
+public class InvestmentService {
     private static final MathContext MATH = MathContext.DECIMAL128;
     private static final BigDecimal HUNDRED = new BigDecimal("100");
 
