@@ -18,6 +18,17 @@ plist="$app_root/deploy/$label.plist"
 
 cd "$app_root"
 ./mvnw clean package
+
+# Local installs keep the database credential in the launcher. Reuse only that
+# explicit export when deploy is run from a clean shell, so migrations remain
+# non-interactive without loading or executing the launcher itself.
+if [ -z "${SPRING_DATASOURCE_PASSWORD:-}" ]; then
+  source_launcher="$workspace_root/java/script/minikun-agent.sh"
+  datasource_password_export="$(sed -n '/^export SPRING_DATASOURCE_PASSWORD=/p' "$source_launcher")"
+  if [ -n "$datasource_password_export" ]; then
+    eval "$datasource_password_export"
+  fi
+fi
 "$app_root/deploy/migrate-database.sh"
 
 mkdir -p \

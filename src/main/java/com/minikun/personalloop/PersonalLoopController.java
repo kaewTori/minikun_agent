@@ -31,14 +31,17 @@ public final class PersonalLoopController {
     private final IncidentCommanderService incidents;
     private final ExplainabilityService explanations;
     private final PersonalTimelineService timeline;
+    private final PersonalExperimentService experiments;
     @Value("${minikun.personal-loop.management.token:${minikun.memory.management.token:}}")
     private String configuredToken;
 
     public PersonalLoopController(WeeklyReviewService reviews, OutcomeLearningService outcomes,
             UniversalInboxService inbox, SafeAutomationService automations, IncidentCommanderService incidents,
-            ExplainabilityService explanations, PersonalTimelineService timeline) {
+            ExplainabilityService explanations, PersonalTimelineService timeline,
+            PersonalExperimentService experiments) {
         this.reviews = reviews; this.outcomes = outcomes; this.inbox = inbox; this.automations = automations;
         this.incidents = incidents; this.explanations = explanations; this.timeline = timeline;
+        this.experiments = experiments;
     }
 
     @PostMapping("/weekly-reviews")
@@ -176,6 +179,67 @@ public final class PersonalLoopController {
             @RequestParam(defaultValue = "100") int limit,
             @RequestHeader(value = "X-Minikun-Personal-Token", required = false) String token) { authorize(token); return timeline.list(ownerId, parse(since), eventType, limit); }
 
+    @PostMapping("/experiments")
+    public PersonalExperimentService.ExperimentDetails createExperiment(
+            @RequestParam(name = "owner_id", defaultValue = "default") String ownerId,
+            @RequestHeader(value = "X-Minikun-Personal-Token", required = false) String token,
+            @RequestBody ExperimentCreateRequest request) {
+        authorize(token);
+        return experiments.create(ownerId, blank(request.conversationId(), "cockpit"), request.title(),
+                request.hypothesis(), request.protocol(), request.metricName(), request.metricUnit(),
+                MetricDirection.valueOf(blank(request.direction(), "INCREASE").toUpperCase()),
+                request.baselineValue(), request.targetValue(), request.durationDays());
+    }
+
+    @GetMapping("/experiments")
+    public List<PersonalExperimentService.ExperimentOverview> experiments(
+            @RequestParam(name = "owner_id", defaultValue = "default") String ownerId,
+            @RequestParam(required = false) String status, @RequestParam(defaultValue = "50") int limit,
+            @RequestHeader(value = "X-Minikun-Personal-Token", required = false) String token) {
+        authorize(token);
+        ExperimentStatus parsed = status == null || status.isBlank() ? null : ExperimentStatus.valueOf(status.toUpperCase());
+        return experiments.list(ownerId, parsed, limit);
+    }
+
+    @GetMapping("/experiments/{id}")
+    public PersonalExperimentService.ExperimentDetails experiment(@PathVariable UUID id,
+            @RequestParam(name = "owner_id", defaultValue = "default") String ownerId,
+            @RequestHeader(value = "X-Minikun-Personal-Token", required = false) String token) {
+        authorize(token); return experiments.details(ownerId, id);
+    }
+
+    @PostMapping("/experiments/{id}/transition")
+    public PersonalExperimentService.ExperimentDetails transitionExperiment(@PathVariable UUID id,
+            @RequestParam(name = "owner_id", defaultValue = "default") String ownerId,
+            @RequestHeader(value = "X-Minikun-Personal-Token", required = false) String token,
+            @RequestBody ExperimentTransitionRequest request) {
+        authorize(token);
+        return switch (blank(request.action(), "").toUpperCase()) {
+            case "START" -> experiments.start(ownerId, id);
+            case "PAUSE" -> experiments.pause(ownerId, id);
+            case "RESUME" -> experiments.resume(ownerId, id);
+            case "COMPLETE" -> experiments.complete(ownerId, id, request.note());
+            case "ABANDON" -> experiments.abandon(ownerId, id, request.note());
+            default -> throw new IllegalArgumentException("action must be START, PAUSE, RESUME, COMPLETE, or ABANDON");
+        };
+    }
+
+    @PostMapping("/experiments/{id}/check-ins")
+    public PersonalExperimentService.ExperimentDetails checkInExperiment(@PathVariable UUID id,
+            @RequestParam(name = "owner_id", defaultValue = "default") String ownerId,
+            @RequestHeader(value = "X-Minikun-Personal-Token", required = false) String token,
+            @RequestBody ExperimentCheckInRequest request) {
+        authorize(token); return experiments.checkIn(ownerId, id, request.value(), request.note(), parse(request.observedAt()));
+    }
+
+    @PostMapping("/experiments/{id}/evaluate")
+    public PersonalExperimentService.ExperimentDetails evaluateExperiment(@PathVariable UUID id,
+            @RequestParam(name = "owner_id", defaultValue = "default") String ownerId,
+            @RequestHeader(value = "X-Minikun-Personal-Token", required = false) String token,
+            @RequestBody ExperimentEvaluationRequest request) {
+        authorize(token); return experiments.evaluate(ownerId, id, request.score(), request.note());
+    }
+
     private void authorize(String token) { if (configuredToken != null && !configuredToken.isBlank() && !Objects.equals(configuredToken, token)) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "personal loop token is invalid"); }
     private Instant parse(String value) { return value == null || value.isBlank() ? null : Instant.parse(value); }
     private String blank(String value, String fallback) { return value == null || value.isBlank() ? fallback : value.trim(); }
@@ -188,4 +252,10 @@ public final class PersonalLoopController {
     public record AutomationRequest(String name, String triggerType, Map<String,Object> trigger, String actionType, Map<String,Object> action, boolean enabled) { }
     public record EnabledRequest(boolean enabled) { }
     public record NoteRequest(String note) { }
+    public record ExperimentCreateRequest(String conversationId, String title, String hypothesis, String protocol,
+            String metricName, String metricUnit, String direction, double baselineValue, double targetValue,
+            int durationDays) { }
+    public record ExperimentTransitionRequest(String action, String note) { }
+    public record ExperimentCheckInRequest(double value, String note, String observedAt) { }
+    public record ExperimentEvaluationRequest(int score, String note) { }
 }

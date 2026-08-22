@@ -25,6 +25,10 @@ public class PersonalLoopConfiguration {
     @Bean PersonalLoopStore personalLoopStore(ObjectProvider<JdbcTemplate> jdbc, ObjectMapper json) { return new PersonalLoopStore(jdbc.getIfAvailable(), json); }
     @Bean PersonalTimelineRecorder personalTimelineRecorder(PersonalLoopStore store, Clock clock) { return new PersonalTimelineRecorder(store, clock); }
     @Bean OutcomeLearningService outcomeLearningService(PersonalLoopStore store, PersonalTimelineRecorder timeline, Clock clock) { return new OutcomeLearningService(store, timeline, clock); }
+    @Bean PersonalExperimentService personalExperimentService(PersonalLoopStore store, OutcomeLearningService outcomes,
+            PersonalTimelineRecorder timeline, Clock clock) {
+        return new PersonalExperimentService(store, outcomes, timeline, clock);
+    }
     @Bean WeeklyReviewService weeklyReviewService(PersonalLoopStore store, OutcomeLearningService outcomes,
             PersonalTimelineRecorder timeline, ObjectProvider<TaskService> tasks, ObjectProvider<GoalService> goals,
             ObjectProvider<NextActionService> nextActions, ObjectProvider<AgentExecutionService> executions, Clock clock) {
@@ -69,8 +73,8 @@ public class PersonalLoopConfiguration {
             @Value("${minikun.personal-loop.owner-id:default}") String owner) { return new IncidentCommanderScheduler(service, owner); }
     @Bean PersonalLoopController personalLoopController(WeeklyReviewService reviews, OutcomeLearningService outcomes,
             UniversalInboxService inbox, SafeAutomationService automations, IncidentCommanderService incidents,
-            ExplainabilityService explanations, PersonalTimelineService timeline) {
-        return new PersonalLoopController(reviews, outcomes, inbox, automations, incidents, explanations, timeline);
+            ExplainabilityService explanations, PersonalTimelineService timeline, PersonalExperimentService experiments) {
+        return new PersonalLoopController(reviews, outcomes, inbox, automations, incidents, explanations, timeline, experiments);
     }
     @Bean PersonalLoopTool personalLoopTool(WeeklyReviewService reviews, OutcomeLearningService outcomes,
             UniversalInboxService inbox, SafeAutomationService automations, IncidentCommanderService incidents,

@@ -2,6 +2,7 @@ package com.minikun.personalloop;
 
 import static com.minikun.personalloop.PersonalLoopModels.*;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -37,6 +38,7 @@ import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.aop.framework.ProxyFactory;
 
 class PersonalLoopServicesTest {
     private static final Instant NOW = Instant.parse("2026-08-22T12:00:00Z");
@@ -49,6 +51,18 @@ class PersonalLoopServicesTest {
         clock = Clock.fixed(NOW, ZoneOffset.UTC);
         store = new PersonalLoopStore(null, new ObjectMapper());
         timeline = new PersonalTimelineRecorder(store, clock);
+    }
+
+    @Test
+    void personalExperimentSupportsClassBasedProxyingRequiredByTransactionalMethods() {
+        OutcomeLearningService outcomes = new OutcomeLearningService(store, timeline, clock);
+        PersonalExperimentService service = new PersonalExperimentService(store, outcomes, timeline, clock);
+        ProxyFactory proxyFactory = new ProxyFactory(service);
+        proxyFactory.setProxyTargetClass(true);
+
+        assertDoesNotThrow(() -> {
+            proxyFactory.getProxy();
+        });
     }
 
     @Test
@@ -168,6 +182,64 @@ class PersonalLoopServicesTest {
         assertEquals(List.of("PERSONAL:notes/plan.md"), trace.sources());
         assertFalse(trace.decisions().containsKey("prompt"));
         assertTrue(trace.summary().contains("1"));
+    }
+
+    @Test
+    void personalExperimentClosesTheLearningLoopFromDraftToEvaluation() {
+        OutcomeLearningService outcomes = new OutcomeLearningService(store, timeline, clock);
+        PersonalExperimentService service = new PersonalExperimentService(store, outcomes, timeline, clock);
+
+        var created = service.create("owner-a", "cockpit", "โฟกัสก่อนเปิดแชต",
+                "การทำงานเงียบ 30 นาทีช่วยให้งานสำคัญคืบหน้า", "ทำงานสำคัญก่อนเปิดแชตทุกเช้า",
+                "นาทีโฟกัส", "นาที", MetricDirection.INCREASE, 20, 45, 7);
+
+        assertEquals(ExperimentStatus.DRAFT, created.experiment().status());
+        assertEquals(OutcomeStatus.PROPOSED, created.outcome().status());
+        assertThrows(IllegalStateException.class,
+                () -> service.checkIn("owner-a", created.experiment().id(), 30, "เร็วเกินไป", null));
+
+        var started = service.start("owner-a", created.experiment().id());
+        assertEquals(ExperimentStatus.RUNNING, started.experiment().status());
+        assertEquals(OutcomeStatus.IN_PROGRESS, started.outcome().status());
+        assertEquals(7, java.time.Duration.between(started.experiment().startedAt(),
+                started.experiment().plannedEndAt()).toDays());
+
+        service.checkIn("owner-a", created.experiment().id(), 30, "วันแรก", NOW);
+        var checkedIn = service.checkIn("owner-a", created.experiment().id(), 40, "ดีขึ้น", NOW.plusSeconds(60));
+        assertEquals(2, checkedIn.analysis().checkInCount());
+        assertEquals(80, checkedIn.analysis().progressPercent());
+        assertEquals("IMPROVING", checkedIn.analysis().trend());
+
+        var completed = service.complete("owner-a", created.experiment().id(), "ทำได้สม่ำเสมอ");
+        assertEquals(ExperimentStatus.COMPLETED, completed.experiment().status());
+        assertEquals("MADE_PROGRESS", completed.analysis().conclusion());
+        assertEquals(OutcomeStatus.COMPLETED, completed.outcome().status());
+
+        var evaluated = service.evaluate("owner-a", created.experiment().id(), 5, "อยากทำต่อ");
+        assertEquals(OutcomeStatus.EVALUATED, evaluated.outcome().status());
+        assertEquals(5, evaluated.outcome().score());
+        assertThrows(IllegalArgumentException.class,
+                () -> service.details("owner-b", created.experiment().id()));
+    }
+
+    @Test
+    void personalExperimentSupportsDecreasingMetricsAndExplicitAbandonment() {
+        OutcomeLearningService outcomes = new OutcomeLearningService(store, timeline, clock);
+        PersonalExperimentService service = new PersonalExperimentService(store, outcomes, timeline, clock);
+        var created = service.create("owner-a", "cockpit", "ลดเวลาหน้าจอก่อนนอน",
+                "ลดหน้าจอจะช่วยให้พักผ่อนได้ตรงเวลา", "งดหน้าจอช่วงสุดท้ายของวัน",
+                "นาทีหน้าจอ", "นาที", MetricDirection.DECREASE, 90, 30, 14);
+
+        service.start("owner-a", created.experiment().id());
+        var checkedIn = service.checkIn("owner-a", created.experiment().id(), 45, "ลดลงแล้ว", NOW);
+        assertEquals(75, checkedIn.analysis().progressPercent());
+        assertEquals(-45d, checkedIn.analysis().deltaFromBaseline());
+
+        var abandoned = service.abandon("owner-a", created.experiment().id(), "ช่วงนี้ตารางไม่นิ่ง");
+        assertEquals(ExperimentStatus.ABANDONED, abandoned.experiment().status());
+        assertEquals(OutcomeStatus.ABANDONED, abandoned.outcome().status());
+        assertThrows(IllegalStateException.class,
+                () -> service.start("owner-a", created.experiment().id()));
     }
 
     private static final class InMemoryTaskStore implements TaskStore {

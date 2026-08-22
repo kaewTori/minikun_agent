@@ -36,6 +36,8 @@ public final class PersonalLoopStore {
     private final Map<UUID, Incident> incidents = new ConcurrentHashMap<>();
     private final Map<UUID, ExplainabilityTrace> traces = new ConcurrentHashMap<>();
     private final Map<UUID, TimelineEvent> timeline = new ConcurrentHashMap<>();
+    private final Map<UUID, PersonalExperiment> experiments = new ConcurrentHashMap<>();
+    private final Map<UUID, ExperimentCheckIn> checkIns = new ConcurrentHashMap<>();
 
     public PersonalLoopStore(JdbcTemplate jdbc, ObjectMapper json) {
         this.jdbc = jdbc;
@@ -291,6 +293,61 @@ public final class PersonalLoopStore {
         return jdbc.query("SELECT * FROM minikun_personal_timeline WHERE owner_id = ? ORDER BY occurred_at DESC LIMIT ?", this::timeline, ownerId, limit);
     }
 
+    public PersonalExperiment save(PersonalExperiment value) {
+        if (jdbc == null) { experiments.put(value.id(), value); return value; }
+        jdbc.update("""
+                INSERT INTO minikun_personal_experiment
+                    (id, owner_id, conversation_id, outcome_id, title, hypothesis, protocol, metric_name,
+                     metric_unit, direction, baseline_value, target_value, duration_days, status,
+                     started_at, planned_end_at, created_at, updated_at, completed_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT (id) DO UPDATE SET status = EXCLUDED.status, started_at = EXCLUDED.started_at,
+                    planned_end_at = EXCLUDED.planned_end_at, updated_at = EXCLUDED.updated_at,
+                    completed_at = EXCLUDED.completed_at
+                """, value.id(), value.ownerId(), value.conversationId(), value.outcomeId(), value.title(),
+                value.hypothesis(), value.protocol(), value.metricName(), value.metricUnit(), value.direction().name(),
+                value.baselineValue(), value.targetValue(), value.durationDays(), value.status().name(),
+                ts(value.startedAt()), ts(value.plannedEndAt()), ts(value.createdAt()), ts(value.updatedAt()),
+                ts(value.completedAt()));
+        return value;
+    }
+
+    public Optional<PersonalExperiment> experiment(UUID id, String ownerId) {
+        if (jdbc == null) return Optional.ofNullable(experiments.get(id)).filter(v -> v.ownerId().equals(ownerId));
+        return jdbc.query("SELECT * FROM minikun_personal_experiment WHERE id = ? AND owner_id = ?",
+                this::experiment, id, ownerId).stream().findFirst();
+    }
+
+    public List<PersonalExperiment> experiments(String ownerId, ExperimentStatus status, int limit) {
+        if (jdbc == null) return experiments.values().stream().filter(v -> v.ownerId().equals(ownerId)
+                && (status == null || v.status() == status))
+                .sorted(Comparator.comparing(PersonalExperiment::updatedAt).reversed()).limit(limit).toList();
+        if (status == null) {
+            return jdbc.query("SELECT * FROM minikun_personal_experiment WHERE owner_id = ? ORDER BY updated_at DESC LIMIT ?",
+                    this::experiment, ownerId, limit);
+        }
+        return jdbc.query("SELECT * FROM minikun_personal_experiment WHERE owner_id = ? AND status = ? ORDER BY updated_at DESC LIMIT ?",
+                this::experiment, ownerId, status.name(), limit);
+    }
+
+    public ExperimentCheckIn save(ExperimentCheckIn value) {
+        if (jdbc == null) { checkIns.put(value.id(), value); return value; }
+        jdbc.update("""
+                INSERT INTO minikun_experiment_check_in
+                    (id, experiment_id, owner_id, value, note, observed_at, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, value.id(), value.experimentId(), value.ownerId(), value.value(), value.note(),
+                ts(value.observedAt()), ts(value.createdAt()));
+        return value;
+    }
+
+    public List<ExperimentCheckIn> checkIns(UUID experimentId, String ownerId) {
+        if (jdbc == null) return checkIns.values().stream().filter(v -> v.ownerId().equals(ownerId)
+                && v.experimentId().equals(experimentId)).sorted(Comparator.comparing(ExperimentCheckIn::observedAt)).toList();
+        return jdbc.query("SELECT * FROM minikun_experiment_check_in WHERE experiment_id = ? AND owner_id = ? ORDER BY observed_at",
+                this::checkIn, experimentId, ownerId);
+    }
+
     private WeeklyReview review(ResultSet r, int n) throws SQLException { return new WeeklyReview(uuid(r,"id"), r.getString("owner_id"), r.getString("conversation_id"), instant(r,"period_start"), instant(r,"period_end"), ReviewStatus.valueOf(r.getString("status")), readMap(r.getString("summary_json")), instant(r,"created_at"), instant(r,"completed_at")); }
     private ReviewProposal proposal(ResultSet r, int n) throws SQLException { return new ReviewProposal(uuid(r,"id"), uuid(r,"review_id"), r.getString("owner_id"), r.getString("proposal_type"), r.getString("target_id"), r.getString("title"), r.getString("reason"), readMap(r.getString("payload_json")), ProposalStatus.valueOf(r.getString("status")), instant(r,"created_at"), instant(r,"decided_at")); }
     private Outcome outcome(ResultSet r, int n) throws SQLException { Integer score = (Integer) r.getObject("score"); return new Outcome(uuid(r,"id"), r.getString("owner_id"), r.getString("conversation_id"), r.getString("category"), r.getString("recommendation"), r.getString("source_type"), r.getString("source_id"), OutcomeStatus.valueOf(r.getString("status")), r.getString("result_note"), score, instant(r,"created_at"), instant(r,"accepted_at"), instant(r,"completed_at"), instant(r,"evaluated_at")); }
@@ -300,6 +357,8 @@ public final class PersonalLoopStore {
     private Incident incident(ResultSet r, int n) throws SQLException { return new Incident(uuid(r,"id"), r.getString("owner_id"), r.getString("fingerprint"), IncidentStatus.valueOf(r.getString("status")), r.getString("severity"), r.getString("summary"), r.getString("probable_cause"), readMaps(r.getString("findings_json")), readMaps(r.getString("timeline_json")), instant(r,"opened_at"), instant(r,"updated_at"), instant(r,"resolved_at")); }
     private ExplainabilityTrace trace(ResultSet r, int n) throws SQLException { return new ExplainabilityTrace(uuid(r,"id"), r.getString("owner_id"), r.getString("conversation_id"), r.getString("response_id"), r.getString("summary"), readStrings(r.getString("sources_json")), readStrings(r.getString("tools_json")), readMap(r.getString("decisions_json")), instant(r,"created_at")); }
     private TimelineEvent timeline(ResultSet r, int n) throws SQLException { return new TimelineEvent(uuid(r,"id"), r.getString("owner_id"), r.getString("event_type"), r.getString("source_type"), r.getString("source_id"), r.getString("title"), r.getString("summary"), readMap(r.getString("details_json")), instant(r,"occurred_at"), instant(r,"created_at")); }
+    private PersonalExperiment experiment(ResultSet r, int n) throws SQLException { return new PersonalExperiment(uuid(r,"id"), r.getString("owner_id"), r.getString("conversation_id"), uuid(r,"outcome_id"), r.getString("title"), r.getString("hypothesis"), r.getString("protocol"), r.getString("metric_name"), r.getString("metric_unit"), MetricDirection.valueOf(r.getString("direction")), r.getDouble("baseline_value"), r.getDouble("target_value"), r.getInt("duration_days"), ExperimentStatus.valueOf(r.getString("status")), instant(r,"started_at"), instant(r,"planned_end_at"), instant(r,"created_at"), instant(r,"updated_at"), instant(r,"completed_at")); }
+    private ExperimentCheckIn checkIn(ResultSet r, int n) throws SQLException { return new ExperimentCheckIn(uuid(r,"id"), uuid(r,"experiment_id"), r.getString("owner_id"), r.getDouble("value"), r.getString("note"), instant(r,"observed_at"), instant(r,"created_at")); }
 
     private String write(Object value) { try { return json.writeValueAsString(value); } catch (JsonProcessingException e) { throw new IllegalStateException("could not serialize personal loop data", e); } }
     private Map<String,Object> readMap(String value) { return read(value, MAP, Map.of()); }
@@ -319,6 +378,7 @@ public final class PersonalLoopStore {
         return switch (value) {
             case WeeklyReview v -> v.ownerId(); case Outcome v -> v.ownerId(); case InboxItem v -> v.ownerId();
             case AutomationRun v -> v.ownerId(); case Incident v -> v.ownerId(); case TimelineEvent v -> v.ownerId();
+            case PersonalExperiment v -> v.ownerId();
             default -> throw new IllegalArgumentException("unsupported owner-scoped value");
         };
     }

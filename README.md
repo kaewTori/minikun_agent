@@ -36,6 +36,8 @@
 - มี proactive safety policy สำหรับ quiet hours และ daily briefing ที่รวมอากาศ นัดหมาย งาน และสิ่งค้างเวลา 08:00 (`Asia/Bangkok`)
 - Closed-loop Personal Agent สำหรับ weekly review, outcome learning, universal inbox,
   safe automation recipes, incident correlation, explainability และ personal timeline
+- Minikun Web แบบ mobile-first และ dark theme สำหรับ streaming chat, vision, ไฟล์ข้อความ,
+  voice input/output, ประวัติหลายบทสนทนา รวมถึง Cockpit, inbox และ Personal Experiment ที่ `/cockpit`
 - Personal Context Runtime สำหรับ context budget, dynamic max-tokens และ bounded recovery
 - ตรวจสอบ ลบรายรายการ และล้าง long-term memory แบบ owner-scoped ผ่าน `/v1/memory`
 
@@ -741,6 +743,36 @@ Personal Loop เชื่อม goal, task, agent run, Guardian และ conve
 - Incident Commander รวม Guardian findings เป็น fingerprint, probable cause และ incident timeline
 - Explainability แสดง source identifier, tool และ routing decision ที่ใช้จริง โดยไม่เก็บเนื้อหา retrieval
 - Personal Timeline รวม lifecycle event กับ task, goal และ agent run เป็น read model เดียว
+- Personal Experiment เก็บสมมติฐาน วิธีทดลอง metric, baseline/target, check-in และผลสรุป
+  โดยเชื่อม lifecycle เข้ากับ Outcome Learning และ Timeline อัตโนมัติ
+
+เปิด Minikun Web ในเครือข่ายภายในได้ที่:
+
+```text
+http://127.0.0.1:8080/cockpit
+```
+
+หน้า Chat เรียก `/v1/chat/completions` แบบ streaming จึงใช้ model, memory, search, vision,
+native tools และ confirmation policy ชุดเดียวกับ API หลัก รองรับการแนบ JPEG/PNG/WebP,
+ไฟล์ข้อความ, การถอดเสียงผ่าน `/v1/audio/transcriptions` และอ่านคำตอบผ่าน `/v1/audio/speech`
+
+หน้าเว็บไม่ฝัง token ลง bundle และเก็บ token ที่กรอกไว้เฉพาะ `sessionStorage` ของแท็บปัจจุบัน
+ส่วนรายการบทสนทนาและข้อความสำหรับแสดงผลเก็บใน `localStorage` ของอุปกรณ์นั้น เพื่อให้เปิดแชตเดิมต่อได้
+โดยยังเชื่อมผ่าน origin เดียวกับ Minikun API และใช้ confirmation policy ฝั่ง server เหมือนเดิม
+
+ตัวอย่างสร้างและเริ่ม Personal Experiment:
+
+```sh
+curl -X POST -H 'Content-Type: application/json' \
+  -H "X-Minikun-Personal-Token: $MINIKUN_PERSONAL_LOOP_TOKEN" \
+  -d '{"conversationId":"cockpit","title":"โฟกัสก่อนเปิดแชต","hypothesis":"ช่วงเงียบช่วยให้งานคืบหน้า","protocol":"ทำงานสำคัญ 30 นาทีก่อนเปิดแชต","metricName":"นาทีโฟกัส","metricUnit":"นาที","direction":"INCREASE","baselineValue":15,"targetValue":45,"durationDays":7}' \
+  'http://127.0.0.1:8080/v1/personal/experiments?owner_id=default'
+
+curl -X POST -H 'Content-Type: application/json' \
+  -H "X-Minikun-Personal-Token: $MINIKUN_PERSONAL_LOOP_TOKEN" \
+  -d '{"action":"START"}' \
+  'http://127.0.0.1:8080/v1/personal/experiments/<experiment-id>/transition?owner_id=default'
+```
 
 ตัวอย่าง capture และ commit ผ่าน Universal Inbox:
 
@@ -759,6 +791,8 @@ API หลักอยู่ใต้ `/v1/personal`:
 - `/weekly-reviews` และ `/weekly-reviews/proposals/{id}/decision`
 - `/outcomes`, `/outcomes/insights` และ `/outcomes/{id}/transition`
 - `/inbox`, `/automations`, `/automations/runs`
+- `/experiments`, `/experiments/{id}/transition`, `/experiments/{id}/check-ins`
+  และ `/experiments/{id}/evaluate`
 - `/incidents`, `/explanations` และ `/timeline`
 
 schema อยู่ใน `personal-loop-schema.sql` และใช้ token จาก `MINIKUN_PERSONAL_LOOP_TOKEN`

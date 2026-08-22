@@ -18,6 +18,8 @@ public final class PersonalLoopModels {
     public enum RiskLevel { LOW, MEDIUM, HIGH, CRITICAL }
     public enum AutomationRunStatus { WAITING_CONFIRMATION, COMPLETED, REJECTED, FAILED, SKIPPED }
     public enum IncidentStatus { OPEN, RESOLVED }
+    public enum ExperimentStatus { DRAFT, RUNNING, PAUSED, COMPLETED, ABANDONED }
+    public enum MetricDirection { INCREASE, DECREASE }
 
     public record WeeklyReview(
             UUID id, String ownerId, String conversationId, Instant periodStart, Instant periodEnd,
@@ -121,6 +123,47 @@ public final class PersonalLoopModels {
             sourceType = text(sourceType, "source type"); sourceId = text(sourceId, "source id");
             title = text(title, "timeline title"); summary = clean(summary); details = map(details);
             Objects.requireNonNull(occurredAt); Objects.requireNonNull(createdAt);
+        }
+    }
+
+    public record PersonalExperiment(
+            UUID id, String ownerId, String conversationId, UUID outcomeId, String title, String hypothesis,
+            String protocol, String metricName, String metricUnit, MetricDirection direction,
+            double baselineValue, double targetValue, int durationDays, ExperimentStatus status,
+            Instant startedAt, Instant plannedEndAt, Instant createdAt, Instant updatedAt, Instant completedAt) {
+        public PersonalExperiment {
+            Objects.requireNonNull(id); ownerId = owner(ownerId);
+            conversationId = text(conversationId, "conversation id"); Objects.requireNonNull(outcomeId);
+            title = text(title, "experiment title"); hypothesis = text(hypothesis, "experiment hypothesis");
+            protocol = text(protocol, "experiment protocol"); metricName = text(metricName, "metric name");
+            metricUnit = text(metricUnit, "metric unit"); Objects.requireNonNull(direction);
+            if (!Double.isFinite(baselineValue) || !Double.isFinite(targetValue)) {
+                throw new IllegalArgumentException("experiment metric values must be finite");
+            }
+            if (direction == MetricDirection.INCREASE && targetValue <= baselineValue) {
+                throw new IllegalArgumentException("increase target must be greater than baseline");
+            }
+            if (direction == MetricDirection.DECREASE && targetValue >= baselineValue) {
+                throw new IllegalArgumentException("decrease target must be less than baseline");
+            }
+            if (durationDays < 1 || durationDays > 365) {
+                throw new IllegalArgumentException("experiment duration must be between 1 and 365 days");
+            }
+            Objects.requireNonNull(status); Objects.requireNonNull(createdAt); Objects.requireNonNull(updatedAt);
+            if ((status == ExperimentStatus.RUNNING || status == ExperimentStatus.PAUSED
+                    || status == ExperimentStatus.COMPLETED) && (startedAt == null || plannedEndAt == null)) {
+                throw new IllegalArgumentException("started experiment must have a start and planned end");
+            }
+        }
+    }
+
+    public record ExperimentCheckIn(
+            UUID id, UUID experimentId, String ownerId, double value, String note,
+            Instant observedAt, Instant createdAt) {
+        public ExperimentCheckIn {
+            Objects.requireNonNull(id); Objects.requireNonNull(experimentId); ownerId = owner(ownerId);
+            if (!Double.isFinite(value)) throw new IllegalArgumentException("check-in value must be finite");
+            note = clean(note); Objects.requireNonNull(observedAt); Objects.requireNonNull(createdAt);
         }
     }
 

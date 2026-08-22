@@ -91,6 +91,61 @@ class MinikunAgentApplicationTests {
 	}
 
 	@Test
+	void cockpitHasStableEntryPointAndServesTheLocalDashboard() throws Exception {
+		mockMvc.perform(get("/cockpit"))
+				.andExpect(status().isOk())
+				.andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.forwardedUrl("/cockpit/index.html"));
+
+		mockMvc.perform(get("/cockpit/"))
+				.andExpect(status().isOk())
+				.andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.forwardedUrl("/cockpit/index.html"));
+
+		mockMvc.perform(get("/cockpit/index.html"))
+				.andExpect(status().isOk())
+				.andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content()
+						.string(org.hamcrest.Matchers.containsString("YOUR PERSONAL AGENT")));
+
+		mockMvc.perform(get("/cockpit/minikun-avatar.jpg"))
+				.andExpect(status().isOk())
+				.andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content()
+						.contentTypeCompatibleWith(MediaType.IMAGE_JPEG));
+	}
+
+	@Test
+	void cockpitCanCreateStartAndCheckInAPersonalExperimentThroughHttp() throws Exception {
+		MvcResult created = mockMvc.perform(post("/v1/personal/experiments")
+				.param("owner_id", "experiment-http-test")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+						{"conversationId":"cockpit","title":"อ่านก่อนนอน",
+						 "hypothesis":"อ่านก่อนนอนช่วยลดเวลาหน้าจอ","protocol":"อ่าน 20 นาที",
+						 "metricName":"นาทีอ่าน","metricUnit":"นาที","direction":"INCREASE",
+						 "baselineValue":5,"targetValue":20,"durationDays":7}
+						"""))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.experiment.status").value("DRAFT"))
+				.andExpect(jsonPath("$.outcome.status").value("PROPOSED"))
+				.andReturn();
+		String id = new ObjectMapper().readTree(created.getResponse().getContentAsString())
+				.path("experiment").path("id").asText();
+
+		mockMvc.perform(post("/v1/personal/experiments/{id}/transition", id)
+				.param("owner_id", "experiment-http-test")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"action\":\"START\"}"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.experiment.status").value("RUNNING"));
+
+		mockMvc.perform(post("/v1/personal/experiments/{id}/check-ins", id)
+				.param("owner_id", "experiment-http-test")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"value\":14,\"note\":\"ทำได้จริง\"}"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.analysis.checkInCount").value(1))
+				.andExpect(jsonPath("$.analysis.progressPercent").value(60));
+	}
+
+	@Test
 	void contextWiresOwnerScopedAdaptiveCompanionApi() throws Exception {
 		org.junit.jupiter.api.Assertions.assertNotNull(
 				applicationContext.getBean(com.minikun.personality.learning.AdaptivePreferenceLearningService.class));

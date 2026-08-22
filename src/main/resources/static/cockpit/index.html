@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#050806">
+  <meta name="description" content="Minikun — ผู้ช่วยส่วนตัวที่คุย คิด ค้นหา และลงมือทำร่วมกับคุณ">
+  <title>Minikun</title>
+  <link rel="icon" href="/cockpit/minikun-avatar.jpg">
+  <link rel="stylesheet" href="/cockpit/cockpit.css?v=20260823-mobileux">
+</head>
+<body>
+  <a class="skip-link" href="#chat-composer">ข้ามไปยังช่องพิมพ์ข้อความ</a>
+  <div class="app-shell">
+    <aside class="rail" aria-label="เมนูหลัก">
+      <a class="brand" href="/cockpit/" aria-label="Minikun หน้าหลัก">
+        <img src="/cockpit/minikun-avatar.jpg" alt="" class="brand-avatar">
+        <span><strong>MINIKUN</strong><small>PERSONAL AGENT</small></span>
+      </a>
+      <button class="new-chat-button" id="new-chat" type="button"><span aria-hidden="true">＋</span> แชตใหม่</button>
+      <nav class="main-nav">
+        <button class="nav-item active" type="button" data-view-target="chat"><span aria-hidden="true">◉</span><b>แชต</b></button>
+        <button class="nav-item" type="button" data-view-target="cockpit"><span aria-hidden="true">⌁</span><b>Cockpit</b></button>
+        <button class="nav-item" type="button" data-view-target="cockpit" data-section="experiments"><span aria-hidden="true">◇</span><b>การทดลอง</b></button>
+        <button class="nav-item" type="button" data-view-target="cockpit" data-section="inbox"><span aria-hidden="true">＋</span><b>Inbox</b></button>
+      </nav>
+      <section class="conversation-panel" aria-labelledby="conversation-heading">
+        <div class="conversation-heading"><span id="conversation-heading">บทสนทนา</span><button id="clear-chat-list" type="button" aria-label="ล้างรายการบทสนทนา">•••</button></div>
+        <ol id="conversation-list" class="conversation-list" data-conversation-list></ol>
+        <p id="conversation-empty" class="conversation-empty" data-conversation-empty>บทสนทนาจะอยู่บนอุปกรณ์นี้ครับ</p>
+      </section>
+      <div class="rail-bottom">
+        <div class="privacy-note"><span class="status-dot"></span><span>LOCAL FIRST<small>ข้อมูลอยู่กับเรา</small></span></div>
+        <button class="icon-button labelled" id="open-settings" type="button"><span aria-hidden="true">⚙</span> ตั้งค่า</button>
+      </div>
+    </aside>
+
+    <main class="workspace" id="main-content">
+      <section class="chat-view" id="chat-view" data-view="chat" aria-label="แชตกับมินิคุง">
+        <header class="chat-topbar">
+          <div class="chat-identity">
+            <button class="mobile-menu-trigger" type="button" data-open-mobile-menu aria-label="เปิดเมนูมินิคุง"><img src="/cockpit/minikun-avatar.jpg" alt=""></button>
+            <img src="/cockpit/minikun-avatar.jpg" alt="มินิคุง" class="chat-avatar desktop-chat-avatar">
+            <div><strong>มินิคุง</strong><span><i class="status-dot"></i><em id="chat-status">พร้อมช่วยพี่สาว</em></span></div>
+          </div>
+          <div class="chat-actions">
+            <span class="model-pill" id="model-pill">MINI-KUN</span>
+            <button class="icon-button voice-toggle" id="voice-output" type="button" aria-pressed="false" aria-label="อ่านคำตอบออกเสียง">◖</button>
+            <button class="icon-button" id="mobile-new-chat" type="button" aria-label="เริ่มแชตใหม่">＋</button>
+          </div>
+        </header>
+        <div class="messages-scroll" id="messages-scroll">
+          <div class="messages" id="messages" aria-live="polite" aria-busy="false"></div>
+          <section class="chat-welcome" id="chat-welcome" aria-labelledby="welcome-title">
+            <div class="hero-avatar-wrap"><img src="/cockpit/minikun-avatar.jpg" alt="มินิคุง" class="hero-avatar"><span class="hero-presence"></span></div>
+            <p class="eyebrow">YOUR PERSONAL AGENT</p>
+            <h1 id="welcome-title">คุยกับมินิคุงได้ทุกเรื่องครับ</h1>
+            <p>คิด วางแผน ค้นข้อมูล ดูแล homelab จัดการงานและปฏิทิน—ถ้าต้องลงมือจริง มินิคุงจะขออนุญาตก่อนเสมอ</p>
+            <div class="starter-grid" aria-label="คำแนะนำเริ่มต้น">
+              <button type="button" data-prompt="ช่วยสรุปสิ่งสำคัญที่ฉันควรโฟกัสวันนี้"><span>◎</span><strong>โฟกัสวันนี้</strong><small>งาน เป้าหมาย และเรื่องเร่งด่วน</small></button>
+              <button type="button" data-prompt="ช่วยตรวจสุขภาพ homelab และสรุปเฉพาะสิ่งที่ควรรู้"><span>⌁</span><strong>ดูแล Homelab</strong><small>ตรวจสุขภาพและอธิบายความเสี่ยง</small></button>
+              <button type="button" data-prompt="ช่วยค้นข้อมูลล่าสุดเรื่องนี้ให้หน่อย: "><span>↗</span><strong>ค้นและวิจัย</strong><small>ค้นเว็บพร้อมอ้างอิงแหล่งที่มา</small></button>
+              <button type="button" data-prompt="ช่วยเปลี่ยนความคิดนี้ให้เป็นแผนที่ลงมือทำได้: "><span>◇</span><strong>วางแผนให้ฉัน</strong><small>แตกเป็นงาน เตือน และก้าวถัดไป</small></button>
+            </div>
+            <div class="capability-strip"><span>ค้นเว็บ</span><span>ความรู้ส่วนตัว</span><span>วิเคราะห์ภาพ</span><span>งานและปฏิทิน</span><span>เสียง</span><span>Agent mode</span></div>
+          </section>
+        </div>
+        <div class="composer-dock">
+          <div class="attachment-tray hidden" id="attachment-tray" aria-label="ไฟล์แนบ"></div>
+          <form class="chat-composer" id="chat-form">
+            <label class="sr-only" for="chat-composer">ข้อความถึงมินิคุง</label>
+            <textarea id="chat-composer" rows="1" maxlength="50000" placeholder="คุยกับมินิคุง…" autocomplete="off"></textarea>
+            <div class="composer-tools">
+              <div><button class="composer-button" id="attach-file" type="button" aria-label="แนบรูปหรือไฟล์">＋</button><input id="file-input" type="file" multiple accept="image/*,.txt,.md,.json,.csv,.log,.yaml,.yml,.xml,.html,.java,.js,.ts,.py,.sql,.sh,.properties" hidden><button class="composer-button" id="record-voice" type="button" aria-label="บันทึกเสียง">●</button><span class="recording-time hidden" id="recording-time">00:00</span></div>
+              <div class="composer-submit-group"><span class="composer-hint">Enter ส่ง · Shift+Enter ขึ้นบรรทัดใหม่</span><button class="send-button" id="send-message" type="submit" aria-label="ส่งข้อความ">↑</button><button class="stop-button hidden" id="stop-message" type="button" aria-label="หยุดคำตอบ">■</button></div>
+            </div>
+          </form>
+          <p class="composer-note">มินิคุงอาจพลาดได้ เรื่องสำคัญควรตรวจสอบอีกครั้งครับ</p>
+        </div>
+      </section>
+
+      <section class="cockpit-view hidden" id="cockpit-view" data-view="cockpit" aria-label="Cockpit ส่วนตัว">
+        <header class="topbar"><div class="cockpit-heading"><button class="mobile-menu-trigger" type="button" data-open-mobile-menu aria-label="เปิดเมนูมินิคุง"><img src="/cockpit/minikun-avatar.jpg" alt=""></button><div><p class="eyebrow" id="today-label">วันของเรา</p><h1 id="greeting">สวัสดีครับ พี่สาว</h1></div></div><div class="top-actions"><span class="sync-state" id="sync-state"><span class="status-dot"></span> พร้อมดูแล</span><button class="icon-button" id="refresh" type="button" aria-label="โหลดข้อมูลใหม่">↻</button></div></header>
+        <section class="attention-strip" id="today" aria-labelledby="attention-title"><div><p class="eyebrow light">MINIKUN SIGNAL</p><h2 id="attention-title">วันนี้เอาแค่สิ่งสำคัญให้เดินหน้าก็พอครับ</h2><p id="attention-copy">มินิคุงกำลังรวบรวมงาน เป้าหมาย และสิ่งที่รอการตัดสินใจให้ครับ</p></div><div class="signal-stats" aria-label="สรุปวันนี้"><div><strong id="due-count">—</strong><span>ถึงกำหนด</span></div><div><strong id="goal-count">—</strong><span>เป้าหมาย</span></div><div><strong id="waiting-count">—</strong><span>รอยืนยัน</span></div></div></section>
+        <section class="dashboard-grid" aria-label="ภาพรวมส่วนตัว">
+          <article class="panel decision-panel hidden" id="pending-panel" aria-labelledby="pending-title"><div class="panel-heading"><div><p class="eyebrow coral">YOUR DECISION</p><h2 id="pending-title">เรื่องที่รอพี่สาวตัดสินใจ</h2></div><span class="count-badge" id="decision-count">0</span></div><div class="decision-list" id="decision-list" aria-live="polite"></div></article>
+          <article class="panel focus-panel" aria-labelledby="focus-title"><div class="panel-heading"><div><p class="eyebrow">NEXT ACTIONS</p><h2 id="focus-title">ก้าวเล็ก ๆ ของวันนี้</h2></div><span class="soft-badge">เลือกมาให้แล้ว</span></div><div class="action-list" id="action-list" aria-live="polite"><div class="loading-row"><span></span><div><i></i><i></i></div></div></div><p class="empty-state hidden" id="action-empty">ยังไม่มีสิ่งเร่งด่วนครับ วันนี้มีพื้นที่ให้หายใจเต็มที่</p></article>
+          <article class="panel experiment-panel" id="experiments" aria-labelledby="experiment-title"><div class="panel-heading"><div><p class="eyebrow coral">PERSONAL EXPERIMENT</p><h2 id="experiment-title">กำลังเรียนรู้ว่าอะไรเวิร์ก</h2></div><button class="text-button" id="new-experiment" type="button">+ ทดลองใหม่</button></div><div id="experiment-card" class="experiment-content" aria-live="polite"><div class="experiment-orbit" aria-hidden="true"><span>—</span></div><div><div class="loading-line wide"></div><div class="loading-line"></div></div></div><div class="empty-state hidden" id="experiment-empty"><strong>มีเรื่องเล็ก ๆ ที่อยากลองเปลี่ยนไหมครับ</strong><span>ตั้งสมมติฐาน วัดผลสั้น ๆ แล้วให้มินิคุงช่วยสรุป</span><button class="primary-button" type="button" data-open-experiment>สร้างการทดลองแรก</button></div></article>
+          <article class="panel inbox-panel" id="inbox" aria-labelledby="inbox-title"><div class="panel-heading"><div><p class="eyebrow">QUICK CAPTURE</p><h2 id="inbox-title">ฝากไว้กับมินิคุง</h2></div><span class="count-badge" id="inbox-count">0</span></div><form class="capture-form" id="capture-form"><label class="sr-only" for="capture-input">ข้อความที่ต้องการฝากไว้</label><textarea id="capture-input" rows="2" placeholder="งาน ไอเดีย สิ่งที่ต้องจำ…" maxlength="20000" required></textarea><button class="primary-button" type="submit">เก็บเข้า Inbox</button></form><div class="inbox-list" id="inbox-list" aria-live="polite"></div><p class="empty-state" id="inbox-empty">Inbox โล่งแล้วครับ</p></article>
+          <article class="panel timeline-panel" id="timeline" aria-labelledby="timeline-title"><div class="panel-heading"><div><p class="eyebrow">PERSONAL TIMELINE</p><h2 id="timeline-title">สิ่งที่เกิดขึ้นล่าสุด</h2></div><button class="text-button" id="show-all-timeline" type="button">ดูเพิ่ม</button></div><ol class="timeline-list" id="timeline-list" aria-live="polite"><li class="loading-line wide"></li></ol><p class="empty-state hidden" id="timeline-empty">เรื่องราวของเราจะเริ่มบันทึกตรงนี้ครับ</p></article>
+        </section>
+      </section>
+    </main>
+  </div>
+  <div class="toast-region" id="toast-region" aria-live="polite"></div>
+
+  <dialog id="mobile-menu-dialog" class="mobile-menu-dialog" aria-labelledby="mobile-menu-title">
+    <section class="mobile-menu-card">
+      <header class="mobile-menu-heading"><img src="/cockpit/minikun-avatar.jpg" alt=""><div><strong id="mobile-menu-title">MINIKUN</strong><span><i class="status-dot"></i> พร้อมอยู่ข้างพี่สาว</span></div><button class="close-button" type="button" data-close-dialog aria-label="ปิดเมนู">×</button></header>
+      <button class="mobile-menu-new-chat" id="mobile-menu-new-chat" type="button"><span aria-hidden="true">＋</span> เริ่มแชตใหม่</button>
+      <nav class="mobile-menu-nav" aria-label="เมนูมือถือ">
+        <button class="mobile-nav-item active" type="button" data-view-target="chat"><span aria-hidden="true">◉</span><b>แชต</b></button>
+        <button class="mobile-nav-item" type="button" data-view-target="cockpit"><span aria-hidden="true">⌁</span><b>Cockpit</b></button>
+        <button class="mobile-nav-item" type="button" data-view-target="cockpit" data-section="experiments"><span aria-hidden="true">◇</span><b>การทดลอง</b></button>
+        <button class="mobile-nav-item" type="button" data-view-target="cockpit" data-section="inbox"><span aria-hidden="true">＋</span><b>Inbox</b></button>
+      </nav>
+      <section class="mobile-conversation-panel" aria-labelledby="mobile-conversation-heading">
+        <div class="conversation-heading"><span id="mobile-conversation-heading">บทสนทนา</span><button id="mobile-clear-chat-list" type="button" aria-label="ล้างรายการบทสนทนา">•••</button></div>
+        <ol class="conversation-list" data-conversation-list></ol>
+        <p class="conversation-empty" data-conversation-empty>บทสนทนาจะอยู่บนอุปกรณ์นี้ครับ</p>
+      </section>
+      <footer class="mobile-menu-footer"><div class="privacy-note"><span class="status-dot"></span><span>LOCAL FIRST<small>ข้อมูลอยู่กับเรา</small></span></div><button id="mobile-menu-settings" type="button"><span aria-hidden="true">⚙</span> ตั้งค่า</button></footer>
+    </section>
+  </dialog>
+  <dialog id="settings-dialog"><form method="dialog" class="dialog-card" id="settings-form"><div class="dialog-heading"><div><p class="eyebrow">CONNECTION</p><h2>ตั้งค่ามินิคุง</h2></div><button class="close-button" type="button" data-close-dialog aria-label="ปิด">×</button></div><p class="dialog-copy">การตั้งค่านี้เก็บเฉพาะใน browser ของอุปกรณ์นี้ครับ</p><label>Owner ID<input id="owner-id" name="ownerId" value="default" autocomplete="off"></label><label>Personal token<input id="personal-token" name="token" type="password" autocomplete="off" placeholder="ไม่ต้องกรอก หากไม่ได้ตั้ง token"></label><label>Model<input id="chat-model" name="model" value="mini-kun" autocomplete="off"></label><div class="dialog-actions"><button class="secondary-button" type="button" data-close-dialog>ยกเลิก</button><button class="primary-button" value="default" id="save-settings">บันทึก</button></div></form></dialog>
+  <dialog id="experiment-dialog"><form method="dialog" class="dialog-card experiment-form" id="experiment-form"><div class="dialog-heading"><div><p class="eyebrow coral">NEW EXPERIMENT</p><h2>ลองเรื่องเล็ก ๆ อย่างตั้งใจ</h2></div><button class="close-button" type="button" data-close-dialog aria-label="ปิด">×</button></div><label>ชื่อการทดลอง<input name="title" required maxlength="120" placeholder="เช่น โฟกัสก่อนเปิดแชต"></label><label>สมมติฐาน<textarea name="hypothesis" required rows="2" placeholder="ถ้าฉันทำ… แล้วน่าจะเกิด…"></textarea></label><label>วิธีที่เราจะลอง<textarea name="protocol" required rows="2" placeholder="กติกาเล็ก ๆ ที่ทำซ้ำได้"></textarea></label><div class="form-grid three"><label>ตัวชี้วัด<input name="metricName" required placeholder="นาทีโฟกัส"></label><label>หน่วย<input name="metricUnit" required placeholder="นาที"></label><label>ทิศทาง<select name="direction"><option value="INCREASE">เพิ่มขึ้น</option><option value="DECREASE">ลดลง</option></select></label></div><div class="form-grid three"><label>ค่าตั้งต้น<input name="baselineValue" required type="number" step="any" value="0"></label><label>เป้าหมาย<input name="targetValue" required type="number" step="any" value="1"></label><label>ระยะเวลา (วัน)<input name="durationDays" required type="number" min="1" max="365" value="7"></label></div><div class="dialog-actions"><button class="secondary-button" type="button" data-close-dialog>ไว้ก่อน</button><button class="primary-button" value="default">สร้างเป็นฉบับร่าง</button></div></form></dialog>
+  <dialog id="experiment-action-dialog"><form method="dialog" class="dialog-card" id="experiment-action-form"><div class="dialog-heading"><div><p class="eyebrow coral">EXPERIMENT CHECK-IN</p><h2 id="experiment-action-title">บันทึกผลวันนี้</h2></div><button class="close-button" type="button" data-close-dialog aria-label="ปิด">×</button></div><p class="dialog-copy" id="experiment-action-copy"></p><label id="experiment-value-field">ค่าที่วัดได้<input id="experiment-value" name="value" type="number" step="any"></label><label id="experiment-score-field" class="hidden">ผลลัพธ์ช่วยแค่ไหน<select id="experiment-score" name="score"><option value="5">5 — ช่วยมาก</option><option value="4">4 — ช่วยชัดเจน</option><option value="3">3 — พอใช้</option><option value="2">2 — ช่วยน้อย</option><option value="1">1 — ไม่ช่วย</option></select></label><label>บันทึกสั้น ๆ<textarea id="experiment-note" name="note" rows="3" placeholder="วันนี้สังเกตอะไรบ้าง"></textarea></label><div class="dialog-actions"><button class="secondary-button" type="button" data-close-dialog>ยกเลิก</button><button class="primary-button" value="default" id="experiment-action-submit">บันทึก</button></div></form></dialog>
+  <dialog id="clear-history-dialog"><form method="dialog" class="dialog-card"><div class="dialog-heading"><div><p class="eyebrow">LOCAL HISTORY</p><h2>ล้างรายการบทสนทนา?</h2></div><button class="close-button" type="button" data-close-dialog aria-label="ปิด">×</button></div><p class="dialog-copy">จะล้างเฉพาะประวัติที่แสดงบนอุปกรณ์นี้ ไม่แตะความจำหลักของมินิคุงครับ</p><div class="dialog-actions"><button class="secondary-button" type="button" data-close-dialog>ยกเลิก</button><button class="danger-button" value="confirm" id="confirm-clear-history">ล้างรายการ</button></div></form></dialog>
+  <script src="/cockpit/cockpit.js?v=20260823-mobileux" defer></script>
+</body>
+</html>
