@@ -24,6 +24,7 @@ import com.minikun.agent.minikun_agent.api.openai.dto.EmbeddingResponse;
 import com.minikun.agent.minikun_agent.conversation.ChatMessage;
 import com.minikun.agent.minikun_agent.conversation.ConversationId;
 import com.minikun.agent.minikun_agent.conversation.ConversationMemoryService;
+import com.minikun.agent.minikun_agent.conversation.ConversationSummaryService;
 import com.minikun.commands.CommandCatalog;
 import com.minikun.commands.CommandFormatter;
 import com.minikun.diagnostics.DiagnosticsFormatter;
@@ -151,6 +152,8 @@ public class ChatService {
 
     private PersonalKnowledgeService personalKnowledgeService;
 
+    private ConversationSummaryService conversationSummaryService;
+
     @Autowired
     void configureCollaborators(ChatCollaborators collaborators) {
         toolCallingRuntime = collaborators.toolCallingRuntime();
@@ -170,6 +173,7 @@ public class ChatService {
         browserContentService = collaborators.browserContentService();
         visionInputService = collaborators.visionInputService();
         personalKnowledgeService = collaborators.personalKnowledgeService();
+        conversationSummaryService = collaborators.conversationSummaryService();
     }
 
     public ChatService(
@@ -366,16 +370,16 @@ public class ChatService {
                         visionInput);
             } catch (BrowserContentException exception) {
                 String content = browserFailureMessage(userMessage.content(), exception);
-                if (shouldPersistConversation(request)) {
-                    conversationMemoryService.append(conversationId, new ChatMessage("assistant", content));
-                }
+                turnFinalizer().persistDeterministic(
+                        conversationId, userMessage, content, memoryOwnerId(request, conversationId),
+                        transaction.requestId(), shouldPersistConversation(request), false);
                 transaction.success();
                 return responseForContent(request, content);
             }
             if (verifiedToolResult.map(ToolEvidence::requiresConfirmation).orElse(false)) {
                 String content = verifiedToolResult.get().content();
                 turnFinalizer().complete(
-                        context.conversationId(), context.ownerId(), transaction.requestId(), content,
+                        context.conversationId(), userMessage, context.ownerId(), transaction.requestId(), content,
                         context.persistConversation(), false);
                 transaction.success();
                 return responseForContent(request, content);
@@ -396,7 +400,7 @@ public class ChatService {
                 content = "ขออภัยครับ โมเดลยังไม่ได้ส่งคำตอบที่สมบูรณ์ กรุณาลองสั่งอีกครั้งครับ";
             }
             turnFinalizer().complete(
-                    context.conversationId(), context.ownerId(), transaction.requestId(), content,
+                    context.conversationId(), userMessage, context.ownerId(), transaction.requestId(), content,
                     context.persistConversation(), false);
             ChatCompletionResponse result = responseFactory.completion(
                     transaction.requestId(), Instant.now().getEpochSecond(), model, content, usage,
@@ -451,16 +455,16 @@ public class ChatService {
                 visionInput);
         } catch (BrowserContentException exception) {
             String content = browserFailureMessage(userMessage.content(), exception);
-            if (shouldPersistConversation(request)) {
-                conversationMemoryService.append(conversationId, new ChatMessage("assistant", content));
-            }
+            turnFinalizer().persistDeterministic(
+                    conversationId, userMessage, content, memoryOwnerId(request, conversationId),
+                    transaction.requestId(), shouldPersistConversation(request), true);
             transaction.success();
             return commandStream(content, request);
         }
         if (verifiedToolResult.map(ToolEvidence::requiresConfirmation).orElse(false)) {
             String content = verifiedToolResult.get().content();
             turnFinalizer().complete(
-                    context.conversationId(), context.ownerId(), transaction.requestId(), content,
+                    context.conversationId(), userMessage, context.ownerId(), transaction.requestId(), content,
                     context.persistConversation(), true);
             transaction.success();
             return commandStream(content, request);
@@ -499,7 +503,7 @@ public class ChatService {
                 .doOnComplete(() -> {
                     if (!assistantContent.isEmpty()) {
                         turnFinalizer().complete(
-                                context.conversationId(), context.ownerId(), transaction.requestId(),
+                                context.conversationId(), userMessage, context.ownerId(), transaction.requestId(),
                                 assistantContent.toString(), context.persistConversation(), true);
                     }
                     withTrace(traceId, transaction::success);
@@ -526,10 +530,8 @@ public class ChatService {
             history = conversationMemoryService.load(conversationId);
             log.info("process=conversation_history event=loaded messages={}{}", history.size(),
                     streaming ? " stream=true" : "");
-            if (persistConversation) {
-                conversationMemoryService.append(conversationId, userMessage);
-                log.info("process=conversation event=user_message_persisted{}", streaming ? " stream=true" : "");
-            }
+            log.debug("process=conversation event=turn_persistence_deferred{}",
+                    streaming ? " stream=true" : "");
         } catch (RuntimeException exception) {
             conversationResult = "error";
             throw exception;
@@ -537,6 +539,9 @@ public class ChatService {
             recordStage("conversation", conversationStarted, conversationResult);
         }
         CompanionModeContext interactionMode = companionModeFor(ownerId, conversationId, userMessage.content());
+        String conversationSummary = conversationSummary(ownerId, conversationId);
+        int recentMessageLimit = conversationSummary.isBlank() || conversationSummaryService == null
+                ? Integer.MAX_VALUE : conversationSummaryService.recentMessageLimit();
         ChatKnowledgeSelection knowledgeSelection = knowledgeResolver().resolve(
                 new ChatKnowledgeResolver.Request(
                         userMessage.content(), transaction.requestId(), conversationId, ownerId,
@@ -550,6 +555,8 @@ public class ChatService {
                     request,
                     userMessage,
                     history,
+                    conversationSummary,
+                    recentMessageLimit,
                     knowledgeSelection,
                     preparedImages.awareness(),
                     verifiedToolResult,
@@ -625,6 +632,7 @@ public class ChatService {
                 reflectionService,
                 deferredReflectionService,
                 observationPublisher,
+                conversationSummaryService,
                 reflectionEnabled);
     }
 
@@ -749,6 +757,13 @@ public class ChatService {
             return null;
         }
         return companionModeService.evaluate(ownerId, conversationId.value(), latestUserMessage).orElse(null);
+    }
+
+    private String conversationSummary(String ownerId, ConversationId conversationId) {
+        if (conversationSummaryService == null) {
+            return "";
+        }
+        return conversationSummaryService.summary(ownerId, conversationId).orElse("");
     }
 
     private String browserFailureMessage(String userMessage, BrowserContentException exception) {

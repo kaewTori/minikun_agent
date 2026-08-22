@@ -18,6 +18,7 @@ plist="$app_root/deploy/$label.plist"
 
 cd "$app_root"
 ./mvnw clean package
+"$app_root/deploy/migrate-database.sh"
 
 mkdir -p \
   "$local_app/target" \

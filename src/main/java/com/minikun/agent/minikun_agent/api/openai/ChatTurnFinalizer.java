@@ -10,6 +10,7 @@ import org.springframework.beans.factory.ObjectProvider;
 import com.minikun.agent.minikun_agent.conversation.ChatMessage;
 import com.minikun.agent.minikun_agent.conversation.ConversationId;
 import com.minikun.agent.minikun_agent.conversation.ConversationMemoryService;
+import com.minikun.agent.minikun_agent.conversation.ConversationSummaryService;
 import com.minikun.memory.DeferredReflectionService;
 import com.minikun.memory.ReflectionService;
 import com.minikun.memory.event.MinikunEvent;
@@ -30,6 +31,7 @@ final class ChatTurnFinalizer {
     private final ObjectProvider<ReflectionService> reflectionService;
     private final DeferredReflectionService deferredReflectionService;
     private final ObservationPublisher observationPublisher;
+    private final ConversationSummaryService conversationSummaryService;
     private final boolean reflectionEnabled;
 
     ChatTurnFinalizer(
@@ -37,16 +39,19 @@ final class ChatTurnFinalizer {
             ObjectProvider<ReflectionService> reflectionService,
             DeferredReflectionService deferredReflectionService,
             ObservationPublisher observationPublisher,
+            ConversationSummaryService conversationSummaryService,
             boolean reflectionEnabled) {
         this.conversationMemoryService = conversationMemoryService;
         this.reflectionService = reflectionService;
         this.deferredReflectionService = deferredReflectionService;
         this.observationPublisher = observationPublisher;
+        this.conversationSummaryService = conversationSummaryService;
         this.reflectionEnabled = reflectionEnabled;
     }
 
     void complete(
             ConversationId conversationId,
+            ChatMessage userMessage,
             String ownerId,
             String requestId,
             String assistantContent,
@@ -55,10 +60,12 @@ final class ChatTurnFinalizer {
         if (!persistConversation) {
             return;
         }
-        conversationMemoryService.append(conversationId, new ChatMessage("assistant", assistantContent));
-        log.info("process=conversation event=assistant_message_persisted{}",
+        conversationMemoryService.appendTurn(
+                conversationId, userMessage, new ChatMessage("assistant", assistantContent));
+        log.info("process=conversation event=completed_turn_persisted{}",
                 streaming ? " stream=true" : "");
         publishTurnCompleted(ownerId, conversationId, requestId);
+        updateConversationSummary(ownerId, conversationId);
         reflectOnCompletedConversation(ownerId, conversationId);
     }
 
@@ -73,11 +80,12 @@ final class ChatTurnFinalizer {
         if (!persistConversation) {
             return;
         }
-        conversationMemoryService.append(conversationId, userMessage);
-        conversationMemoryService.append(conversationId, new ChatMessage("assistant", assistantContent));
+        conversationMemoryService.appendTurn(
+                conversationId, userMessage, new ChatMessage("assistant", assistantContent));
         log.info("process=conversation event=deterministic_tool_turn_persisted{}",
                 streaming ? " stream=true" : "");
         publishTurnCompleted(ownerId, conversationId, requestId);
+        updateConversationSummary(ownerId, conversationId);
         // Operational snapshots are intentionally excluded from long-term reflection.
     }
 
@@ -182,5 +190,13 @@ final class ChatTurnFinalizer {
                 conversationId == null ? null : conversationId.value(),
                 Instant.now(),
                 Map.of("request_id", requestId == null ? "" : requestId))));
+    }
+
+    private void updateConversationSummary(String ownerId, ConversationId conversationId) {
+        if (conversationSummaryService == null) {
+            return;
+        }
+        conversationSummaryService.schedule(
+                ownerId, conversationId, () -> conversationMemoryService.load(conversationId));
     }
 }

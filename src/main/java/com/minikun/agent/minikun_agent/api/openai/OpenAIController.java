@@ -1,5 +1,7 @@
 package com.minikun.agent.minikun_agent.api.openai;
 
+import java.util.Locale;
+
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -23,6 +25,9 @@ import lombok.RequiredArgsConstructor;
 @RequestMapping("/v1")
 @RequiredArgsConstructor
 public class OpenAIController {
+    private static final String CONVERSATION_HEADER = "X-Conversation-Id";
+    private static final String CONVERSATION_SOURCE_HEADER = "X-Conversation-Id-Source";
+    private static final String EXPOSED_HEADERS = CONVERSATION_HEADER + ", " + CONVERSATION_SOURCE_HEADER;
 
     private final ChatService chatService;
     private final ConversationIdResolver conversationIdResolver;
@@ -31,11 +36,15 @@ public class OpenAIController {
     public ResponseEntity<?> chatCompletion(
             @RequestBody ChatCompletionRequest request,
             HttpServletRequest httpRequest) {
-        ConversationId conversationId = conversationIdResolver.resolve(request, httpRequest);
+        ConversationIdResolver.Resolution resolution =
+                conversationIdResolver.resolveDetails(request, httpRequest);
+        ConversationId conversationId = resolution.conversationId();
 
         if (Boolean.TRUE.equals(request.stream())) {
             return ResponseEntity.ok()
-                .header("X-Conversation-Id", conversationId.value())
+                .header(CONVERSATION_HEADER, conversationId.value())
+                .header(CONVERSATION_SOURCE_HEADER, resolution.source().name().toLowerCase(Locale.ROOT))
+                .header("Access-Control-Expose-Headers", EXPOSED_HEADERS)
                     .contentType(MediaType.TEXT_EVENT_STREAM)
                 .body(chatService.chatCompletionStream(request, conversationId));
         }
@@ -44,7 +53,9 @@ public class OpenAIController {
             chatService.chatCompletion(request, conversationId);
 
         return ResponseEntity.ok()
-            .header("X-Conversation-Id", conversationId.value())
+            .header(CONVERSATION_HEADER, conversationId.value())
+            .header(CONVERSATION_SOURCE_HEADER, resolution.source().name().toLowerCase(Locale.ROOT))
+            .header("Access-Control-Expose-Headers", EXPOSED_HEADERS)
             .body(response);
     }
 

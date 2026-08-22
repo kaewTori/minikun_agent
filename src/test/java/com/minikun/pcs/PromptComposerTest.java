@@ -248,6 +248,31 @@ class PromptComposerTest {
         }
 
         @Test
+        void oversizedConversationIsWindowedToRecentTurnsBeforeSelection() {
+        String conversation = "user: oldest-" + "ก".repeat(180)
+                + "\n\nassistant: older-answer-" + "ข".repeat(180)
+                + "\n\nuser: recent-question"
+                + "\n\nassistant: latest-answer";
+        ContextBudget budget = budgetWithAllocations(
+                100_000, 100_000, 120, 100_000, 100_000, 100_000, 100_000);
+        PromptRequest request = new PromptRequest(
+                character(), new RuntimeContext("now"), new ConversationContext(conversation), null,
+                List.of(), new UserMessage("continue"), SearchSelectionSignals.EMPTY,
+                SearchContext.EMPTY, KnowledgeSelection.EMPTY, KnowledgeConsolidation.EMPTY, budget);
+
+        PromptCompositionResult result = new PromptComposer().composeWithDiagnostics(request);
+
+        String system = result.prompt().messages().getFirst().content();
+        assertTrue(system.contains("[Conversation]"));
+        assertTrue(system.contains("recent-question"));
+        assertTrue(system.contains("latest-answer"));
+        assertTrue(system.contains("Earlier conversation omitted"));
+        assertFalse(system.contains("oldest-"));
+        assertTrue(result.contextProcessingResult().orElseThrow().evictions().stream()
+                .noneMatch(eviction -> eviction.item().section() == ContextBudgetSection.CONVERSATION));
+        }
+
+        @Test
     void requiredOverflowRemainsVisibleAndRequiredSectionsAreNotDropped() {
         ContextBudget budget = budgetWithAllocations(1, 100_000, 100_000, 100_000, 100_000, 100_000, 100_000);
         PromptCompositionResult result = new PromptComposer().composeWithDiagnostics(requestWithBudget(

@@ -29,6 +29,21 @@ public class ConversationMemoryService {
         chatMemory.add(conversationId.value(), toSpringMessage(message));
     }
 
+    /** Persists a completed user/assistant turn through one ChatMemory write boundary. */
+    public void appendTurn(
+            ConversationId conversationId,
+            ChatMessage userMessage,
+            ChatMessage assistantMessage) {
+        if (!"user".equalsIgnoreCase(userMessage.role())) {
+            throw new IllegalArgumentException("turn must start with a user message");
+        }
+        if (!"assistant".equalsIgnoreCase(assistantMessage.role())) {
+            throw new IllegalArgumentException("turn must end with an assistant message");
+        }
+        chatMemory.add(conversationId.value(), List.of(
+                toSpringMessage(userMessage), toSpringMessage(assistantMessage)));
+    }
+
     public void clear(ConversationId conversationId) {
         chatMemory.clear(conversationId.value());
     }

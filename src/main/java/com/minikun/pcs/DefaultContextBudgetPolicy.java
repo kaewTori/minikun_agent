@@ -11,10 +11,10 @@ public final class DefaultContextBudgetPolicy implements ContextBudgetPolicy {
     private static final Map<ContextBudgetSection, Long> DEFAULT_WEIGHTS = Map.of(
             ContextBudgetSection.CHARACTER, 15L,
             ContextBudgetSection.RUNTIME, 10L,
-            ContextBudgetSection.CONVERSATION, 15L,
-            ContextBudgetSection.USER_MODEL, 10L,
-            ContextBudgetSection.MEMORY, 15L,
-            ContextBudgetSection.KNOWLEDGE, 10L,
+            ContextBudgetSection.CONVERSATION, 30L,
+            ContextBudgetSection.USER_MODEL, 5L,
+            ContextBudgetSection.MEMORY, 10L,
+            ContextBudgetSection.KNOWLEDGE, 5L,
             ContextBudgetSection.CAPABILITIES, 5L,
             ContextBudgetSection.USER_MESSAGE, 20L);
 

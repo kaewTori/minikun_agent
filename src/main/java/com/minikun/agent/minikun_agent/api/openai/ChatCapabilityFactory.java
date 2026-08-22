@@ -18,13 +18,26 @@ final class ChatCapabilityFactory {
             ToolEvidence verifiedToolResult,
             VisionInput visionInput,
             CompanionModeContext interactionMode,
+            String conversationStyleInstruction,
             boolean nativeToolsAvailable) {
         List<CapabilityInstruction> capabilities = new ArrayList<>();
+        addConversationStyle(capabilities, conversationStyleInstruction);
         addInteractionMode(capabilities, interactionMode);
         addKnowledgeCapabilities(capabilities, selection, imageAwareness);
         addVisionCapability(capabilities, visionInput);
         addToolCapability(capabilities, verifiedToolResult, nativeToolsAvailable);
         return List.copyOf(capabilities);
+    }
+
+    private void addConversationStyle(
+            List<CapabilityInstruction> capabilities,
+            String conversationStyleInstruction) {
+        if (conversationStyleInstruction != null && !conversationStyleInstruction.isBlank()) {
+            capabilities.add(new CapabilityInstruction(
+                    "Natural conversation",
+                    conversationStyleInstruction,
+                    true));
+        }
     }
 
     private void addInteractionMode(

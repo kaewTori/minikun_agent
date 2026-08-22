@@ -30,6 +30,19 @@ class ConversationMemoryServiceTest {
     }
 
     @Test
+    void appendsACompletedTurnInOneMemoryOperation() {
+        ConversationId conversationId = new ConversationId("conversation-turn");
+
+        service.appendTurn(conversationId,
+                new ChatMessage("user", "Question"),
+                new ChatMessage("assistant", "Answer"));
+
+        assertEquals(List.of(
+                new ChatMessage("user", "Question"),
+                new ChatMessage("assistant", "Answer")), service.load(conversationId));
+    }
+
+    @Test
     void conversationsRemainIsolatedAndCanBeCleared() {
         ConversationId first = new ConversationId("conversation-1");
         ConversationId second = new ConversationId("conversation-2");

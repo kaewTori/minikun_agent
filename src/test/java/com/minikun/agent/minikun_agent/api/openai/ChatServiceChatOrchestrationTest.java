@@ -14,6 +14,7 @@ import static org.mockito.Mockito.when;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
+import java.util.Optional;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -36,6 +37,7 @@ import com.minikun.agent.minikun_agent.api.openai.dto.Message;
 import com.minikun.agent.minikun_agent.conversation.ChatMessage;
 import com.minikun.agent.minikun_agent.conversation.ConversationId;
 import com.minikun.agent.minikun_agent.conversation.ConversationMemoryService;
+import com.minikun.agent.minikun_agent.conversation.ConversationSummaryService;
 import com.minikun.model.ChatModelProviderRegistry;
 import com.minikun.model.ActiveChatModelProvider;
 import com.minikun.model.ActiveModelConfiguration;
@@ -88,6 +90,29 @@ import reactor.core.publisher.Flux;
 
 class ChatServiceChatOrchestrationTest {
     private static final Path MCS_ROOT = Path.of("../../config/minikun-agent/mcs");
+
+    @Test
+    void injectsNaturalConversationAndEmotionalGuidanceIntoOrdinaryTurns() throws Exception {
+        ChatModel chatModel = mock(ChatModel.class);
+        ConversationMemoryService conversation = mock(ConversationMemoryService.class);
+        when(conversation.load(any())).thenReturn(List.of(
+                new ChatMessage("assistant", "เมื่อวานพี่สาวทำงานดึกครับ")));
+        when(chatModel.call(any(Prompt.class))).thenReturn(response("วันนี้พักก่อนสักนิดนะครับ"));
+        ChatService service = service(chatModel, conversation);
+
+        service.chatCompletion(new ChatCompletionRequest(
+                "mini-kun", List.of(new Message("user", "วันนี้เหนื่อยและเครียดมากเลย")),
+                "natural-style", false, null, null, null), new ConversationId("natural-style"));
+
+        ArgumentCaptor<Prompt> prompt = ArgumentCaptor.forClass(Prompt.class);
+        verify(chatModel).call(prompt.capture());
+        String text = promptText(prompt.getValue());
+        assertTrue(text.contains("Natural conversation"));
+        assertTrue(text.contains("Use conversation history to resolve references and implied follow-ups"));
+        assertTrue(text.contains("acknowledge the specific feeling"));
+        assertTrue(text.contains("one small, practical next step"));
+        assertTrue(text.contains("เมื่อวานพี่สาวทำงานดึกครับ"));
+    }
 
     @Test
     void injectsConversationScopedCompanionModeIntoPrompt() throws Exception {
@@ -143,11 +168,12 @@ class ChatServiceChatOrchestrationTest {
                 .getThinkOption().toJsonValue());
         assertTrue(promptText(prompt.getValue()).contains("User-provided Images"));
 
-        ArgumentCaptor<ChatMessage> persisted = ArgumentCaptor.forClass(ChatMessage.class);
-        verify(conversation, org.mockito.Mockito.times(2)).append(any(), persisted.capture());
-        assertEquals("อธิบายภาพนี้", persisted.getAllValues().getFirst().content());
-        assertFalse(persisted.getAllValues().stream()
-                .anyMatch(message -> message.content().contains("iVBORw0KGgo")));
+        ArgumentCaptor<ChatMessage> persistedUser = ArgumentCaptor.forClass(ChatMessage.class);
+        ArgumentCaptor<ChatMessage> persistedAssistant = ArgumentCaptor.forClass(ChatMessage.class);
+        verify(conversation).appendTurn(any(), persistedUser.capture(), persistedAssistant.capture());
+        assertEquals("อธิบายภาพนี้", persistedUser.getValue().content());
+        assertFalse(persistedUser.getValue().content().contains("iVBORw0KGgo"));
+        assertFalse(persistedAssistant.getValue().content().contains("iVBORw0KGgo"));
     }
 
     @Test
@@ -155,7 +181,7 @@ class ChatServiceChatOrchestrationTest {
         ChatModel chatModel = mock(ChatModel.class);
         ConversationMemoryService conversation = mock(ConversationMemoryService.class);
         when(conversation.load(any())).thenReturn(List.of(
-                new ChatMessage("assistant", "พี่สาวครับ ตอนนี้มินิคุงยังไม่สามารถตรวจสอบข้อมูลสภาพอากาศได้ครับ")));
+                new ChatMessage("assistant", "พี่สาววางแผนจะออกจากบ้านพรุ่งนี้เช้าครับ")));
         when(chatModel.call(any(Prompt.class))).thenReturn(response("พรุ่งนี้มีฝนครับ พี่สาวควรพกร่มนะครับ"));
 
         WeatherForecastTool weatherTool = new WeatherForecastTool(request ->
@@ -185,7 +211,68 @@ class ChatServiceChatOrchestrationTest {
         assertTrue(text.contains("กรุงเทพมหานคร"));
         assertTrue(text.contains("70%"));
         assertTrue(text.contains("Keep the identity, language, tone, and response style from MCS"));
-        assertTrue(!text.contains("ยังไม่สามารถตรวจสอบข้อมูลสภาพอากาศได้"));
+        assertTrue(text.contains("พี่สาววางแผนจะออกจากบ้านพรุ่งนี้เช้าครับ"));
+    }
+
+    @Test
+    void longConversationKeepsRecentTurnsInsteadOfDroppingAllHistory() {
+        ChatModel chatModel = mock(ChatModel.class);
+        ConversationMemoryService conversation = mock(ConversationMemoryService.class);
+        List<ChatMessage> history = new java.util.ArrayList<>();
+        for (int turn = 0; turn < 12; turn++) {
+            history.add(new ChatMessage("user", "question-" + turn + "-" + "ก".repeat(500)));
+            history.add(new ChatMessage("assistant", "answer-" + turn + "-" + "ข".repeat(500)));
+        }
+        when(conversation.load(any())).thenReturn(List.copyOf(history));
+        when(chatModel.call(any(Prompt.class))).thenReturn(response("ต่อเนื่องจากคำตอบล่าสุดครับ"));
+        ChatService service = service(chatModel, conversation);
+
+        service.chatCompletion(new ChatCompletionRequest(
+                "mini-kun", List.of(new Message("user", "ขยายคำตอบล่าสุดอีกนิด")),
+                "long-conversation", false, null, null, null),
+                new ConversationId("long-conversation"));
+
+        ArgumentCaptor<Prompt> prompt = ArgumentCaptor.forClass(Prompt.class);
+        verify(chatModel).call(prompt.capture());
+        String text = promptText(prompt.getValue());
+        assertTrue(text.contains("[Conversation]"));
+        assertTrue(text.contains("answer-11-"));
+        assertTrue(text.contains("question-11-"));
+        assertTrue(text.contains("Earlier conversation omitted"));
+        assertFalse(text.contains("question-0-"));
+    }
+
+    @Test
+    void rollingSummaryIsCombinedWithOnlyTheNewestVerbatimTurns() throws Exception {
+        ChatModel chatModel = mock(ChatModel.class);
+        ConversationMemoryService conversation = mock(ConversationMemoryService.class);
+        ConversationSummaryService summaries = mock(ConversationSummaryService.class);
+        ConversationId conversationId = new ConversationId("summary-conversation");
+        when(conversation.load(any())).thenReturn(List.of(
+                new ChatMessage("user", "old-question"),
+                new ChatMessage("assistant", "old-answer"),
+                new ChatMessage("user", "recent-question"),
+                new ChatMessage("assistant", "recent-answer")));
+        when(summaries.summary("default", conversationId))
+                .thenReturn(Optional.of("- ก่อนหน้านี้พี่เลือกแนวทาง A"));
+        when(summaries.recentMessageLimit()).thenReturn(2);
+        when(chatModel.call(any(Prompt.class))).thenReturn(response("ต่อจากแนวทาง A ครับ"));
+        ChatService service = service(chatModel, conversation);
+        setField(service, "conversationSummaryService", summaries);
+
+        service.chatCompletion(new ChatCompletionRequest(
+                "mini-kun", List.of(new Message("user", "ทำต่อเลย")),
+                conversationId.value(), false, null, null, null), conversationId);
+
+        ArgumentCaptor<Prompt> prompt = ArgumentCaptor.forClass(Prompt.class);
+        verify(chatModel).call(prompt.capture());
+        String text = promptText(prompt.getValue());
+        assertTrue(text.contains("Rolling summary"));
+        assertTrue(text.contains("ก่อนหน้านี้พี่เลือกแนวทาง A"));
+        assertTrue(text.contains("recent-question"));
+        assertTrue(text.contains("recent-answer"));
+        assertFalse(text.contains("old-question"));
+        verify(summaries).schedule(any(), any(), any());
     }
 
     @Test
@@ -216,8 +303,8 @@ class ChatServiceChatOrchestrationTest {
         verify(streamingModel, never()).stream(any(Prompt.class));
         verify(blockingConversation, never()).load(any());
         verify(streamingConversation, never()).load(any());
-        verify(blockingConversation, org.mockito.Mockito.times(2)).append(any(), any());
-        verify(streamingConversation, org.mockito.Mockito.times(2)).append(any(), any());
+        verify(blockingConversation).appendTurn(any(), any(), any());
+        verify(streamingConversation).appendTurn(any(), any(), any());
     }
 
     @Test
@@ -253,8 +340,8 @@ class ChatServiceChatOrchestrationTest {
 
         verify(blockingConversation).load(conversationId);
         verify(streamingConversation).load(conversationId);
-        verify(blockingConversation, org.mockito.Mockito.times(2)).append(any(), any());
-        verify(streamingConversation, org.mockito.Mockito.times(2)).append(any(), any());
+        verify(blockingConversation).appendTurn(any(), any(), any());
+        verify(streamingConversation).appendTurn(any(), any(), any());
         verify(blockingModel, never()).stream(any(Prompt.class));
         verify(streamingModel, never()).call(any(Prompt.class));
     }
@@ -270,7 +357,7 @@ class ChatServiceChatOrchestrationTest {
                 .chatCompletion(request(), new ConversationId("blank-response"));
 
         assertTrue(result.choices().getFirst().message().content().contains("ยังไม่ได้ส่งคำตอบที่สมบูรณ์"));
-        verify(conversation, org.mockito.Mockito.times(2)).append(any(), any());
+        verify(conversation).appendTurn(any(), any(), any());
     }
 
     @Test
@@ -381,7 +468,21 @@ class ChatServiceChatOrchestrationTest {
         assertThrows(IllegalStateException.class, () -> service.chatCompletionStream(request(),
                 new ConversationId("stream-error")).collectList().block());
 
-        verify(conversation, org.mockito.Mockito.times(1)).append(any(), any());
+        verify(conversation, never()).appendTurn(any(), any(), any());
+    }
+
+    @Test
+    void blockingModelFailureDoesNotPersistAnIncompleteTurn() {
+        ChatModel chatModel = mock(ChatModel.class);
+        ConversationMemoryService conversation = mock(ConversationMemoryService.class);
+        when(conversation.load(any())).thenReturn(List.of());
+        when(chatModel.call(any(Prompt.class))).thenThrow(new IllegalStateException("model failed"));
+        ChatService service = service(chatModel, conversation);
+
+        assertThrows(IllegalStateException.class, () -> service.chatCompletion(
+                request(), new ConversationId("blocking-error")));
+
+        verify(conversation, never()).appendTurn(any(), any(), any());
     }
 
     @Test
@@ -396,7 +497,7 @@ class ChatServiceChatOrchestrationTest {
                 .take(1)
                 .blockLast();
 
-        verify(conversation, org.mockito.Mockito.times(1)).append(any(), any());
+        verify(conversation, never()).appendTurn(any(), any(), any());
     }
 
     @Test
@@ -486,6 +587,7 @@ class ChatServiceChatOrchestrationTest {
         verify(activeProvider, never()).stream(any(Prompt.class));
         verify(conversation, never()).load(any());
         verify(conversation, never()).append(any(), any());
+        verify(conversation, never()).appendTurn(any(), any(), any());
     }
 
     @Test

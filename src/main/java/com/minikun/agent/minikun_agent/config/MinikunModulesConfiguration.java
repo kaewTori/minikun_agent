@@ -4,6 +4,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
 
 import com.minikun.agent.execution.AgentExecutionConfiguration;
+import com.minikun.agent.minikun_agent.conversation.ConversationSummaryConfiguration;
 import com.minikun.browser.BrowserConfiguration;
 import com.minikun.calendar.ExternalCalendarConfiguration;
 import com.minikun.calendar.ExternalCalendarController;
@@ -109,7 +110,8 @@ import com.minikun.weather.WeatherConfiguration;
 /** Explicit module graph kept separate from the executable application entry point. */
 @Configuration(proxyBeanMethods = false)
 @Import({
-        MemoryConfiguration.class, SearchConfiguration.class, BrowserConfiguration.class,
+        MemoryConfiguration.class, ConversationSummaryConfiguration.class,
+        SearchConfiguration.class, BrowserConfiguration.class,
         MeterRegistryMetricsReader.class, DiagnosticsService.class, DiagnosticsFormatter.class,
         DiagnosticsPromptBuilder.class, MinikunPersonaProvider.class, KnowledgeSelectionConfiguration.class,
         CommandCatalog.class, CommandFormatter.class, VersionService.class, VersionFormatter.class,

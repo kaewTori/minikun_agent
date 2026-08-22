@@ -100,7 +100,7 @@ class ChatServiceReflectionBoundaryTest {
 
     private Optional<CompletedConversation> select(ConversationMemoryService memory) {
         ChatTurnFinalizer finalizer = new ChatTurnFinalizer(
-                memory, mock(ObjectProvider.class), null, null, false);
+                memory, mock(ObjectProvider.class), null, null, null, false);
         return finalizer.completedConversation("owner-1", CONVERSATION_ID);
     }
 }

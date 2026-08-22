@@ -41,10 +41,10 @@ class DefaultContextBudgetPolicyTest {
 
         assertEquals(15, budget.allocation(ContextBudgetSection.CHARACTER));
         assertEquals(10, budget.allocation(ContextBudgetSection.RUNTIME));
-        assertEquals(15, budget.allocation(ContextBudgetSection.CONVERSATION));
-        assertEquals(10, budget.allocation(ContextBudgetSection.USER_MODEL));
-        assertEquals(15, budget.allocation(ContextBudgetSection.MEMORY));
-        assertEquals(10, budget.allocation(ContextBudgetSection.KNOWLEDGE));
+        assertEquals(30, budget.allocation(ContextBudgetSection.CONVERSATION));
+        assertEquals(5, budget.allocation(ContextBudgetSection.USER_MODEL));
+        assertEquals(10, budget.allocation(ContextBudgetSection.MEMORY));
+        assertEquals(5, budget.allocation(ContextBudgetSection.KNOWLEDGE));
         assertEquals(5, budget.allocation(ContextBudgetSection.CAPABILITIES));
         assertEquals(20, budget.allocation(ContextBudgetSection.USER_MESSAGE));
     }

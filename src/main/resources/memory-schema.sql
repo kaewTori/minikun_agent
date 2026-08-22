@@ -23,6 +23,19 @@ ALTER TABLE minikun_memory
 CREATE INDEX IF NOT EXISTS idx_minikun_memory_conversation
     ON minikun_memory (owner_id, conversation_id, created_at, id);
 
+CREATE TABLE IF NOT EXISTS minikun_conversation_summary (
+    owner_id VARCHAR(255) NOT NULL,
+    conversation_id VARCHAR(255) NOT NULL,
+    content TEXT NOT NULL,
+    covered_fingerprints TEXT NOT NULL DEFAULT '',
+    summarized_messages INTEGER NOT NULL DEFAULT 0,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (owner_id, conversation_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_minikun_conversation_summary_updated
+    ON minikun_conversation_summary (owner_id, updated_at DESC);
+
 CREATE TABLE IF NOT EXISTS minikun_user_profile (
     owner_id VARCHAR(255) PRIMARY KEY,
     display_name VARCHAR(255) NOT NULL DEFAULT '',

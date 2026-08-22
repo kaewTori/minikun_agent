@@ -11,6 +11,7 @@
 - Voice Companion แบบ local สำหรับ speech-to-text, text-to-speech และ voice turn ต่อเนื่อง
 - Personal Knowledge แบบ local สำหรับ index เอกสาร, hybrid retrieval และ citation ในบทสนทนา
 - Adaptive Companion ที่เรียนรู้ภาษา ความยาว รูปแบบ ระดับเทคนิค และโทนการตอบแบบ owner-scoped
+- Natural Conversation Advisor ที่ใช้เจตนา บริบทต่อเนื่อง และสัญญาณอารมณ์เพื่อปรับคำตอบโดยไม่เก็บข้อความเพิ่ม
 - Companion Mode แบบ conversation-scoped สำหรับสลับพฤติกรรมระหว่าง `companion`, `work` และ `focus`
 - Communication Assistant สำหรับ draft, rewrite, reply และ summarize โดยใช้โมเดลหลักแบบ draft-only
 - Agent Planner + Execution Loop สำหรับคำสั่งหลายขั้น พร้อม state, retry, confirmation stop และ resume จาก PostgreSQL
@@ -544,9 +545,9 @@ curl -X POST http://127.0.0.1:8080/v1/communication/assist \
 
 ## Memory และ prompt composition
 
-Short-term history ถูกผูกกับ `ConversationId` และเก็บผ่าน Spring AI JDBC Chat Memory ใน PostgreSQL ส่วน long-term memory ถูกเก็บในตาราง `minikun_memory` ตาม schema ใน [`memory-schema.sql`](src/main/resources/memory-schema.sql)
+Short-term history ถูกผูกกับ `ConversationId` และเก็บทั้งข้อความฝั่ง user กับ assistant ผ่าน Spring AI JDBC Chat Memory ใน PostgreSQL เมื่อบทสนทนายาวขึ้น ระบบจะสรุปช่วงเก่าแบบ rolling summary ลง `minikun_conversation_summary` แยกตาม `owner_id` และ `conversation_id` แล้วใช้ร่วมกับข้อความล่าสุด ส่วน long-term memory ถูกเก็บในตาราง `minikun_memory` ตาม schema ใน [`memory-schema.sql`](src/main/resources/memory-schema.sql)
 
-ใน request chat ระบบจะโหลด history เดิม, เรียกคืน knowledge ที่เกี่ยวข้อง, สร้าง prompt ผ่าน PCS แล้วจึงเรียก chat model หลังตอบสำเร็จจึงบันทึก assistant message กลับเข้า conversation memory
+ใน request chat ระบบจะโหลด history เดิม, เรียกคืน knowledge ที่เกี่ยวข้อง, สร้าง prompt ผ่าน PCS แล้วจึงเรียก chat model หลังตอบสำเร็จจึงบันทึก user และ assistant พร้อมกันเป็น completed turn เดียว จึงไม่ทิ้ง user message ค้างเมื่อ model ล้มเหลวหรือ stream ถูกยกเลิก
 
 เมื่อมี tool result ที่ยืนยันแล้ว ระบบจะใส่ผลลัพธ์นั้นไว้ใน context ของ prompt และให้โมเดลสร้างคำตอบสุดท้ายเองตาม MCS แทนการส่งข้อความสำเร็จรูปจาก tool โดยตรง
 
@@ -677,7 +678,7 @@ cd /Volumes/minikun/homelab/java
 
 ## หมายเหตุด้าน production
 
-- `spring.sql.init.mode=always` เหมาะกับ local setup แต่ production ควรใช้ migration ที่ควบคุม version ได้
+- deployment จะรัน [`deploy/migrate-database.sh`](deploy/migrate-database.sh) ก่อน restart เพื่อใช้ migration ที่มี version; `spring.sql.init.mode=always` ยังคงไว้สำหรับ local bootstrap จนกว่า legacy schema ทั้งหมดจะย้ายเข้าระบบ migration
 - อย่า commit secret เช่น database password หรือ API key ลง repository ควรส่งผ่าน environment variables
 - ตรวจสอบ model name ให้ตรงกับ model ที่ติดตั้งใน Ollama/compatible backend
 - การเปิด `MINIKUN_MEMORY_REFLECTION_ENABLED` และ search decision mode แบบ LLM จะเพิ่ม latency และการเรียก model ต่อ request

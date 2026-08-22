@@ -1,5 +1,6 @@
 package com.minikun.agent.minikun_agent.api;
 
+import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 
 import org.springframework.stereotype.Component;
@@ -13,21 +14,45 @@ import jakarta.servlet.http.HttpServletRequest;
 public class ConversationIdResolver {
 
     public ConversationId resolve(ChatCompletionRequest request, HttpServletRequest httpRequest) {
-        String identifier = firstText(
-                httpRequest.getHeader("X-Conversation-Id"),
-                request.conversation_id(),
-                httpRequest.getHeader("X-OpenWebUI-Chat-Id"),
-                httpRequest.getHeader("X-Chat-Id"),
-                httpRequest.getHeader("Chat-Id"));
-        return new ConversationId(identifier == null ? UUID.randomUUID().toString() : identifier);
+        return resolveDetails(request, httpRequest).conversationId();
     }
 
-    private String firstText(String... candidates) {
-        for (String candidate : candidates) {
-            if (candidate != null && !candidate.isBlank()) {
-                return candidate.trim();
+    public Resolution resolveDetails(ChatCompletionRequest request, HttpServletRequest httpRequest) {
+        Candidate[] candidates = {
+                new Candidate(httpRequest.getHeader("X-Conversation-Id"), Source.EXPLICIT_HEADER),
+                new Candidate(request.conversation_id(), Source.REQUEST_BODY),
+                new Candidate(httpRequest.getHeader("X-OpenWebUI-Chat-Id"), Source.OPENWEBUI_HEADER),
+                new Candidate(httpRequest.getHeader("X-Chat-Id"), Source.TRANSPORT_HEADER),
+                new Candidate(httpRequest.getHeader("Chat-Id"), Source.TRANSPORT_HEADER)
+        };
+        for (Candidate candidate : candidates) {
+            if (candidate.value() != null && !candidate.value().isBlank()) {
+                return new Resolution(new ConversationId(normalize(candidate.value())), candidate.source());
             }
         }
-        return null;
+        return new Resolution(new ConversationId(UUID.randomUUID().toString()), Source.GENERATED);
+    }
+
+    /** Spring AI's PostgreSQL chat-memory schema limits conversation ids to 36 characters. */
+    private String normalize(String identifier) {
+        String normalized = identifier.trim();
+        if (normalized.length() <= 36 && normalized.chars().noneMatch(Character::isISOControl)) {
+            return normalized;
+        }
+        return UUID.nameUUIDFromBytes(normalized.getBytes(StandardCharsets.UTF_8)).toString();
+    }
+
+    public record Resolution(ConversationId conversationId, Source source) {
+    }
+
+    public enum Source {
+        EXPLICIT_HEADER,
+        REQUEST_BODY,
+        OPENWEBUI_HEADER,
+        TRANSPORT_HEADER,
+        GENERATED
+    }
+
+    private record Candidate(String value, Source source) {
     }
 }

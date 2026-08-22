@@ -6,6 +6,7 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 
 import com.minikun.browser.BrowserContentService;
+import com.minikun.agent.minikun_agent.conversation.ConversationSummaryService;
 import com.minikun.knowledge.PersonalKnowledgeService;
 import com.minikun.memory.DeferredReflectionService;
 import com.minikun.memory.event.ObservationPublisher;
@@ -41,6 +42,7 @@ final class ChatCollaborators {
     private final BrowserContentService browserContentService;
     private final VisionInputService visionInputService;
     private final PersonalKnowledgeService personalKnowledgeService;
+    private final ConversationSummaryService conversationSummaryService;
 
     ChatCollaborators(
             ObjectProvider<SpringAiToolCallingRuntime> toolCallingRuntime,
@@ -59,7 +61,8 @@ final class ChatCollaborators {
             ObjectProvider<ChatGenerationProfileSelector> generationProfileSelector,
             BrowserContentService browserContentService,
             ObjectProvider<VisionInputService> visionInputService,
-            ObjectProvider<PersonalKnowledgeService> personalKnowledgeService) {
+            ObjectProvider<PersonalKnowledgeService> personalKnowledgeService,
+            ObjectProvider<ConversationSummaryService> conversationSummaryService) {
         this.toolCallingRuntime = toolCallingRuntime.getIfAvailable();
         this.toolRequestRouters = toolRequestRouters.orderedStream().toList();
         this.dynamicGenerationOptionsFactory = dynamicGenerationOptionsFactory.getIfAvailable();
@@ -77,6 +80,7 @@ final class ChatCollaborators {
         this.browserContentService = browserContentService;
         this.visionInputService = visionInputService.getIfAvailable();
         this.personalKnowledgeService = personalKnowledgeService.getIfAvailable();
+        this.conversationSummaryService = conversationSummaryService.getIfAvailable();
     }
 
     SpringAiToolCallingRuntime toolCallingRuntime() { return toolCallingRuntime; }
@@ -96,4 +100,5 @@ final class ChatCollaborators {
     BrowserContentService browserContentService() { return browserContentService; }
     VisionInputService visionInputService() { return visionInputService; }
     PersonalKnowledgeService personalKnowledgeService() { return personalKnowledgeService; }
+    ConversationSummaryService conversationSummaryService() { return conversationSummaryService; }
 }

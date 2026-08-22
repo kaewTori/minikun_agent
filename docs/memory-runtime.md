@@ -8,10 +8,10 @@ long-term memory:    ownerId
 request lifecycle:   Observation / MinikunEvent
 ```
 
-Long-term recall uses `LongTermMemoryScope` and a lightweight local relevance
-ranker. It scores query term overlap and confidence, then uses recency as a
-tie-breaker. This is intentionally inexpensive for a single-user home agent;
-embedding retrieval can be added behind the same recall boundary later.
+Long-term recall uses `LongTermMemoryScope` across conversations belonging to
+the same owner. When an embedding model is available, semantic similarity is
+combined with memory confidence; failures fall back to the lightweight local
+ranker, which scores query overlap and confidence with recency as a tie-breaker.
 
 Reflection is deferred through a bounded single-thread executor when the Spring
 runtime is available. If the queue is full, the existing synchronous path is used

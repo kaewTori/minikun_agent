@@ -17,8 +17,9 @@ import com.minikun.model.capability.ModelCapability;
 import com.minikun.model.capability.ModelCapabilityRegistry;
 import com.minikun.pcs.KnowledgeConsolidation;
 import com.minikun.pcs.KnowledgeSelection;
+import com.minikun.pcs.ContextBudgetSection;
+import com.minikun.pcs.DefaultContextBudgetPolicy;
 import com.minikun.pcs.PromptComposer;
-import com.minikun.pcs.PromptException;
 import com.minikun.pcs.PromptRequest;
 import com.minikun.pcs.SearchContext;
 import com.minikun.pcs.SearchSelectionSignals;
@@ -26,10 +27,10 @@ import com.minikun.pcs.model.ConversationContext;
 import com.minikun.pcs.model.KnowledgeContext;
 import com.minikun.pcs.model.RuntimeContext;
 import com.minikun.personality.companion.CompanionModeContext;
-import com.minikun.personality.model.MoodSnapshot;
 import com.minikun.personality.model.PersonalUserModel;
 import com.minikun.personality.profile.UserModelService;
 import com.minikun.personality.runtime.AdaptivePersonaService;
+import com.minikun.personality.runtime.ConversationStyleAdvisor;
 import com.minikun.tokenbudget.config.TokenBudgetProperties;
 import com.minikun.tokenbudget.runtime.DynamicGenerationOptionsFactory;
 import com.minikun.tools.ToolEvidence;
@@ -56,6 +57,8 @@ final class ChatPromptFactory {
     private final ChatGenerationProfileSelector generationProfileSelector;
     private final ChatPerformanceMetrics performanceMetrics;
     private final Configuration configuration;
+    private final ConversationStyleAdvisor conversationStyleAdvisor = new ConversationStyleAdvisor();
+    private final ConversationHistoryWindow conversationHistoryWindow = new ConversationHistoryWindow();
 
     ChatPromptFactory(
             CharacterSpecification characterSpecification,
@@ -101,17 +104,26 @@ final class ChatPromptFactory {
                 .filter(this::hasText)
                 .reduce((left, right) -> left + "\n\n" + right)
                 .orElse("Current date: " + LocalDate.now());
-        String conversation = input.history().stream()
-                .filter(message -> !"system".equals(message.role()))
-                .filter(message -> !isCommandMessage(message.content()))
-                .map(message -> message.role() + ": " + message.content())
-                .reduce((left, right) -> left + "\n\n" + right)
-                .orElse("");
+        long conversationBudget = new DefaultContextBudgetPolicy()
+                .allocate(configuration.contextBudgetCharacters())
+                .allocation(ContextBudgetSection.CONVERSATION);
+        String summarySection = summarySection(input.conversationSummary(), conversationBudget);
+        long recentConversationBudget = Math.max(0L, conversationBudget
+                - summarySection.length()
+                - (summarySection.isBlank() ? 0 : "\n\nRecent turns:\n".length()));
+        ConversationHistoryWindow.Result conversationWindow = conversationHistoryWindow.build(
+                request, input.history(), this::isCommandMessage, recentConversationBudget,
+                input.recentMessageLimit());
+        String conversation = combineConversation(summarySection, conversationWindow.content());
+        log.debug("process=conversation_window event=selected source={} input_messages={} "
+                        + "selected_messages={} omitted_messages={} summary_chars={} "
+                        + "selected_chars={} budget_chars={}",
+                conversationWindow.source(), conversationWindow.inputMessages(),
+                conversationWindow.selectedMessages(), conversationWindow.omittedMessages(),
+                summarySection.length(), conversation.length(), conversationBudget);
 
         boolean factFirstToolTurn = isVerifiedToolResult(input.verifiedToolResult());
-        String conversationContent = factFirstToolTurn
-                ? ""
-                : conversation.isBlank() ? requestConversation(request) : conversation;
+        String conversationContent = conversation;
         SearchSelectionSignals promptSearchSignals = factFirstToolTurn
                 ? SearchSelectionSignals.EMPTY : input.knowledgeSelection().searchSignals();
         SearchContext promptSearchContext = factFirstToolTurn
@@ -122,12 +134,13 @@ final class ChatPromptFactory {
                 ? KnowledgeConsolidation.EMPTY : input.knowledgeSelection().consolidation();
         KnowledgeContext promptKnowledge = factFirstToolTurn
                 ? KnowledgeContext.empty() : input.knowledgeSelection().selection().knowledgeContext();
+        var conversationStyle = conversationStyleAdvisor.advise(userMessage.content());
         var personaSignals = adaptivePersonaService == null
                 ? com.minikun.personality.signal.PersonaSelectionSignals.EMPTY
                 : adaptivePersonaService.evaluate(
                         input.ownerId(), userMessage.content(), promptSearchSignals.searchRequested(),
                         configuration.nativeToolsAvailable() || input.verifiedToolResult() != null,
-                        false, MoodSnapshot.DEFAULT).signals();
+                        false, conversationStyle.mood()).signals();
         PersonalUserModel userModel = userModelService == null
                 ? PersonalUserModel.EMPTY
                 : safeUserModel(input.ownerId());
@@ -138,7 +151,8 @@ final class ChatPromptFactory {
                 promptKnowledge,
                 capabilityFactory.create(
                         input.knowledgeSelection(), input.imageAwareness(), input.verifiedToolResult(),
-                        input.visionInput(), input.interactionMode(), configuration.nativeToolsAvailable()),
+                        input.visionInput(), input.interactionMode(), conversationStyle.instruction(),
+                        configuration.nativeToolsAvailable()),
                 new com.minikun.pcs.model.UserMessage(userMessage.content()),
                 promptSearchSignals,
                 promptSearchContext,
@@ -217,30 +231,36 @@ final class ChatPromptFactory {
         }
     }
 
-    private String requestConversation(ChatCompletionRequest request) {
-        int currentUserIndex = lastUserMessageIndex(request);
-        return java.util.stream.IntStream.range(0, currentUserIndex)
-                .mapToObj(request.messages()::get)
-                .filter(message -> !"system".equals(message.role()))
-                .filter(message -> hasText(message.content()))
-                .filter(message -> !isCommandMessage(message.content()))
-                .map(message -> message.role() + ": " + message.content())
-                .reduce((left, right) -> left + "\n\n" + right)
-                .orElse("");
-    }
-
-    private int lastUserMessageIndex(ChatCompletionRequest request) {
-        for (int index = request.messages().size() - 1; index >= 0; index--) {
-            var message = request.messages().get(index);
-            if ("user".equals(message.role()) && (hasText(message.content()) || message.hasImageContent())) {
-                return index;
-            }
-        }
-        throw new PromptException("chat request must contain user text or an image");
-    }
-
     private boolean isVerifiedToolResult(ToolEvidence evidence) {
         return evidence != null && evidence.success() && hasText(evidence.content());
+    }
+
+    private String summarySection(String summary, long conversationBudget) {
+        if (!hasText(summary) || conversationBudget <= 0) {
+            return "";
+        }
+        String label = "Rolling summary (older context; recent turns below take precedence):\n";
+        int maximumSectionCharacters = (int) Math.min(
+                conversationBudget * 40L / 100L, Integer.MAX_VALUE);
+        int maximumContentCharacters = maximumSectionCharacters - label.length();
+        if (maximumContentCharacters <= 0) {
+            return "";
+        }
+        String normalized = summary.strip();
+        String bounded = normalized.length() <= maximumContentCharacters
+                ? normalized
+                : normalized.substring(0, maximumContentCharacters).stripTrailing();
+        return label + bounded;
+    }
+
+    private String combineConversation(String summarySection, String recentConversation) {
+        if (summarySection.isBlank()) {
+            return recentConversation;
+        }
+        if (recentConversation.isBlank()) {
+            return summarySection;
+        }
+        return summarySection + "\n\nRecent turns:\n" + recentConversation;
     }
 
     private boolean isCommandMessage(String content) {
@@ -255,6 +275,8 @@ final class ChatPromptFactory {
             ChatCompletionRequest request,
             ChatMessage userMessage,
             List<ChatMessage> history,
+            String conversationSummary,
+            int recentMessageLimit,
             ChatKnowledgeSelection knowledgeSelection,
             ImageAwareness imageAwareness,
             ToolEvidence verifiedToolResult,

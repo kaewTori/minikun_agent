@@ -36,8 +36,7 @@ public final class ContextItemAssembler {
                 REQUIRED_PRIORITY, true));
         items.add(new ContextItem(ContextBudgetSection.RUNTIME, request.runtime().content(),
                 REQUIRED_PRIORITY, true));
-        addOptional(items, ContextBudgetSection.CONVERSATION,
-                request.conversation() == null ? null : request.conversation().content(), 3);
+        addConversation(items, request);
         addOptional(items, ContextBudgetSection.USER_MODEL,
                 request.personalUserModel().promptContent(), 1);
         addKnowledge(items, request);
@@ -46,6 +45,50 @@ public final class ContextItemAssembler {
         items.add(new ContextItem(ContextBudgetSection.USER_MESSAGE, userMessage.content(),
                 REQUIRED_PRIORITY, true));
         return List.copyOf(items);
+    }
+
+    private void addConversation(List<ContextItem> items, PromptRequest request) {
+        String content = request.conversation() == null ? null : request.conversation().content();
+        if (content == null || content.isBlank()) {
+            return;
+        }
+        if (request.contextBudget() != null) {
+            content = retainRecentConversation(
+                    content, request.contextBudget().allocation(ContextBudgetSection.CONVERSATION));
+        }
+        addOptional(items, ContextBudgetSection.CONVERSATION, content, 3);
+    }
+
+    private String retainRecentConversation(String content, long maximumCharacters) {
+        if (maximumCharacters <= 0) {
+            return "";
+        }
+        int limit = (int) Math.min(maximumCharacters, Integer.MAX_VALUE);
+        if (content.length() <= limit) {
+            return content;
+        }
+        String marker = "[Earlier conversation omitted]\n\n";
+        if (limit <= marker.length()) {
+            return content.substring(content.length() - limit);
+        }
+        int target = content.length() - (limit - marker.length());
+        int boundary = nextTurnBoundary(content, target);
+        String recent = boundary < 0 ? content.substring(target) : content.substring(boundary);
+        return marker + recent;
+    }
+
+    private int nextTurnBoundary(String content, int start) {
+        int user = content.indexOf("\n\nuser: ", start);
+        int assistant = content.indexOf("\n\nassistant: ", start);
+        int boundary;
+        if (user < 0) {
+            boundary = assistant;
+        } else if (assistant < 0) {
+            boundary = user;
+        } else {
+            boundary = Math.min(user, assistant);
+        }
+        return boundary < 0 ? -1 : boundary + 2;
     }
 
     private void addKnowledge(List<ContextItem> items, PromptRequest request) {
