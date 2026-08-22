@@ -22,9 +22,15 @@ public final class DeferredReflectionService implements AutoCloseable {
     public boolean submit(ReflectionService service, CompletedConversation conversation) {
         Objects.requireNonNull(service, "service");
         Objects.requireNonNull(conversation, "conversation");
+        return submit(() -> service.reflect(conversation));
+    }
+
+    /** Defers snapshot loading as well as model work so neither adds request latency. */
+    public boolean submit(Runnable reflectionTask) {
+        Objects.requireNonNull(reflectionTask, "reflectionTask");
         if (!capacity.tryAcquire()) return false;
         executor.execute(() -> {
-            try { service.reflect(conversation); }
+            try { reflectionTask.run(); }
             finally { capacity.release(); }
         });
         return true;

@@ -199,6 +199,7 @@ public class SearchConfiguration {
             SearchDecisionPromptBuilder promptBuilder,
             MeterRegistry meterRegistry,
             ImageIntentDetector imageIntentDetector,
+            @Value("${minikun.performance.fast-path.enabled:true}") boolean fastPathEnabled,
             @Value("${minikun.search.decision.mode:rule}") String mode) {
         SearchDecisionService ruleService = new RuleBasedSearchDecisionService(meterRegistry);
         SearchDecisionService decisionService = switch (mode) {
@@ -210,7 +211,7 @@ public class SearchConfiguration {
                     "Unsupported minikun.search.decision.mode: " + mode);
         };
         decisionService = new FastPathSearchDecisionService(
-                decisionService, new RuleBasedSearchDecisionService(meterRegistry));
+                decisionService, new RuleBasedSearchDecisionService(meterRegistry), meterRegistry, fastPathEnabled);
         return new ImageIntentSearchDecisionService(decisionService, imageIntentDetector);
     }
 

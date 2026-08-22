@@ -157,6 +157,8 @@ public class ReflectionService {
         try {
             sample.stop(Timer.builder(DURATION)
                     .tag("result", outcome)
+                    .publishPercentiles(0.5, 0.95, 0.99)
+                    .publishPercentileHistogram()
                     .register(meterRegistry));
         } catch (RuntimeException ignored) {
         }

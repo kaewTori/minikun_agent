@@ -14,10 +14,12 @@ import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
+import com.minikun.agent.minikun_agent.api.openai.ChatPerformanceMetrics;
 
 /** Lets Ollama answer first and uses TinyGrad as a precision pass when useful. */
 @Service
@@ -31,6 +33,9 @@ public final class CooperativeChatModelService {
     private final String mode;
     private final Duration verificationTimeout;
     private final int maxDraftCharacters;
+
+    @Autowired(required = false)
+    private ChatPerformanceMetrics performanceMetrics;
 
     public CooperativeChatModelService(
             ChatModelProviderRegistry registry,
@@ -207,13 +212,23 @@ public final class CooperativeChatModelService {
     }
 
     private ChatResponse callWithTimeout(ChatModelProvider verifier, Prompt prompt) {
+        long started = System.nanoTime();
+        String result = "success";
         try {
             return CompletableFuture.supplyAsync(() -> verifier.chat(prompt))
                     .orTimeout(verificationTimeout.toMillis(), TimeUnit.MILLISECONDS)
                     .join();
         } catch (CompletionException exception) {
+            result = "error";
             Throwable cause = exception.getCause() == null ? exception : exception.getCause();
             throw new IllegalStateException("TinyGrad verification timed out or failed", cause);
+        } catch (RuntimeException exception) {
+            result = "error";
+            throw exception;
+        } finally {
+            if (performanceMetrics != null) {
+                performanceMetrics.record("tinygrad", started, result);
+            }
         }
     }
 

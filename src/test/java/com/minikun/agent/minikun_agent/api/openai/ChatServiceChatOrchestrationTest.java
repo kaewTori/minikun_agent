@@ -64,6 +64,7 @@ import com.minikun.pcs.KnowledgeCandidate;
 import com.minikun.pcs.KnowledgeSource;
 import com.minikun.pcs.model.ImageSource;
 import com.minikun.pcs.model.KnowledgeContext;
+import com.minikun.personality.companion.CompanionModeService;
 import com.minikun.runtime.CacheFormatter;
 import com.minikun.runtime.CacheService;
 import com.minikun.runtime.ModelsFormatter;
@@ -87,6 +88,31 @@ import reactor.core.publisher.Flux;
 
 class ChatServiceChatOrchestrationTest {
     private static final Path MCS_ROOT = Path.of("../../config/minikun-agent/mcs");
+
+    @Test
+    void injectsConversationScopedCompanionModeIntoPrompt() throws Exception {
+        ChatModel chatModel = mock(ChatModel.class);
+        ConversationMemoryService conversation = mock(ConversationMemoryService.class);
+        when(conversation.load(any())).thenReturn(List.of());
+        when(chatModel.call(any(Prompt.class))).thenReturn(response("อยู่ตรงนี้กับพี่สาวครับ"));
+        ChatService service = service(chatModel, conversation);
+        setField(service, "companionModeService", new CompanionModeService(true, 100));
+        setField(service, "generationProfileSelector", new ChatGenerationProfileSelector(
+                new CooperationRouter(), true, 384, 512, 768, 1_536, 2_048));
+        setField(service, "configuredGenerationMaxTokens", 2_048);
+
+        service.chatCompletion(new ChatCompletionRequest(
+                "mini-kun", List.of(new Message("user", "วันนี้ขอคุยแบบคู่หูนะ")),
+                "companion-mode", false, null, null, null), new ConversationId("companion-mode"));
+
+        ArgumentCaptor<Prompt> prompt = ArgumentCaptor.forClass(Prompt.class);
+        verify(chatModel).call(prompt.capture());
+        String text = promptText(prompt.getValue());
+        assertTrue(text.contains("Interaction mode: COMPANION"));
+        assertTrue(text.contains("โหมดปัจจุบันคือ COMPANION"));
+        assertTrue(text.contains("ห้ามเสนอหลายทางเลือก"));
+        assertEquals(384, prompt.getValue().getOptions().getMaxTokens());
+    }
 
     @Test
     void attachesVisionMediaToCurrentPromptWithoutPersistingImageBytes() throws Exception {
@@ -371,6 +397,75 @@ class ChatServiceChatOrchestrationTest {
                 .blockLast();
 
         verify(conversation, org.mockito.Mockito.times(1)).append(any(), any());
+    }
+
+    @Test
+    void streamingRecordsUserAndModelTimeToFirstToken() throws Exception {
+        ChatModel chatModel = mock(ChatModel.class);
+        ConversationMemoryService conversation = mock(ConversationMemoryService.class);
+        when(conversation.load(any())).thenReturn(List.of());
+        when(chatModel.stream(any(Prompt.class))).thenReturn(Flux.just(new ChatResponse(
+                List.of(new Generation(new AssistantMessage("first token"))),
+                ChatResponseMetadata.builder().usage(new DefaultUsage(10, 2, 12, null)).build())));
+        ChatService service = service(chatModel, conversation);
+        io.micrometer.core.instrument.simple.SimpleMeterRegistry registry =
+                new io.micrometer.core.instrument.simple.SimpleMeterRegistry();
+        setField(service, "performanceMetrics", new ChatPerformanceMetrics(registry));
+
+        service.chatCompletionStream(request(), new ConversationId("stream-ttft"))
+                .collectList().block();
+
+        assertEquals(1L, registry.get(ChatPerformanceMetrics.STAGE_DURATION)
+                .tags("stage", "ttft", "result", "success").timer().count());
+        assertEquals(1L, registry.get(ChatPerformanceMetrics.STAGE_DURATION)
+                .tags("stage", "model_ttft", "result", "success").timer().count());
+        assertEquals(1L, registry.get(ChatPerformanceMetrics.TOKENS_PER_SECOND).summary().count());
+    }
+
+    @Test
+    void generalStreamingBypassesBlockingToolRuntime() throws Exception {
+        ChatModel chatModel = mock(ChatModel.class);
+        ConversationMemoryService conversation = mock(ConversationMemoryService.class);
+        SpringAiToolCallingRuntime toolRuntime = mock(SpringAiToolCallingRuntime.class);
+        when(conversation.load(any())).thenReturn(List.of());
+        when(chatModel.stream(any(Prompt.class))).thenReturn(Flux.just(response("streamed answer")));
+        ChatService service = service(chatModel, conversation);
+        setField(service, "toolsEnabled", true);
+        setField(service, "toolCallingRuntime", toolRuntime);
+        setField(service, "generationProfileSelector", new ChatGenerationProfileSelector(
+                new CooperationRouter(), true, 384, 512, 768, 1_536, 2_048));
+        setField(service, "configuredGenerationMaxTokens", 2_048);
+
+        service.chatCompletionStream(request(), new ConversationId("general-direct-stream"))
+                .collectList().block();
+
+        verify(chatModel).stream(any(Prompt.class));
+        verify(toolRuntime, never()).call(any(Prompt.class), any(ConversationId.class), any(String.class));
+    }
+
+    @Test
+    void technicalStreamingRetainsToolRuntime() throws Exception {
+        ChatModel chatModel = mock(ChatModel.class);
+        ConversationMemoryService conversation = mock(ConversationMemoryService.class);
+        SpringAiToolCallingRuntime toolRuntime = mock(SpringAiToolCallingRuntime.class);
+        when(conversation.load(any())).thenReturn(List.of());
+        when(toolRuntime.call(any(Prompt.class), any(ConversationId.class), any(String.class)))
+                .thenReturn(response("technical answer"));
+        ChatService service = service(chatModel, conversation);
+        setField(service, "toolsEnabled", true);
+        setField(service, "toolCallingRuntime", toolRuntime);
+        setField(service, "generationProfileSelector", new ChatGenerationProfileSelector(
+                new CooperationRouter(), true, 384, 512, 768, 1_536, 2_048));
+        setField(service, "configuredGenerationMaxTokens", 2_048);
+        ChatCompletionRequest technical = new ChatCompletionRequest(
+                "test-model", List.of(new Message("user", "ช่วย debug Spring Boot API นี้")),
+                "technical-stream", true, null, null, null);
+
+        service.chatCompletionStream(technical, new ConversationId("technical-stream"))
+                .collectList().block();
+
+        verify(toolRuntime).call(any(Prompt.class), any(ConversationId.class), any(String.class));
+        verify(chatModel, never()).stream(any(Prompt.class));
     }
 
     @Test

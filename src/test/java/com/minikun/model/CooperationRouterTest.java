@@ -17,6 +17,22 @@ class CooperationRouterTest {
     }
 
     @Test
+    void doesNotEscalateAnOrdinaryQuestionMarkToTinyGrad() {
+        CooperationRoutingDecision decision = router.decide("วันนี้เป็นยังไงบ้าง?");
+
+        assertEquals(CooperationRisk.LOW, decision.risk());
+        assertTrue(!decision.needsExpert());
+    }
+
+    @Test
+    void leavesFreshnessLookupToSearchInsteadOfTinyGrad() {
+        CooperationRoutingDecision decision = router.decide("ข่าวล่าสุดวันนี้มีอะไรบ้าง?");
+
+        assertEquals(CooperationRisk.LOW, decision.risk());
+        assertTrue(!decision.needsExpert());
+    }
+
+    @Test
     void routesPrecisionQuestionToBackgroundExpert() {
         CooperationRoutingDecision decision = router.decide("ช่วยตรวจสอบโค้ดนี้ว่าผิดตรงไหน");
 

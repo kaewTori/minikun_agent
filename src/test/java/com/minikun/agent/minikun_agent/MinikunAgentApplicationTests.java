@@ -85,6 +85,8 @@ class MinikunAgentApplicationTests {
 
 	@Test
 	void contextLoads() {
+		org.junit.jupiter.api.Assertions.assertNotNull(
+				applicationContext.getBean(com.minikun.personality.companion.CompanionModeService.class));
 	}
 
 	@Test

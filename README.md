@@ -11,6 +11,7 @@
 - Voice Companion แบบ local สำหรับ speech-to-text, text-to-speech และ voice turn ต่อเนื่อง
 - Personal Knowledge แบบ local สำหรับ index เอกสาร, hybrid retrieval และ citation ในบทสนทนา
 - Adaptive Companion ที่เรียนรู้ภาษา ความยาว รูปแบบ ระดับเทคนิค และโทนการตอบแบบ owner-scoped
+- Companion Mode แบบ conversation-scoped สำหรับสลับพฤติกรรมระหว่าง `companion`, `work` และ `focus`
 - Communication Assistant สำหรับ draft, rewrite, reply และ summarize โดยใช้โมเดลหลักแบบ draft-only
 - Agent Planner + Execution Loop สำหรับคำสั่งหลายขั้น พร้อม state, retry, confirmation stop และ resume จาก PostgreSQL
 - เก็บ short-term conversation history ด้วย Spring AI Chat Memory และ PostgreSQL
@@ -157,6 +158,8 @@ Actuator ที่เปิดให้เข้าถึงคือ `/actuator
 | `MINIKUN_TASK_ENABLED` | `true` | เปิด goal/task store, tool และ follow-up scheduler |
 | `MINIKUN_TASK_POLL_INTERVAL_MS` | `30000` | รอบตรวจ task follow-up ที่ถึงเวลาแล้ว |
 | `MINIKUN_TASK_MANAGEMENT_TOKEN` | ใช้ค่า memory token ถ้ามี | token สำหรับ Task API ที่ใช้โดย dashboard/automation |
+| `MINIKUN_COMPANION_MODE_ENABLED` | `true` | เปิด interaction mode แบบ conversation-scoped |
+| `MINIKUN_COMPANION_MODE_MAXIMUM_SESSIONS` | `1000` | จำนวน owner/conversation modes ที่เก็บใน memory สูงสุด |
 | `MINIKUN_AGENT_EXECUTION_ENABLED` | `true` | เปิดแผนและ execution tracking สำหรับคำสั่งหลายขั้น |
 | `MINIKUN_AGENT_MAX_PLANNED_STEPS` | `8` | จำนวนขั้นในแผนภายในสูงสุด |
 | `MINIKUN_AGENT_MAX_TOOL_STEPS` | `12` | จำนวน tool calls ที่บันทึกได้สูงสุดต่อ run |
@@ -351,6 +354,19 @@ run ที่จบแล้วแต่มี failed tool step สามาร�
 curl -X POST -H "X-Minikun-Agent-Token: $MINIKUN_AGENT_MANAGEMENT_TOKEN" \
   'http://127.0.0.1:8080/v1/agent/runs/<run-id>/resume?owner_id=default'
 ```
+
+### Companion Mode
+
+เปลี่ยนรูปแบบการตอบใน conversation ปัจจุบันด้วยข้อความธรรมชาติ เช่น `เข้าโหมดคู่หู`,
+`เข้าโหมดทำงาน` หรือ `เปิดโหมดโฟกัส` โหมดจะคงอยู่เฉพาะ owner และ conversation เดิม
+จนกว่าจะเปลี่ยนโหมดหรือสั่ง `กลับโหมดปกติ`
+
+- `companion` เน้นความอบอุ่น รับฟังบริบท และถามต่อไม่เกินหนึ่งคำถามเมื่อช่วยได้จริง
+- `work` เน้นผลลัพธ์ การลงมือทำ และหลักฐาน
+- `focus` ตอบสั้น ให้ next action ทีละอย่าง และลดสิ่งรบกวน
+
+state ของโหมดเป็น bounded in-memory และจะกลับเป็นปกติหลัง restart โดยไม่แก้ character identity
+ถาวรใน MCS รวมทั้งไม่ลดข้อกำหนดด้าน safety, confirmation หรือความถูกต้องของ tool result
 
 ### Embeddings
 

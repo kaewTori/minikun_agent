@@ -20,6 +20,7 @@ import com.minikun.personality.management.AdaptationController;
 import com.minikun.personality.management.AdaptationExceptionHandler;
 import com.minikun.personality.management.UserModelController;
 import com.minikun.personality.profile.UserModelService;
+import com.minikun.personality.companion.CompanionModeService;
 import com.minikun.memory.MemoryRepository;
 import java.time.Clock;
 import java.time.Duration;
@@ -32,6 +33,13 @@ import org.springframework.context.annotation.Import;
 @Import({AdaptivePreferenceLearningService.class,
         AdaptationController.class, AdaptationExceptionHandler.class})
 public class PersonalityConfiguration {
+    @Bean
+    CompanionModeService companionModeService(
+            @Value("${minikun.companion-mode.enabled:true}") boolean enabled,
+            @Value("${minikun.companion-mode.maximum-sessions:1000}") int maximumSessions) {
+        return new CompanionModeService(enabled, maximumSessions);
+    }
+
     @Bean
     AdaptivePersonaRuntime adaptivePersonaRuntime() { return new AdaptivePersonaRuntime(); }
 

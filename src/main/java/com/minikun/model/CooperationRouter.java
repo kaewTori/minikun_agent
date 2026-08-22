@@ -14,9 +14,8 @@ public final class CooperationRouter {
                     + "credential|security|exploit)",
             Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
     private static final Pattern MEDIUM_RISK = Pattern.compile(
-            "(ล่าสุด|ปัจจุบัน|วันนี้|แม่นยำ|ชัดเจน|ตรวจสอบ|อ้างอิง|เปรียบเทียบ|ตัวเลข|ข้อผิดพลาด|"
-                    + "exact|accurate|verify|fact.?check|current|latest|today|precise|compare|calculate|number|"
-                    + "error|debug|source|citation|why|how to)",
+            "(แม่นยำ|ชัดเจน|ตรวจสอบ|เปรียบเทียบ|ตัวเลข|ข้อผิดพลาด|"
+                    + "exact|accurate|verify|fact.?check|precise|compare|calculate|number|error|debug)",
             Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
     private static final Pattern CALCULATION_REQUEST = Pattern.compile(
             "(คำนวณ|คิดเลข|หาค่า|สูตร|ประมาณการ|ประเมินทรัพยากร|แบ่งทรัพยากร|"
@@ -41,6 +40,11 @@ public final class CooperationRouter {
                     + "creative writing|write a story|write fiction|short story|novel|fanfic|roleplay|poem|"
                     + "poetry|screenplay|fictional|worldbuilding)",
             Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+    private static final Pattern CASUAL_CONVERSATION = Pattern.compile(
+            "(สวัสดี|หวัดดี|เป็น(?:ยัง)?ไง|ขอบคุณ|ขอบใจ|ฝันดี|คิดถึง|เหงา|เหนื่อย|เครียด|เศร้า|ดีใจ|"
+                    + "ไม่สบายใจ|คุย(?:กัน|เล่น|เป็นเพื่อน|แบบ)|คู่หู|เพื่อนคุย|companion|hello|hi\\b|"
+                    + "thanks|thank you|how are you|i feel|i['’]?m (?:tired|sad|lonely|stressed))",
+            Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
 
     public CooperationRoutingDecision decide(String userText) {
         if (userText == null || userText.isBlank()) {
@@ -59,8 +63,10 @@ public final class CooperationRouter {
         if (TECHNICAL_WORK.matcher(value).find()) {
             return new CooperationRoutingDecision(CooperationRisk.MEDIUM, true, "technical_work");
         }
-        if (MEDIUM_RISK.matcher(value).find()
-                || value.contains("?") || value.contains("？") || value.length() > 600) {
+        if (CASUAL_CONVERSATION.matcher(value).find()) {
+            return CooperationRoutingDecision.low();
+        }
+        if (MEDIUM_RISK.matcher(value).find() || value.length() > 600) {
             return new CooperationRoutingDecision(CooperationRisk.MEDIUM, true, "precision_signal");
         }
         return CooperationRoutingDecision.low();

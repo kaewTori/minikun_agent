@@ -7,6 +7,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 
@@ -52,6 +53,9 @@ import com.minikun.memory.event.SafeObservationPublisher;
 import com.minikun.memory.ReflectionService;
 import com.minikun.personality.model.MoodSnapshot;
 import com.minikun.personality.runtime.AdaptivePersonaService;
+import com.minikun.personality.companion.CompanionModeService;
+import com.minikun.personality.companion.CompanionMode;
+import com.minikun.personality.companion.CompanionModeContext;
 import com.minikun.personality.profile.UserModelService;
 import com.minikun.personality.model.PersonalUserModel;
 import com.minikun.memory.model.CompletedConversation;
@@ -180,6 +184,9 @@ public class ChatService {
     private AdaptivePersonaService adaptivePersonaService;
 
     @Autowired(required = false)
+    private CompanionModeService companionModeService;
+
+    @Autowired(required = false)
     private UserModelService userModelService;
 
     @Autowired(required = false)
@@ -190,6 +197,12 @@ public class ChatService {
 
     @Autowired(required = false)
     private ObservationPublisher observationPublisher;
+
+    @Autowired(required = false)
+    private ChatPerformanceMetrics performanceMetrics;
+
+    @Autowired(required = false)
+    private ChatGenerationProfileSelector generationProfileSelector;
 
     @Autowired
     private BrowserContentService browserContentService;
@@ -372,6 +385,8 @@ public class ChatService {
         String model = modelName(request.model(), effectiveConfiguredChatModel());
         ChatTransactionLogger.Transaction transaction = transactionLogger.start(
                 "chatcmpl-" + UUID.randomUUID(), model, false, request.messages().size());
+        long requestStarted = System.nanoTime();
+        String requestResult = "success";
         try {
             Optional<ToolEvidence> verifiedToolResult = routeTool(
                     userMessage, conversationId, memoryOwnerId(request, conversationId));
@@ -408,9 +423,12 @@ public class ChatService {
             }
             // The weather route has already executed the tool. Generate the final
             // answer from the MCS/PCS prompt, without invoking that tool twice.
+            long generationStarted = System.nanoTime();
             var response = verifiedToolResult.isPresent()
                     ? callChatModel(context.prompt(), "chat_model", transaction.requestId(), context.conversationId())
                     : callModel(context.prompt(), context.conversationId(), context.ownerId(), transaction.requestId());
+            ModelUsage usage = modelUsage(response);
+            recordModelUsage(usage, generationStarted);
             String content = response.getResult().getOutput().getText();
             if (!hasText(content)) {
                 log.warn("process=model_response event=blank request_id={}", transaction.requestId());
@@ -428,13 +446,16 @@ public class ChatService {
                     "stop");
             ChatCompletionResponse result = new ChatCompletionResponse(
                     transaction.requestId(), "chat.completion", Instant.now().getEpochSecond(),
-                    model, List.of(choice), toOpenAiUsage(modelUsage(response)),
+                    model, List.of(choice), toOpenAiUsage(usage),
                     context.attachments());
             transaction.success();
             return result;
         } catch (RuntimeException exception) {
+            requestResult = "error";
             transaction.failed(exception);
             throw exception;
+        } finally {
+            recordStage("total", requestStarted, requestResult);
         }
     }
 
@@ -452,10 +473,12 @@ public class ChatService {
         String requestId = "chatcmpl-" + UUID.randomUUID();
         ChatTransactionLogger.Transaction transaction = transactionLogger.start(
                 requestId, model, true, request.messages().size());
+        long requestStarted = System.nanoTime();
         String id = requestId;
         long created = Instant.now().getEpochSecond();
         StringBuilder assistantContent = new StringBuilder();
         AtomicReference<ModelUsage> modelUsage = new AtomicReference<>(ModelUsage.empty());
+        AtomicBoolean firstTokenRecorded = new AtomicBoolean();
 
         Optional<ToolEvidence> verifiedToolResult = routeTool(
                 userMessage, conversationId, memoryOwnerId(request, conversationId));
@@ -497,20 +520,22 @@ public class ChatService {
         Flux<ChatResponse> modelResponses = verifiedToolResult.isPresent()
             ? streamChatModel(context.prompt(), context.conversationId())
             : toolsEnabled && toolCallingRuntime != null
+                    && !directStreamingProfile(context.generationProfile())
             ? Flux.defer(() -> Flux.just(reviewToolRuntimeDraft(
                     context.prompt(), context.conversationId(), context.ownerId())))
             : streamChatModel(context.prompt(), context.conversationId());
         Flux<String> chunks = modelResponses
+                .doOnNext(response -> recordFirstToken(
+                        response, firstTokenRecorded, requestStarted, modelStarted))
                 .doOnNext(response -> appendAssistantText(assistantContent, response))
-            .doOnNext(response -> modelUsage.set(modelUsage(response)))
+                .doOnNext(response -> captureModelUsage(modelUsage, response))
                 .map(response -> streamChunk(response, id, created, model))
                 .filter(chunk -> !chunk.isBlank())
-                .doOnComplete(() -> withTrace(traceId,
-                        () -> logModelDuration("chat_model_stream", modelStarted, requestId)))
-                .doOnError(exception -> withTrace(traceId,
-                        () -> logModelDuration("chat_model_stream", modelStarted, requestId)))
-                .doOnCancel(() -> withTrace(traceId,
-                        () -> logModelDuration("chat_model_stream", modelStarted, requestId)));
+                .doFinally(signal -> withTrace(traceId, () -> {
+                    logModelDuration("chat_model_stream", modelStarted, requestId);
+                    recordStage("model", modelStarted, signalResult(signal));
+                    recordModelUsage(modelUsage.get(), modelStarted);
+                }));
 
         return Flux.concat(
                 Flux.just(data(new ChatCompletionResponse.StreamChunk(
@@ -537,7 +562,8 @@ public class ChatService {
                     withTrace(traceId, transaction::success);
                 })
                 .doOnError(exception -> withTrace(traceId, () -> transaction.failed(exception)))
-                .doOnCancel(() -> withTrace(traceId, transaction::cancelled));
+                .doOnCancel(() -> withTrace(traceId, transaction::cancelled))
+                .doFinally(signal -> recordStage("total", requestStarted, signalResult(signal)));
     }
 
     private ChatExecutionContext prepareChatExecution(
@@ -549,25 +575,47 @@ public class ChatService {
             ToolEvidence verifiedToolResult,
             VisionInput visionInput) {
         boolean persistConversation = shouldPersistConversation(request);
-        List<ChatMessage> history = conversationMemoryService.load(conversationId);
-        log.info("process=conversation_history event=loaded messages={}{}", history.size(),
-                streaming ? " stream=true" : "");
-        if (persistConversation) {
-            conversationMemoryService.append(conversationId, userMessage);
-            log.info("process=conversation event=user_message_persisted{}", streaming ? " stream=true" : "");
+        String ownerId = memoryOwnerId(request, conversationId);
+        long conversationStarted = System.nanoTime();
+        List<ChatMessage> history;
+        String conversationResult = "success";
+        try {
+            history = conversationMemoryService.load(conversationId);
+            log.info("process=conversation_history event=loaded messages={}{}", history.size(),
+                    streaming ? " stream=true" : "");
+            if (persistConversation) {
+                conversationMemoryService.append(conversationId, userMessage);
+                log.info("process=conversation event=user_message_persisted{}", streaming ? " stream=true" : "");
+            }
+        } catch (RuntimeException exception) {
+            conversationResult = "error";
+            throw exception;
+        } finally {
+            recordStage("conversation", conversationStarted, conversationResult);
         }
+        CompanionModeContext interactionMode = companionModeFor(ownerId, conversationId, userMessage.content());
         KnowledgePipelineSelection knowledgeSelection = knowledgeFor(
                 userMessage.content(), transaction.requestId(), conversationId,
-                memoryOwnerId(request, conversationId), hasConversationContext(history, request),
+                ownerId, hasConversationContext(history, request),
                 classifierContext(history));
         PreparedImages preparedImages = prepareImages(knowledgeSelection);
-        Prompt prompt = promptFor(
-                request, history, knowledgeSelection, preparedImages.awareness(), verifiedToolResult,
-                memoryOwnerId(request, conversationId), visionInput);
+        long promptStarted = System.nanoTime();
+        PreparedPrompt preparedPrompt;
+        String promptResult = "success";
+        try {
+            preparedPrompt = promptFor(
+                    request, history, knowledgeSelection, preparedImages.awareness(), verifiedToolResult,
+                    ownerId, interactionMode, visionInput);
+        } catch (RuntimeException exception) {
+            promptResult = "error";
+            throw exception;
+        } finally {
+            recordStage("prompt", promptStarted, promptResult);
+        }
         log.info("process=prompt event=composed{}", streaming ? " stream=true" : "");
         return new ChatExecutionContext(
-                prompt, conversationId, persistConversation, memoryOwnerId(request, conversationId),
-                preparedImages.attachments());
+                preparedPrompt.prompt(), conversationId, persistConversation, ownerId,
+                preparedImages.attachments(), preparedPrompt.generationProfile());
     }
 
     private PreparedImages prepareImages(KnowledgePipelineSelection knowledgeSelection) {
@@ -733,6 +781,13 @@ public class ChatService {
                 nonNegative(usage.getPromptTokens()), nonNegative(usage.getCompletionTokens()));
     }
 
+    private void captureModelUsage(AtomicReference<ModelUsage> target, ChatResponse response) {
+        ModelUsage usage = modelUsage(response);
+        if (!usage.equals(ModelUsage.empty())) {
+            target.set(usage);
+        }
+    }
+
     private int nonNegative(Integer value) {
         return value == null ? 0 : Math.max(0, value);
     }
@@ -783,13 +838,14 @@ public class ChatService {
         return values;
     }
 
-    private Prompt promptFor(
+    private PreparedPrompt promptFor(
             ChatCompletionRequest request,
             List<ChatMessage> history,
             KnowledgePipelineSelection knowledgeSelection,
             ImageAwareness imageAwareness,
             ToolEvidence verifiedToolResult,
             String ownerId,
+            CompanionModeContext interactionMode,
             VisionInput visionInput) {
         var userMessage = userMessage(request, visionInput);
         String runtime = request.messages().stream()
@@ -838,19 +894,25 @@ public class ChatService {
                 new RuntimeContext(runtime),
                 conversationContent.isBlank() ? null : new ConversationContext(conversationContent),
                 promptKnowledge,
-                capabilitiesFor(knowledgeSelection, imageAwareness, verifiedToolResult, visionInput),
+                capabilitiesFor(knowledgeSelection, imageAwareness, verifiedToolResult, visionInput,
+                        interactionMode),
                 new com.minikun.pcs.model.UserMessage(userMessage.content()),
                 promptSearchSignals,
                 promptSearchContext,
                 promptKnowledgeSelection,
                 promptKnowledgeConsolidation, null, personaSignals, userModel);
-        GenerationOptions options = generationOptions(request);
+        ProfiledGenerationOptions generation = generationOptions(
+                request, userMessage.content(), interactionMode == null ? null : interactionMode.mode(),
+                verifiedToolResult != null || visionInput != null && visionInput.hasImages());
+        GenerationOptions options = generation.options();
         PersonalContextRuntime contextRuntime = personalContextRuntime;
         if (contextRuntime == null && dynamicTokenBudgetEnabled && dynamicGenerationOptionsFactory != null) {
             contextRuntime = new PersonalContextRuntime(promptComposer, dynamicGenerationOptionsFactory);
         }
         if (contextRuntime == null) {
-            return withVisionMedia(toSpringPrompt(promptComposer.compose(promptRequest), options), visionInput);
+            return new PreparedPrompt(
+                    withVisionMedia(toSpringPrompt(promptComposer.compose(promptRequest), options), visionInput),
+                    generation.profile());
         }
         ModelCapability capability = dynamicTokenBudgetEnabled && modelCapabilityRegistry != null
                 ? modelCapabilityRegistry.get(activeChatModelProvider.get().id())
@@ -873,7 +935,9 @@ public class ChatService {
                 result.snapshot().recoveryAttempts(),
                 result.snapshot().estimatedInputTokens(),
                 result.snapshot().allocatedOutputTokens());
-        return withVisionMedia(toSpringPrompt(result.prompt(), result.generationOptions()), visionInput);
+        return new PreparedPrompt(
+                withVisionMedia(toSpringPrompt(result.prompt(), result.generationOptions()), visionInput),
+                generation.profile());
     }
 
     private PersonalUserModel safeUserModel(String ownerId) {
@@ -886,14 +950,33 @@ public class ChatService {
         }
     }
 
-    private GenerationOptions generationOptions(ChatCompletionRequest request) {
-        Integer maxTokens = request.max_completion_tokens() != null
-            ? request.max_completion_tokens()
-            : request.max_tokens() != null ? request.max_tokens() : configuredGenerationMaxTokens;
+    private ProfiledGenerationOptions generationOptions(
+            ChatCompletionRequest request,
+            String userText,
+            CompanionMode mode,
+            boolean toolOrVisionRequest) {
+        Integer requestedMaxTokens = request.max_completion_tokens() != null
+                ? request.max_completion_tokens() : request.max_tokens();
+        Integer maxTokens = requestedMaxTokens;
+        String profile = "request";
+        if (maxTokens == null) {
+            if (generationProfileSelector == null) {
+                maxTokens = configuredGenerationMaxTokens;
+                profile = "default";
+            } else {
+                ChatGenerationProfileSelector.Selection selection = generationProfileSelector.select(
+                        userText, mode, toolOrVisionRequest, configuredGenerationMaxTokens);
+                maxTokens = selection.maxTokens();
+                profile = selection.profile();
+            }
+        }
         List<String> stop = request.stop() == null ? List.of() : request.stop();
         Double temperature = request.temperature() != null
-            ? request.temperature() : configuredGenerationTemperature;
-        return new GenerationOptions(temperature, maxTokens, stop);
+                ? request.temperature() : configuredGenerationTemperature;
+        if (performanceMetrics != null) {
+            performanceMetrics.generationProfile(profile, maxTokens);
+        }
+        return new ProfiledGenerationOptions(new GenerationOptions(temperature, maxTokens, stop), profile);
     }
 
     private String requestConversation(ChatCompletionRequest request) {
@@ -982,14 +1065,23 @@ public class ChatService {
     private KnowledgePipelineSelection knowledgeFor(String query, boolean conversationContextAvailable,
             ConversationId conversationId, String ownerId, String classifierContext) {
         log.info("process=knowledge_pipeline event=start");
-        KnowledgeContext memoryKnowledge = recallKnowledge(query, conversationId, ownerId);
-        KnowledgeContext personalKnowledge = recallPersonalKnowledge(query, ownerId);
+        long memoryStarted = System.nanoTime();
+        KnowledgeContext memoryKnowledge;
+        KnowledgeContext personalKnowledge;
+        try {
+            memoryKnowledge = recallKnowledge(query, conversationId, ownerId);
+            personalKnowledge = recallPersonalKnowledge(query, ownerId);
+        } finally {
+            recordStage("memory", memoryStarted, "success");
+        }
         KnowledgeContext localKnowledge = combineKnowledge(memoryKnowledge, personalKnowledge);
         List<KnowledgeCandidate> browserCandidates = List.of();
+        long searchStarted = System.nanoTime();
         if (!searchEnabled || isInternalTitleRequest(query)) {
             log.info("process=search event=skipped enabled={} internal_request={}",
                     searchEnabled, isInternalTitleRequest(query));
             browserCandidates = readBrowserCandidates(query);
+            recordStage("search", searchStarted, "skipped");
             return selectionWithContext(query, conversationContextAvailable, memoryKnowledge, personalKnowledge,
                     null, false, null, browserCandidates, SearchSelectionSignals.EMPTY);
         }
@@ -1034,8 +1126,10 @@ public class ChatService {
                 plan.language(), plan.intent(), plan.timeRange(), plan.confidence(), plan.reason());
         SearchSelectionSignals searchSignals = searchSelectionSignalMapper.map(decision);
         if (!plan.shouldSearch()) {
+            fastPath("no_search");
             log.info("process=search event=skipped reason=query_plan");
             browserCandidates = joinBrowser(browserFuture);
+            recordStage("search", searchStarted, "skipped");
             return selectionWithContext(query, conversationContextAvailable, memoryKnowledge, personalKnowledge,
                     plannedDecision, false, null, browserCandidates, searchSignals);
         }
@@ -1058,10 +1152,12 @@ public class ChatService {
             searchKnowledge = searchFuture.join();
             log.info("Search completed knowledgeCharacters={}",
                     searchKnowledge == null ? 0 : searchKnowledge.content().length());
+            recordStage("search", searchStarted, "success");
             return pipelineSelection(query, conversationContextAvailable, memoryKnowledge, personalKnowledge,
                     plannedDecision, searchAttempted, searchKnowledge, browserCandidates, searchSignals);
         } catch (RuntimeException exception) {
             log.warn("Search failed; continuing without search knowledge", exception);
+            recordStage("search", searchStarted, "error");
             return pipelineSelection(query, conversationContextAvailable, memoryKnowledge, personalKnowledge,
                     plannedDecision, searchAttempted, null, browserCandidates, searchSignals);
         }
@@ -1160,8 +1256,13 @@ public class ChatService {
             KnowledgePipelineSelection selection,
             ImageAwareness imageAwareness,
             ToolEvidence verifiedToolResult,
-            VisionInput visionInput) {
+            VisionInput visionInput,
+            CompanionModeContext interactionMode) {
         List<CapabilityInstruction> capabilities = new java.util.ArrayList<>();
+        if (interactionMode != null) {
+            capabilities.add(new CapabilityInstruction(
+                    "Interaction mode: " + interactionMode.mode().name(), interactionMode.instruction(), true));
+        }
         boolean hasBrowserContent = selection.selection().selectedCandidates().stream()
                 .anyMatch(candidate -> candidate.source() == KnowledgeSource.BROWSER);
         boolean hasPersonalKnowledge = selection.selection().selectedCandidates().stream()
@@ -1221,6 +1322,14 @@ public class ChatService {
         return List.copyOf(capabilities);
     }
 
+    private CompanionModeContext companionModeFor(
+            String ownerId, ConversationId conversationId, String latestUserMessage) {
+        if (companionModeService == null || conversationId == null) {
+            return null;
+        }
+        return companionModeService.evaluate(ownerId, conversationId.value(), latestUserMessage).orElse(null);
+    }
+
     private boolean isVerifiedToolResult(ToolEvidence evidence) {
         return evidence != null && evidence.success() && hasText(evidence.content());
     }
@@ -1269,7 +1378,14 @@ public class ChatService {
             ConversationId conversationId,
             boolean persistConversation,
             String ownerId,
-            List<ChatAttachment> attachments) {
+            List<ChatAttachment> attachments,
+            String generationProfile) {
+    }
+
+    private record PreparedPrompt(Prompt prompt, String generationProfile) {
+    }
+
+    private record ProfiledGenerationOptions(GenerationOptions options, String profile) {
     }
 
     private record PreparedImages(ImageAwareness awareness, List<ChatAttachment> attachments) {
@@ -1407,6 +1523,20 @@ public class ChatService {
         }
     }
 
+    private void recordFirstToken(
+            ChatResponse response,
+            AtomicBoolean recorded,
+            long requestStarted,
+            long modelStarted) {
+        if (response == null || response.getResult() == null || response.getResult().getOutput() == null
+                || !hasText(response.getResult().getOutput().getText())
+                || !recorded.compareAndSet(false, true)) {
+            return;
+        }
+        recordStage("ttft", requestStarted, "success");
+        recordStage("model_ttft", modelStarted, "success");
+    }
+
     private VisionInput visionInput(ChatCompletionRequest request) {
         int userMessageIndex = lastUserMessageIndex(request.messages());
         var message = request.messages().get(userMessageIndex);
@@ -1492,17 +1622,29 @@ public class ChatService {
             return;
         }
         try {
-            Optional<CompletedConversation> conversation = completedConversation(ownerId, conversationId);
-            if (conversation.isEmpty()) {
+            var service = reflectionService.getIfAvailable();
+            if (service == null) {
                 return;
             }
-            var service = reflectionService.getIfAvailable();
-            if (service != null) {
-                if (deferredReflectionService == null
-                        || !deferredReflectionService.submit(service, conversation.get())) {
-                    service.reflect(conversation.get());
+            if (deferredReflectionService != null) {
+                boolean submitted = deferredReflectionService.submit(
+                        () -> runReflection(service, ownerId, conversationId));
+                if (!submitted) {
+                    log.warn("memory_reflection conversation_id={} success=false reason=queue_full action=dropped",
+                            conversationId.value());
                 }
+                return;
             }
+            // Compatibility fallback for contexts that do not configure the bounded executor.
+            runReflection(service, ownerId, conversationId);
+        } catch (RuntimeException exception) {
+            log.warn("memory_reflection conversation_id={} success=false", conversationId.value(), exception);
+        }
+    }
+
+    private void runReflection(ReflectionService service, String ownerId, ConversationId conversationId) {
+        try {
+            completedConversation(ownerId, conversationId).ifPresent(service::reflect);
         } catch (RuntimeException exception) {
             log.warn("memory_reflection conversation_id={} success=false", conversationId.value(), exception);
         }
@@ -1575,13 +1717,18 @@ public class ChatService {
     private ChatResponse callChatModel(
             Prompt prompt, String process, String requestId, ConversationId conversationId) {
         long started = System.nanoTime();
+        String result = "success";
         try {
             return cooperativeChatModelService == null
                     ? chatModelProvider().chat(prompt)
                     : cooperativeChatModelService.chat(chatModelProvider(), prompt,
                             conversationId == null ? "unknown" : conversationId.value());
+        } catch (RuntimeException exception) {
+            result = "error";
+            throw exception;
         } finally {
             logModelDuration(process, started, requestId);
+            recordStage("model", started, result);
         }
     }
 
@@ -1596,10 +1743,15 @@ public class ChatService {
             Prompt prompt, ConversationId conversationId, String ownerId, String requestId) {
         if (toolsEnabled && toolCallingRuntime != null) {
             long started = System.nanoTime();
+            String result = "success";
             try {
                 return reviewToolRuntimeDraft(prompt, conversationId, ownerId);
+            } catch (RuntimeException exception) {
+                result = "error";
+                throw exception;
             } finally {
                 logModelDuration("chat_model", started, requestId);
+                recordStage("model", started, result);
             }
         }
         return callChatModel(prompt, "chat_model", requestId, conversationId);
@@ -1623,6 +1775,42 @@ public class ChatService {
         log.info("model_call={} request_id={} duration_ms={}", process,
                 requestId == null ? "-" : requestId,
                 (System.nanoTime() - started) / 1_000_000);
+    }
+
+    private void recordStage(String stage, long startedNanos, String result) {
+        if (performanceMetrics != null) {
+            performanceMetrics.record(stage, startedNanos, result);
+        }
+    }
+
+    private void fastPath(String reason) {
+        if (performanceMetrics != null) {
+            performanceMetrics.fastPath(reason);
+        }
+    }
+
+    private void recordModelUsage(ModelUsage usage, long startedNanos) {
+        if (performanceMetrics != null && usage != null) {
+            performanceMetrics.modelUsage(
+                    usage.promptTokens(), usage.completionTokens(), System.nanoTime() - startedNanos);
+        }
+    }
+
+    private String signalResult(reactor.core.publisher.SignalType signal) {
+        if (signal == reactor.core.publisher.SignalType.ON_COMPLETE) {
+            return "success";
+        }
+        if (signal == reactor.core.publisher.SignalType.CANCEL) {
+            return "cancelled";
+        }
+        return "error";
+    }
+
+    private boolean directStreamingProfile(String profile) {
+        return "companion".equals(profile)
+                || "general".equals(profile)
+                || "focus".equals(profile)
+                || "creative".equals(profile);
     }
 
     private void withTrace(String traceId, Runnable action) {
