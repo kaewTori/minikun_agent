@@ -94,7 +94,7 @@ public final class HomelabGuardianService {
             String status = text(snapshot.get("status"));
             if ("UP".equals(status)) return;
             GuardianSeverity severity = switch (name.toLowerCase(Locale.ROOT)) {
-                case "application", "postgres", "ollama", "redis" -> GuardianSeverity.CRITICAL;
+                case "application", "postgres", "tinygrad", "ollama", "redis" -> GuardianSeverity.CRITICAL;
                 default -> GuardianSeverity.WARNING;
             };
             findings.add(new GuardianFinding("DEPENDENCY_DOWN", severity, name,

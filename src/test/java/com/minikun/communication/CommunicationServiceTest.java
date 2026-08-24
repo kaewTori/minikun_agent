@@ -15,6 +15,7 @@ import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
 import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.ollama.api.OllamaChatOptions;
 import reactor.core.publisher.Flux;
 
@@ -43,6 +44,21 @@ class CommunicationServiceTest {
         assertTrue(system.contains("untrusted source material"));
         assertTrue(user.contains("\"content\":\"นัดคุยวันศุกร์\""));
         assertTrue(user.contains("\"action\":\"draft\""));
+    }
+
+    @Test
+    void usesPortableOptionsForTinyGradCommunicationWork() {
+        CapturingProvider model = new CapturingProvider("ร่างข้อความ", ChatModelId.TINYGRAD);
+        CommunicationService service = service(model);
+
+        service.assist(new CommunicationRequest(
+                "owner-1", "draft", "นัดคุยวันศุกร์", "", "ขอนัดประชุม",
+                "ทีมงาน", "chat", "concise", "th", 500));
+
+        assertTrue(model.prompt.getOptions() instanceof ChatOptions);
+        assertTrue(!(model.prompt.getOptions() instanceof OllamaChatOptions));
+        assertEquals(1600, model.prompt.getOptions().getMaxTokens());
+        assertEquals(0.25, model.prompt.getOptions().getTemperature());
     }
 
     @Test
@@ -125,13 +141,19 @@ class CommunicationServiceTest {
 
     private static final class CapturingProvider implements ChatModelProvider {
         private final String response;
+        private final ChatModelId id;
         private Prompt prompt;
 
         private CapturingProvider(String response) {
-            this.response = response;
+            this(response, ChatModelId.EXISTING);
         }
 
-        @Override public ChatModelId id() { return ChatModelId.EXISTING; }
+        private CapturingProvider(String response, ChatModelId id) {
+            this.response = response;
+            this.id = id;
+        }
+
+        @Override public ChatModelId id() { return id; }
         @Override public ModelCapabilities capabilities() { return new ModelCapabilities(false, false, false); }
 
         @Override

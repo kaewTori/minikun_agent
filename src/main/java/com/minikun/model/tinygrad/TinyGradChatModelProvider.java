@@ -4,6 +4,8 @@ import java.util.Objects;
 
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import com.minikun.model.ChatModelId;
@@ -14,12 +16,19 @@ import reactor.core.publisher.Flux;
 
 @Component
 public final class TinyGradChatModelProvider implements ChatModelProvider {
-    private static final ModelCapabilities CAPABILITIES = new ModelCapabilities(true, false, false);
-
     private final TinyGradClient client;
+    private final ModelCapabilities capabilities;
 
     public TinyGradChatModelProvider(TinyGradClient client) {
+        this(client, false);
+    }
+
+    @Autowired
+    public TinyGradChatModelProvider(
+            TinyGradClient client,
+            @Value("${minikun.model.tinygrad.tools-enabled:true}") boolean toolsEnabled) {
         this.client = Objects.requireNonNull(client, "TinyGrad client must not be null");
+        this.capabilities = new ModelCapabilities(true, toolsEnabled, false);
     }
 
     @Override
@@ -29,7 +38,7 @@ public final class TinyGradChatModelProvider implements ChatModelProvider {
 
     @Override
     public ModelCapabilities capabilities() {
-        return CAPABILITIES;
+        return capabilities;
     }
 
     @Override

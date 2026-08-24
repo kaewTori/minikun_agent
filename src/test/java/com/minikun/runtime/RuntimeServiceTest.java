@@ -23,6 +23,16 @@ class RuntimeServiceTest {
     }
 
     @Test
+    void reportsTinyGradModelWhenTinyGradIsActive() {
+        ModelsService service = new ModelsService(
+                "tinygrad", "ollama-chat", "gemma-4-tinygrad", "embedding", "memory", "search");
+
+        assertEquals("gemma-4-tinygrad", service.chatModel());
+        assertEquals("gemma-4-tinygrad", service.snapshot().chatModel().value());
+        assertEquals("embedding", service.snapshot().embeddingModel().value());
+    }
+
+    @Test
     void cacheSnapshotUsesConfiguredValuesOnly() {
         CacheInfo snapshot = new CacheService("false", "valkey", Duration.ofMinutes(5)).snapshot();
 

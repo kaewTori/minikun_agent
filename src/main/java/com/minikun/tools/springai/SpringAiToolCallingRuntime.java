@@ -98,18 +98,7 @@ public final class SpringAiToolCallingRuntime {
             throw new IllegalStateException(
                     "Chat model provider does not support tool calling: " + chatModelProvider.id());
         }
-        // OllamaChatModel casts chat options to OllamaChatOptions. The generic
-        // DefaultToolCallingChatOptions is not compatible with that adapter,
-        // even though both implement ToolCallingChatOptions.
-        OllamaChatOptions.Builder optionsBuilder;
-        if (prompt.getOptions() instanceof OllamaChatOptions ollamaOptions) {
-            // Preserve every request-scoped Ollama option (especially numCtx). Rebuilding
-            // from the generic ChatOptions view silently resets Ollama-specific settings.
-            optionsBuilder = ollamaOptions.mutate();
-        } else {
-            optionsBuilder = OllamaChatOptions.builder();
-            copyChatOptions(prompt.getOptions(), optionsBuilder);
-        }
+        ToolCallingChatOptions.Builder<?> optionsBuilder = toolOptionsBuilder(prompt.getOptions());
         Optional<AgentRun> agentRun = planningService.plan(prompt)
                 .flatMap(plan -> executionTracker.start(ownerId, conversationId.value(), plan));
         String activeGoals = agentRun.isPresent() && goalService != null
@@ -166,6 +155,25 @@ public final class SpringAiToolCallingRuntime {
             agentRun.ifPresent(run -> executionTracker.fail(run.id(), exception.getClass().getSimpleName()));
             throw exception;
         }
+    }
+
+    private ToolCallingChatOptions.Builder<?> toolOptionsBuilder(ChatOptions source) {
+        if (chatModelProvider.id() == com.minikun.model.ChatModelId.EXISTING) {
+            // Spring AI's Ollama adapter casts options to OllamaChatOptions. Preserve
+            // provider-specific values such as numCtx while the Ollama rollback path exists.
+            if (source instanceof OllamaChatOptions ollamaOptions) {
+                return ollamaOptions.mutate();
+            }
+            OllamaChatOptions.Builder builder = OllamaChatOptions.builder();
+            copyChatOptions(source, builder);
+            return builder;
+        }
+
+        // TinyGrad consumes the portable OpenAI/Spring AI option surface. Do not leak
+        // Ollama-only options into a provider that cannot honor them.
+        ToolCallingChatOptions.Builder<?> builder = ToolCallingChatOptions.builder();
+        copyChatOptions(source, builder);
+        return builder;
     }
 
     private void prepareCurrentCallIds(ChatResponse response) {

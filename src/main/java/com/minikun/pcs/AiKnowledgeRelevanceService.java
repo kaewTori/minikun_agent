@@ -2,8 +2,10 @@ package com.minikun.pcs;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.springframework.ai.chat.model.ChatModel;
-import org.springframework.ai.chat.prompt.Prompt;
+
+import com.minikun.model.task.TaskModelMessage;
+import com.minikun.model.task.TaskModelProvider;
+import com.minikun.model.task.TaskModelRequest;
 
 import java.util.List;
 import java.util.Objects;
@@ -15,15 +17,15 @@ public final class AiKnowledgeRelevanceService implements KnowledgeRelevanceServ
     private static final TypeReference<List<RelevanceScore>> RELEVANCE_TYPE = new TypeReference<>() {
     };
 
-    private final ChatModel chatModel;
+    private final TaskModelProvider taskModelProvider;
     private final ObjectMapper objectMapper;
     private final KnowledgeRelevancePolicy policy;
 
     public AiKnowledgeRelevanceService(
-            ChatModel chatModel,
+            TaskModelProvider taskModelProvider,
             ObjectMapper objectMapper,
             KnowledgeRelevancePolicy policy) {
-        this.chatModel = Objects.requireNonNull(chatModel, "chat model must not be null");
+        this.taskModelProvider = Objects.requireNonNull(taskModelProvider, "task model provider must not be null");
         this.objectMapper = Objects.requireNonNull(objectMapper, "object mapper must not be null");
         this.policy = Objects.requireNonNull(policy, "relevance policy must not be null");
     }
@@ -32,13 +34,17 @@ public final class AiKnowledgeRelevanceService implements KnowledgeRelevanceServ
     public List<KnowledgeRelevance> evaluate(String userRequest, List<KnowledgeCandidate> candidates) {
         Objects.requireNonNull(candidates, "candidates must not be null");
         String prompt = buildPrompt(Objects.requireNonNullElse(userRequest, ""), candidates);
-        var response = chatModel.call(new Prompt(new org.springframework.ai.chat.messages.UserMessage(prompt)));
-        if (response == null || response.getResult() == null || response.getResult().getOutput() == null
-                || response.getResult().getOutput().getText() == null) {
+        long started = System.nanoTime();
+        String responseText = taskModelProvider.generate(new TaskModelRequest(
+                List.of(new TaskModelMessage("user", prompt)), 256, 0.0,
+                TaskModelRequest.ResponseFormat.TEXT));
+        log.info("model_call=knowledge_relevance request_id=- duration_ms={}",
+                (System.nanoTime() - started) / 1_000_000);
+        if (responseText == null || responseText.isBlank()) {
             throw new IllegalStateException("relevance model returned no response");
         }
         try {
-            return objectMapper.readValue(response.getResult().getOutput().getText(), RELEVANCE_TYPE)
+            return objectMapper.readValue(responseText, RELEVANCE_TYPE)
                     .stream()
                     .map(item -> new KnowledgeRelevance(
                             item.candidateId(), item.score(), decisionFor(item.score())))

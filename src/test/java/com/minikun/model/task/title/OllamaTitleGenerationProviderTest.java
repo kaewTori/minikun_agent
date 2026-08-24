@@ -42,4 +42,17 @@ class OllamaTitleGenerationProviderTest {
         assertThrows(IllegalStateException.class, () -> provider.generateTitle(
                 List.of(new ChatMessage("user", "Question"))));
     }
+
+    @Test
+    void tinyGradTitlePromptDoesNotUseQwenNoThinkDirective() {
+        TaskModelProvider taskModelProvider = mock(TaskModelProvider.class);
+        when(taskModelProvider.generate(any(TaskModelRequest.class))).thenReturn("TinyGrad Migration");
+        OllamaTitleGenerationProvider provider = new OllamaTitleGenerationProvider(
+                taskModelProvider, new TitlePromptBuilder(), false);
+
+        provider.generateTitle(List.of(new ChatMessage("user", "ย้ายไป TinyGrad")));
+
+        verify(taskModelProvider).generate(argThat(request -> request.messages().getFirst().content()
+                .startsWith("Generate a short conversation title.")));
+    }
 }

@@ -4,16 +4,11 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.ai.chat.model.ChatModel;
-import org.springframework.ai.ollama.api.OllamaApi;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
-import org.springframework.http.client.JdkClientHttpRequestFactory;
-import org.springframework.web.client.RestClient;
 
-import java.net.http.HttpClient;
-import java.time.Duration;
+import com.minikun.model.task.TaskModelProvider;
 
 @Configuration(proxyBeanMethods = false)
 @EnableConfigurationProperties(KnowledgeSelectionProperties.class)
@@ -28,12 +23,12 @@ public class KnowledgeSelectionConfiguration {
     @Bean
     @ConditionalOnProperty(value = "minikun.knowledge-relevance.ai.enabled", havingValue = "true")
     KnowledgeRelevanceService aiKnowledgeRelevanceService(
-            ChatModel chatModel,
+            TaskModelProvider taskModelProvider,
             ObjectMapper objectMapper,
             KnowledgeRelevancePolicy policy,
             @Value("${minikun.knowledge-relevance.ai.minimum-candidates:6}") int minimumCandidates) {
         return new ThresholdKnowledgeRelevanceService(
-                new AiKnowledgeRelevanceService(chatModel, objectMapper, policy),
+                new AiKnowledgeRelevanceService(taskModelProvider, objectMapper, policy),
                 new DefaultKnowledgeRelevanceService(policy), minimumCandidates);
     }
 
@@ -46,22 +41,11 @@ public class KnowledgeSelectionConfiguration {
     @Bean
     @ConditionalOnProperty(value = "minikun.knowledge-ranking.ai.enabled", havingValue = "true")
     KnowledgeRankingService aiKnowledgeRankingService(
-            @Value("${minikun.memory.model:${spring.ai.ollama.chat.options.model:main-model}}") String model,
-            @Value("${spring.ai.ollama.base-url:http://127.0.0.1:11434}") String baseUrl,
-            @Value("${minikun.memory.main-model.timeout:240s}") Duration timeout,
+            TaskModelProvider taskModelProvider,
             ObjectMapper objectMapper,
             @Value("${minikun.knowledge-ranking.ai.minimum-candidates:6}") int minimumCandidates) {
-        var httpClient = HttpClient.newBuilder()
-                .connectTimeout(timeout)
-                .build();
-        var requestFactory = new JdkClientHttpRequestFactory(httpClient);
-        requestFactory.setReadTimeout(timeout);
-        OllamaApi ollamaApi = OllamaApi.builder()
-                .baseUrl(baseUrl)
-                .restClientBuilder(RestClient.builder().requestFactory(requestFactory))
-                .build();
         return new ThresholdKnowledgeRankingService(
-                new AiKnowledgeRankingService(ollamaApi, model, objectMapper), minimumCandidates);
+                new AiKnowledgeRankingService(taskModelProvider, objectMapper), minimumCandidates);
     }
 
     @Bean

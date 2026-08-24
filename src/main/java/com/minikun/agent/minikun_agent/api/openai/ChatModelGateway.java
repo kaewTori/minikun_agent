@@ -1,5 +1,8 @@
 package com.minikun.agent.minikun_agent.api.openai;
 
+import java.util.Locale;
+import java.util.concurrent.atomic.AtomicBoolean;
+
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
 
@@ -52,10 +55,19 @@ final class ChatModelGateway {
     }
 
     Flux<ChatResponse> stream(Prompt prompt, ConversationId conversationId) {
-        return cooperativeChatModelService == null
+        long started = System.nanoTime();
+        AtomicBoolean firstChunk = new AtomicBoolean();
+        Flux<ChatResponse> response = cooperativeChatModelService == null
                 ? provider().stream(prompt)
                 : cooperativeChatModelService.stream(
                         provider(), prompt, conversationValue(conversationId));
+        return response
+                .doOnNext(ignored -> {
+                    if (firstChunk.compareAndSet(false, true)) {
+                        recordProviderStage("ttft", started, "success");
+                    }
+                })
+                .doFinally(signal -> recordProviderStage("stream", started, signalResult(signal)));
     }
 
     ChatResponse chatWithTools(
@@ -80,7 +92,7 @@ final class ChatModelGateway {
     }
 
     boolean toolsAvailable() {
-        return toolsEnabled && toolCallingRuntime != null;
+        return toolsEnabled && toolCallingRuntime != null && provider().capabilities().toolCalling();
     }
 
     ChatResponse reviewToolRuntimeDraft(
@@ -110,8 +122,18 @@ final class ChatModelGateway {
     }
 
     private void recordStage(long started, String result) {
-        if (performanceMetrics != null) {
-            performanceMetrics.record("model", started, result);
-        }
+        recordProviderStage("call", started, result);
+    }
+
+    private void recordProviderStage(String operation, long started, String result) {
+        if (performanceMetrics == null) return;
+        String provider = provider().id().name().toLowerCase(Locale.ROOT);
+        performanceMetrics.record("model_" + provider + "_" + operation, started, result);
+    }
+
+    private String signalResult(reactor.core.publisher.SignalType signal) {
+        if (signal == reactor.core.publisher.SignalType.ON_COMPLETE) return "success";
+        if (signal == reactor.core.publisher.SignalType.CANCEL) return "cancelled";
+        return "error";
     }
 }
