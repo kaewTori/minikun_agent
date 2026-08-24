@@ -19,8 +19,7 @@ class HomelabGuardianServiceTest {
                 Map.of("status", "UP"), Map.of("status", "WARNING", "used_percent", 96.0),
                 Map.of("status", "UP"), Map.of("status", "WARNING", "used_percent", 91.0),
                 Map.of("status", "UP"), Map.of("status", "RUNNING"),
-                Map.of("tinygrad", Map.of("status", "DOWN", "latency_ms", 9),
-                        "ollama", Map.of("status", "DOWN", "latency_ms", 10),
+                Map.of("ollama", Map.of("status", "DOWN", "latency_ms", 10),
                         "browser", Map.of("status", "DOWN", "latency_ms", 11)));
         Clock clock = Clock.fixed(Instant.parse("2026-08-20T12:00:00Z"), ZoneOffset.UTC);
         HomelabGuardianService service = new HomelabGuardianService(() -> health,
@@ -31,8 +30,6 @@ class HomelabGuardianServiceTest {
 
         assertEquals("CRITICAL", report.status());
         assertTrue(report.findings().stream().anyMatch(value -> value.component().equals("ollama")
-                && value.severity() == GuardianSeverity.CRITICAL));
-        assertTrue(report.findings().stream().anyMatch(value -> value.component().equals("tinygrad")
                 && value.severity() == GuardianSeverity.CRITICAL));
         assertTrue(report.findings().stream().anyMatch(value -> value.component().equals("browser")
                 && value.severity() == GuardianSeverity.WARNING));

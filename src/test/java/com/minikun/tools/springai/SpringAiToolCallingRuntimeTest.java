@@ -12,10 +12,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.util.List;
 import java.util.Map;
-import java.util.ArrayList;
 import java.util.UUID;
 import java.time.Instant;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
@@ -24,11 +22,9 @@ import org.springframework.ai.chat.messages.ToolResponseMessage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
-import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.chat.model.ToolContext;
 import org.springframework.ai.ollama.api.OllamaChatOptions;
-import org.springframework.ai.model.tool.ToolCallingChatOptions;
 import org.mockito.ArgumentCaptor;
 
 import com.minikun.agent.minikun_agent.conversation.ConversationId;
@@ -123,56 +119,6 @@ class SpringAiToolCallingRuntimeTest {
 
         assertEquals("The verified results are 5 and 10.", response.getResult().getOutput().getText());
         verify(chatModel, times(3)).call(any(Prompt.class));
-    }
-
-    @Test
-    void usesPortableToolOptionsForTinyGradProvider() {
-        List<Prompt> prompts = new ArrayList<>();
-        AtomicInteger calls = new AtomicInteger();
-        ChatModelProvider tinyGradProvider = new ChatModelProvider() {
-            @Override
-            public ChatModelId id() {
-                return ChatModelId.TINYGRAD;
-            }
-
-            @Override
-            public ModelCapabilities capabilities() {
-                return new ModelCapabilities(true, true, false);
-            }
-
-            @Override
-            public ChatResponse chat(Prompt prompt) {
-                prompts.add(prompt);
-                return calls.getAndIncrement() == 0
-                        ? toolRequest("tinygrad-call", 2, 3)
-                        : new ChatResponse(List.of(new Generation(new AssistantMessage("The answer is 5."))));
-            }
-
-            @Override
-            public reactor.core.publisher.Flux<ChatResponse> stream(Prompt prompt) {
-                return reactor.core.publisher.Flux.empty();
-            }
-        };
-        SpringAiToolCallingRuntime runtime = new SpringAiToolCallingRuntime(
-                new DefaultActiveChatModelProvider(
-                        ActiveModelConfiguration.parse("tinygrad"),
-                        new DefaultChatModelProviderRegistry(List.of(tinyGradProvider))),
-                List.of(new CalculatorAddTool()),
-                new DefaultToolExecutor(new DefaultToolRegistry(List.of(new CalculatorAddTool()))),
-                new ObjectMapper());
-        Prompt prompt = new Prompt("Add 2 and 3.",
-                ChatOptions.builder().temperature(0.2).maxTokens(256).build());
-
-        ChatResponse response = runtime.call(prompt, new ConversationId("conversation"));
-
-        assertEquals("The answer is 5.", response.getResult().getOutput().getText());
-        assertEquals(2, prompts.size());
-        assertEquals(true, prompts.stream().allMatch(value -> value.getOptions() instanceof ToolCallingChatOptions));
-        assertEquals(true, prompts.stream().noneMatch(value -> value.getOptions() instanceof OllamaChatOptions));
-        ToolCallingChatOptions options = (ToolCallingChatOptions) prompts.get(0).getOptions();
-        assertEquals(0.2, options.getTemperature());
-        assertEquals(256, options.getMaxTokens());
-        assertEquals(1, options.getToolCallbacks().size());
     }
 
     @Test

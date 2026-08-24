@@ -16,24 +16,17 @@ public final class OllamaTitleGenerationProvider implements TitleGenerationProvi
     private static final String NO_THINK_PREFIX = "/no_think\n";
     private final TitlePromptBuilder promptBuilder;
     private final TaskModelProvider taskModelProvider;
-    private final boolean disableThinking;
 
     public OllamaTitleGenerationProvider(TaskModelProvider taskModelProvider,
             TitlePromptBuilder promptBuilder) {
-        this(taskModelProvider, promptBuilder, true);
-    }
-
-    public OllamaTitleGenerationProvider(TaskModelProvider taskModelProvider,
-            TitlePromptBuilder promptBuilder, boolean disableThinking) {
         this.taskModelProvider = Objects.requireNonNull(taskModelProvider,
                 "taskModelProvider must not be null");
         this.promptBuilder = Objects.requireNonNull(promptBuilder, "promptBuilder must not be null");
-        this.disableThinking = disableThinking;
     }
 
     @Override
     public String generateTitle(List<ChatMessage> messages) {
-        String prompt = (disableThinking ? NO_THINK_PREFIX : "") + promptBuilder.build(messages);
+        String prompt = NO_THINK_PREFIX + promptBuilder.build(messages);
         String response = taskModelProvider.generate(new TaskModelRequest(
                 List.of(new TaskModelMessage("user", prompt)), MAX_OUTPUT_TOKENS, 0.0,
                 TaskModelRequest.ResponseFormat.TEXT));

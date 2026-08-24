@@ -27,10 +27,10 @@ public final class TitleGenerationService {
             if (title == null || title.isBlank()) {
                 throw new IllegalStateException("title provider returned an empty title");
             }
-            log.info("title_generation_provider=task_model success=true latency_ms={}", elapsedMillis(started));
+            log.info("title_generation_provider=ollama success=true latency_ms={}", elapsedMillis(started));
             return title.trim();
         } catch (RuntimeException exception) {
-            log.warn("title_generation_provider=task_model success=false latency_ms={}", elapsedMillis(started), exception);
+            log.warn("title_generation_provider=ollama success=false latency_ms={}", elapsedMillis(started), exception);
             return FALLBACK_TITLE;
         }
     }

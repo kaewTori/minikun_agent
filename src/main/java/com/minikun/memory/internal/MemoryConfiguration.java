@@ -5,6 +5,7 @@ import java.time.Duration;
 
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.ai.ollama.api.OllamaApi;
 import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
@@ -13,6 +14,8 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.http.client.JdkClientHttpRequestFactory;
+import org.springframework.web.client.RestClient;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.minikun.memory.MemoryAnalyzer;
@@ -123,10 +126,19 @@ public class MemoryConfiguration {
             MemoryValidator validator,
             MemoryPolicy policy,
             Clock memoryClock,
-            TaskModelProvider taskModelProvider,
-            @Value("${minikun.memory.model:${minikun.model.tinygrad.model:main-model}}") String model,
+                @Value("${minikun.memory.model:${spring.ai.ollama.chat.options.model:main-model}}") String model,
+                @Value("${spring.ai.ollama.base-url:http://127.0.0.1:11434}") String baseUrl,
             @Value("${minikun.memory.main-model.timeout:150s}") Duration timeout) {
-            return new MainModelMemoryClient(taskModelProvider, model, timeout, memoryClock,
+            var httpClient = java.net.http.HttpClient.newBuilder()
+                .connectTimeout(timeout)
+                .build();
+            var requestFactory = new JdkClientHttpRequestFactory(httpClient);
+            requestFactory.setReadTimeout(timeout);
+            OllamaApi ollamaApi = OllamaApi.builder()
+                .baseUrl(baseUrl)
+                .restClientBuilder(RestClient.builder().requestFactory(requestFactory))
+                .build();
+            return new MainModelMemoryClient(ollamaApi, model, timeout, memoryClock,
                 promptBuilder, responseParser, validator, policy);
     }
 

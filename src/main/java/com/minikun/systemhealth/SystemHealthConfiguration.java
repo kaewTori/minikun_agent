@@ -12,7 +12,7 @@ public class SystemHealthConfiguration {
     @Bean
     SystemHealthReader systemHealthReader(
             @Value("${minikun.system.health.disk-path:/Volumes/minikun}") String diskPath,
-            @Value("${minikun.system.health.dependencies:application=127.0.0.1:8080,postgres=127.0.0.1:5432,redis=127.0.0.1:6379,tinygrad=127.0.0.1:8001,ollama=127.0.0.1:11434,searxng=127.0.0.1:8888,browser=127.0.0.1:3001}") String dependencies,
+            @Value("${minikun.system.health.dependencies:application=127.0.0.1:8080,postgres=127.0.0.1:5432,redis=127.0.0.1:6379,ollama=127.0.0.1:11434,searxng=127.0.0.1:8888,browser=127.0.0.1:3001}") String dependencies,
             @Value("${minikun.system.health.connect-timeout:500ms}") Duration connectTimeout,
             @Value("${minikun.system.health.memory-warning-percent:85}") double memoryWarningPercent,
             @Value("${minikun.system.health.disk-warning-percent:90}") double diskWarningPercent) {

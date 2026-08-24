@@ -3,10 +3,13 @@ package com.minikun.memory.internal;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeoutException;
+
+import org.springframework.ai.ollama.api.OllamaApi;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -15,13 +18,29 @@ import com.minikun.memory.MemoryExtractionClient;
 import com.minikun.memory.MemoryPolicy;
 import com.minikun.memory.model.CandidateMemory;
 import com.minikun.memory.model.CompletedConversation;
-import com.minikun.model.task.TaskModelMessage;
-import com.minikun.model.task.TaskModelProvider;
-import com.minikun.model.task.TaskModelRequest;
 
 @Slf4j
 final class MainModelMemoryClient implements MemoryExtractionClient {
-    private final TaskModelProvider taskModelProvider;
+    private static final Map<String, Object> MEMORY_RESPONSE_SCHEMA = Map.of(
+        "type", "object",
+        "properties", Map.of(
+            "memories", Map.of(
+                "type", "array",
+                            "maxItems", 3,
+                "items", Map.of(
+                    "type", "object",
+                    "properties", Map.of(
+                        "category", Map.of("type", "string", "enum",
+                            List.of("PREFERENCE", "GOAL", "PROFILE", "SKILL", "PROJECT")),
+                        "content", Map.of("type", "string", "maxLength", 500),
+                        "confidence", Map.of("type", "number", "minimum", 0.0, "maximum", 1.0),
+                        "reason", Map.of("type", "string", "maxLength", 240)),
+                    "required", List.of("category", "content", "confidence", "reason"),
+                    "additionalProperties", false))),
+        "required", List.of("memories"),
+        "additionalProperties", false);
+
+    private final OllamaApi ollamaApi;
     private final String model;
     private final Duration timeout;
     private final Clock clock;
@@ -30,10 +49,10 @@ final class MainModelMemoryClient implements MemoryExtractionClient {
     private final MemoryValidator validator;
     private final MemoryPolicy policy;
 
-    MainModelMemoryClient(TaskModelProvider taskModelProvider, String model, Duration timeout, Clock clock,
+    MainModelMemoryClient(OllamaApi ollamaApi, String model, Duration timeout, Clock clock,
             MemoryPromptBuilder promptBuilder, MemoryResponseParser responseParser,
             MemoryValidator validator, MemoryPolicy policy) {
-        this.taskModelProvider = taskModelProvider;
+        this.ollamaApi = ollamaApi;
         this.model = model;
         this.timeout = timeout;
         this.clock = clock;
@@ -48,9 +67,16 @@ final class MainModelMemoryClient implements MemoryExtractionClient {
         String prompt = promptBuilder.build(conversation, clock.instant());
         long started = System.nanoTime();
         try {
-            String response = CompletableFuture.supplyAsync(() -> taskModelProvider.generate(new TaskModelRequest(
-                    List.of(new TaskModelMessage("user", prompt)), 384, 0.0,
-                    TaskModelRequest.ResponseFormat.JSON_OBJECT)))
+            String response = CompletableFuture.supplyAsync(() -> ollamaApi.chat(
+                    OllamaApi.ChatRequest.builder(model)
+                            .messages(List.of(new OllamaApi.Message(
+                                    OllamaApi.Message.Role.USER, prompt, List.of(), List.of(), null, null)))
+                            .stream(false)
+                                .format(MEMORY_RESPONSE_SCHEMA)
+                            .options(java.util.Map.of("temperature", 0.0, "num_predict", 384))
+                            .build())
+                    .message()
+                    .content())
                     .orTimeout(timeout.toMillis(), java.util.concurrent.TimeUnit.MILLISECONDS)
                     .get();
             if (response == null || response.isBlank()) {

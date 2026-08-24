@@ -18,12 +18,11 @@ public class TitleGenerationConfiguration {
             @Value("${minikun.model.title.provider:ollama}") String provider,
             TitlePromptBuilder promptBuilder,
             TaskModelProvider taskModelProvider) {
-        boolean tinyGrad = "tinygrad".equalsIgnoreCase(provider);
-        if (!tinyGrad && !"ollama".equalsIgnoreCase(provider)) {
+        if (!"ollama".equalsIgnoreCase(provider)) {
             return messages -> {
                 throw new IllegalStateException("title provider is disabled");
             };
         }
-        return new OllamaTitleGenerationProvider(taskModelProvider, promptBuilder, !tinyGrad);
+        return new OllamaTitleGenerationProvider(taskModelProvider, promptBuilder);
     }
 }
