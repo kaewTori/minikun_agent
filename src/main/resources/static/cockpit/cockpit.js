@@ -19,8 +19,11 @@
     recordingStartedAt: 0,
     recordingTimer: null,
     voiceOutput: localStorage.getItem("minikun.voice-output") === "true",
+    activeAudio: null,
+    cockpitPage: "overview",
     timelineLimit: 6,
-    experimentAction: null
+    experimentAction: null,
+    currentLocation: null
   };
 
   const $ = (selector) => document.querySelector(selector);
@@ -37,6 +40,10 @@
       value["X-Minikun-Personal-Token"] = state.token;
       value["X-Minikun-Task-Token"] = state.token;
       value["X-Minikun-Goal-Token"] = state.token;
+      value["X-Minikun-Agent-Token"] = state.token;
+      value["X-Minikun-Memory-Token"] = state.token;
+      value["X-Minikun-Knowledge-Token"] = state.token;
+      value["X-Minikun-System-Token"] = state.token;
     }
     return value;
   }
@@ -210,9 +217,30 @@
       node.classList.toggle("active", matchesView && matchesSection);
     });
     if (view === "cockpit") {
+      const page = { experiments: "experiments", inbox: "work", "permission-center": "permissions" }[section]
+        || state.cockpitPage || "overview";
+      switchCockpitPage(page, section);
       loadDashboard();
-      if (section) requestAnimationFrame(() => document.getElementById(section)?.scrollIntoView({ behavior: "smooth", block: "start" }));
     }
+  }
+
+  function switchCockpitPage(page = "overview", focusId = "") {
+    const allowed = new Set(["overview", "work", "tools", "health", "memory", "permissions", "experiments"]);
+    state.cockpitPage = allowed.has(page) ? page : "overview";
+    document.querySelectorAll("[data-cockpit-page]").forEach((node) => {
+      const pages = String(node.dataset.cockpitPage || "").split(/\s+/);
+      node.classList.toggle("cockpit-page-hidden", !pages.includes(state.cockpitPage));
+    });
+    document.querySelectorAll("[data-cockpit-target]").forEach((button) => {
+      const active = button.dataset.cockpitTarget === state.cockpitPage;
+      button.classList.toggle("active", active);
+      if (active) button.setAttribute("aria-current", "page");
+      else button.removeAttribute("aria-current");
+    });
+    requestAnimationFrame(() => {
+      if (focusId) document.getElementById(focusId)?.scrollIntoView({ behavior: "smooth", block: "start" });
+      else window.scrollTo(0, 0);
+    });
   }
 
   function escapeHtml(value) {
@@ -282,6 +310,23 @@
     return `${minutes} นาที ${seconds} วิ`;
   }
 
+  function formatUptime(milliseconds) {
+    const hours = Math.floor(Math.max(0, Number(milliseconds) || 0) / 3_600_000);
+    if (hours < 24) return `${hours} ชม.`;
+    const days = Math.floor(hours / 24);
+    return `${days} วัน ${hours % 24} ชม.`;
+  }
+
+  function formatBinaryBytes(bytes) {
+    const value = Number(bytes);
+    if (!Number.isFinite(value) || value < 0) return "—";
+    const gibibyte = 1024 ** 3;
+    const mebibyte = 1024 ** 2;
+    if (value >= gibibyte) return `${(value / gibibyte).toFixed(2)} GiB`;
+    if (value >= mebibyte) return `${Math.round(value / mebibyte)} MiB`;
+    return `${Math.round(value / 1024)} KiB`;
+  }
+
   function renderResponseMeta(message) {
     if (message.role !== "assistant") return null;
     const values = [];
@@ -295,6 +340,18 @@
     const meta = element("div", "response-meta");
     values.forEach((value) => meta.append(element("span", "", value)));
     return meta;
+  }
+
+  function renderLiveProgress(message) {
+    const progress = element("div", "live-progress");
+    const pulse = element("span", "live-progress-pulse");
+    pulse.innerHTML = "<i></i><i></i><i></i>";
+    const copy = element("div");
+    copy.append(element("strong", "", message.progress || "กำลังทำความเข้าใจคำถาม…"));
+    const seconds = Math.max(0, Math.floor((Date.now() - Number(message.timing?.startedAt || Date.now())) / 1000));
+    copy.append(element("small", "", seconds ? `รอมา ${seconds} วินาที` : "เริ่มทำงานแล้วครับ"));
+    progress.append(pulse, copy);
+    return progress;
   }
 
   function renderMessage(message, live = false) {
@@ -312,9 +369,7 @@
     }
     const content = element("div", "message-content");
     if (live && !message.content) {
-      const typing = element("span", "typing");
-      typing.innerHTML = "<i></i><i></i><i></i>";
-      content.append(typing);
+      content.append(renderLiveProgress(message));
     } else {
       content.innerHTML = markdown(message.content);
     }
@@ -386,6 +441,37 @@
     }
     const pending = state.pendingChats.get(state.currentConversationId);
     setChatBusy(Boolean(pending), pending?.status || "พร้อมช่วยพี่สาว");
+  }
+
+  function updatePendingProgress(task, label) {
+    const changed = task.status !== label;
+    task.status = label;
+    task.assistant.progress = label;
+    if (state.currentConversationId !== task.conversationId) return;
+    const row = document.querySelector(`[data-message-id="${task.assistant.id}"]`);
+    const labelNode = row?.querySelector(".live-progress strong");
+    const timeNode = row?.querySelector(".live-progress small");
+    if (labelNode) labelNode.textContent = label;
+    if (timeNode) {
+      const seconds = Math.max(0, Math.floor((Date.now() - task.assistant.timing.startedAt) / 1000));
+      timeNode.textContent = seconds ? `รอมา ${seconds} วินาที` : "เริ่มทำงานแล้วครับ";
+    }
+    if (changed) syncChatState();
+  }
+
+  function startPendingProgress(task, prompt) {
+    const researchLikely = /(ค้น|หา(?:ข้อมูล|ข่าว)|ล่าสุด|เว็บ|แหล่งข้อมูล|อ้างอิง|research|search|https?:\/\/)/i.test(prompt);
+    const stage = (elapsed) => {
+      if (elapsed < 3) return "กำลังทำความเข้าใจคำถาม…";
+      if (elapsed < 8) return "กำลังคิดและวางแผนคำตอบ…";
+      if (elapsed < 18) return researchLikely ? "กำลังหาข้อมูลที่เกี่ยวข้อง…" : "กำลังเลือกข้อมูลและเครื่องมือ…";
+      return "กำลังตรวจและเรียบเรียงคำตอบ…";
+    };
+    updatePendingProgress(task, stage(0));
+    task.progressTimer = window.setInterval(() => {
+      const elapsed = (Date.now() - task.assistant.timing.startedAt) / 1000;
+      updatePendingProgress(task, stage(elapsed));
+    }, 1000);
   }
 
   function autoGrowComposer() {
@@ -465,6 +551,10 @@
     for (const document of documents) {
       combined += `\n\n[ไฟล์แนบ: ${document.name}]\n\`\`\`text\n${document.text}\n\`\`\``;
     }
+    if (state.currentLocation) {
+      const { latitude, longitude, accuracy } = state.currentLocation;
+      combined += `\n\n[ตำแหน่งจากอุปกรณ์ขณะนี้: latitude ${latitude}, longitude ${longitude}, accuracy ${accuracy} เมตร]`;
+    }
     if (!images.length) return combined;
     return [
       { type: "text", text: combined || "ช่วยดูภาพที่แนบมานี้ให้หน่อยครับ" },
@@ -472,14 +562,14 @@
     ];
   }
 
-  async function consumeChatStream(response, assistant) {
+  async function consumeChatStream(response, assistant, task) {
     if (!response.body) throw new Error("Browser นี้ยังไม่รองรับ streaming response");
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
     const update = () => {
       const node = document.querySelector(`[data-message-id="${assistant.id}"] .message-content`);
-      if (node) node.innerHTML = assistant.content ? markdown(assistant.content) : '<span class="typing"><i></i><i></i><i></i></span>';
+      if (node && assistant.content) node.innerHTML = markdown(assistant.content);
       scrollToLatest();
     };
     while (true) {
@@ -493,9 +583,13 @@
         try {
           const chunk = JSON.parse(line);
           const delta = chunk.choices?.[0]?.delta;
+          if (delta?.tool_calls?.length || chunk.tool_calls?.length || chunk.stage === "tool") {
+            updatePendingProgress(task, "กำลังใช้เครื่องมือช่วยหาคำตอบ…");
+          }
           if (delta?.content) {
             if (!assistant.timing.firstTokenMs) assistant.timing.firstTokenMs = Date.now() - assistant.timing.startedAt;
             assistant.content += delta.content;
+            updatePendingProgress(task, "กำลังเรียบเรียงคำตอบ…");
           }
           if (chunk.usage) {
             assistant.usage = {
@@ -543,8 +637,12 @@
     $("#messages").append(renderMessage(userMessage), renderMessage(assistant, true));
     scrollToLatest();
     saveConversation(text || files[0], conversationId, messages);
-    const task = { controller: new AbortController(), assistant, status: "กำลังคิดและเลือกเครื่องมือ…" };
+    const task = {
+      controller: new AbortController(), assistant, conversationId,
+      status: "กำลังทำความเข้าใจคำถาม…", progressTimer: null
+    };
     state.pendingChats.set(conversationId, task);
+    startPendingProgress(task, text);
     renderConversationList();
     syncChatState();
     try {
@@ -565,7 +663,7 @@
         try { const body = await response.json(); message = body.error?.message || body.message || message; } catch (_) { /* noop */ }
         throw new Error(message);
       }
-      await consumeChatStream(response, assistant);
+      await consumeChatStream(response, assistant, task);
       assistant.timing.totalMs = Date.now() - assistant.timing.startedAt;
       if (!assistant.content && !assistant.attachments.length) assistant.content = "ได้รับข้อความแล้วครับ แต่ยังไม่มีคำตอบกลับมา";
       messages.push(assistant);
@@ -592,6 +690,7 @@
         toast(error.message, true);
       }
     } finally {
+      window.clearInterval(task.progressTimer);
       if (state.pendingChats.get(conversationId) === task) state.pendingChats.delete(conversationId);
       renderConversationList();
       syncChatState();
@@ -599,19 +698,91 @@
     }
   }
 
-  async function speak(text) {
+  function speechText(value) {
+    return String(value || "")
+      .replace(/```[\s\S]*?```/g, " ข้ามส่วนโค้ด ")
+      .replace(/`([^`]+)`/g, "$1")
+      .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
+      .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+      .replace(/https?:\/\/\S+/g, " ลิงก์ ")
+      .replace(/[*_>#|~-]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function isAppleMobile() {
+    return /iPad|iPhone|iPod/.test(navigator.userAgent)
+      || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  }
+
+  function stopSpeech() {
+    if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+    if (state.activeAudio) {
+      state.activeAudio.pause();
+      state.activeAudio.removeAttribute("src");
+      state.activeAudio.load();
+      state.activeAudio = null;
+    }
+  }
+
+  function speakWithBrowser(text) {
+    if (!("speechSynthesis" in window) || !("SpeechSynthesisUtterance" in window)) {
+      return Promise.reject(new Error("อุปกรณ์นี้ไม่มีเสียงอ่านใน browser"));
+    }
+    return new Promise((resolve, reject) => {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text.slice(0, 4000));
+      const voices = window.speechSynthesis.getVoices();
+      utterance.voice = voices.find((voice) => /^th(-|_)/i.test(voice.lang)) || null;
+      utterance.lang = "th-TH";
+      utterance.rate = 0.96;
+      utterance.onend = resolve;
+      utterance.onerror = (event) => reject(new Error(event.error === "canceled" ? "ยกเลิกเสียงแล้ว" : "เสียงระบบของ iPhone เล่นไม่สำเร็จ"));
+      window.speechSynthesis.speak(utterance);
+    });
+  }
+
+  async function speakWithServer(text) {
+    const response = await fetch("/v1/audio/speech", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model: "minikun-voice", input: text.slice(0, 1800), voice: "minikun", response_format: "wav", speed: 1 })
+    });
+    if (!response.ok) {
+      let message = `ระบบเสียงยังไม่พร้อม (${response.status})`;
+      try { message = (await response.json()).message || message; } catch (_) { /* keep status */ }
+      throw new Error(message);
+    }
+    const url = URL.createObjectURL(await response.blob());
+    const audio = new Audio();
+    audio.preload = "auto";
+    audio.playsInline = true;
+    audio.src = url;
+    state.activeAudio = audio;
+    const release = () => {
+      URL.revokeObjectURL(url);
+      if (state.activeAudio === audio) state.activeAudio = null;
+    };
+    audio.addEventListener("ended", release, { once: true });
+    audio.addEventListener("error", release, { once: true });
+    await audio.play();
+  }
+
+  async function speak(value) {
+    const text = speechText(value);
+    if (!text) return;
+    stopSpeech();
     try {
-      const response = await fetch("/v1/audio/speech", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model: "minikun-voice", input: text.slice(0, 12000), voice: "minikun", response_format: "wav", speed: 1 })
-      });
-      if (!response.ok) throw new Error("ระบบเสียงยังไม่พร้อม");
-      const url = URL.createObjectURL(await response.blob());
-      const audio = new Audio(url);
-      audio.addEventListener("ended", () => URL.revokeObjectURL(url), { once: true });
-      await audio.play();
-    } catch (error) { toast(error.message, true); }
+      if (isAppleMobile()) await speakWithBrowser(text);
+      else await speakWithServer(text);
+    } catch (firstError) {
+      try {
+        if (isAppleMobile()) await speakWithServer(text);
+        else await speakWithBrowser(text);
+      } catch (_) {
+        toast(firstError.message, true);
+      }
+    }
   }
 
   function wavBlob(chunks, sourceRate) {
@@ -667,6 +838,10 @@
       await stopRecording();
       return;
     }
+    if (!permissionSecureContext()) {
+      showPermissionHelp("microphone", true);
+      return;
+    }
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
     if (!navigator.mediaDevices?.getUserMedia || !AudioContextClass) {
       toast("Browser นี้ยังไม่รองรับการบันทึกเสียงครับ", true);
@@ -698,7 +873,7 @@
       state.mediaStream = null;
       state.audioContext?.close();
       state.audioContext = null;
-      toast("เปิดไมโครโฟนไม่สำเร็จ กรุณาอนุญาตการใช้งานก่อนครับ", true);
+      showPermissionHelp("microphone");
     }
   }
 
@@ -890,23 +1065,352 @@
     }
   }
 
+  function renderAgentRuns(items = []) {
+    const statusLabels = {
+      PLANNED: "วางแผนแล้ว", RUNNING: "กำลังทำ", WAITING_CONFIRMATION: "รอยืนยัน",
+      COMPLETED: "เสร็จแล้ว", COMPLETED_WITH_ERRORS: "เสร็จบางส่วน", FAILED: "มีปัญหา", LIMIT_REACHED: "ถึงขีดจำกัด"
+    };
+    const activeStatuses = new Set(["PLANNED", "RUNNING", "WAITING_CONFIRMATION"]);
+    const sorted = [...items].sort((left, right) => {
+      const activeDifference = Number(activeStatuses.has(right.status)) - Number(activeStatuses.has(left.status));
+      return activeDifference || new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime();
+    });
+    const visible = sorted.slice(0, 5);
+    const activeCount = items.filter((item) => activeStatuses.has(item.status)).length;
+    $("#agent-run-count").textContent = activeCount ? `${activeCount} กำลังดูแล` : String(items.length);
+    $("#agent-run-empty").classList.toggle("hidden", visible.length > 0);
+    const list = $("#agent-run-list");
+    list.replaceChildren();
+    for (const run of visible) {
+      const row = element("article", `agent-run status-${String(run.status || "").toLowerCase()}`);
+      const heading = element("div", "agent-run-heading");
+      heading.append(element("strong", "", run.objective || "งานของมินิคุง"));
+      heading.append(element("span", "run-status", statusLabels[run.status] || run.status));
+      const progress = Math.max(0, Math.min(100, Math.round((Number(run.currentStep) / Math.max(1, Number(run.maxSteps))) * 100)));
+      const detail = element("div", "agent-run-detail");
+      detail.append(element("span", "", `${run.currentStep}/${run.maxSteps} ขั้นตอน`));
+      detail.append(element("time", "", relativeTime(run.updatedAt)));
+      const track = element("div", "agent-progress");
+      const bar = element("span");
+      bar.style.width = `${run.status === "COMPLETED" ? 100 : progress}%`;
+      track.append(bar);
+      row.append(heading, track, detail);
+      if (run.summary) row.append(element("p", "agent-summary", run.summary));
+      if (["FAILED", "COMPLETED_WITH_ERRORS", "LIMIT_REACHED"].includes(run.status)) {
+        const retry = element("button", "text-button", "ลองทำต่อ");
+        retry.type = "button";
+        retry.addEventListener("click", () => resumeAgentRun(run.id, retry));
+        row.append(retry);
+      }
+      list.append(row);
+    }
+  }
+
+  function renderToolTimeline(details = []) {
+    const statusLabels = {
+      RUNNING: "กำลังใช้", RETRYING: "กำลังลองใหม่", COMPLETED: "สำเร็จ",
+      FAILED: "ไม่สำเร็จ", WAITING_CONFIRMATION: "รอยืนยัน"
+    };
+    const steps = details.flatMap((detail) => (detail.steps || []).map((step) => ({ run: detail.run, step })))
+      .sort((left, right) => new Date(right.step.updatedAt).getTime() - new Date(left.step.updatedAt).getTime())
+      .slice(0, 8);
+    $("#tool-step-count").textContent = `${steps.length.toLocaleString("th-TH")} ขั้นตอน`;
+    $("#tool-step-empty").classList.toggle("hidden", steps.length > 0);
+    const list = $("#tool-step-list");
+    list.replaceChildren();
+    for (const { run, step } of steps) {
+      const row = element("li", `tool-step status-${String(step.status || "").toLowerCase()}`);
+      row.append(element("span", "tool-step-marker"));
+      const copy = element("div", "tool-step-copy");
+      const heading = element("div", "tool-step-heading");
+      heading.append(element("strong", "", step.toolName));
+      heading.append(element("span", "tool-step-status", statusLabels[step.status] || step.status));
+      copy.append(heading);
+      copy.append(element("p", "", run?.objective || "งานของมินิคุง"));
+      const meta = element("div", "tool-step-meta");
+      const finishedAt = step.completedAt || step.updatedAt;
+      const duration = Math.max(0, new Date(finishedAt).getTime() - new Date(step.startedAt).getTime());
+      meta.append(element("span", "", `ใช้เวลา ${formatDuration(duration)}`));
+      meta.append(element("time", "", relativeTime(step.updatedAt)));
+      copy.append(meta);
+      row.append(copy);
+      list.append(row);
+    }
+  }
+
+  async function loadToolTimeline(runs = []) {
+    const recent = [...runs]
+      .sort((left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime())
+      .slice(0, 4);
+    if (!recent.length) {
+      renderToolTimeline([]);
+      return;
+    }
+    const results = await Promise.allSettled(recent.map((run) => api(`/v1/agent/runs/${run.id}`)));
+    renderToolTimeline(results.filter((result) => result.status === "fulfilled").map((result) => result.value));
+  }
+
+  function renderSystemHealth(report) {
+    const available = Boolean(report && typeof report === "object");
+    $("#health-empty").classList.toggle("hidden", available);
+    const overall = $("#health-overall");
+    overall.textContent = !available ? "อ่านไม่ได้" : report.healthy ? "พร้อมใช้งาน" : "ควรตรวจดู";
+    overall.dataset.state = !available ? "unknown" : report.healthy ? "up" : "warning";
+    const setResource = (name, source = {}) => {
+      const percent = Number(source.usage_percent ?? source.used_percent);
+      const valid = Number.isFinite(percent) && percent >= 0;
+      $(`#health-${name}`).textContent = valid ? `${Math.round(percent)}%` : "—";
+      const bar = $(`#health-${name}-bar`);
+      bar.style.width = valid ? `${Math.min(100, percent)}%` : "0%";
+      bar.dataset.state = source.status === "UP" ? "up" : String(source.status || "unknown").toLowerCase();
+    };
+    setResource("cpu", report?.cpu);
+    setResource("memory", report?.memory);
+    setResource("disk", report?.disk);
+    $("#health-uptime").textContent = available ? formatUptime(report.jvm?.uptime_ms) : "—";
+    $("#health-runtime").textContent = report?.jvm?.java_version ? `Java ${report.jvm.java_version}` : "JVM";
+
+    const nvAllocator = report?.dependencies?.tinygrad?.allocator_memory;
+    const allocatorUp = String(nvAllocator?.status || "UNKNOWN").toUpperCase() === "UP";
+    const allocatorCard = $("#health-nv-allocator");
+    allocatorCard.dataset.state = allocatorUp ? "up" : "unknown";
+    $("#health-nv-status").textContent = allocatorUp ? "TinyGrad · NV device" : "ยังอ่านไม่ได้";
+    $("#health-nv-current").textContent = allocatorUp ? formatBinaryBytes(nvAllocator.current_bytes) : "—";
+    $("#health-nv-peak").textContent = allocatorUp ? formatBinaryBytes(nvAllocator.peak_bytes) : "—";
+
+    const dependencyLabels = {
+      application: "Minikun", postgres: "Database", redis: "Redis", tinygrad: "TinyGrad",
+      ollama: "Ollama", searxng: "Search", browser: "Browser"
+    };
+    const dependencies = Object.entries(report?.dependencies || {});
+    const list = $("#health-dependency-list");
+    list.replaceChildren();
+    for (const [name, value] of dependencies) {
+      const row = element("div", "health-dependency");
+      const status = String(value.status || "UNKNOWN").toUpperCase();
+      row.dataset.state = status.toLowerCase();
+      row.append(element("span", "health-dot"));
+      const copy = element("div");
+      copy.append(element("strong", "", dependencyLabels[name] || name));
+      copy.append(element("small", "", status === "UP" ? "เชื่อมต่อแล้ว" : "ยังไม่พร้อม"));
+      const latency = Number(value.latency_ms);
+      row.append(copy, element("span", "health-latency", Number.isFinite(latency) ? `${latency} ms` : "—"));
+      list.append(row);
+    }
+    list.classList.toggle("hidden", !dependencies.length);
+  }
+
+  function activateQuickAction(action) {
+    switch (action) {
+      case "image":
+        showView("chat");
+        $("#file-input").click();
+        break;
+      case "idea":
+        showView("cockpit", "inbox");
+        requestAnimationFrame(() => {
+          $("#capture-input")?.focus();
+        });
+        break;
+      case "reminder": {
+        showView("chat");
+        const composer = $("#chat-composer");
+        composer.value = "ช่วยสร้าง Reminder ให้ฉัน: ";
+        autoGrowComposer();
+        composer.focus();
+        break;
+      }
+      case "location":
+        showView("cockpit", "permission-center");
+        requestCurrentLocation();
+        break;
+      case "voice":
+        showView("chat");
+        toggleRecording();
+        break;
+      default: break;
+    }
+  }
+
+  function latestContextTokens() {
+    const messages = state.chatMessages.length
+      ? state.chatMessages
+      : state.conversations.flatMap((conversation) => conversation.messages || []);
+    const latest = [...messages].reverse().find((message) => Number(message.usage?.promptTokens) > 0);
+    return Number(latest?.usage?.promptTokens) || 0;
+  }
+
+  function renderContextMemory(memories = [], knowledge = {}) {
+    const categoryLabels = { FACT: "ข้อมูล", PREFERENCE: "ความชอบ", GOAL: "เป้าหมาย", CONSTRAINT: "ข้อจำกัด", RELATIONSHIP: "ความสัมพันธ์", ROUTINE: "กิจวัตร" };
+    $("#memory-count").textContent = memories.length >= 30
+      ? `${memories.length.toLocaleString("th-TH")} ล่าสุด`
+      : `${memories.length.toLocaleString("th-TH")} ความจำ`;
+    const tokens = latestContextTokens();
+    $("#context-token-count").textContent = tokens ? `${tokens.toLocaleString("th-TH")} tokens` : "ยังไม่มี";
+    $("#knowledge-source-count").textContent = Number.isFinite(Number(knowledge.sources)) ? Number(knowledge.sources).toLocaleString("th-TH") : "—";
+    $("#knowledge-chunk-count").textContent = Number.isFinite(Number(knowledge.chunks)) ? Number(knowledge.chunks).toLocaleString("th-TH") : "—";
+    const preview = $("#memory-preview");
+    preview.replaceChildren();
+    $("#memory-empty").classList.toggle("hidden", memories.length > 0);
+    for (const memory of memories.slice(0, 3)) {
+      const row = element("div", "memory-item");
+      const meta = element("div", "memory-meta");
+      meta.append(element("span", "", categoryLabels[memory.category] || memory.category));
+      meta.append(element("small", "", `${Math.round((Number(memory.confidence) || 0) * 100)}%`));
+      row.append(meta, element("p", "", memory.content));
+      preview.append(row);
+    }
+  }
+
+  const permissionLabels = {
+    granted: "อนุญาตแล้ว", denied: "ถูกปิด", prompt: "ยังไม่อนุญาต",
+    unsupported: "ไม่รองรับ", insecure: "ต้องใช้ HTTPS"
+  };
+
+  function permissionSecureContext() {
+    return window.isSecureContext || ["localhost", "127.0.0.1", "::1"].includes(window.location.hostname);
+  }
+
+  function showPermissionHelp(name, insecure = false) {
+    const subject = { location: "ตำแหน่ง", microphone: "ไมโครโฟน", notifications: "การแจ้งเตือน" }[name] || "สิทธิ์นี้";
+    const message = insecure
+      ? `บน iPhone ต้องเปิด Minikun ผ่าน HTTPS ก่อนจึงจะใช้${subject}ได้ครับ`
+      : `บน iPhone ให้แตะ aA → การตั้งค่าเว็บไซต์ → ${subject} → อนุญาต แล้วกลับมาลองอีกครั้งครับ`;
+    $("#permission-note").textContent = message;
+    toast(message, true);
+  }
+
+  function setPermissionUi(name, status, detail = "") {
+    const statusNode = $(`#${name}-state`);
+    const button = $(`#request-${name === "notifications" ? "notifications" : name}`);
+    statusNode.textContent = permissionLabels[status] || status;
+    statusNode.dataset.state = status;
+    if (detail) $(`#${name}-detail`).textContent = detail;
+    button.disabled = status === "unsupported";
+    button.textContent = status === "granted"
+      ? (name === "location" ? "อัปเดต" : "ทดสอบ")
+      : status === "denied" ? "ลองอีกครั้ง"
+        : status === "insecure" ? "ดูวิธีเปิด" : "เปิดใช้";
+  }
+
+  async function browserPermission(name) {
+    if (!navigator.permissions?.query) return "prompt";
+    try { return (await navigator.permissions.query({ name })).state; }
+    catch (_) { return "prompt"; }
+  }
+
+  async function renderPermissions() {
+    const secure = permissionSecureContext();
+    const locationState = !secure ? "insecure"
+      : navigator.geolocation ? await browserPermission("geolocation") : "unsupported";
+    const microphoneState = !secure ? "insecure"
+      : navigator.mediaDevices?.getUserMedia ? await browserPermission("microphone") : "unsupported";
+    const notificationState = !secure ? "insecure" : "Notification" in window
+      ? (Notification.permission === "default" ? "prompt" : Notification.permission) : "unsupported";
+    setPermissionUi("location", locationState, state.currentLocation
+      ? `ใช้กับแชตนี้ · แม่นยำประมาณ ${state.currentLocation.accuracy} ม.` : "ใช้กับคำถามในแชตขณะที่หน้านี้เปิดอยู่");
+    setPermissionUi("microphone", microphoneState, "ใช้คุยและถอดเสียง");
+    setPermissionUi("notifications", notificationState, "อนุญาตให้หน้าเว็บแสดงการแจ้งเตือน");
+    $("#permission-note").textContent = secure
+      ? "มินิคุงจะขอสิทธิ์เมื่อพี่สาวแตะเท่านั้น ถ้าเคยปิด ให้แตะ aA → การตั้งค่าเว็บไซต์ แล้วกลับมาลองอีกครั้งครับ"
+      : "Safari บน iPhone อนุญาตตำแหน่ง ไมโครโฟน และการแจ้งเตือนเฉพาะหน้า HTTPS เท่านั้นครับ";
+  }
+
+  function requestCurrentLocation() {
+    if (!permissionSecureContext()) {
+      setPermissionUi("location", "insecure");
+      showPermissionHelp("location", true);
+      return;
+    }
+    if (!navigator.geolocation) {
+      setPermissionUi("location", "unsupported");
+      return;
+    }
+    const button = $("#request-location");
+    button.disabled = true;
+    button.textContent = "กำลังหา";
+    navigator.geolocation.getCurrentPosition((position) => {
+      state.currentLocation = {
+        latitude: Number(position.coords.latitude.toFixed(6)),
+        longitude: Number(position.coords.longitude.toFixed(6)),
+        accuracy: Math.round(position.coords.accuracy)
+      };
+      setPermissionUi("location", "granted", `ใช้กับแชตนี้ · แม่นยำประมาณ ${state.currentLocation.accuracy} ม.`);
+      toast("เปิดตำแหน่งให้แชตนี้แล้วครับ");
+    }, (error) => {
+      setPermissionUi("location", error.code === 1 ? "denied" : "prompt");
+      if (error.code === 1) showPermissionHelp("location");
+      else toast("อ่านตำแหน่งไม่สำเร็จ ลองอีกครั้งได้ครับ", true);
+    }, { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 });
+  }
+
+  async function requestMicrophonePermission() {
+    if (!permissionSecureContext()) {
+      setPermissionUi("microphone", "insecure");
+      showPermissionHelp("microphone", true);
+      return;
+    }
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setPermissionUi("microphone", "unsupported");
+      return;
+    }
+    const button = $("#request-microphone");
+    button.disabled = true;
+    button.textContent = "กำลังขอ";
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream.getTracks().forEach((track) => track.stop());
+      setPermissionUi("microphone", "granted");
+      toast("ไมโครโฟนพร้อมใช้แล้วครับ");
+    } catch (_) {
+      setPermissionUi("microphone", "denied");
+      showPermissionHelp("microphone");
+    }
+  }
+
+  async function requestNotificationPermission() {
+    if (!permissionSecureContext()) {
+      setPermissionUi("notifications", "insecure");
+      showPermissionHelp("notifications", true);
+      return;
+    }
+    if (!("Notification" in window)) {
+      setPermissionUi("notifications", "unsupported");
+      return;
+    }
+    const result = await Notification.requestPermission();
+    setPermissionUi("notifications", result);
+    if (result === "denied") showPermissionHelp("notifications");
+    else toast(result === "granted" ? "อนุญาตการแจ้งเตือนแล้วครับ" : "ยังไม่ได้เปิดการแจ้งเตือนครับ", result !== "granted");
+  }
+
   async function loadDashboard() {
     setSync(true, "กำลังทบทวน");
+    renderPermissions();
     const calls = await Promise.allSettled([
       api("/v1/personal/status"),
       api("/v1/personal/next-actions?limit=5"),
       api("/v1/personal/experiments?limit=20"),
       api("/v1/personal/inbox?limit=20"),
       api(`/v1/personal/timeline?limit=${state.timelineLimit}`),
-      api("/v1/personal/automations/runs?limit=20")
+      api("/v1/personal/automations/runs?limit=20"),
+      api("/v1/agent/runs?limit=12"),
+      api("/v1/memory?limit=30"),
+      api("/v1/knowledge/status"),
+      api("/v1/system/health")
     ]);
-    const [status, actions, experiments, inbox, timeline, decisions] = calls;
+    const [status, actions, experiments, inbox, timeline, decisions, agentRuns, memories, knowledge, systemHealth] = calls;
     const decisionCount = renderDecisions(decisions.status === "fulfilled" ? decisions.value : []);
     renderStatus(status.status === "fulfilled" ? status.value : {}, decisionCount);
     renderActions(actions.status === "fulfilled" ? actions.value : []);
     renderExperiment(experiments.status === "fulfilled" ? experiments.value : []);
     renderInbox(inbox.status === "fulfilled" ? inbox.value : []);
     renderTimeline(timeline.status === "fulfilled" ? timeline.value : []);
+    const runItems = agentRuns.status === "fulfilled" ? agentRuns.value : [];
+    renderAgentRuns(runItems);
+    await loadToolTimeline(runItems);
+    renderContextMemory(memories.status === "fulfilled" ? memories.value : [], knowledge.status === "fulfilled" ? knowledge.value : {});
+    renderSystemHealth(systemHealth.status === "fulfilled" ? systemHealth.value : null);
     const failures = calls.filter((call) => call.status === "rejected");
     setSync(failures.length === 0, failures.length ? "มีบางส่วนยังไม่พร้อม" : "พร้อมดูแล");
     if (failures.length === calls.length) toast("เชื่อมกับมินิคุงไม่ได้ ลองตรวจ Owner ID หรือ token ครับ", true);
@@ -918,6 +1422,20 @@
       toast("ปิดงานให้แล้วครับ");
       await loadDashboard();
     } catch (error) { toast(error.message, true); }
+  }
+
+  async function resumeAgentRun(id, button) {
+    button.disabled = true;
+    button.textContent = "กำลังเริ่ม";
+    try {
+      await api(`/v1/agent/runs/${id}/resume`, { method: "POST" });
+      toast("มินิคุงเริ่มทำงานนี้ต่อแล้วครับ");
+      await loadDashboard();
+    } catch (error) {
+      toast(error.message, true);
+      button.disabled = false;
+      button.textContent = "ลองทำต่อ";
+    }
   }
 
   async function transitionExperiment(id, action, note = "") {
@@ -1118,7 +1636,14 @@
     state.voiceOutput = !state.voiceOutput;
     localStorage.setItem("minikun.voice-output", String(state.voiceOutput));
     $("#voice-output").setAttribute("aria-pressed", String(state.voiceOutput));
-    toast(state.voiceOutput ? "จะอ่านคำตอบใหม่ออกเสียงครับ" : "ปิดการอ่านคำตอบแล้วครับ");
+    if (!state.voiceOutput) {
+      stopSpeech();
+      toast("ปิดการอ่านคำตอบแล้วครับ");
+      return;
+    }
+    const latest = [...state.chatMessages].reverse().find((message) => message.role === "assistant" && message.content);
+    if (latest) speak(latest.content);
+    toast(latest ? "กำลังอ่านคำตอบล่าสุดครับ" : "จะอ่านคำตอบใหม่ออกเสียงครับ");
   });
   $("#messages").addEventListener("click", async (event) => {
     const button = event.target.closest("[data-copy-code]");
@@ -1143,6 +1668,7 @@
   window.addEventListener("beforeunload", () => {
     state.mediaStream?.getTracks().forEach((track) => track.stop());
     state.audioContext?.close();
+    stopSpeech();
   });
 
   $("#open-settings").addEventListener("click", () => settingsDialog.showModal());
@@ -1151,6 +1677,17 @@
     settingsDialog.showModal();
   });
   $("#refresh").addEventListener("click", loadDashboard);
+  document.querySelectorAll("[data-quick-action]").forEach((button) => {
+    button.addEventListener("click", () => activateQuickAction(button.dataset.quickAction));
+  });
+  document.querySelectorAll("[data-cockpit-target]").forEach((button) => {
+    button.addEventListener("click", () => {
+      switchCockpitPage(button.dataset.cockpitTarget);
+    });
+  });
+  $("#request-location").addEventListener("click", requestCurrentLocation);
+  $("#request-microphone").addEventListener("click", requestMicrophonePermission);
+  $("#request-notifications").addEventListener("click", requestNotificationPermission);
   $("#new-experiment").addEventListener("click", () => experimentDialog.showModal());
   document.querySelectorAll("[data-open-experiment]").forEach((button) => {
     button.addEventListener("click", () => experimentDialog.showModal());

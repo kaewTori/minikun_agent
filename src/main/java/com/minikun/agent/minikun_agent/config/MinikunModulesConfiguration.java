@@ -21,6 +21,8 @@ import com.minikun.diagnostics.MeterRegistryMetricsReader;
 import com.minikun.guardian.GuardianConfiguration;
 import com.minikun.goal.GoalConfiguration;
 import com.minikun.guardian.HomelabGuardianScheduler;
+import com.minikun.https.LocalCertificateController;
+import com.minikun.https.LocalHttpsConfiguration;
 import com.minikun.investment.InvestmentService;
 import com.minikun.investment.JdbcInvestmentStore;
 import com.minikun.knowledge.PersonalKnowledgeConfiguration;
@@ -66,6 +68,7 @@ import com.minikun.runtime.VersionFormatter;
 import com.minikun.runtime.VersionService;
 import com.minikun.search.internal.SearchConfiguration;
 import com.minikun.systemhealth.SystemHealthConfiguration;
+import com.minikun.systemhealth.SystemHealthController;
 import com.minikun.task.JdbcTaskStore;
 import com.minikun.task.TaskController;
 import com.minikun.task.TaskFollowUpScheduler;
@@ -134,7 +137,9 @@ import com.minikun.weather.WeatherConfiguration;
         MemoryManagementService.class, MemoryManagementController.class, WeatherConfiguration.class,
         ExternalCalendarConfiguration.class, ExternalCalendarController.class,
         ExternalCalendarReminderScheduler.class, ProactiveNotificationPolicy.class,
-        SystemHealthConfiguration.class, CurrentTimeToolRouter.class, DefaultToolRegistry.class,
+        SystemHealthConfiguration.class, SystemHealthController.class,
+        LocalHttpsConfiguration.class, LocalCertificateController.class,
+        CurrentTimeToolRouter.class, DefaultToolRegistry.class,
         DefaultToolExecutor.class, CalculatorAddTool.class, WeatherForecastTool.class, CurrentTimeTool.class,
         WebSearchTool.class, WebOpenUrlTool.class, WeatherToolRouter.class, LocationResolveTool.class,
         PlannerManageTool.class, CalendarManageTool.class, MemoryManageTool.class, ServiceHealthTool.class,

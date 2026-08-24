@@ -41,6 +41,8 @@ mkdir -p \
   "$HOME/Library/Logs/Minikun" \
   "$HOME/Library/LaunchAgents"
 
+/bin/sh "$app_root/deploy/setup-local-https.sh"
+
 staged_jar="$local_app/target/.minikun_agent-1.0.0.jar.$$"
 trap 'rm -f "$staged_jar"' EXIT HUP INT TERM
 cp "$app_root/target/minikun_agent-1.0.0.jar" "$staged_jar"
@@ -72,7 +74,7 @@ launchctl bootstrap "gui/$(id -u)" "$HOME/Library/LaunchAgents/$label.plist"
 launchctl kickstart -k "gui/$(id -u)/$label"
 
 attempt=0
-until curl --fail --silent --show-error http://127.0.0.1:8080/actuator/health; do
+until curl --fail --silent --show-error http://127.0.0.1:8080/actuator/health/readiness; do
   attempt=$((attempt + 1))
   if [ "$attempt" -ge 30 ]; then
     echo "Mini-kun did not become healthy within 30 seconds" >&2
@@ -80,4 +82,9 @@ until curl --fail --silent --show-error http://127.0.0.1:8080/actuator/health; d
   fi
   sleep 1
 done
+printf '\n'
+
+curl --fail --silent --show-error \
+  --cacert "$local_root/tls/minikun-local-ca.pem" \
+  https://127.0.0.1:8443/actuator/health/readiness
 printf '\n'

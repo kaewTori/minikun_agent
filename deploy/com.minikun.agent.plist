@@ -20,6 +20,10 @@
         <string>/usr/bin/java</string>
         <key>OLLAMA_NATIVE_BASE_URL</key>
         <string>http://127.0.0.1:11434</string>
+        <key>MINIKUN_HTTPS_ENABLED</key>
+        <string>true</string>
+        <key>MINIKUN_HTTPS_PORT</key>
+        <string>8443</string>
     </dict>
 
     <key>RunAtLoad</key>

@@ -750,7 +750,14 @@ Personal Loop เชื่อม goal, task, agent run, Guardian และ conve
 
 ```text
 http://127.0.0.1:8080/cockpit
+https://mini-kun.local:8443/cockpit/
 ```
+
+การ deploy บน macOS จะสร้าง Local CA และใบรับรอง HTTPS ที่มี SAN สำหรับ `mini-kun`,
+`mini-kun.local`, `localhost`, loopback, LAN IP และ Tailscale IP ที่ตรวจพบ โดยยังคง HTTP
+พอร์ต `8080` ไว้สำหรับ health probe และดาวน์โหลด public CA ได้จาก
+`http://<LAN-IP>:8080/v1/system/https/ca` หากใช้ iPhone ให้ติดตั้ง profile ที่ดาวน์โหลด
+จากนั้นเปิด full trust ที่ Settings > General > About > Certificate Trust Settings ก่อนเปิด HTTPS
 
 หน้า Chat เรียก `/v1/chat/completions` แบบ streaming จึงใช้ model, memory, search, vision,
 native tools และ confirmation policy ชุดเดียวกับ API หลัก รองรับการแนบ JPEG/PNG/WebP,
@@ -816,7 +823,8 @@ schema อยู่ใน `personal-loop-schema.sql` และใช้ token �
 
 ## Deploy บน macOS
 
-สคริปต์ deploy จะ build JAR, ติดตั้ง LaunchAgent และตรวจสอบ health endpoint:
+สคริปต์ deploy จะ build JAR, สร้าง/ต่ออายุใบรับรอง local HTTPS, ติดตั้ง LaunchAgent
+และตรวจสอบ health endpoint ทั้ง HTTP `8080` กับ HTTPS `8443`:
 
 ```sh
 cd /Volumes/minikun/homelab/java

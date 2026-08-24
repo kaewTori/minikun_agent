@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 
@@ -26,5 +27,34 @@ class DefaultSystemHealthReaderTest {
         assertTrue(report.jvm().containsKey("java_version"));
         assertEquals("DOWN", report.dependencies().get("unused").get("status"));
         assertTrue(!report.dependencies().get("unused").containsKey("host"));
+    }
+
+    @Test
+    void exposesOnlineNvAllocatorWithoutMakingTinyGradARequiredDependency() {
+        SystemHealthReport report = new DefaultSystemHealthReader(
+                Path.of("/tmp"),
+                List.of(),
+                Duration.ofMillis(50),
+                85,
+                90,
+                () -> Map.of("status", "UP", "device", "NV", "current_bytes", 1024L, "peak_bytes", 2048L))
+                .read();
+
+        assertEquals("UP", report.dependencies().get("tinygrad").get("status"));
+        assertEquals(1024L, ((Map<?, ?>) report.dependencies().get("tinygrad").get("allocator_memory")).get("current_bytes"));
+    }
+
+    @Test
+    void omitsOfflineOptionalTinyGradFromRequiredDependencies() {
+        SystemHealthReport report = new DefaultSystemHealthReader(
+                Path.of("/tmp"),
+                List.of(),
+                Duration.ofMillis(50),
+                85,
+                90,
+                () -> Map.of("status", "UNKNOWN", "device", "NV"))
+                .read();
+
+        assertTrue(!report.dependencies().containsKey("tinygrad"));
     }
 }
