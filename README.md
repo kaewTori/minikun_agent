@@ -202,6 +202,11 @@ Actuator ที่เปิดให้เข้าถึงคือ `/actuator
 | `MINIKUN_NOTIFICATION_MANAGEMENT_TOKEN` | ใช้ค่า task/memory token ถ้ามี | token สำหรับอ่านประวัติการส่ง notification |
 | `MINIKUN_NOTIFICATION_SCHEDULER_STALE_AFTER` | `2m` | ระยะที่ scheduler ไม่ poll ก่อน health เปลี่ยนเป็น `DOWN` |
 | `MINIKUN_NOTIFICATION_SCHEDULER_FAILURE_THRESHOLD` | `3` | จำนวน delivery failure ติดต่อกันก่อน health เปลี่ยนเป็น `DOWN` |
+| `MINIKUN_SYNC_ENABLED` | `true` | เปิด server-side chat sync และ device pairing สำหรับ Cockpit |
+| `MINIKUN_SYNC_OWNER_ID` | `default` | owner ภายในของชุดอุปกรณ์แบบ single-user |
+| `MINIKUN_SYNC_CANONICAL_ORIGIN` | `https://mini-kun:8443` | origin สำหรับ pairing link ของเครื่องลูกที่เชื่อมผ่าน Tailscale |
+| `MINIKUN_SYNC_PAIRING_TTL` | `PT2M` | อายุรหัสจับคู่อุปกรณ์แบบใช้ครั้งเดียว |
+| `MINIKUN_SYNC_SESSION_TTL` | `P180D` | อายุ session ของอุปกรณ์ที่จับคู่แล้ว |
 
 Voice Companion กำหนดค่าผ่าน `minikun.voice.*` ใน `application.properties` โดยค่าเริ่มต้นใช้
 Whisper Large V3 Turbo Q4 ผ่าน MLX สำหรับถอดเสียงและเสียง `Kanya` ของ macOS สำหรับพูดภาษาไทย
@@ -750,7 +755,8 @@ Personal Loop เชื่อม goal, task, agent run, Guardian และ conve
 
 ```text
 http://127.0.0.1:8080/cockpit
-https://mini-kun.local:8443/cockpit/
+https://127.0.0.1:8443/cockpit/
+https://mini-kun:8443/cockpit/
 ```
 
 การ deploy บน macOS จะสร้าง Local CA และใบรับรอง HTTPS ที่มี SAN สำหรับ `mini-kun`,
@@ -764,8 +770,18 @@ native tools และ confirmation policy ชุดเดียวกับ API
 ไฟล์ข้อความ, การถอดเสียงผ่าน `/v1/audio/transcriptions` และอ่านคำตอบผ่าน `/v1/audio/speech`
 
 หน้าเว็บไม่ฝัง token ลง bundle และเก็บ token ที่กรอกไว้เฉพาะ `sessionStorage` ของแท็บปัจจุบัน
-ส่วนรายการบทสนทนาและข้อความสำหรับแสดงผลเก็บใน `localStorage` ของอุปกรณ์นั้น เพื่อให้เปิดแชตเดิมต่อได้
-โดยยังเชื่อมผ่าน origin เดียวกับ Minikun API และใช้ confirmation policy ฝั่ง server เหมือนเดิม
+ส่วนรายการบทสนทนาและข้อความสำหรับแสดงผล sync ผ่าน PostgreSQL โดยใช้ device session แบบ
+`HttpOnly + Secure + SameSite=Strict` จึงไม่ต้องมี user/password หรือส่ง secret ให้ JavaScript
+และยังเชื่อมผ่าน origin เดียวกับ Minikun API พร้อม confirmation policy ฝั่ง server เหมือนเดิม
+
+การเชื่อมอุปกรณ์ครั้งแรกให้เปิด `https://127.0.0.1:8443/cockpit/` จากเครื่อง Mac ที่รัน service
+ระบบจะสร้าง trusted device สำหรับ origin ของเครื่องหลักให้ครั้งเดียว จากนั้นไปที่
+Settings → Device Sync → เชื่อมอุปกรณ์ใหม่ แล้วใช้ iPhone สแกน QR หรือเปิด pairing link
+ซึ่งชี้ไป `https://mini-kun:8443` ผ่าน Tailscale แต่ละ origin มี session cookie แยกกัน
+ขณะที่บทสนทนาใช้ owner และ PostgreSQL ชุดเดียวกันจึงยัง sync ถึงกัน รหัสมีอายุ 2 นาทีและใช้ได้ครั้งเดียว
+สามารถดู last seen และถอนสิทธิ์อุปกรณ์อื่นแยกรายเครื่องได้จากหน้าเดียวกัน เมื่ออุปกรณ์เครื่องสุดท้าย
+ถูกตัดการเชื่อมต่อ Mac เครื่องหลักจะ bootstrap ใหม่ได้อีกครั้ง ประวัติเดิมจาก `localStorage`
+จะถูก import ครั้งแรกโดยอัตโนมัติ
 
 ตัวอย่างสร้างและเริ่ม Personal Experiment:
 

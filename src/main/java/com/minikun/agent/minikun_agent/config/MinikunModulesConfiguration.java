@@ -69,6 +69,7 @@ import com.minikun.runtime.VersionService;
 import com.minikun.search.internal.SearchConfiguration;
 import com.minikun.systemhealth.SystemHealthConfiguration;
 import com.minikun.systemhealth.SystemHealthController;
+import com.minikun.sync.SyncConfiguration;
 import com.minikun.task.JdbcTaskStore;
 import com.minikun.task.TaskController;
 import com.minikun.task.TaskFollowUpScheduler;
@@ -139,6 +140,7 @@ import com.minikun.weather.WeatherConfiguration;
         ExternalCalendarReminderScheduler.class, ProactiveNotificationPolicy.class,
         SystemHealthConfiguration.class, SystemHealthController.class,
         LocalHttpsConfiguration.class, LocalCertificateController.class,
+        SyncConfiguration.class,
         CurrentTimeToolRouter.class, DefaultToolRegistry.class,
         DefaultToolExecutor.class, CalculatorAddTool.class, WeatherForecastTool.class, CurrentTimeTool.class,
         WebSearchTool.class, WebOpenUrlTool.class, WeatherToolRouter.class, LocationResolveTool.class,

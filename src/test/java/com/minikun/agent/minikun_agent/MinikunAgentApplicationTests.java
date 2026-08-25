@@ -100,6 +100,18 @@ class MinikunAgentApplicationTests {
 				.andExpect(status().isOk())
 				.andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.forwardedUrl("/cockpit/index.html"));
 
+		mockMvc.perform(get("/cockpit/").secure(true).header("Host", "127.0.0.1:8443"))
+				.andExpect(status().isOk())
+				.andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.forwardedUrl("/cockpit/index.html"));
+
+		mockMvc.perform(get("/cockpit/").secure(true).header("Host", "mini-kun:8443"))
+				.andExpect(status().isOk())
+				.andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.forwardedUrl("/cockpit/index.html"));
+
+		mockMvc.perform(get("/pair").secure(true).header("Host", "mini-kun:8443"))
+				.andExpect(status().isOk())
+				.andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.forwardedUrl("/cockpit/pair.html"));
+
 		mockMvc.perform(get("/cockpit/index.html"))
 				.andExpect(status().isOk())
 				.andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content()

@@ -23,7 +23,17 @@
     cockpitPage: "overview",
     timelineLimit: 6,
     experimentAction: null,
-    currentLocation: null
+    currentLocation: null,
+    sync: {
+      paired: false,
+      deviceId: "",
+      canonicalOrigin: "https://mini-kun:8443",
+      timers: new Map(),
+      eventSource: null,
+      pairingUrl: "",
+      refreshing: false,
+      remoteDirty: false
+    }
   };
 
   const $ = (selector) => document.querySelector(selector);
@@ -113,7 +123,7 @@
   function safeConversationList() {
     try {
       const parsed = JSON.parse(localStorage.getItem("minikun.conversations") || "[]");
-      return Array.isArray(parsed) ? parsed.slice(0, 40) : [];
+      return Array.isArray(parsed) ? normalizeConversations(parsed) : [];
     } catch (_) { return []; }
   }
 
@@ -127,9 +137,11 @@
 
   function compactMessages(messages) {
     return messages.slice(-80).map((message) => ({
+      id: message.id || uniqueId("message-"),
       role: message.role,
       content: message.content,
       createdAt: message.createdAt,
+      files: (message.files || []).slice(0, 12),
       usage: message.usage,
       timing: message.timing ? {
         firstTokenMs: message.timing.firstTokenMs,
@@ -139,6 +151,227 @@
         .filter((attachment) => attachment.url && !attachment.url.startsWith("data:"))
         .slice(0, 6)
     }));
+  }
+
+  function normalizeConversations(values) {
+    return values.slice(0, 40).filter((value) => value?.id).map((value) => ({
+      id: String(value.id),
+      title: String(value.title || "แชตใหม่"),
+      updatedAt: Number(value.updatedAt) || Date.parse(value.updatedAt) || Date.now(),
+      messages: (Array.isArray(value.messages) ? value.messages : []).slice(-80).map((message) => ({
+        ...message,
+        id: message.id || uniqueId("message-"),
+        role: message.role || "user",
+        content: String(message.content || ""),
+        createdAt: Number(message.createdAt) || Date.parse(message.createdAt) || Date.now(),
+        files: Array.isArray(message.files) ? message.files : [],
+        attachments: Array.isArray(message.attachments) ? message.attachments : []
+      }))
+    })).sort((a, b) => b.updatedAt - a.updatedAt);
+  }
+
+  function syncPayload(conversation) {
+    return {
+      id: conversation.id,
+      title: conversation.title,
+      updatedAt: new Date(conversation.updatedAt || Date.now()).toISOString(),
+      messages: (conversation.messages || []).map((message) => ({
+        ...message,
+        createdAt: new Date(message.createdAt || Date.now()).toISOString()
+      }))
+    };
+  }
+
+  function defaultDeviceName() {
+    if (/iPhone/i.test(navigator.userAgent)) return "iPhone";
+    if (/iPad/i.test(navigator.userAgent)) return "iPad";
+    if (/Mac/i.test(navigator.platform || navigator.userAgent)) return "Mac เครื่องหลัก";
+    return "Browser เครื่องนี้";
+  }
+
+  async function syncFetch(path, options = {}) {
+    const response = await fetch(path, {
+      ...options,
+      headers: { ...(options.body ? { "Content-Type": "application/json" } : {}), ...(options.headers || {}) }
+    });
+    if (!response.ok) {
+      let message = `ซิงก์ไม่สำเร็จ (${response.status})`;
+      try {
+        const body = await response.json();
+        message = body.detail || body.message || message;
+      } catch (_) { /* keep status message */ }
+      const error = new Error(message);
+      error.status = response.status;
+      throw error;
+    }
+    return response.status === 204 ? null : response.json();
+  }
+
+  function renderSyncState(label, stateName = "") {
+    const top = $("#sync-state");
+    if (top) {
+      top.replaceChildren(element("span", "status-dot"), document.createTextNode(` ${label}`));
+      top.dataset.state = stateName;
+    }
+    const badge = $("#device-sync-state");
+    if (badge) {
+      badge.textContent = label;
+      badge.dataset.state = stateName;
+    }
+  }
+
+  async function initializeSync() {
+    if (window.location.protocol !== "https:") {
+      renderSyncState("ต้องใช้ HTTPS", "unpaired");
+      $("#device-sync-copy").textContent = "เครื่องหลักเปิดผ่าน https://127.0.0.1:8443 เพื่อซิงก์ครับ";
+      return;
+    }
+    try {
+      const session = await syncFetch("/v1/sync/session", {
+        method: "POST", body: JSON.stringify({ deviceName: defaultDeviceName() })
+      });
+      state.sync.canonicalOrigin = session.canonicalOrigin || state.sync.canonicalOrigin;
+      if (!session.paired) {
+        renderSyncState("ยังไม่จับคู่", "unpaired");
+        $("#device-sync-copy").textContent = "สแกน QR จากอุปกรณ์ที่เชื่อมต่ออยู่แล้วครับ";
+        return;
+      }
+      state.sync.paired = true;
+      state.sync.deviceId = session.deviceId;
+      state.ownerId = session.ownerId || state.ownerId;
+      sessionStorage.setItem("minikun.owner", state.ownerId);
+      $("#owner-id").value = state.ownerId;
+      $("#owner-id").disabled = true;
+      $("#device-sync-copy").textContent = `${session.deviceName} · ข้อมูลอยู่ที่มินิคุง`;
+      $("#create-pairing").disabled = false;
+      renderSyncState("ซิงก์แล้ว", "paired");
+      const local = state.conversations.map(syncPayload);
+      if (local.length && localStorage.getItem("minikun.sync-migrated") !== "true") {
+        await syncFetch("/v1/sync/conversations/import", { method: "POST", body: JSON.stringify(local) });
+        localStorage.setItem("minikun.sync-migrated", "true");
+      }
+      await refreshSyncedConversations();
+      await loadPairedDevices();
+      connectSyncEvents();
+      if (session.bootstrapped) toast("ตั้ง Mac เครื่องนี้เป็นอุปกรณ์หลักแล้วครับ");
+    } catch (error) {
+      renderSyncState("ซิงก์สะดุด", "unpaired");
+      $("#device-sync-copy").textContent = error.message;
+    }
+  }
+
+  async function refreshSyncedConversations() {
+    if (!state.sync.paired || state.sync.refreshing) return;
+    if (state.pendingChats.size) {
+      state.sync.remoteDirty = true;
+      return;
+    }
+    state.sync.refreshing = true;
+    state.sync.remoteDirty = false;
+    try {
+      const remote = normalizeConversations(await syncFetch("/v1/sync/conversations"));
+      const currentId = state.currentConversationId;
+      state.conversations = remote;
+      const current = remote.find((conversation) => conversation.id === currentId) || remote[0];
+      if (current) {
+        state.currentConversationId = current.id;
+        state.chatMessages = current.messages;
+      } else if (!state.chatMessages.length) {
+        state.currentConversationId = chatId();
+      }
+      persistConversations();
+      renderConversationList();
+      renderChat();
+      syncChatState();
+    } finally {
+      state.sync.refreshing = false;
+    }
+  }
+
+  function scheduleConversationSync(conversationId) {
+    if (!state.sync.paired) return;
+    window.clearTimeout(state.sync.timers.get(conversationId));
+    state.sync.timers.set(conversationId, window.setTimeout(async () => {
+      state.sync.timers.delete(conversationId);
+      const conversation = state.conversations.find((value) => value.id === conversationId);
+      if (!conversation) return;
+      try {
+        await syncFetch(`/v1/sync/conversations/${encodeURIComponent(conversationId)}`, {
+          method: "PUT", body: JSON.stringify(syncPayload(conversation))
+        });
+        renderSyncState("ซิงก์แล้ว", "paired");
+      } catch (error) {
+        renderSyncState("รอซิงก์", "unpaired");
+      }
+    }, 220));
+  }
+
+  function connectSyncEvents() {
+    state.sync.eventSource?.close();
+    const source = new EventSource("/v1/sync/events");
+    state.sync.eventSource = source;
+    source.addEventListener("sync", async (event) => {
+      try {
+        const update = JSON.parse(event.data);
+        if (update.sourceDeviceId === state.sync.deviceId) return;
+        await refreshSyncedConversations();
+        await loadPairedDevices();
+        renderSyncState("อัปเดตแล้ว", "paired");
+      } catch (_) { /* EventSource reconnects and the next refresh repairs state */ }
+    });
+    source.onerror = () => renderSyncState("กำลังเชื่อมใหม่", "unpaired");
+    source.onopen = () => renderSyncState("ซิงก์แล้ว", "paired");
+  }
+
+  async function loadPairedDevices() {
+    const list = $("#paired-device-list");
+    if (!list || !state.sync.paired) return;
+    try {
+      const devices = await syncFetch("/v1/sync/devices");
+      list.replaceChildren();
+      for (const device of devices) {
+        const row = element("div", "paired-device");
+        const copy = element("div");
+        copy.append(element("strong", "", device.name));
+        copy.append(element("small", "", `ใช้งาน ${relativeTime(device.lastSeenAt)}`));
+        row.append(copy);
+        if (device.current) {
+          row.append(element("span", "paired-device-current", "เครื่องนี้"));
+        } else {
+          const revoke = element("button", "", "ถอนสิทธิ์");
+          revoke.type = "button";
+          revoke.addEventListener("click", async () => {
+            if (!window.confirm(`ถอนสิทธิ์ ${device.name}?`)) return;
+            try {
+              await syncFetch(`/v1/sync/devices/${encodeURIComponent(device.id)}`, { method: "DELETE" });
+              await loadPairedDevices();
+              toast("ถอนสิทธิ์อุปกรณ์แล้วครับ");
+            } catch (error) { toast(error.message, true); }
+          });
+          row.append(revoke);
+        }
+        list.append(row);
+      }
+    } catch (error) {
+      list.replaceChildren(element("p", "dialog-copy", error.message));
+    }
+  }
+
+  async function createDevicePairing() {
+    const button = $("#create-pairing");
+    button.disabled = true;
+    try {
+      const pairing = await syncFetch("/v1/sync/pairings", { method: "POST" });
+      state.sync.pairingUrl = pairing.pairUrl;
+      $("#pairing-code").textContent = `${pairing.code.slice(0, 4)}-${pairing.code.slice(4)}`;
+      $("#pairing-qr").src = `${pairing.qrUrl}?v=${Date.now()}`;
+      $("#pairing-expiry").textContent = `หมดอายุ ${relativeTime(pairing.expiresAt)}`;
+      $("#pairing-card").classList.remove("hidden");
+    } catch (error) {
+      toast(error.message, true);
+    } finally {
+      button.disabled = !state.sync.paired;
+    }
   }
 
   function conversationTitle(text) {
@@ -158,6 +391,7 @@
     state.conversations.sort((a, b) => b.updatedAt - a.updatedAt);
     persistConversations();
     renderConversationList();
+    scheduleConversationSync(conversationId);
   }
 
   function renderConversationList() {
@@ -694,6 +928,7 @@
       if (state.pendingChats.get(conversationId) === task) state.pendingChats.delete(conversationId);
       renderConversationList();
       syncChatState();
+      if (!state.pendingChats.size && state.sync.remoteDirty) refreshSyncedConversations();
       if (state.currentConversationId === conversationId && !window.matchMedia("(pointer: coarse)").matches) composer.focus();
     }
   }
@@ -1566,6 +1801,9 @@
   $("#chat-model").value = state.model;
   $("#model-pill").textContent = state.model.toUpperCase();
   $("#voice-output").setAttribute("aria-pressed", String(state.voiceOutput));
+  if (isAppleMobile()) {
+    $("#composer-hint").textContent = "Enter ขึ้นบรรทัดใหม่ · แตะ ↑ เพื่อส่ง";
+  }
 
   state.conversations = safeConversationList();
   if (state.conversations.length) {
@@ -1620,7 +1858,7 @@
   $("#chat-form").addEventListener("submit", sendChat);
   $("#chat-composer").addEventListener("input", autoGrowComposer);
   $("#chat-composer").addEventListener("keydown", (event) => {
-    if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
+    if (!isAppleMobile() && event.key === "Enter" && !event.shiftKey && !event.isComposing) {
       event.preventDefault();
       sendChat();
     }
@@ -1659,22 +1897,39 @@
     mobileMenuDialog.close();
     clearHistoryDialog.showModal();
   });
-  $("#confirm-clear-history").addEventListener("click", () => {
-    localStorage.removeItem("minikun.conversations");
-    state.conversations = [];
-    startNewChat();
-    toast("ล้างรายการบทสนทนาบนอุปกรณ์นี้แล้วครับ");
+  $("#confirm-clear-history").addEventListener("click", async (event) => {
+    event.preventDefault();
+    try {
+      if (state.sync.paired) await syncFetch("/v1/sync/conversations", { method: "DELETE" });
+      localStorage.removeItem("minikun.conversations");
+      state.conversations = [];
+      startNewChat();
+      clearHistoryDialog.close("confirm");
+      toast(state.sync.paired ? "ล้างรายการบทสนทนาจากทุกอุปกรณ์แล้วครับ" : "ล้างรายการบนอุปกรณ์นี้แล้วครับ");
+    } catch (error) { toast(error.message, true); }
   });
   window.addEventListener("beforeunload", () => {
     state.mediaStream?.getTracks().forEach((track) => track.stop());
     state.audioContext?.close();
+    state.sync.eventSource?.close();
     stopSpeech();
   });
 
-  $("#open-settings").addEventListener("click", () => settingsDialog.showModal());
+  $("#open-settings").addEventListener("click", () => {
+    settingsDialog.showModal();
+    loadPairedDevices();
+  });
   $("#mobile-menu-settings").addEventListener("click", () => {
     mobileMenuDialog.close();
     settingsDialog.showModal();
+    loadPairedDevices();
+  });
+  $("#create-pairing").addEventListener("click", createDevicePairing);
+  $("#copy-pair-link").addEventListener("click", async () => {
+    try {
+      await copyText(state.sync.pairingUrl);
+      toast("คัดลอกลิงก์จับคู่แล้วครับ");
+    } catch (error) { toast(error.message, true); }
   });
   $("#refresh").addEventListener("click", loadDashboard);
   document.querySelectorAll("[data-quick-action]").forEach((button) => {
@@ -1714,4 +1969,5 @@
   });
 
   showView("chat");
+  initializeSync();
 })();

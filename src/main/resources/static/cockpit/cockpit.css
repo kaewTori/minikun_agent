@@ -199,6 +199,32 @@ dialog::backdrop { background: rgba(0,5,2,.76); backdrop-filter: blur(7px); }
 .mobile-menu-dialog { display: none; }
 .dialog-card { padding: 24px; border: 1px solid #283c31; border-radius: 22px; background:#0d1410; box-shadow:var(--shadow); }
 .dialog-heading { display:flex;justify-content:space-between;align-items:flex-start;gap:14px;margin-bottom:12px }.dialog-heading h2{margin:0;font-size:20px}.dialog-copy{color:var(--muted);font-size:10px;line-height:1.55}.close-button{border:0;background:transparent;color:var(--muted);font-size:24px;cursor:pointer}.dialog-card label{display:block;margin-top:13px;color:var(--muted);font-size:10px;font-weight:700}.dialog-card label input,.dialog-card label textarea,.dialog-card label select{margin-top:5px;color:var(--text);font-weight:450}.dialog-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:21px}.form-grid{display:grid;gap:9px}.form-grid.three{grid-template-columns:repeat(3,1fr)}
+.settings-card { width: min(560px, calc(100vw - 28px)); }
+.device-sync-panel { padding: 15px; border: 1px solid var(--line); border-radius: 16px; background: #090e0b; }
+.device-sync-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.device-sync-heading strong, .device-sync-heading small { display: block; }
+.device-sync-heading strong { font-size: 16px; }
+.device-sync-heading small { margin-top: 4px; color: var(--muted); font-size: 13px; line-height: 1.45; }
+.device-sync-state { flex: 0 0 auto; padding: 5px 8px; border: 1px solid var(--line); border-radius: 99px; color: var(--muted); font-size: 11px; font-weight: 750; }
+.device-sync-state[data-state="paired"] { border-color: #2f6447; background: var(--green-soft); color: #9aefba; }
+.device-sync-state[data-state="unpaired"] { border-color: #66502c; color: var(--amber); }
+.pairing-actions { margin-top: 14px; }
+.pairing-actions button { width: 100%; }
+.pairing-card { display: grid; grid-template-columns: 154px minmax(0,1fr); gap: 17px; align-items: center; margin-top: 13px; padding: 13px; border: 1px solid #315f45; border-radius: 15px; background: rgba(57,229,140,.04); }
+.pairing-card img { width: 154px; height: 154px; border-radius: 10px; background: white; }
+.pairing-card small, .pairing-card strong, .pairing-card span { display: block; }
+.pairing-card small, .pairing-card span { color: var(--muted); font-size: 12px; }
+.pairing-card strong { margin: 7px 0; color: #dff7e8; font: 800 22px ui-monospace,SFMono-Regular,Menlo,monospace; letter-spacing: .12em; }
+.pairing-card .text-button { min-height: 36px; padding: 0; }
+.paired-device-list { display: grid; gap: 7px; margin-top: 13px; }
+.paired-device { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 10px; align-items: center; padding: 10px 11px; border: 1px solid var(--line); border-radius: 12px; }
+.paired-device strong, .paired-device small { display: block; }
+.paired-device strong { overflow: hidden; font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
+.paired-device small { margin-top: 3px; color: var(--muted); font-size: 11px; }
+.paired-device button { min-height: 36px; padding: 0 10px; border: 1px solid #573735; border-radius: 9px; background: rgba(255,125,121,.05); color: #e99691; font-size: 12px; }
+.paired-device-current { color: var(--green); font-size: 11px; }
+.advanced-settings { margin-top: 14px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 14px; }
+.advanced-settings summary { color: #84978c; font-size: 13px; cursor: pointer; }
 .toast-region{position:fixed;z-index:300;right:20px;bottom:20px;display:grid;gap:8px}.toast{max-width:340px;padding:11px 14px;border:1px solid #2b5c42;border-radius:12px;background:#0d1e15;color:#dff9e9;box-shadow:var(--shadow);font-size:10px;animation:toast-in .2s ease}.toast.error{border-color:#743e3d;background:#2c1413;color:#ffd7d4}@keyframes toast-in{from{opacity:0;transform:translateY(7px)}}
 
 @media (max-width: 1000px) {
@@ -245,6 +271,13 @@ dialog::backdrop { background: rgba(0,5,2,.76); backdrop-filter: blur(7px); }
   @keyframes mobile-menu-in { from { transform: translateX(-24px); opacity: .45; } }
 }
 @media (max-width: 390px) {.starter-grid button{min-height:92px}.starter-grid small{display:none}.chat-welcome h1{font-size:24px}.nav-item{min-width:60px}}
+@media (max-width: 560px) {
+  .settings-card { width: 100%; }
+  .device-sync-heading { align-items: flex-start; }
+  .pairing-card { grid-template-columns: 1fr; text-align: center; }
+  .pairing-card img { margin: 0 auto; }
+  .pairing-card strong { font-size: 20px; }
+}
 
 /* Control center and comfortable typography */
 body { font-size: 16px; }

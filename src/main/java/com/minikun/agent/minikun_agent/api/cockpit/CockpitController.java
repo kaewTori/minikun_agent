@@ -7,5 +7,12 @@ import org.springframework.web.bind.annotation.GetMapping;
 @Controller
 public final class CockpitController {
     @GetMapping({"/cockpit", "/cockpit/"})
-    public String cockpit() { return "forward:/cockpit/index.html"; }
+    public String cockpit() {
+        return "forward:/cockpit/index.html";
+    }
+
+    @GetMapping("/pair")
+    public String pair() {
+        return "forward:/cockpit/pair.html";
+    }
 }
