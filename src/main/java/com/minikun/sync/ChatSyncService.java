@@ -12,6 +12,8 @@ import java.util.UUID;
 
 public final class ChatSyncService {
     private static final Set<String> ROLES = Set.of("user", "assistant", "system");
+    private static final Set<String> METADATA_KEYS = Set.of(
+            "parentId", "branchId", "status", "feedback", "feedbackReason", "sources");
     private final ChatSyncRepository repository;
     private final SyncEventBroker events;
     private final Clock clock;
@@ -77,11 +79,34 @@ public final class ChatSyncService {
                     .filter(Objects::nonNull).map(file -> trim(file, 240)).limit(12).toList();
             List<Map<String, Object>> attachments = message.attachments() == null
                     ? List.of() : message.attachments().stream().filter(Objects::nonNull).limit(12).toList();
+            Map<String, Object> metadata = sanitizeMetadata(message.metadata());
             messages.add(new ChatSyncConversation.Message(messageId, role, content, files, attachments,
                     message.usage(), message.timing(),
-                    message.createdAt() == null ? updatedAt : message.createdAt()));
+                    message.createdAt() == null ? updatedAt : message.createdAt(), metadata));
         }
-        return new ChatSyncConversation(id, title, updatedAt, List.copyOf(messages));
+        return new ChatSyncConversation(id, title, updatedAt, List.copyOf(messages),
+                value.pinned(), value.archived());
+    }
+
+    private Map<String, Object> sanitizeMetadata(Map<String, Object> input) {
+        if (input == null || input.isEmpty()) return Map.of();
+        Map<String, Object> result = new java.util.LinkedHashMap<>();
+        for (String key : METADATA_KEYS) {
+            Object value = input.get(key);
+            if (value instanceof String text) {
+                result.put(key, trim(text, "feedbackReason".equals(key) ? 500 : 240));
+            } else if ("sources".equals(key) && value instanceof List<?> sources) {
+                List<Map<String, Object>> sanitized = new ArrayList<>();
+                for (Object source : sources.stream().limit(12).toList()) {
+                    if (!(source instanceof Map<?, ?> map)) continue;
+                    String url = trim(Objects.toString(map.get("url"), ""), 2_000);
+                    String name = trim(Objects.toString(map.get("title"), ""), 240);
+                    if (!url.isBlank()) sanitized.add(Map.of("url", url, "title", name));
+                }
+                result.put(key, List.copyOf(sanitized));
+            }
+        }
+        return Map.copyOf(result);
     }
 
     private String required(String value, String label, int limit) {

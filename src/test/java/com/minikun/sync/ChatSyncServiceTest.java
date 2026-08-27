@@ -2,6 +2,7 @@ package com.minikun.sync;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.time.Clock;
@@ -44,6 +45,43 @@ class ChatSyncServiceTest {
                 new ChatSyncConversation.Message("message", "tool", "result", List.of(), List.of(),
                         null, null, Instant.now())));
         assertThrows(IllegalArgumentException.class, () -> service.save(session, "chat", tool));
+    }
+
+    @Test
+    void preservesConversationStateAndBoundedTurnMetadata() {
+        ChatSyncConversation input = new ChatSyncConversation("chat", "หัวข้อ", null, List.of(
+                new ChatSyncConversation.Message("message", "assistant", "คำตอบ", List.of(), List.of(),
+                        null, null, Instant.now(), Map.of(
+                                "status", "complete", "feedback", "up", "branchId", "branch-1"))),
+                true, true);
+
+        ChatSyncConversation saved = service.save(session, "chat", input);
+
+        assertTrue(saved.pinned());
+        assertTrue(saved.archived());
+        assertEquals("up", saved.messages().getFirst().metadata().get("feedback"));
+    }
+
+    @Test
+    void inMemorySyncReplacesTranscriptOnlyWithNewestSnapshot() {
+        InMemoryChatSyncRepository syncRepository = new InMemoryChatSyncRepository();
+        Instant firstUpdate = Instant.parse("2026-08-26T00:00:00Z");
+        ChatSyncConversation.Message first = new ChatSyncConversation.Message(
+                "first", "user", "ต้นฉบับ", List.of(), List.of(), null, null, firstUpdate);
+        ChatSyncConversation.Message regenerated = new ChatSyncConversation.Message(
+                "regenerated", "assistant", "คำตอบใหม่", List.of(), List.of(), null, null,
+                firstUpdate.plusSeconds(1));
+        syncRepository.upsert("default", new ChatSyncConversation(
+                "chat", "เดิม", firstUpdate, List.of(first)));
+        syncRepository.upsert("default", new ChatSyncConversation(
+                "chat", "ใหม่", firstUpdate.plusSeconds(2), List.of(first, regenerated)));
+        syncRepository.upsert("default", new ChatSyncConversation(
+                "chat", "ข้อมูลเก่า", firstUpdate.minusSeconds(1), List.of()));
+
+        ChatSyncConversation saved = syncRepository.list("default", 10).getFirst();
+        assertEquals("ใหม่", saved.title());
+        assertEquals(List.of("first", "regenerated"),
+                saved.messages().stream().map(ChatSyncConversation.Message::id).toList());
     }
 
     private static final class InMemoryChats implements ChatSyncRepository {

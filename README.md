@@ -38,6 +38,8 @@
   safe automation recipes, incident correlation, explainability และ personal timeline
 - Minikun Web แบบ mobile-first และ dark theme สำหรับ streaming chat, vision, ไฟล์ข้อความ,
   voice input/output, ประวัติหลายบทสนทนา รวมถึง Cockpit, inbox และ Personal Experiment ที่ `/cockpit`
+- Chat productivity ใน Cockpit: ค้นหา/ปักหมุด/เก็บถาวร/เปลี่ยนชื่อ/ทำสำเนา/ลบ/ส่งออกบทสนทนา,
+  edit-to-branch, regenerate/retry, feedback, source cards, per-chat draft และไฟล์แนบต่อเนื่องข้าม turn
 - Personal Context Runtime สำหรับ context budget, dynamic max-tokens และ bounded recovery
 - ตรวจสอบ ลบรายรายการ และล้าง long-term memory แบบ owner-scoped ผ่าน `/v1/memory`
 
@@ -648,7 +650,7 @@ curl -X POST http://127.0.0.1:8080/v1/communication/assist \
 
 Short-term history ถูกผูกกับ `ConversationId` และเก็บทั้งข้อความฝั่ง user กับ assistant ผ่าน Spring AI JDBC Chat Memory ใน PostgreSQL เมื่อบทสนทนายาวขึ้น ระบบจะสรุปช่วงเก่าแบบ rolling summary ลง `minikun_conversation_summary` แยกตาม `owner_id` และ `conversation_id` แล้วใช้ร่วมกับข้อความล่าสุด ส่วน long-term memory ถูกเก็บในตาราง `minikun_memory` ตาม schema ใน [`memory-schema.sql`](src/main/resources/memory-schema.sql)
 
-ใน request chat ระบบจะโหลด history เดิม, เรียกคืน knowledge ที่เกี่ยวข้อง, สร้าง prompt ผ่าน PCS แล้วจึงเรียก chat model หลังตอบสำเร็จจึงบันทึก user และ assistant พร้อมกันเป็น completed turn เดียว จึงไม่ทิ้ง user message ค้างเมื่อ model ล้มเหลวหรือ stream ถูกยกเลิก
+ใน request chat ระบบจะโหลด history เดิม, เรียกคืน knowledge ที่เกี่ยวข้อง, สร้าง prompt ผ่าน PCS แล้วจึงเรียก chat model โดยส่ง recent turns เป็นข้อความ `USER`/`ASSISTANT` ตาม role จริง ส่วน rolling summary และ omission note อยู่ใน system context หลังตอบสำเร็จจึงบันทึก user และ assistant พร้อมกันเป็น completed turn เดียว จึงไม่ทิ้ง user message ค้างเมื่อ model ล้มเหลวหรือ stream ถูกยกเลิก
 
 เมื่อมี tool result ที่ยืนยันแล้ว ระบบจะใส่ผลลัพธ์นั้นไว้ใน context ของ prompt และให้โมเดลสร้างคำตอบสุดท้ายเองตาม MCS แทนการส่งข้อความสำเร็จรูปจาก tool โดยตรง
 

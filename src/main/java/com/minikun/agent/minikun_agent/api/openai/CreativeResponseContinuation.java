@@ -52,7 +52,10 @@ final class CreativeResponseContinuation {
     Prompt continuationPrompt(Prompt original, String generatedContent) {
         String systemContext = original.getSystemMessage().getText();
         String identity = prefix(systemContext, MAXIMUM_IDENTITY_CHARACTERS);
-        String conversation = suffix(section(systemContext, "Conversation"), MAXIMUM_CONVERSATION_CHARACTERS);
+        String conversation = suffix(roleConversation(original), MAXIMUM_CONVERSATION_CHARACTERS);
+        if (conversation.isBlank()) {
+            conversation = suffix(section(systemContext, "Conversation"), MAXIMUM_CONVERSATION_CHARACTERS);
+        }
         String instruction = """
                 Continue an interrupted creative response seamlessly and finish the current story or scene at a
                 natural stopping point. Preserve the same language, point of view, tense, names, characterization,
@@ -133,6 +136,26 @@ final class CreativeResponseContinuation {
         start += marker.length();
         int end = content.indexOf("\n\n[", start);
         return content.substring(start, end < 0 ? content.length() : end).strip();
+    }
+
+    private String roleConversation(Prompt prompt) {
+        List<org.springframework.ai.chat.messages.Message> instructions = prompt.getInstructions();
+        if (instructions.size() <= 2) {
+            return "";
+        }
+        StringBuilder result = new StringBuilder();
+        for (int index = 1; index < instructions.size() - 1; index++) {
+            var message = instructions.get(index);
+            if (message instanceof UserMessage) {
+                result.append("user: ");
+            } else if (message instanceof AssistantMessage) {
+                result.append("assistant: ");
+            } else {
+                continue;
+            }
+            result.append(message.getText()).append("\n\n");
+        }
+        return result.toString().strip();
     }
 
     private String prefix(String content, int maximumCharacters) {

@@ -16,6 +16,8 @@ CREATE TABLE IF NOT EXISTS minikun_chat_conversation (
     owner_id VARCHAR(200) NOT NULL,
     id VARCHAR(200) NOT NULL,
     title VARCHAR(160) NOT NULL,
+    pinned BOOLEAN NOT NULL DEFAULT FALSE,
+    archived BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
     PRIMARY KEY (owner_id, id)
@@ -23,6 +25,9 @@ CREATE TABLE IF NOT EXISTS minikun_chat_conversation (
 
 CREATE INDEX IF NOT EXISTS idx_minikun_chat_conversation_recent
     ON minikun_chat_conversation(owner_id, updated_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_minikun_chat_conversation_active
+    ON minikun_chat_conversation(owner_id, archived, pinned DESC, updated_at DESC);
 
 CREATE TABLE IF NOT EXISTS minikun_chat_message (
     owner_id VARCHAR(200) NOT NULL,
@@ -34,6 +39,7 @@ CREATE TABLE IF NOT EXISTS minikun_chat_message (
     attachments_json TEXT NOT NULL DEFAULT '[]',
     usage_json TEXT,
     timing_json TEXT,
+    metadata_json TEXT,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL,
     PRIMARY KEY (owner_id, conversation_id, id),
     CONSTRAINT fk_minikun_chat_message_conversation

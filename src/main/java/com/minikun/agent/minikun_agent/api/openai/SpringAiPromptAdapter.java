@@ -3,6 +3,7 @@ package com.minikun.agent.minikun_agent.api.openai;
 import java.util.List;
 
 import org.springframework.ai.chat.messages.Message;
+import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.prompt.ChatOptions;
@@ -77,6 +78,7 @@ final class SpringAiPromptAdapter {
         return switch (message.role()) {
             case SYSTEM -> new SystemMessage(message.content());
             case USER -> new UserMessage(message.content());
+            case ASSISTANT -> new AssistantMessage(message.content());
         };
     }
 }

@@ -61,7 +61,9 @@ The default maximum is 20 messages and can be overridden with `SPRING_AI_CHAT_ME
 
 ## Prompt continuity
 
-When a client sends the visible transcript in the OpenAI-compatible `messages` array, the service reconciles it with stored JDBC history. A recent client suffix recovers its older stored turns, overlapping histories are merged without duplicates, and a genuinely divergent visible transcript remains authoritative so an edited branch cannot pull in unrelated stored messages. Stored JDBC history is also used when clients send only the current user message. System and internal command messages are excluded from the conversation section.
+When a client sends the visible transcript in the OpenAI-compatible `messages` array, the service reconciles it with stored JDBC history. Minikun Cockpit sends its completed visible user/assistant transcript on every turn, including the current user message, so assistant answers remain available even when the browser and server memory are being reconciled. A recent client suffix recovers its older stored turns, overlapping histories are merged without duplicates, and a genuinely divergent visible transcript remains authoritative so an edited branch cannot pull in unrelated stored messages. Stored JDBC history is also used when clients send only the current user message. Recent turns are rendered as native `USER` and `ASSISTANT` prompt messages; rolling summary and omission notes remain system context. System, internal command, and client-local error messages are excluded.
+
+Cockpit stores attachment assets locally in IndexedDB instead of syncing raw Base64 data. Text-file bodies can be restored on later turns, and up to two recent image attachments are reattached to the current multimodal request so follow-up questions can still refer to them. Editing a user turn creates a new branch, while regenerating the newest assistant response replaces the truncated transcript in sync storage.
 
 Conversation context receives 30% of the application context-character budget. The normal total is 24,000 characters; creative writing and storytelling turns use 40,000 characters by default, giving their conversation section more room for preceding scenes and story constraints. History is selected from the newest message backwards and an omission marker is added when older messages do not fit. Oversized conversation context is windowed again during context-pressure recovery, so the latest turns remain available instead of the entire conversation section being evicted. Verified tool-result turns retain this recent conversation window alongside the current tool evidence.
 
@@ -80,8 +82,9 @@ Owner-scoped summary inspection and repair use the existing memory-management tr
 - `GET /v1/conversations/{conversationId}/summary?ownerId=default`
 - `POST /v1/conversations/{conversationId}/summary/rebuild?ownerId=default`
 - `DELETE /v1/conversations/{conversationId}/summary?ownerId=default`
+- `DELETE /v1/conversations/{conversationId}?ownerId=default`
 
-When configured, send `X-Minikun-Memory-Token`; the dedicated override is `MINIKUN_CONVERSATION_SUMMARY_MANAGEMENT_TOKEN`. Status includes enabled/present state, summary age, summarized-message count, retained history count, and whether an update is pending.
+The conversation delete endpoint clears short-term JDBC chat memory and its rolling summary but intentionally leaves long-term memory intact. When configured, send `X-Minikun-Memory-Token`; the dedicated override is `MINIKUN_CONVERSATION_SUMMARY_MANAGEMENT_TOKEN`. Status includes enabled/present state, summary age, summarized-message count, retained history count, and whether an update is pending. Cockpit sync also persists conversation pin/archive state and bounded per-message branch, status, feedback, and source metadata.
 
 Actuator publishes `minikun.conversation.summary.jobs` with `updated`, `noop`, `failed`, `coalesced`, and `queue_full` outcomes, plus `minikun.conversation.summary.duration` and `minikun.conversation.summary.queue.depth`.
 

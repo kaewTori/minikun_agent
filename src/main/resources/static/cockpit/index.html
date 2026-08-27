@@ -7,7 +7,7 @@
   <meta name="description" content="Minikun — ผู้ช่วยส่วนตัวที่คุย คิด ค้นหา และลงมือทำร่วมกับคุณ">
   <title>Minikun</title>
   <link rel="icon" href="/cockpit/minikun-avatar.jpg">
-  <link rel="stylesheet" href="/cockpit/cockpit.css?v=20260826-devicesync2">
+  <link rel="stylesheet" href="/cockpit/cockpit.css?v=20260827-chat-productivity1">
 </head>
 <body>
   <a class="skip-link" href="#chat-composer">ข้ามไปยังช่องพิมพ์ข้อความ</a>
@@ -26,6 +26,8 @@
       </nav>
       <section class="conversation-panel" aria-labelledby="conversation-heading">
         <div class="conversation-heading"><span id="conversation-heading">บทสนทนา</span><button id="clear-chat-list" type="button" aria-label="ล้างรายการบทสนทนา">•••</button></div>
+        <label class="conversation-search"><span class="sr-only">ค้นหาบทสนทนา</span><input data-conversation-search type="search" placeholder="ค้นหาแชต…"></label>
+        <button class="archive-toggle" data-archive-toggle type="button">ดูคลังแชต</button>
         <ol id="conversation-list" class="conversation-list" data-conversation-list></ol>
         <p id="conversation-empty" class="conversation-empty" data-conversation-empty>บทสนทนาจะซิงก์ข้ามอุปกรณ์ครับ</p>
       </section>
@@ -166,6 +168,8 @@
       </nav>
       <section class="mobile-conversation-panel" aria-labelledby="mobile-conversation-heading">
         <div class="conversation-heading"><span id="mobile-conversation-heading">บทสนทนา</span><button id="mobile-clear-chat-list" type="button" aria-label="ล้างรายการบทสนทนา">•••</button></div>
+        <label class="conversation-search"><span class="sr-only">ค้นหาบทสนทนา</span><input data-conversation-search type="search" placeholder="ค้นหาแชต…"></label>
+        <button class="archive-toggle" data-archive-toggle type="button">ดูคลังแชต</button>
         <ol class="conversation-list" data-conversation-list></ol>
         <p class="conversation-empty" data-conversation-empty>บทสนทนาจะซิงก์ข้ามอุปกรณ์ครับ</p>
       </section>
@@ -176,6 +180,7 @@
   <dialog id="experiment-dialog"><form method="dialog" class="dialog-card experiment-form" id="experiment-form"><div class="dialog-heading"><div><p class="eyebrow coral">NEW EXPERIMENT</p><h2>ลองเรื่องเล็ก ๆ อย่างตั้งใจ</h2></div><button class="close-button" type="button" data-close-dialog aria-label="ปิด">×</button></div><label>ชื่อการทดลอง<input name="title" required maxlength="120" placeholder="เช่น โฟกัสก่อนเปิดแชต"></label><label>สมมติฐาน<textarea name="hypothesis" required rows="2" placeholder="ถ้าฉันทำ… แล้วน่าจะเกิด…"></textarea></label><label>วิธีที่เราจะลอง<textarea name="protocol" required rows="2" placeholder="กติกาเล็ก ๆ ที่ทำซ้ำได้"></textarea></label><div class="form-grid three"><label>ตัวชี้วัด<input name="metricName" required placeholder="นาทีโฟกัส"></label><label>หน่วย<input name="metricUnit" required placeholder="นาที"></label><label>ทิศทาง<select name="direction"><option value="INCREASE">เพิ่มขึ้น</option><option value="DECREASE">ลดลง</option></select></label></div><div class="form-grid three"><label>ค่าตั้งต้น<input name="baselineValue" required type="number" step="any" value="0"></label><label>เป้าหมาย<input name="targetValue" required type="number" step="any" value="1"></label><label>ระยะเวลา (วัน)<input name="durationDays" required type="number" min="1" max="365" value="7"></label></div><div class="dialog-actions"><button class="secondary-button" type="button" data-close-dialog>ไว้ก่อน</button><button class="primary-button" value="default">สร้างเป็นฉบับร่าง</button></div></form></dialog>
   <dialog id="experiment-action-dialog"><form method="dialog" class="dialog-card" id="experiment-action-form"><div class="dialog-heading"><div><p class="eyebrow coral">EXPERIMENT CHECK-IN</p><h2 id="experiment-action-title">บันทึกผลวันนี้</h2></div><button class="close-button" type="button" data-close-dialog aria-label="ปิด">×</button></div><p class="dialog-copy" id="experiment-action-copy"></p><label id="experiment-value-field">ค่าที่วัดได้<input id="experiment-value" name="value" type="number" step="any"></label><label id="experiment-score-field" class="hidden">ผลลัพธ์ช่วยแค่ไหน<select id="experiment-score" name="score"><option value="5">5 — ช่วยมาก</option><option value="4">4 — ช่วยชัดเจน</option><option value="3">3 — พอใช้</option><option value="2">2 — ช่วยน้อย</option><option value="1">1 — ไม่ช่วย</option></select></label><label>บันทึกสั้น ๆ<textarea id="experiment-note" name="note" rows="3" placeholder="วันนี้สังเกตอะไรบ้าง"></textarea></label><div class="dialog-actions"><button class="secondary-button" type="button" data-close-dialog>ยกเลิก</button><button class="primary-button" value="default" id="experiment-action-submit">บันทึก</button></div></form></dialog>
   <dialog id="clear-history-dialog"><form method="dialog" class="dialog-card"><div class="dialog-heading"><div><p class="eyebrow">SYNCED HISTORY</p><h2>ล้างรายการบทสนทนา?</h2></div><button class="close-button" type="button" data-close-dialog aria-label="ปิด">×</button></div><p class="dialog-copy">รายการแชตจะถูกล้างจากทุกอุปกรณ์ที่จับคู่ไว้ แต่ไม่แตะความจำระยะยาวของมินิคุงครับ</p><div class="dialog-actions"><button class="secondary-button" type="button" data-close-dialog>ยกเลิก</button><button class="danger-button" value="confirm" id="confirm-clear-history">ล้างทุกรายการ</button></div></form></dialog>
-  <script src="/cockpit/cockpit.js?v=20260826-devicesync3" defer></script>
+  <dialog id="conversation-actions-dialog"><form method="dialog" class="dialog-card"><div class="dialog-heading"><div><p class="eyebrow">CONVERSATION</p><h2>จัดการบทสนทนา</h2></div><button class="close-button" type="button" data-close-dialog aria-label="ปิด">×</button></div><label>ชื่อบทสนทนา<input id="conversation-title-input" maxlength="160" autocomplete="off"></label><div class="conversation-action-grid"><button class="secondary-button" id="rename-conversation" type="button">เปลี่ยนชื่อ</button><button class="secondary-button" id="pin-conversation" type="button">ปักหมุด</button><button class="secondary-button" id="archive-conversation" type="button">เก็บเข้าคลัง</button><button class="secondary-button" id="duplicate-conversation" type="button">ทำสำเนา</button><button class="secondary-button" id="export-conversation" type="button">Export Markdown</button><button class="secondary-button" id="export-conversation-json" type="button">Export JSON</button><button class="danger-button" id="delete-conversation" type="button">ลบบทสนทนา</button></div></form></dialog>
+  <script src="/cockpit/cockpit.js?v=20260827-chat-productivity1" defer></script>
 </body>
 </html>

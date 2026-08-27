@@ -48,7 +48,7 @@ public final class ContextItemAssembler {
     }
 
     private void addConversation(List<ContextItem> items, PromptRequest request) {
-        String content = request.conversation() == null ? null : request.conversation().content();
+        String content = request.conversation() == null ? null : request.conversation().systemContent();
         if (content == null || content.isBlank()) {
             return;
         }

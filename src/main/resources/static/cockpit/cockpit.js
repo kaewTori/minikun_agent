@@ -7,6 +7,9 @@
     model: localStorage.getItem("minikun.model") || "mini-kun",
     conversations: [],
     currentConversationId: "",
+    conversationQuery: "",
+    showArchived: false,
+    actionConversationId: "",
     chatMessages: [],
     attachments: [],
     pendingChats: new Map(),
@@ -140,6 +143,13 @@
       id: message.id || uniqueId("message-"),
       role: message.role,
       content: message.content,
+      localOnly: Boolean(message.localOnly),
+      parentId: message.parentId || "",
+      branchId: message.branchId || "",
+      status: message.status || "complete",
+      feedback: message.feedback || "",
+      feedbackReason: message.feedbackReason || "",
+      sources: (message.sources || []).slice(0, 12),
       createdAt: message.createdAt,
       files: (message.files || []).slice(0, 12),
       usage: message.usage,
@@ -148,7 +158,14 @@
         totalMs: message.timing.totalMs
       } : undefined,
       attachments: (message.attachments || [])
-        .filter((attachment) => attachment.url && !attachment.url.startsWith("data:"))
+        .map((attachment) => ({
+          title: attachment.title || attachment.name || "ไฟล์แนบ",
+          url: attachment.url && !attachment.url.startsWith("data:") ? attachment.url : "",
+          assetId: attachment.assetId || "",
+          kind: attachment.kind || "image",
+          type: attachment.type || ""
+        }))
+        .filter((attachment) => attachment.url || attachment.assetId)
         .slice(0, 6)
     }));
   }
@@ -158,11 +175,20 @@
       id: String(value.id),
       title: String(value.title || "แชตใหม่"),
       updatedAt: Number(value.updatedAt) || Date.parse(value.updatedAt) || Date.now(),
+      pinned: Boolean(value.pinned),
+      archived: Boolean(value.archived),
       messages: (Array.isArray(value.messages) ? value.messages : []).slice(-80).map((message) => ({
         ...message,
         id: message.id || uniqueId("message-"),
         role: message.role || "user",
         content: String(message.content || ""),
+        parentId: message.parentId || message.metadata?.parentId || "",
+        branchId: message.branchId || message.metadata?.branchId || "",
+        status: message.status || message.metadata?.status || "complete",
+        feedback: message.feedback || message.metadata?.feedback || "",
+        feedbackReason: message.feedbackReason || message.metadata?.feedbackReason || "",
+        sources: Array.isArray(message.sources) ? message.sources
+          : Array.isArray(message.metadata?.sources) ? message.metadata.sources : [],
         createdAt: Number(message.createdAt) || Date.parse(message.createdAt) || Date.now(),
         files: Array.isArray(message.files) ? message.files : [],
         attachments: Array.isArray(message.attachments) ? message.attachments : []
@@ -174,9 +200,25 @@
     return {
       id: conversation.id,
       title: conversation.title,
+      pinned: Boolean(conversation.pinned),
+      archived: Boolean(conversation.archived),
       updatedAt: new Date(conversation.updatedAt || Date.now()).toISOString(),
-      messages: (conversation.messages || []).map((message) => ({
-        ...message,
+      messages: (conversation.messages || []).filter((message) => !message.localOnly).map((message) => ({
+        id: message.id,
+        role: message.role,
+        content: message.content,
+        files: message.files,
+        usage: message.usage,
+        timing: message.timing,
+        attachments: message.attachments,
+        metadata: {
+          parentId: message.parentId || "",
+          branchId: message.branchId || "",
+          status: message.status || "complete",
+          feedback: message.feedback || "",
+          feedbackReason: message.feedbackReason || "",
+          sources: (message.sources || []).slice(0, 12)
+        },
         createdAt: new Date(message.createdAt || Date.now()).toISOString()
       }))
     };
@@ -382,39 +424,55 @@
   function saveConversation(seed = "", conversationId = state.currentConversationId, messages = state.chatMessages) {
     let current = state.conversations.find((item) => item.id === conversationId);
     if (!current) {
-      current = { id: conversationId, title: conversationTitle(seed), updatedAt: Date.now(), messages: [] };
+      current = {
+        id: conversationId, title: conversationTitle(seed), updatedAt: Date.now(), messages: [],
+        pinned: false, archived: false
+      };
       state.conversations.unshift(current);
     }
     if (current.title === "แชตใหม่" && seed) current.title = conversationTitle(seed);
     current.updatedAt = Date.now();
     current.messages = compactMessages(messages);
-    state.conversations.sort((a, b) => b.updatedAt - a.updatedAt);
+    state.conversations.sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.updatedAt - a.updatedAt);
     persistConversations();
     renderConversationList();
     scheduleConversationSync(conversationId);
   }
 
   function renderConversationList() {
+    const query = state.conversationQuery.trim().toLocaleLowerCase("th");
+    const visible = state.conversations.filter((conversation) => {
+      if (Boolean(conversation.archived) !== state.showArchived) return false;
+      if (!query) return true;
+      return `${conversation.title}\n${(conversation.messages || []).map((message) => message.content).join("\n")}`
+        .toLocaleLowerCase("th").includes(query);
+    });
     for (const list of document.querySelectorAll("[data-conversation-list]")) {
       list.replaceChildren();
-      for (const conversation of state.conversations) {
+      for (const conversation of visible) {
         const item = element("li");
         const button = element("button", conversation.id === state.currentConversationId ? "active" : "");
         const pending = state.pendingChats.has(conversation.id);
         button.classList.toggle("pending", pending);
         button.type = "button";
         button.title = pending ? `${conversation.title} — มินิคุงกำลังตอบ` : conversation.title;
-        button.append(element("span", "", conversation.title));
+        button.append(element("span", "", `${conversation.pinned ? "◆ " : ""}${conversation.title}`));
         button.addEventListener("click", () => {
           mobileMenuDialog?.close();
           switchConversation(conversation.id);
         });
-        item.append(button);
+        const actions = element("button", "conversation-actions-button", "•••");
+        actions.type = "button";
+        actions.setAttribute("aria-label", `จัดการ ${conversation.title}`);
+        actions.addEventListener("click", () => openConversationActions(conversation.id));
+        item.append(button, actions);
         list.append(item);
       }
     }
     document.querySelectorAll("[data-conversation-empty]").forEach((node) => {
-      node.classList.toggle("hidden", state.conversations.length > 0);
+      node.classList.toggle("hidden", visible.length > 0);
+      node.textContent = query ? "ไม่พบบทสนทนาที่ค้นหา" : state.showArchived
+        ? "ยังไม่มีบทสนทนาที่เก็บถาวร" : "บทสนทนาจะซิงก์ข้ามอุปกรณ์ครับ";
     });
   }
 
@@ -427,6 +485,7 @@
     renderConversationList();
     syncChatState();
     showView("chat");
+    restoreDraft();
     $("#chat-composer").focus();
   }
 
@@ -441,6 +500,90 @@
     renderConversationList();
     syncChatState();
     showView("chat");
+    restoreDraft();
+  }
+
+  function draftKey() {
+    return `minikun.draft.${state.currentConversationId}`;
+  }
+
+  function saveDraft() {
+    try { localStorage.setItem(draftKey(), $("#chat-composer").value); } catch (_) { /* quota */ }
+  }
+
+  function restoreDraft() {
+    const composer = $("#chat-composer");
+    try { composer.value = localStorage.getItem(draftKey()) || ""; } catch (_) { composer.value = ""; }
+    autoGrowComposer();
+  }
+
+  function actionConversation() {
+    return state.conversations.find((conversation) => conversation.id === state.actionConversationId);
+  }
+
+  function openConversationActions(id) {
+    const conversation = state.conversations.find((item) => item.id === id);
+    if (!conversation) return;
+    state.actionConversationId = id;
+    $("#conversation-title-input").value = conversation.title;
+    $("#pin-conversation").textContent = conversation.pinned ? "เลิกปักหมุด" : "ปักหมุด";
+    $("#archive-conversation").textContent = conversation.archived ? "นำกลับจากคลัง" : "เก็บเข้าคลัง";
+    if (!$("#conversation-actions-dialog").open) $("#conversation-actions-dialog").showModal();
+  }
+
+  function touchConversation(conversation) {
+    conversation.updatedAt = Date.now();
+    state.conversations.sort((left, right) => Number(right.pinned) - Number(left.pinned)
+      || right.updatedAt - left.updatedAt);
+    persistConversations();
+    renderConversationList();
+    scheduleConversationSync(conversation.id);
+  }
+
+  function exportConversation(conversation) {
+    const markdownText = [
+      `# ${conversation.title}`,
+      "",
+      ...(conversation.messages || []).flatMap((message) => [
+        `## ${message.role === "assistant" ? "Minikun" : "User"}`,
+        "",
+        message.content || "",
+        ...(message.sources?.length ? ["", "Sources:", ...message.sources.map((source) => `- ${source.url}`)] : []),
+        ""
+      ])
+    ].join("\n");
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(new Blob([markdownText], { type: "text/markdown;charset=utf-8" }));
+    link.download = `${conversation.title.replace(/[^\p{L}\p{N}._-]+/gu, "-").slice(0, 80) || "minikun-chat"}.md`;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+  }
+
+  function exportConversationJson(conversation) {
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(new Blob([JSON.stringify(syncPayload(conversation), null, 2)],
+      { type: "application/json;charset=utf-8" }));
+    link.download = `${conversation.title.replace(/[^\p{L}\p{N}._-]+/gu, "-").slice(0, 80) || "minikun-chat"}.json`;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+  }
+
+  async function deleteConversation(conversation) {
+    if (!conversation || !window.confirm(`ลบ “${conversation.title}” และบริบทระยะสั้นของแชตนี้?`)) return;
+    await api(`/v1/conversations/${encodeURIComponent(conversation.id)}`, { method: "DELETE" });
+    if (state.sync.paired) {
+      await syncFetch(`/v1/sync/conversations/${encodeURIComponent(conversation.id)}`, { method: "DELETE" });
+    }
+    state.conversations = state.conversations.filter((item) => item.id !== conversation.id);
+    persistConversations();
+    $("#conversation-actions-dialog").close();
+    if (state.currentConversationId === conversation.id) {
+      const next = state.conversations.find((item) => !item.archived);
+      if (next) switchConversation(next.id); else startNewChat();
+    } else {
+      renderConversationList();
+    }
+    toast("ลบบทสนทนาและ short-term memory แล้วครับ");
   }
 
   function showView(view, section = "") {
@@ -570,10 +713,43 @@
     if (thinkingMs > 0) values.push(`คิด ${formatDuration(thinkingMs)}`);
     const totalMs = Number(message.timing?.totalMs);
     if (totalMs > thinkingMs) values.push(`รวม ${formatDuration(totalMs)}`);
+    if (message.status === "stopped") values.push("หยุดโดยผู้ใช้");
+    if (message.status === "failed") values.push("ส่งไม่สำเร็จ");
     if (!values.length) return null;
     const meta = element("div", "response-meta");
     values.forEach((value) => meta.append(element("span", "", value)));
     return meta;
+  }
+
+  function renderSourceCards(message) {
+    if (message.role !== "assistant" || !message.sources?.length) return null;
+    const region = element("section", "message-sources");
+    region.append(element("strong", "", "แหล่งอ้างอิง"));
+    const list = element("div", "message-source-list");
+    for (const source of message.sources) {
+      const link = element("a", "message-source", source.title || source.url);
+      link.href = source.url;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      list.append(link);
+    }
+    region.append(list);
+    return region;
+  }
+
+  function setMessageFeedback(message, value) {
+    if (message.feedback === value) {
+      message.feedback = "";
+      message.feedbackReason = "";
+    } else {
+      message.feedback = value;
+      message.feedbackReason = value === "down"
+        ? String(window.prompt("มินิคุงควรปรับอะไรในคำตอบนี้? (ไม่บังคับ)", "") || "").trim().slice(0, 500)
+        : "";
+    }
+    saveConversation("", state.currentConversationId, state.chatMessages);
+    renderChat();
+    toast(message.feedback ? "บันทึก feedback แล้วครับ" : "ยกเลิก feedback แล้วครับ");
   }
 
   function renderLiveProgress(message) {
@@ -624,6 +800,8 @@
       }
       if (images.childElementCount) body.append(images);
     }
+    const sourceCards = renderSourceCards(message);
+    if (sourceCards) body.append(sourceCards);
     const responseMeta = renderResponseMeta(message);
     if (responseMeta) body.append(responseMeta);
     if (!live) {
@@ -638,6 +816,29 @@
         } catch (error) { toast(error.message, true); }
       });
       tools.append(copy);
+      const index = state.chatMessages.indexOf(message);
+      const branch = element("button", "", "แตกสาขา");
+      branch.type = "button";
+      branch.addEventListener("click", () => branchFromMessage(index));
+      tools.append(branch);
+      if (message.role === "user") {
+        const edit = element("button", "", "แก้ไข");
+        edit.type = "button";
+        edit.addEventListener("click", () => editUserMessage(index));
+        tools.append(edit);
+      } else {
+        const regenerate = element("button", "", message.status === "failed" ? "ลองอีกครั้ง" : "ตอบใหม่");
+        regenerate.type = "button";
+        regenerate.addEventListener("click", () => regenerateMessage(index));
+        tools.append(regenerate);
+        for (const [value, label] of [["up", "👍"], ["down", "👎"]]) {
+          const feedback = element("button", message.feedback === value ? "selected" : "", label);
+          feedback.type = "button";
+          feedback.setAttribute("aria-label", value === "up" ? "คำตอบมีประโยชน์" : "คำตอบควรปรับปรุง");
+          feedback.addEventListener("click", () => setMessageFeedback(message, value));
+          tools.append(feedback);
+        }
+      }
       body.append(tools);
     }
     row.append(avatar, body);
@@ -732,6 +933,60 @@
     });
   }
 
+  function attachmentDatabase() {
+    return new Promise((resolve, reject) => {
+      if (!("indexedDB" in globalThis)) {
+        reject(new Error("Browser นี้ไม่รองรับที่เก็บไฟล์สำหรับแชตต่อเนื่อง"));
+        return;
+      }
+      const request = indexedDB.open("minikun-chat-assets", 1);
+      request.onupgradeneeded = () => request.result.createObjectStore("assets", { keyPath: "id" });
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error || new Error("เปิดที่เก็บไฟล์ไม่สำเร็จ"));
+    });
+  }
+
+  async function saveAttachmentAsset(attachment) {
+    const asset = {
+      id: attachment.assetId || uniqueId("asset-"),
+      kind: attachment.kind,
+      name: attachment.name,
+      type: attachment.type,
+      value: attachment.kind === "image" ? attachment.data : attachment.text,
+      createdAt: Date.now()
+    };
+    try {
+      const database = await attachmentDatabase();
+      await new Promise((resolve, reject) => {
+        const transaction = database.transaction("assets", "readwrite");
+        transaction.objectStore("assets").put(asset);
+        transaction.oncomplete = resolve;
+        transaction.onerror = () => reject(transaction.error);
+      });
+      database.close();
+      attachment.assetId = asset.id;
+    } catch (error) {
+      console.warn("Chat attachment persistence unavailable", error);
+    }
+    return attachment;
+  }
+
+  async function loadAttachmentAsset(assetId) {
+    if (!assetId) return null;
+    try {
+      const database = await attachmentDatabase();
+      const result = await new Promise((resolve, reject) => {
+        const request = database.transaction("assets", "readonly").objectStore("assets").get(assetId);
+        request.onsuccess = () => resolve(request.result || null);
+        request.onerror = () => reject(request.error);
+      });
+      database.close();
+      return result;
+    } catch (_) {
+      return null;
+    }
+  }
+
   async function addFiles(files) {
     for (const file of Array.from(files).slice(0, 6)) {
       if (file.size > 10 * 1024 * 1024) {
@@ -740,13 +995,17 @@
       }
       try {
         if (file.type.startsWith("image/")) {
-          state.attachments.push({ kind: "image", name: file.name, type: file.type, data: await fileAsDataUrl(file) });
+          state.attachments.push(await saveAttachmentAsset({
+            kind: "image", name: file.name, type: file.type, data: await fileAsDataUrl(file)
+          }));
         } else {
           if (file.size > 500 * 1024) {
             toast(`${file.name} ใหญ่เกิน 500 KB สำหรับไฟล์ข้อความครับ`, true);
             continue;
           }
-          state.attachments.push({ kind: "text", name: file.name, type: file.type, text: await fileAsText(file) });
+          state.attachments.push(await saveAttachmentAsset({
+            kind: "text", name: file.name, type: file.type, text: await fileAsText(file)
+          }));
         }
       } catch (error) { toast(error.message, true); }
     }
@@ -794,6 +1053,68 @@
       { type: "text", text: combined || "ช่วยดูภาพที่แนบมานี้ให้หน่อยครับ" },
       ...images.map((image) => ({ type: "image_url", image_url: { url: image.data, detail: "auto" } }))
     ];
+  }
+
+  async function promptMessages(messages, currentUserMessage, currentContent) {
+    const selected = messages
+      .filter((message) => message === currentUserMessage || !message.localOnly)
+      .filter((message) => message.role === "user" || message.role === "assistant")
+      .slice(-40);
+    const recentTextAssetIds = new Set();
+    const recentImageAssetIds = [];
+    for (let messageIndex = selected.length - 1; messageIndex >= 0; messageIndex--) {
+      const message = selected[messageIndex];
+      if (message === currentUserMessage || message.role !== "user") continue;
+      const attachments = message.attachments || [];
+      for (let attachmentIndex = attachments.length - 1; attachmentIndex >= 0; attachmentIndex--) {
+        const attachment = attachments[attachmentIndex];
+        if (!attachment.assetId) continue;
+        if (attachment.kind === "text" && recentTextAssetIds.size < 3) {
+          recentTextAssetIds.add(attachment.assetId);
+        }
+        if (attachment.kind === "image" && recentImageAssetIds.length < 2
+            && !recentImageAssetIds.includes(attachment.assetId)) {
+          recentImageAssetIds.push(attachment.assetId);
+        }
+      }
+      if (recentTextAssetIds.size >= 3 && recentImageAssetIds.length >= 2) break;
+    }
+    let restoredTextCharacters = 0;
+    const result = [];
+    for (const message of selected) {
+      let content = message === currentUserMessage ? currentContent : String(message.content || "").trim();
+      if (message !== currentUserMessage && message.role === "user") {
+        for (const attachment of (message.attachments || [])) {
+          if (!recentTextAssetIds.has(attachment.assetId)) continue;
+          const asset = await loadAttachmentAsset(attachment.assetId);
+          if (asset?.kind === "text" && asset.value && restoredTextCharacters < 30000) {
+            const excerpt = String(asset.value).slice(0, 30000 - restoredTextCharacters);
+            restoredTextCharacters += excerpt.length;
+            content += `\n\n[ไฟล์แนบจากข้อความนี้: ${asset.name}]\n\`\`\`text\n${excerpt}\n\`\`\``;
+          }
+        }
+      }
+      if (Array.isArray(content) || content) result.push({ role: message.role, content });
+    }
+    const previousImages = [];
+    for (const assetId of recentImageAssetIds.reverse()) {
+      const asset = await loadAttachmentAsset(assetId);
+      if (asset?.kind === "image" && asset.value) {
+        previousImages.push({ name: asset.name, data: asset.value });
+      }
+    }
+    if (previousImages.length && result.length) {
+      const current = result.at(-1);
+      const parts = Array.isArray(current.content)
+        ? [...current.content]
+        : [{ type: "text", text: String(current.content || "") }];
+      for (const image of previousImages) {
+        parts.push({ type: "text", text: `[ภาพจากข้อความก่อนหน้า: ${image.name}]` });
+        parts.push({ type: "image_url", image_url: { url: image.data, detail: "auto" } });
+      }
+      current.content = parts;
+    }
+    return result;
   }
 
   async function consumeChatStream(response, assistant, task) {
@@ -844,49 +1165,62 @@
     }
   }
 
-  async function sendChat(event) {
-    event?.preventDefault();
-    const conversationId = state.currentConversationId;
-    if (state.chatTranscribing || state.pendingChats.has(conversationId)) return;
-    const composer = $("#chat-composer");
-    const text = composer.value.trim();
-    const attachments = state.attachments.splice(0);
-    if (!text && !attachments.length) return;
-    const files = attachments.map((item) => item.name);
-    const messages = state.chatMessages;
-    const userMessage = {
-      id: uniqueId("message-"), role: "user", content: text || "ช่วยดูไฟล์ที่แนบมานี้ให้หน่อยครับ", files,
-      attachments: attachments.filter((item) => item.kind === "image").map((item) => ({ title: item.name, url: item.data })),
-      createdAt: Date.now()
-    };
+  function extractSources(content) {
+    const seen = new Set();
+    const sources = [];
+    for (const match of String(content || "").matchAll(/https?:\/\/[^\s)\]}>"']+/g)) {
+      const url = match[0].replace(/[.,;:!?]+$/, "");
+      if (seen.has(url)) continue;
+      seen.add(url);
+      try {
+        sources.push({ url, title: new URL(url).hostname.replace(/^www\./, "") });
+      } catch (_) { /* ignore malformed model output */ }
+      if (sources.length >= 12) break;
+    }
+    return sources;
+  }
+
+  async function hydrateMessageAttachments(message) {
+    const hydrated = [];
+    for (const attachment of (message.attachments || []).slice(0, 6)) {
+      const asset = await loadAttachmentAsset(attachment.assetId);
+      if (asset) {
+        hydrated.push({
+          kind: asset.kind, name: asset.name, type: asset.type, assetId: asset.id,
+          ...(asset.kind === "image" ? { data: asset.value } : { text: asset.value })
+        });
+      }
+    }
+    return hydrated;
+  }
+
+  async function runChatTurn({ conversationId, messages, userMessage, currentContent, seed }) {
     const assistant = {
       id: uniqueId("message-"), role: "assistant", content: "", attachments: [], createdAt: Date.now(),
-      timing: { startedAt: Date.now(), firstTokenMs: 0, totalMs: 0 }
+      parentId: userMessage.id, branchId: userMessage.branchId || conversationId, status: "generating",
+      timing: { startedAt: Date.now(), firstTokenMs: 0, totalMs: 0 }, sources: [], feedback: ""
     };
-    messages.push(userMessage);
-    composer.value = "";
-    autoGrowComposer();
-    renderAttachmentTray();
     $("#chat-welcome").classList.add("hidden");
-    $("#messages").append(renderMessage(userMessage), renderMessage(assistant, true));
+    renderChat();
+    $("#messages").append(renderMessage(assistant, true));
     scrollToLatest();
-    saveConversation(text || files[0], conversationId, messages);
+    saveConversation(seed || userMessage.content, conversationId, messages);
     const task = {
       controller: new AbortController(), assistant, conversationId,
       status: "กำลังทำความเข้าใจคำถาม…", progressTimer: null
     };
     state.pendingChats.set(conversationId, task);
-    startPendingProgress(task, text);
+    startPendingProgress(task, userMessage.content);
     renderConversationList();
     syncChatState();
     try {
       const response = await fetch("/v1/chat/completions", {
         method: "POST",
-        headers: headers(true),
+        headers: { ...headers(true), "X-Conversation-Id": conversationId },
         signal: task.controller.signal,
         body: JSON.stringify({
           model: state.model,
-          messages: [{ role: "user", content: requestContent(text, attachments) }],
+          messages: await promptMessages(messages, userMessage, currentContent),
           conversation_id: conversationId,
           owner_id: state.ownerId,
           stream: true
@@ -900,8 +1234,10 @@
       await consumeChatStream(response, assistant, task);
       assistant.timing.totalMs = Date.now() - assistant.timing.startedAt;
       if (!assistant.content && !assistant.attachments.length) assistant.content = "ได้รับข้อความแล้วครับ แต่ยังไม่มีคำตอบกลับมา";
+      assistant.status = "complete";
+      assistant.sources = extractSources(assistant.content);
       messages.push(assistant);
-      saveConversation(text || files[0], conversationId, messages);
+      saveConversation(seed || userMessage.content, conversationId, messages);
       if (state.currentConversationId === conversationId) {
         renderChat();
         if (state.voiceOutput && assistant.content) speak(assistant.content);
@@ -911,15 +1247,18 @@
         assistant.timing.totalMs = Date.now() - assistant.timing.startedAt;
         if (assistant.content) {
           assistant.content += "\n\n_หยุดคำตอบแล้ว_";
+          assistant.status = "stopped";
           messages.push(assistant);
-          saveConversation(text || files[0], conversationId, messages);
+          saveConversation(seed || userMessage.content, conversationId, messages);
         }
         if (state.currentConversationId === conversationId) renderChat();
       } else {
         assistant.timing.totalMs = Date.now() - assistant.timing.startedAt;
         assistant.content = `ขออภัยครับ ตอนนี้เชื่อมต่อไม่สำเร็จ\n\n${error.message}`;
+        assistant.localOnly = true;
+        assistant.status = "failed";
         messages.push(assistant);
-        saveConversation(text || files[0], conversationId, messages);
+        saveConversation(seed || userMessage.content, conversationId, messages);
         if (state.currentConversationId === conversationId) renderChat();
         toast(error.message, true);
       }
@@ -929,8 +1268,113 @@
       renderConversationList();
       syncChatState();
       if (!state.pendingChats.size && state.sync.remoteDirty) refreshSyncedConversations();
-      if (state.currentConversationId === conversationId && !window.matchMedia("(pointer: coarse)").matches) composer.focus();
+      if (state.currentConversationId === conversationId && !window.matchMedia("(pointer: coarse)").matches) {
+        $("#chat-composer").focus();
+      }
     }
+  }
+
+  async function sendChat(event) {
+    event?.preventDefault();
+    const conversationId = state.currentConversationId;
+    if (state.chatTranscribing || state.pendingChats.has(conversationId)) return;
+    const composer = $("#chat-composer");
+    const text = composer.value.trim();
+    const attachments = state.attachments.splice(0);
+    if (!text && !attachments.length) return;
+    const files = attachments.map((item) => item.name);
+    const messages = state.chatMessages;
+    const userMessage = {
+      id: uniqueId("message-"), role: "user", content: text || "ช่วยดูไฟล์ที่แนบมานี้ให้หน่อยครับ", files,
+      attachments: attachments.map((item) => ({
+        title: item.name, url: item.kind === "image" ? item.data : "", assetId: item.assetId,
+        kind: item.kind, type: item.type
+      })),
+      branchId: conversationId, status: "complete", createdAt: Date.now()
+    };
+    messages.push(userMessage);
+    composer.value = "";
+    try { localStorage.removeItem(draftKey()); } catch (_) { /* noop */ }
+    autoGrowComposer();
+    renderAttachmentTray();
+    await runChatTurn({
+      conversationId, messages, userMessage,
+      currentContent: requestContent(text, attachments), seed: text || files[0]
+    });
+  }
+
+  async function rerunFromUser(userIndex, branch = false, editedContent = null) {
+    const source = state.chatMessages;
+    const original = source[userIndex];
+    if (!original || original.role !== "user") return;
+    const conversationId = branch ? chatId() : state.currentConversationId;
+    const messages = source.slice(0, userIndex + 1).map((message) => ({
+      ...message,
+      attachments: [...(message.attachments || [])],
+      sources: [...(message.sources || [])]
+    }));
+    let userMessage = messages.at(-1);
+    if (editedContent !== null) {
+      userMessage = {
+        ...userMessage,
+        id: uniqueId("message-"), parentId: original.id, branchId: conversationId,
+        content: editedContent, createdAt: Date.now()
+      };
+      messages[messages.length - 1] = userMessage;
+    } else {
+      userMessage.branchId = conversationId;
+    }
+    if (branch) {
+      state.currentConversationId = conversationId;
+      state.chatMessages = messages;
+      saveConversation(`${userMessage.content} (สาขา)`, conversationId, messages);
+    } else {
+      source.splice(userIndex + 1);
+      state.chatMessages = source;
+    }
+    renderChat();
+    renderConversationList();
+    const attachments = await hydrateMessageAttachments(userMessage);
+    await runChatTurn({
+      conversationId, messages: state.chatMessages, userMessage,
+      currentContent: requestContent(userMessage.content, attachments), seed: userMessage.content
+    });
+  }
+
+  function userBefore(index) {
+    for (let cursor = index - 1; cursor >= 0; cursor--) {
+      if (state.chatMessages[cursor].role === "user") return cursor;
+    }
+    return -1;
+  }
+
+  async function regenerateMessage(index) {
+    const userIndex = userBefore(index);
+    if (userIndex < 0) return;
+    const hasLaterTurns = state.chatMessages.slice(index + 1).some((message) => !message.localOnly);
+    await rerunFromUser(userIndex, hasLaterTurns);
+  }
+
+  async function editUserMessage(index) {
+    const message = state.chatMessages[index];
+    const edited = window.prompt("แก้ข้อความและสร้างสาขาใหม่", message?.content || "");
+    if (edited === null || !edited.trim() || edited.trim() === message.content.trim()) return;
+    await rerunFromUser(index, true, edited.trim());
+  }
+
+  function branchFromMessage(index) {
+    const conversationId = chatId();
+    const messages = state.chatMessages.slice(0, index + 1).map((message) => ({
+      ...message, branchId: conversationId,
+      attachments: [...(message.attachments || [])], sources: [...(message.sources || [])]
+    }));
+    state.currentConversationId = conversationId;
+    state.chatMessages = messages;
+    saveConversation(`${messages.find((message) => message.role === "user")?.content || "บทสนทนา"} (สาขา)`,
+      conversationId, messages);
+    renderChat();
+    renderConversationList();
+    toast("สร้างสาขาบทสนทนาแล้วครับ");
   }
 
   function speechText(value) {
@@ -1814,6 +2258,7 @@
   }
   renderConversationList();
   renderChat();
+  restoreDraft();
 
   document.querySelectorAll("[data-close-dialog]").forEach((button) => {
     button.addEventListener("click", () => button.closest("dialog")?.close("cancel"));
@@ -1856,7 +2301,7 @@
     startNewChat();
   });
   $("#chat-form").addEventListener("submit", sendChat);
-  $("#chat-composer").addEventListener("input", autoGrowComposer);
+  $("#chat-composer").addEventListener("input", () => { autoGrowComposer(); saveDraft(); });
   $("#chat-composer").addEventListener("keydown", (event) => {
     if (!isAppleMobile() && event.key === "Enter" && !event.shiftKey && !event.isComposing) {
       event.preventDefault();
@@ -1900,6 +2345,8 @@
   $("#confirm-clear-history").addEventListener("click", async (event) => {
     event.preventDefault();
     try {
+      await Promise.all(state.conversations.map((conversation) =>
+        api(`/v1/conversations/${encodeURIComponent(conversation.id)}`, { method: "DELETE" })));
       if (state.sync.paired) await syncFetch("/v1/sync/conversations", { method: "DELETE" });
       localStorage.removeItem("minikun.conversations");
       state.conversations = [];
@@ -1908,6 +2355,68 @@
       toast(state.sync.paired ? "ล้างรายการบทสนทนาจากทุกอุปกรณ์แล้วครับ" : "ล้างรายการบนอุปกรณ์นี้แล้วครับ");
     } catch (error) { toast(error.message, true); }
   });
+  document.querySelectorAll("[data-conversation-search]").forEach((input) => {
+    input.addEventListener("input", () => {
+      state.conversationQuery = input.value;
+      document.querySelectorAll("[data-conversation-search]").forEach((peer) => {
+        if (peer !== input) peer.value = input.value;
+      });
+      renderConversationList();
+    });
+  });
+  document.querySelectorAll("[data-archive-toggle]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.showArchived = !state.showArchived;
+      document.querySelectorAll("[data-archive-toggle]").forEach((peer) => {
+        peer.textContent = state.showArchived ? "กลับไปแชตปัจจุบัน" : "ดูคลังแชต";
+      });
+      renderConversationList();
+    });
+  });
+  $("#rename-conversation").addEventListener("click", () => {
+    const conversation = actionConversation();
+    const title = $("#conversation-title-input").value.trim();
+    if (!conversation || !title) return;
+    conversation.title = title;
+    touchConversation(conversation);
+    $("#conversation-actions-dialog").close();
+    toast("เปลี่ยนชื่อบทสนทนาแล้วครับ");
+  });
+  $("#pin-conversation").addEventListener("click", () => {
+    const conversation = actionConversation();
+    if (!conversation) return;
+    conversation.pinned = !conversation.pinned;
+    touchConversation(conversation);
+    openConversationActions(conversation.id);
+  });
+  $("#archive-conversation").addEventListener("click", () => {
+    const conversation = actionConversation();
+    if (!conversation) return;
+    conversation.archived = !conversation.archived;
+    touchConversation(conversation);
+    $("#conversation-actions-dialog").close();
+    if (conversation.archived && state.currentConversationId === conversation.id) {
+      const next = state.conversations.find((item) => !item.archived);
+      if (next) switchConversation(next.id); else startNewChat();
+    }
+    toast(conversation.archived ? "เก็บบทสนทนาเข้าคลังแล้วครับ" : "นำบทสนทนากลับแล้วครับ");
+  });
+  $("#duplicate-conversation").addEventListener("click", () => {
+    const conversation = actionConversation();
+    if (!conversation) return;
+    if (state.currentConversationId !== conversation.id) switchConversation(conversation.id);
+    branchFromMessage(state.chatMessages.length - 1);
+    $("#conversation-actions-dialog").close();
+  });
+  $("#export-conversation").addEventListener("click", () => {
+    const conversation = actionConversation();
+    if (conversation) exportConversation(conversation);
+  });
+  $("#export-conversation-json").addEventListener("click", () => {
+    const conversation = actionConversation();
+    if (conversation) exportConversationJson(conversation);
+  });
+  $("#delete-conversation").addEventListener("click", () => deleteConversation(actionConversation()));
   window.addEventListener("beforeunload", () => {
     state.mediaStream?.getTracks().forEach((track) => track.stop());
     state.audioContext?.close();

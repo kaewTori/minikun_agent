@@ -1,6 +1,5 @@
 package com.minikun.agent.minikun_agent.api;
 
-import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 
 import org.springframework.stereotype.Component;
@@ -27,19 +26,10 @@ public class ConversationIdResolver {
         };
         for (Candidate candidate : candidates) {
             if (candidate.value() != null && !candidate.value().isBlank()) {
-                return new Resolution(new ConversationId(normalize(candidate.value())), candidate.source());
+                return new Resolution(ConversationId.fromTransport(candidate.value()), candidate.source());
             }
         }
         return new Resolution(new ConversationId(UUID.randomUUID().toString()), Source.GENERATED);
-    }
-
-    /** Spring AI's PostgreSQL chat-memory schema limits conversation ids to 36 characters. */
-    private String normalize(String identifier) {
-        String normalized = identifier.trim();
-        if (normalized.length() <= 36 && normalized.chars().noneMatch(Character::isISOControl)) {
-            return normalized;
-        }
-        return UUID.nameUUIDFromBytes(normalized.getBytes(StandardCharsets.UTF_8)).toString();
     }
 
     public record Resolution(ConversationId conversationId, Source source) {

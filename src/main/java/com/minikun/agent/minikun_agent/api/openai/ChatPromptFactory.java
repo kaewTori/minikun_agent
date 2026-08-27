@@ -25,6 +25,8 @@ import com.minikun.pcs.SearchContext;
 import com.minikun.pcs.SearchSelectionSignals;
 import com.minikun.pcs.model.ConversationContext;
 import com.minikun.pcs.model.KnowledgeContext;
+import com.minikun.pcs.model.PromptMessage;
+import com.minikun.pcs.model.PromptRole;
 import com.minikun.pcs.model.RuntimeContext;
 import com.minikun.personality.companion.CompanionModeContext;
 import com.minikun.personality.model.PersonalUserModel;
@@ -131,6 +133,14 @@ final class ChatPromptFactory {
                 request, input.history(), this::isCommandMessage, recentConversationBudget,
                 input.recentMessageLimit());
         String conversation = combineConversation(summarySection, conversationWindow.content());
+        String conversationSystemContent = conversationSystemContent(
+                summarySection, conversationWindow.omittedMessages());
+        List<PromptMessage> conversationMessages = conversationWindow.messages().stream()
+                .map(message -> new PromptMessage(
+                        "assistant".equalsIgnoreCase(message.role())
+                                ? PromptRole.ASSISTANT : PromptRole.USER,
+                        message.content()))
+                .toList();
         log.debug("process=conversation_window event=selected source={} input_messages={} "
                         + "selected_messages={} omitted_messages={} summary_chars={} "
                         + "selected_chars={} budget_chars={}",
@@ -163,7 +173,10 @@ final class ChatPromptFactory {
         PromptRequest promptRequest = new PromptRequest(
                 characterSpecification,
                 new RuntimeContext(runtime),
-                conversationContent.isBlank() ? null : new ConversationContext(conversationContent),
+                conversationContent.isBlank() && conversationMessages.isEmpty()
+                        ? null
+                        : new ConversationContext(
+                                conversationContent, conversationSystemContent, conversationMessages),
                 promptKnowledge,
                 capabilityFactory.create(
                         userMessage.content(),
@@ -267,6 +280,16 @@ final class ChatPromptFactory {
             return summarySection;
         }
         return summarySection + "\n\nRecent turns:\n" + recentConversation;
+    }
+
+    private String conversationSystemContent(String summarySection, int omittedMessages) {
+        if (omittedMessages <= 0) {
+            return summarySection;
+        }
+        String omission = "[Earlier conversation omitted]\n"
+                + "Some earlier verbatim conversation messages were omitted; "
+                + "use the rolling summary when available and treat recent role messages as authoritative.";
+        return summarySection.isBlank() ? omission : summarySection + "\n\n" + omission;
     }
 
     private boolean isCommandMessage(String content) {

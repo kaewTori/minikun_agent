@@ -33,20 +33,21 @@ public class JdbcChatSyncRepository implements ChatSyncRepository {
     @Override
     public List<ChatSyncConversation> list(String ownerId, int limit) {
         List<ChatSyncConversation> conversations = jdbc.query("""
-                SELECT id, title, updated_at
+                SELECT id, title, updated_at, pinned, archived
                 FROM minikun_chat_conversation
                 WHERE owner_id = ?
                 ORDER BY updated_at DESC
                 LIMIT ?
                 """, (rs, row) -> new ChatSyncConversation(rs.getString("id"), rs.getString("title"),
-                        rs.getTimestamp("updated_at").toInstant(), new ArrayList<>()), ownerId, limit);
+                        rs.getTimestamp("updated_at").toInstant(), new ArrayList<>(),
+                        rs.getBoolean("pinned"), rs.getBoolean("archived")), ownerId, limit);
         if (conversations.isEmpty()) return List.of();
 
         Map<String, List<ChatSyncConversation.Message>> messages = new LinkedHashMap<>();
         for (ChatSyncConversation conversation : conversations) messages.put(conversation.id(), new ArrayList<>());
         jdbc.query("""
                 SELECT conversation_id, id, role, content, files_json, attachments_json,
-                       usage_json, timing_json, created_at
+                       usage_json, timing_json, created_at, metadata_json
                 FROM minikun_chat_message
                 WHERE owner_id = ?
                 ORDER BY created_at, id
@@ -55,7 +56,8 @@ public class JdbcChatSyncRepository implements ChatSyncRepository {
                     if (target != null) target.add(mapMessage(rs));
                 }, ownerId);
         return conversations.stream().map(value -> new ChatSyncConversation(
-                value.id(), value.title(), value.updatedAt(), List.copyOf(messages.get(value.id())))).toList();
+                value.id(), value.title(), value.updatedAt(), List.copyOf(messages.get(value.id())),
+                value.pinned(), value.archived())).toList();
     }
 
     @Override
@@ -63,33 +65,38 @@ public class JdbcChatSyncRepository implements ChatSyncRepository {
     public void upsert(String ownerId, ChatSyncConversation conversation) {
         Instant createdAt = conversation.messages().stream().map(ChatSyncConversation.Message::createdAt)
                 .min(Instant::compareTo).orElse(conversation.updatedAt());
-        jdbc.update("""
-                INSERT INTO minikun_chat_conversation (owner_id, id, title, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?)
+        int accepted = jdbc.update("""
+                INSERT INTO minikun_chat_conversation
+                    (owner_id, id, title, created_at, updated_at, pinned, archived)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT (owner_id, id) DO UPDATE SET
-                    title = CASE
-                        WHEN EXCLUDED.updated_at >= minikun_chat_conversation.updated_at THEN EXCLUDED.title
-                        ELSE minikun_chat_conversation.title
-                    END,
-                    updated_at = GREATEST(EXCLUDED.updated_at, minikun_chat_conversation.updated_at)
+                    title = EXCLUDED.title,
+                    updated_at = EXCLUDED.updated_at,
+                    pinned = EXCLUDED.pinned,
+                    archived = EXCLUDED.archived
+                WHERE EXCLUDED.updated_at >= minikun_chat_conversation.updated_at
                 """, ownerId, conversation.id(), conversation.title(), timestamp(createdAt),
-                timestamp(conversation.updatedAt()));
+                timestamp(conversation.updatedAt()), conversation.pinned(), conversation.archived());
+        if (accepted == 0) return;
+        jdbc.update("DELETE FROM minikun_chat_message WHERE owner_id = ? AND conversation_id = ?",
+                ownerId, conversation.id());
         for (ChatSyncConversation.Message message : conversation.messages()) {
             jdbc.update("""
                     INSERT INTO minikun_chat_message
                         (owner_id, conversation_id, id, role, content, files_json, attachments_json,
-                         usage_json, timing_json, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                         usage_json, timing_json, created_at, metadata_json)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT (owner_id, conversation_id, id) DO UPDATE SET
                         role = EXCLUDED.role,
                         content = EXCLUDED.content,
                         files_json = EXCLUDED.files_json,
                         attachments_json = EXCLUDED.attachments_json,
                         usage_json = EXCLUDED.usage_json,
-                        timing_json = EXCLUDED.timing_json
+                        timing_json = EXCLUDED.timing_json,
+                        metadata_json = EXCLUDED.metadata_json
                     """, ownerId, conversation.id(), message.id(), message.role(), message.content(),
                     json(message.files()), json(message.attachments()), nullableJson(message.usage()),
-                    nullableJson(message.timing()), timestamp(message.createdAt()));
+                    nullableJson(message.timing()), timestamp(message.createdAt()), nullableJson(message.metadata()));
         }
     }
 
@@ -112,7 +119,8 @@ public class JdbcChatSyncRepository implements ChatSyncRepository {
                 read(rs.getString("attachments_json"), ATTACHMENT_LIST, List.of()),
                 read(rs.getString("usage_json"), OBJECT_MAP, null),
                 read(rs.getString("timing_json"), OBJECT_MAP, null),
-                rs.getTimestamp("created_at").toInstant());
+                rs.getTimestamp("created_at").toInstant(),
+                read(rs.getString("metadata_json"), OBJECT_MAP, Map.of()));
     }
 
     private String json(Object value) {

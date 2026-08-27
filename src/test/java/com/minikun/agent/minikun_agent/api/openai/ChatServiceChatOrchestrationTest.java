@@ -108,6 +108,9 @@ class ChatServiceChatOrchestrationTest {
         ArgumentCaptor<Prompt> prompt = ArgumentCaptor.forClass(Prompt.class);
         verify(chatModel).call(prompt.capture());
         String text = promptText(prompt.getValue());
+        assertTrue(prompt.getValue().getInstructions().stream()
+                .anyMatch(message -> message instanceof org.springframework.ai.chat.messages.AssistantMessage
+                        && message.getText().contains("เมื่อวานพี่สาวทำงานดึกครับ")));
         assertTrue(text.contains("Natural conversation"));
         assertTrue(text.contains("Use conversation history to resolve references and implied follow-ups"));
         assertTrue(text.contains("acknowledge the specific feeling"));

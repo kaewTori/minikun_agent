@@ -45,7 +45,7 @@ final class ConversationHistoryWindow {
         List<ChatMessage> recentSource = recent(selectedSource, maximumMessages);
         Result result = window(recentSource, source, maximumCharacters);
         return new Result(result.content(), source, selectedSource.size(), result.selectedMessages(),
-                Math.max(0, selectedSource.size() - result.selectedMessages()));
+                Math.max(0, selectedSource.size() - result.selectedMessages()), result.messages());
     }
 
     /**
@@ -122,13 +122,13 @@ final class ConversationHistoryWindow {
 
     private Result window(List<ChatMessage> history, Source source, long maximumCharacters) {
         if (history.isEmpty() || maximumCharacters <= 0) {
-            return new Result("", source, history.size(), 0, history.size());
+            return new Result("", source, history.size(), 0, history.size(), List.of());
         }
         int limit = (int) Math.min(maximumCharacters, Integer.MAX_VALUE);
         List<String> rendered = history.stream().map(this::render).toList();
         String complete = String.join(SEPARATOR, rendered);
         if (complete.length() <= limit) {
-            return new Result(complete, source, history.size(), history.size(), 0);
+            return new Result(complete, source, history.size(), history.size(), 0, List.copyOf(history));
         }
 
         String prefix = EARLIER_MESSAGES_OMITTED + SEPARATOR;
@@ -136,10 +136,11 @@ final class ConversationHistoryWindow {
         if (contentLimit == 0) {
             return new Result(EARLIER_MESSAGES_OMITTED.substring(
                     0, Math.min(limit, EARLIER_MESSAGES_OMITTED.length())),
-                    source, history.size(), 0, history.size());
+                    source, history.size(), 0, history.size(), List.of());
         }
 
         Deque<String> selected = new ArrayDeque<>();
+        Deque<ChatMessage> selectedHistory = new ArrayDeque<>();
         int used = 0;
         for (int index = rendered.size() - 1; index >= 0; index--) {
             String message = rendered.get(index);
@@ -150,19 +151,31 @@ final class ConversationHistoryWindow {
             }
             if (message.length() > available) {
                 if (selected.isEmpty()) {
-                    selected.addFirst(shorten(message, available));
+                    String shortened = shorten(message, available);
+                    selected.addFirst(shortened);
+                    selectedHistory.addFirst(shortenedMessage(history.get(index), shortened));
                     used = contentLimit;
                 }
                 break;
             }
             selected.addFirst(message);
+            selectedHistory.addFirst(history.get(index));
             used += separatorCharacters + message.length();
         }
 
         String content = prefix + String.join(SEPARATOR, selected);
         int selectedMessages = selected.size();
         return new Result(content, source, history.size(), selectedMessages,
-                Math.max(0, history.size() - selectedMessages));
+                Math.max(0, history.size() - selectedMessages), List.copyOf(selectedHistory));
+    }
+
+    private ChatMessage shortenedMessage(ChatMessage original, String rendered) {
+        String prefix = original.role().toLowerCase(Locale.ROOT) + ": ";
+        String content = rendered.startsWith(prefix) ? rendered.substring(prefix.length()) : rendered;
+        if (content.isBlank()) {
+            content = "…";
+        }
+        return new ChatMessage(original.role(), content);
     }
 
     private List<ChatMessage> requestHistory(ChatCompletionRequest request) {
@@ -244,6 +257,7 @@ final class ConversationHistoryWindow {
             Source source,
             int inputMessages,
             int selectedMessages,
-            int omittedMessages) {
+            int omittedMessages,
+            List<ChatMessage> messages) {
     }
 }

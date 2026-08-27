@@ -39,7 +39,7 @@ public final class ConversationSummaryController {
             @RequestParam(defaultValue = "default") String ownerId,
             @RequestHeader(value = "X-Minikun-Memory-Token", required = false) String token) {
         authorize(token);
-        ConversationId id = new ConversationId(conversationId);
+        ConversationId id = ConversationId.fromTransport(conversationId);
         return summaryService.status(ownerId, id, memoryService.load(id).size());
     }
 
@@ -49,7 +49,7 @@ public final class ConversationSummaryController {
             @RequestParam(defaultValue = "default") String ownerId,
             @RequestHeader(value = "X-Minikun-Memory-Token", required = false) String token) {
         authorize(token);
-        ConversationId id = new ConversationId(conversationId);
+        ConversationId id = ConversationId.fromTransport(conversationId);
         var history = memoryService.load(id);
         if (!summaryService.rebuildNow(ownerId, id, history)) {
             throw new ResponseStatusException(
@@ -64,7 +64,7 @@ public final class ConversationSummaryController {
             @RequestParam(defaultValue = "default") String ownerId,
             @RequestHeader(value = "X-Minikun-Memory-Token", required = false) String token) {
         authorize(token);
-        boolean deleted = summaryService.clear(ownerId, new ConversationId(conversationId));
+        boolean deleted = summaryService.clear(ownerId, ConversationId.fromTransport(conversationId));
         return Map.of("deleted", deleted, "conversation_id", conversationId, "owner_id", ownerId);
     }
 

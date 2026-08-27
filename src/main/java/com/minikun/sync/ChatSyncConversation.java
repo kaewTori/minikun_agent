@@ -8,7 +8,13 @@ public record ChatSyncConversation(
         String id,
         String title,
         Instant updatedAt,
-        List<Message> messages) {
+        List<Message> messages,
+        boolean pinned,
+        boolean archived) {
+
+    public ChatSyncConversation(String id, String title, Instant updatedAt, List<Message> messages) {
+        this(id, title, updatedAt, messages, false, false);
+    }
 
     public record Message(
             String id,
@@ -18,6 +24,13 @@ public record ChatSyncConversation(
             List<Map<String, Object>> attachments,
             Map<String, Object> usage,
             Map<String, Object> timing,
-            Instant createdAt) {
+            Instant createdAt,
+            Map<String, Object> metadata) {
+
+        public Message(String id, String role, String content, List<String> files,
+                List<Map<String, Object>> attachments, Map<String, Object> usage,
+                Map<String, Object> timing, Instant createdAt) {
+            this(id, role, content, files, attachments, usage, timing, createdAt, Map.of());
+        }
     }
 }

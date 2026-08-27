@@ -31,6 +31,8 @@ class ConversationHistoryWindowTest {
         assertEquals(ConversationHistoryWindow.Source.CLIENT, result.source());
         assertTrue(result.content().contains("คุยเรื่องสวน"));
         assertTrue(result.content().contains("เราเลือกปลูกมะลิ"));
+        assertEquals("assistant", result.messages().get(1).role());
+        assertEquals("เราเลือกปลูกมะลิ", result.messages().get(1).content());
         assertFalse(result.content().contains("stale server history"));
     }
 

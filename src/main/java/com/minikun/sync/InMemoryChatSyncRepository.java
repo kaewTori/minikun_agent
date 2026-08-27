@@ -25,11 +25,7 @@ final class InMemoryChatSyncRepository implements ChatSyncRepository {
     @Override public void deleteAll(String ownerId) { owners.remove(ownerId); }
 
     private ChatSyncConversation merge(ChatSyncConversation current, ChatSyncConversation update) {
-        java.util.LinkedHashMap<String, ChatSyncConversation.Message> messages = new java.util.LinkedHashMap<>();
-        current.messages().forEach(message -> messages.put(message.id(), message));
-        update.messages().forEach(message -> messages.put(message.id(), message));
         boolean newer = !update.updatedAt().isBefore(current.updatedAt());
-        return new ChatSyncConversation(current.id(), newer ? update.title() : current.title(),
-                newer ? update.updatedAt() : current.updatedAt(), List.copyOf(messages.values()));
+        return newer ? update : current;
     }
 }

@@ -33,7 +33,8 @@ final class PromptRenderer {
         List<String> sections = new ArrayList<>();
         sections.add(CorePromptFragments.persona(request.character(), selectedModules));
         sections.add(section("Runtime", request.runtime().content()));
-        addOptional(sections, "Conversation", request.conversation() == null ? null : request.conversation().content());
+        addOptional(sections, "Conversation",
+                request.conversation() == null ? null : request.conversation().systemContent());
         addOptional(sections, "Personal User Context", request.personalUserModel().promptContent());
         String knowledge = request.knowledgeSelection().selectedCandidates().isEmpty()
             ? request.knowledge() == null ? null : request.knowledge().content()
@@ -51,9 +52,7 @@ final class PromptRenderer {
                 sections.add(capabilities.toString());
             }
         }
-        return new Prompt(List.of(
-            new PromptMessage(PromptRole.SYSTEM, String.join("\n\n", sections)),
-            new PromptMessage(PromptRole.USER, request.userMessage().content())));
+        return prompt(request, String.join("\n\n", sections));
     }
 
     private static Prompt renderProcessed(PromptRequest request, ContextProcessingResult processingResult) {
@@ -69,9 +68,17 @@ final class PromptRenderer {
         addProcessedOptional(sections, "Memory", ContextBudgetSection.MEMORY, contents);
         addProcessedOptional(sections, "Knowledge", ContextBudgetSection.KNOWLEDGE, contents);
         addProcessedOptional(sections, "Capabilities", ContextBudgetSection.CAPABILITIES, contents);
-        return new Prompt(List.of(
-                new PromptMessage(PromptRole.SYSTEM, String.join("\n\n", sections)),
-                new PromptMessage(PromptRole.USER, request.userMessage().content())));
+        return prompt(request, String.join("\n\n", sections));
+    }
+
+    private static Prompt prompt(PromptRequest request, String system) {
+        List<PromptMessage> messages = new ArrayList<>();
+        messages.add(new PromptMessage(PromptRole.SYSTEM, system));
+        if (request.conversation() != null) {
+            messages.addAll(request.conversation().messages());
+        }
+        messages.add(new PromptMessage(PromptRole.USER, request.userMessage().content()));
+        return new Prompt(messages);
     }
 
     private static void addProcessedCharacter(

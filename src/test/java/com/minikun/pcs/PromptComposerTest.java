@@ -7,6 +7,7 @@ import com.minikun.pcs.model.CapabilityInstruction;
 import com.minikun.pcs.model.ConversationContext;
 import com.minikun.pcs.model.KnowledgeContext;
 import com.minikun.pcs.model.Prompt;
+import com.minikun.pcs.model.PromptMessage;
 import com.minikun.pcs.model.PromptRole;
 import com.minikun.pcs.model.RuntimeContext;
 import com.minikun.pcs.model.UserMessage;
@@ -44,6 +45,26 @@ class PromptComposerTest {
         assertTrue(system.indexOf("[Knowledge]") < system.indexOf("[Capabilities]"));
             assertTrue(system.indexOf("[Runtime]") < system.indexOf("[Knowledge]"));
         assertEquals("Answer this", prompt.messages().get(1).content());
+    }
+
+    @Test
+    void preservesRecentConversationRolesBetweenSystemAndCurrentUser() {
+        ConversationContext conversation = new ConversationContext(
+                "user: ก่อนหน้า\n\nassistant: คำตอบเดิม",
+                "Rolling summary",
+                List.of(
+                        new PromptMessage(PromptRole.USER, "ก่อนหน้า"),
+                        new PromptMessage(PromptRole.ASSISTANT, "คำตอบเดิม")));
+        Prompt prompt = new PromptComposer().compose(new PromptRequest(
+                character(), new RuntimeContext("now"), conversation, null,
+                List.of(), new UserMessage("ถามต่อ")));
+
+        assertEquals(List.of(
+                PromptRole.SYSTEM, PromptRole.USER, PromptRole.ASSISTANT, PromptRole.USER),
+                prompt.messages().stream().map(PromptMessage::role).toList());
+        assertTrue(prompt.messages().getFirst().content().contains("Rolling summary"));
+        assertFalse(prompt.messages().getFirst().content().contains("คำตอบเดิม"));
+        assertEquals("คำตอบเดิม", prompt.messages().get(2).content());
     }
 
     @Test
