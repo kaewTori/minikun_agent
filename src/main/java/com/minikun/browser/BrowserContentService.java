@@ -88,6 +88,9 @@ public final class BrowserContentService {
         if (urls.size() > maxUrls) {
             throw new BrowserContentException("too many links (maximum " + maxUrls + ")");
         }
+        if (maxConcurrentUrls == 1) {
+            return readSequentially(urls);
+        }
         Semaphore permits = new Semaphore(maxConcurrentUrls);
         List<CompletableFuture<UrlReadResult>> futures = new ArrayList<>();
         for (int index = 0; index < urls.size(); index++) {
@@ -123,6 +126,21 @@ public final class BrowserContentService {
                 }
             } catch (CompletionException exception) {
                 failures.add(new BrowserReadFailure("unknown", "browser worker failed"));
+            }
+        }
+        return new BrowserReadResult(candidates, failures);
+    }
+
+    private BrowserReadResult readSequentially(List<String> urls) {
+        List<KnowledgeCandidate> candidates = new ArrayList<>();
+        List<BrowserReadFailure> failures = new ArrayList<>();
+        for (int index = 0; index < urls.size(); index++) {
+            UrlReadResult result = readOne(index, urls.get(index));
+            if (result.candidate() != null) {
+                candidates.add(result.candidate());
+            }
+            if (result.failure() != null) {
+                failures.add(result.failure());
             }
         }
         return new BrowserReadResult(candidates, failures);

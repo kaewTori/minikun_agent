@@ -14,7 +14,7 @@ class ImageIntentSearchDecisionServiceTest {
     private final ImageIntentDetector detector = new ImageIntentDetector();
 
     @Test
-    void promotesOnlyNonSearchGeneralKnowledge() {
+    void promotesNonSearchGeneralKnowledge() {
         SearchDecision original = new SearchDecision(false, "หารูปแมว", SearchDecisionReason.GENERAL_KNOWLEDGE);
         SearchDecision decision = serviceReturning(original).decide(original.query());
 
@@ -24,7 +24,7 @@ class ImageIntentSearchDecisionServiceTest {
     }
 
     @Test
-    void preservesStrongerExistingDecisionsWithImageWording() {
+    void explicitImageIntentOverridesGenericSearchClassification() {
         List<SearchDecision> decisions = List.of(
                 new SearchDecision(true, "หารูปข่าวล่าสุดของ Tesla", SearchDecisionReason.CURRENT_INFORMATION),
                 new SearchDecision(true, "show me a photo from GitHub", SearchDecisionReason.EXTERNAL_RESOURCE),
@@ -34,8 +34,58 @@ class ImageIntentSearchDecisionServiceTest {
 
         for (SearchDecision original : decisions) {
             SearchDecision decision = serviceReturning(original).decide(original.query());
-            assertSame(original, decision, original.reason().name());
+            assertTrue(decision.shouldSearch(), original.reason().name());
+            assertEquals(SearchDecisionReason.IMAGE_REQUEST, decision.reason(), original.reason().name());
+            assertEquals(original.query(), decision.query(), original.reason().name());
         }
+    }
+
+    @Test
+    void detectsConversationalThaiImageRecommendation() {
+        SearchDecision original = new SearchDecision(
+                true,
+                "มีรูปผลงานที่น่าสนใจอยากแนะนำไหม",
+                SearchDecisionReason.CURRENT_INFORMATION);
+
+        SearchDecision decision = serviceReturning(original).decide(original.query());
+
+        assertEquals(SearchDecisionReason.IMAGE_REQUEST, decision.reason());
+    }
+
+    @Test
+    void detectsArtworkRecommendationFromVisualArtistContext() {
+        SearchDecision original = new SearchDecision(
+                false,
+                "มีผลงานที่น่าสนใจอยากแนะนำไหม",
+                SearchDecisionReason.RULE_FALLBACK);
+
+        SearchDecision decision = serviceReturning(original).decide(
+                original.query(),
+                "user: RenaRaziel คือใคร\nassistant: เธอเป็นนักวาดภาพประกอบและมีผลงานบน Pixiv");
+
+        assertTrue(decision.shouldSearch());
+        assertEquals(SearchDecisionReason.IMAGE_REQUEST, decision.reason());
+    }
+
+    @Test
+    void doesNotAssumeImagesForArtworkOutsideVisualArtistContext() {
+        SearchDecision original = new SearchDecision(
+                false,
+                "มีผลงานที่น่าสนใจอยากแนะนำไหม",
+                SearchDecisionReason.RULE_FALLBACK);
+
+        SearchDecision decision = serviceReturning(original).decide(
+                original.query(),
+                "user: นักเขียนคนนี้คือใคร\nassistant: เธอเขียนนวนิยายหลายเล่ม");
+
+        assertSame(original, decision);
+    }
+
+    @Test
+    void preservesAnExistingImageDecision() {
+        SearchDecision original = new SearchDecision(true, "หารูปแมว", SearchDecisionReason.IMAGE_REQUEST);
+
+        assertSame(original, serviceReturning(original).decide(original.query()));
     }
 
     @Test

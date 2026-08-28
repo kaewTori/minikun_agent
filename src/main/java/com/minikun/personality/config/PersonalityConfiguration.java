@@ -23,9 +23,14 @@ import com.minikun.personality.management.PersonaManagementController;
 import com.minikun.personality.management.PersonaManagementService;
 import com.minikun.personality.profile.UserModelService;
 import com.minikun.personality.companion.CompanionModeService;
+import com.minikun.personality.companion.CompanionModeStore;
+import com.minikun.personality.companion.InMemoryCompanionModeStore;
+import com.minikun.personality.companion.JdbcCompanionModeStore;
+import com.minikun.personality.companion.CompanionModeController;
 import com.minikun.memory.MemoryRepository;
 import java.time.Clock;
 import java.time.Duration;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -39,8 +44,19 @@ public class PersonalityConfiguration {
     @Bean
     CompanionModeService companionModeService(
             @Value("${minikun.companion-mode.enabled:true}") boolean enabled,
+            CompanionModeStore store) {
+        return new CompanionModeService(enabled, store);
+    }
+
+    @Bean
+    CompanionModeStore companionModeStore(ObjectProvider<JdbcTemplate> jdbc,
             @Value("${minikun.companion-mode.maximum-sessions:1000}") int maximumSessions) {
-        return new CompanionModeService(enabled, maximumSessions);
+        JdbcTemplate template = jdbc.getIfAvailable();
+        return template == null ? new InMemoryCompanionModeStore(maximumSessions) : new JdbcCompanionModeStore(template);
+    }
+
+    @Bean CompanionModeController companionModeController(CompanionModeService service) {
+        return new CompanionModeController(service);
     }
 
     @Bean

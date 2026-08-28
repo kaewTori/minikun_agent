@@ -9,9 +9,15 @@ import org.springframework.stereotype.Service;
 @Service
 public final class CooperationRouter {
     private static final Pattern HIGH_RISK = Pattern.compile(
-            "(สุขภาพ|ยา|การแพทย์|วินิจฉัย|การเงิน|ลงทุน|ภาษี|กฎหมาย|ทนาย|สัญญา|รหัสผ่าน|secret|password|"
-                    + "medical|health|medicine|diagnos|finance|financial|investment|tax|legal|lawyer|contract|"
-                    + "credential|security|exploit)",
+            "(สุขภาพ|การแพทย์|วินิจฉัย|การเงิน|ลงทุน|ภาษี|กฎหมาย|ทนาย|สัญญา(?!ณ)|รหัสผ่าน|"
+                    + "\\b(?:secret|password|medical|health|medicine|diagnos(?:e|is|tic|tics)?|finance|"
+                    + "financial|investment|tax|legal|lawyer|contract|credential|security|exploit)\\b)",
+            Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+    private static final Pattern THAI_MEDICINE = Pattern.compile(
+            "(ยานี้|ยานั้น|ยาตัว|ยาชนิด|ยาอะไร|ยารักษา|ยาแก้|ยาสำหรับ|ยาที่|ยาเม็ด|ยาน้ำ|ยาฉีด|"
+                    + "ยาปฏิชีวนะ|ยาแก้ปวด|กินยา|ใช้ยา|ฉีดยา|แพ้ยา|จ่ายยา|รับประทานยา|ขนาดยา|"
+                    + "สรรพคุณ(?:ของ)?ยา|ผลข้างเคียง(?:ของ)?ยา|ปฏิกิริยาระหว่างยา|หยุดยา|ลดยา|"
+                    + "เพิ่มยา|ชื่อยา|เภสัช|พยาบาล|(?:^|\\s)ยา(?:\\s|$))",
             Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
     private static final Pattern MEDIUM_RISK = Pattern.compile(
             "(แม่นยำ|ชัดเจน|ตรวจสอบ|เปรียบเทียบ|ตัวเลข|ข้อผิดพลาด|"
@@ -55,7 +61,7 @@ public final class CooperationRouter {
         if (CREATIVE_REQUEST.matcher(value).find()) {
             return CooperationRoutingDecision.creative();
         }
-        if (HIGH_RISK.matcher(value).find()) {
+        if (HIGH_RISK.matcher(value).find() || THAI_MEDICINE.matcher(value).find()) {
             return new CooperationRoutingDecision(CooperationRisk.HIGH, true, "high_risk_domain");
         }
         if (CALCULATION_REQUEST.matcher(value).find()) {

@@ -221,6 +221,8 @@ final class ChatKnowledgeResolver {
 
         List<KnowledgeCandidate> browserCandidates = List.of();
         try {
+            boolean imageRequest = SearchOptions.IMAGE_CATEGORY.equals(
+                    categoryFor(plannedDecision, plan.intent()));
             SearchRequest searchRequest = new SearchRequest(
                     UUID.randomUUID(),
                     plan.primaryQuery(),
@@ -232,8 +234,18 @@ final class ChatKnowledgeResolver {
                     plan.alternateQueries());
             CompletableFuture<KnowledgeContext> searchFuture =
                     CompletableFuture.supplyAsync(() -> searchService.search(searchRequest));
+            CompletableFuture<KnowledgeContext> evidenceFuture = imageRequest
+                    ? CompletableFuture.supplyAsync(() -> searchService.search(new SearchRequest(
+                            UUID.randomUUID(), plan.primaryQuery(),
+                            Math.max(1, Math.min(100, configuration.searchResultLimit())),
+                            Instant.now().plus(configuration.searchTimeout()),
+                            new SearchOptions(plan.language(), "", plan.timeRange(), configuration.safeSearch()),
+                            plan.alternateQueries())))
+                    : CompletableFuture.completedFuture(KnowledgeContext.empty());
             browserCandidates = joinBrowser(browserFuture);
-            KnowledgeContext searchKnowledge = searchFuture.join();
+            KnowledgeContext searchKnowledge = imageRequest
+                    ? combine(joinKnowledge(searchFuture, "image"), joinKnowledge(evidenceFuture, "image_evidence"))
+                    : searchFuture.join();
             if (researchIntentDetector.detect(query).deepResearch()) {
                 browserCandidates = mergeBrowserCandidates(
                         browserCandidates, readResearchSourceCandidates(searchKnowledge));
@@ -361,6 +373,16 @@ final class ChatKnowledgeResolver {
         }
     }
 
+    private KnowledgeContext joinKnowledge(CompletableFuture<KnowledgeContext> future, String source) {
+        try {
+            KnowledgeContext result = future.join();
+            return result == null ? KnowledgeContext.empty() : result;
+        } catch (RuntimeException exception) {
+            log.warn("Visual companion search branch failed; continuing with remaining results source={}", source);
+            return KnowledgeContext.empty();
+        }
+    }
+
     private List<KnowledgeCandidate> readResearchSourceCandidates(KnowledgeContext searchKnowledge) {
         if (browserContentService == null || configuration.researchSourceReadLimit() < 1
                 || searchKnowledge == null || searchKnowledge.candidates().isEmpty()) {
@@ -409,22 +431,23 @@ final class ChatKnowledgeResolver {
     }
 
     private String categoryFor(SearchDecision decision, String intent) {
-        if (decision.reason() == SearchDecisionReason.IMAGE_REQUEST && "images".equals(intent)) {
+        if (decision.reason() == SearchDecisionReason.IMAGE_REQUEST || "images".equals(intent)) {
             return SearchOptions.IMAGE_CATEGORY;
         }
         return "current_information".equals(intent) ? "news" : "";
     }
 
     private KnowledgeContext combine(KnowledgeContext first, KnowledgeContext second) {
-        String firstContent = first == null ? "" : first.content();
-        String secondContent = second == null ? "" : second.content();
-        if (firstContent.isBlank()) {
-            return new KnowledgeContext(secondContent);
-        }
-        if (secondContent.isBlank()) {
-            return new KnowledgeContext(firstContent);
-        }
-        return new KnowledgeContext(firstContent + "\n" + secondContent);
+        KnowledgeContext left = first == null ? KnowledgeContext.empty() : first;
+        KnowledgeContext right = second == null ? KnowledgeContext.empty() : second;
+        String content = java.util.stream.Stream.of(left.content(), right.content())
+                .filter(value -> value != null && !value.isBlank())
+                .reduce((a, b) -> a + "\n" + b).orElse("");
+        List<KnowledgeCandidate> candidates = java.util.stream.Stream
+                .concat(left.candidates().stream(), right.candidates().stream()).toList();
+        List<com.minikun.pcs.model.ImageSource> images = java.util.stream.Stream
+                .concat(left.images().stream(), right.images().stream()).toList();
+        return new KnowledgeContext(content, candidates, images);
     }
 
     private boolean isInternalTitleRequest(String content) {

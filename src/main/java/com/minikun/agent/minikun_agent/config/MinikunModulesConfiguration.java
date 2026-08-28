@@ -50,6 +50,7 @@ import com.minikun.notification.NtfyNotificationService;
 import com.minikun.pcs.KnowledgeSelectionConfiguration;
 import com.minikun.pcs.MinikunPersonaProvider;
 import com.minikun.personality.config.PersonalityConfiguration;
+import com.minikun.personality.feedback.ChatFeedbackConfiguration;
 import com.minikun.personalcare.PersonalCareConfiguration;
 import com.minikun.personalloop.PersonalLoopConfiguration;
 import com.minikun.planner.JdbcPlannerConfirmationStore;
@@ -114,7 +115,9 @@ import com.minikun.voice.VoiceConfiguration;
 import com.minikun.voice.VoiceController;
 import com.minikun.voice.VoiceExceptionHandler;
 import com.minikun.weather.WeatherConfiguration;
+import com.minikun.visual.VisualCompanionConfiguration;
 import com.minikun.research.ResearchConfiguration;
+import com.minikun.relationship.RelationshipConfiguration;
 
 /** Explicit module graph kept separate from the executable application entry point. */
 @Configuration(proxyBeanMethods = false)
@@ -133,8 +136,10 @@ import com.minikun.research.ResearchConfiguration;
         TitleGenerationConfiguration.class, TitleGenerationService.class, ContextRuntimeConfiguration.class,
         VisionInputService.class, GuardianConfiguration.class, ComputerConfiguration.class,
         VoiceConfiguration.class, VoiceController.class, VoiceExceptionHandler.class,
-        PersonalKnowledgeConfiguration.class, PersonalityConfiguration.class, PersonalCareConfiguration.class,
-        PersonalLoopConfiguration.class,
+        VisualCompanionConfiguration.class,
+        PersonalKnowledgeConfiguration.class, PersonalityConfiguration.class, ChatFeedbackConfiguration.class,
+        PersonalCareConfiguration.class,
+        PersonalLoopConfiguration.class, RelationshipConfiguration.class,
         CommunicationConfiguration.class, AgentExecutionConfiguration.class, HomelabGuardianScheduler.class,
         MemoryManagementService.class, MemoryManagementController.class, WeatherConfiguration.class,
         ExternalCalendarConfiguration.class, ExternalCalendarController.class,

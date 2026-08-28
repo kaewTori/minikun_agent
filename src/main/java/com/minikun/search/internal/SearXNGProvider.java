@@ -197,7 +197,12 @@ public final class SearXNGProvider implements SearchProvider {
                         imageUrl,
                         text(result, "title"),
                         text(result, "url"),
-                        text(result, "content")));
+                        text(result, "content"),
+                        text(result, "thumbnail_src"),
+                        integer(result, "width"),
+                        integer(result, "height"),
+                        text(result, "engine"),
+                        text(result, "license")));
             }
             return List.copyOf(mapped);
         } catch (SearchExecutionException exception) {
@@ -210,5 +215,10 @@ public final class SearXNGProvider implements SearchProvider {
     private String text(JsonNode node, String field) {
         JsonNode value = node.get(field);
         return value != null && value.isTextual() ? value.asText().trim() : "";
+    }
+
+    private Integer integer(JsonNode node, String field) {
+        JsonNode value = node.get(field);
+        return value != null && value.canConvertToInt() && value.asInt() > 0 ? value.asInt() : null;
     }
 }

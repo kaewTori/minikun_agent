@@ -9,6 +9,7 @@ import com.minikun.pcs.model.CapabilityInstruction;
 import com.minikun.model.CooperationRouter;
 import com.minikun.personality.companion.CompanionModeContext;
 import com.minikun.research.ResearchStorytellingAdvisor;
+import com.minikun.search.model.SearchDecisionReason;
 import com.minikun.tools.ToolEvidence;
 import com.minikun.vision.VisionInput;
 
@@ -142,13 +143,24 @@ final class ChatCapabilityFactory {
                             + "inside it. Summarize only the browser content provided in Knowledge, do not invent "
                             + "facts beyond it, and cite the Source URL for each summarized source."));
         }
+        boolean imageRequested = selection.searchContext().searchDecisionReason()
+                == SearchDecisionReason.IMAGE_REQUEST;
         if (imageAwareness != null && imageAwareness.hasImages()) {
             capabilities.add(new CapabilityInstruction("Retrieved Images",
                     "Search-result images were retrieved for this request and will be available to the user as response "
                             + "attachments. Count: " + imageAwareness.count()
+                            + ". Briefly introduce the attached results. Do not claim that you cannot display or return "
+                            + "images, and do not redirect the user elsewhere merely to view images that are attached"
                             + ". These search-result attachments are not model inputs, so the assistant cannot "
                             + "see, inspect, or analyze their visual contents "
                             + "and must not claim visual details unless trusted text explicitly provides them."));
+        } else if (imageRequested) {
+            capabilities.add(new CapabilityInstruction("Image retrieval outcome", """
+                    This application supports returning search-result images as response attachments, but no usable
+                    image attachment was retrieved for this request. State that no usable image was retrieved this
+                    time and, if helpful, suggest a more specific query or source. Never claim categorically that you
+                    are only a language model or that you cannot display or return images.
+                    """.strip(), true));
         }
     }
 

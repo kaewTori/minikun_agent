@@ -11,12 +11,16 @@ import com.minikun.pcs.model.ImageSource;
 
 class ImageAttachmentMapperTest {
     @Test
-    void mapsOnlyCanonicalAttachmentFieldsInOrder() {
+    void mapsVisualMetadataAndUsesTheSafeProxy() {
         List<ImageSource> images = List.of(
-                new ImageSource("image-url", "image title", "source-url", "description"));
+                new ImageSource("https://images.example/image.jpg", "image title", "source-url", "description"));
 
-        assertEquals(List.of(new ChatAttachment("image", "image-url", "image title")),
-                ImageAttachmentMapper.map(images));
+        ChatAttachment attachment = ImageAttachmentMapper.map(images).getFirst();
+        assertEquals("/v1/images/proxy?url=https%3A%2F%2Fimages.example%2Fimage.jpg", attachment.url());
+        assertEquals("https://images.example/image.jpg", attachment.originalUrl());
+        assertEquals("source-url", attachment.sourceUrl());
+        assertEquals("description", attachment.description());
+        assertEquals("web", attachment.origin());
     }
 
     @Test

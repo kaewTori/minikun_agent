@@ -97,6 +97,32 @@ class DefaultSearchQueryPlanningServiceTest {
     }
 
     @Test
+    void resolvesImageRecommendationAgainstThePreviousArtist() {
+        SearchQueryPlan plan = planner.plan(
+                "มีรูปผลงานที่น่าสนใจอยากแนะนำไหม",
+                new SearchDecision(true, "มีรูปผลงานที่น่าสนใจอยากแนะนำไหม",
+                        SearchDecisionReason.IMAGE_REQUEST),
+                "user: ช่วยค้นหาข้อมูลของนักวาดที่ชื่อ RenaRaziel หน่อย\nassistant: ...");
+
+        assertTrue(plan.primaryQuery().startsWith("RenaRaziel "));
+        assertTrue(plan.primaryQuery().contains("รูปผลงาน"));
+        assertEquals("images", plan.intent());
+        assertEquals("contextual_query", plan.reason());
+    }
+
+    @Test
+    void doesNotTreatStandalonePossessiveOrTodayQueryAsFollowUp() {
+        SearchQueryPlan plan = planner.plan(
+                "ผลงานของ RenaRaziel วันนี้",
+                new SearchDecision(true, "ผลงานของ RenaRaziel วันนี้",
+                        SearchDecisionReason.CURRENT_INFORMATION),
+                "user: Mac mini M4 ราคาเท่าไหร่\nassistant: ...");
+
+        assertFalse(plan.primaryQuery().contains("Mac mini"));
+        assertEquals("deterministic_core_query", plan.reason());
+    }
+
+    @Test
     void emitsComparisonAlternateWithVs() {
         SearchQueryPlan plan = planner.plan(
                 "เปรียบเทียบ Ollama กับ LM Studio บน Mac mini M4",

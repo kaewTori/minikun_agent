@@ -49,6 +49,25 @@ public final class ResponsePreferenceDetector {
         } else if (contains(text, "เป็นทางการ", "สุภาพทางการ", "professional tone", "formal tone")) {
             explicit(observations, AdaptationDimensions.TONE, "professional");
         }
+
+        if (contains(text, "ไม่ต้องถามเยอะ", "ถามให้น้อย", "ถามเฉพาะจำเป็น", "fewer questions",
+                "don't ask too much")) {
+            explicit(observations, AdaptationDimensions.QUESTION_FREQUENCY, "minimal");
+        } else if (contains(text, "ถามเราได้", "ชวนเราคิดต่อ", "ask me questions")) {
+            explicit(observations, AdaptationDimensions.QUESTION_FREQUENCY, "balanced");
+        }
+
+        if (contains(text, "อย่าเพิ่งแนะนำ", "ฟังก่อน", "ไม่ต้องรีบแก้", "listen first", "no advice")) {
+            explicit(observations, AdaptationDimensions.INITIATIVE, "low");
+        } else if (contains(text, "ลงมือเลย", "จัดการให้เลย", "ทำต่อได้เลย", "take initiative", "go ahead")) {
+            explicit(observations, AdaptationDimensions.INITIATIVE, "high");
+        }
+
+        if (contains(text, "พูดตรง", "อย่าตามใจ", "ทักท้วงได้", "แย้งได้", "challenge me", "be direct")) {
+            explicit(observations, AdaptationDimensions.CHALLENGE, "direct");
+        } else if (contains(text, "พูดนุ่ม", "ค่อยๆ บอก", "ค่อย ๆ บอก", "be gentle")) {
+            explicit(observations, AdaptationDimensions.CHALLENGE, "gentle");
+        }
         return new ArrayList<>(observations.values());
     }
 

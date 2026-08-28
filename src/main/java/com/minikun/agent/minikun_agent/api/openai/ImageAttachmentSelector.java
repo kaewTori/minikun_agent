@@ -9,7 +9,7 @@ import com.minikun.pcs.model.ImageSource;
 
 final class ImageAttachmentSelector {
     /** Keeps response payloads small while exposing the first few search results. */
-    static final int MAX_ATTACHMENTS = 3;
+    static final int MAX_ATTACHMENTS = 6;
 
     private ImageAttachmentSelector() {
     }

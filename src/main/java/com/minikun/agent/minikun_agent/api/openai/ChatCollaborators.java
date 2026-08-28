@@ -16,6 +16,7 @@ import com.minikun.personality.companion.CompanionModeService;
 import com.minikun.personality.profile.UserModelService;
 import com.minikun.personality.runtime.AdaptivePersonaService;
 import com.minikun.research.AutonomousResearchService;
+import com.minikun.relationship.ConversationThreadService;
 import com.minikun.context.runtime.PersonalContextRuntime;
 import com.minikun.tokenbudget.config.TokenBudgetProperties;
 import com.minikun.tokenbudget.runtime.DynamicGenerationOptionsFactory;
@@ -46,6 +47,7 @@ final class ChatCollaborators {
     private final ConversationSummaryService conversationSummaryService;
     private final AutonomousResearchService autonomousResearchService;
     private final ChatExplainabilitySink explainabilitySink;
+    private final ConversationThreadService conversationThreadService;
 
     ChatCollaborators(
             ObjectProvider<SpringAiToolCallingRuntime> toolCallingRuntime,
@@ -67,7 +69,8 @@ final class ChatCollaborators {
             ObjectProvider<PersonalKnowledgeService> personalKnowledgeService,
             ObjectProvider<ConversationSummaryService> conversationSummaryService,
             ObjectProvider<AutonomousResearchService> autonomousResearchService,
-            ObjectProvider<ChatExplainabilitySink> explainabilitySink) {
+            ObjectProvider<ChatExplainabilitySink> explainabilitySink,
+            ObjectProvider<ConversationThreadService> conversationThreadService) {
         this.toolCallingRuntime = toolCallingRuntime.getIfAvailable();
         this.toolRequestRouters = toolRequestRouters.orderedStream().toList();
         this.dynamicGenerationOptionsFactory = dynamicGenerationOptionsFactory.getIfAvailable();
@@ -88,6 +91,7 @@ final class ChatCollaborators {
         this.conversationSummaryService = conversationSummaryService.getIfAvailable();
         this.autonomousResearchService = autonomousResearchService.getIfAvailable();
         this.explainabilitySink = explainabilitySink.getIfAvailable();
+        this.conversationThreadService = conversationThreadService.getIfAvailable();
     }
 
     SpringAiToolCallingRuntime toolCallingRuntime() { return toolCallingRuntime; }
@@ -110,4 +114,5 @@ final class ChatCollaborators {
     ConversationSummaryService conversationSummaryService() { return conversationSummaryService; }
     AutonomousResearchService autonomousResearchService() { return autonomousResearchService; }
     ChatExplainabilitySink explainabilitySink() { return explainabilitySink; }
+    ConversationThreadService conversationThreadService() { return conversationThreadService; }
 }

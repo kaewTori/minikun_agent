@@ -37,6 +37,7 @@ import com.minikun.memory.ReflectionService;
 import com.minikun.personality.runtime.AdaptivePersonaService;
 import com.minikun.personality.companion.CompanionModeService;
 import com.minikun.personality.companion.CompanionModeContext;
+import com.minikun.relationship.ConversationThreadService;
 import com.minikun.personality.profile.UserModelService;
 import com.minikun.knowledge.PersonalKnowledgeService;
 import com.minikun.model.ActiveChatModelProvider;
@@ -153,6 +154,8 @@ public class ChatService {
 
     private ConversationSummaryService conversationSummaryService;
 
+    private ConversationThreadService conversationThreadService;
+
     private AutonomousResearchService autonomousResearchService;
 
     private ChatExplainabilityRecorder explainabilityRecorder = new ChatExplainabilityRecorder(null);
@@ -177,6 +180,7 @@ public class ChatService {
         visionInputService = collaborators.visionInputService();
         personalKnowledgeService = collaborators.personalKnowledgeService();
         conversationSummaryService = collaborators.conversationSummaryService();
+        conversationThreadService = collaborators.conversationThreadService();
         autonomousResearchService = collaborators.autonomousResearchService();
         explainabilityRecorder = new ChatExplainabilityRecorder(collaborators.explainabilitySink());
     }
@@ -702,6 +706,7 @@ public class ChatService {
                 deferredReflectionService,
                 observationPublisher,
                 conversationSummaryService,
+                conversationThreadService,
                 reflectionEnabled);
     }
 
@@ -826,6 +831,7 @@ public class ChatService {
                 tokenBudgetProperties,
                 adaptivePersonaService,
                 userModelService,
+                conversationThreadService,
                 generationProfileSelector,
                 performanceMetrics,
                 new ChatPromptFactory.Configuration(

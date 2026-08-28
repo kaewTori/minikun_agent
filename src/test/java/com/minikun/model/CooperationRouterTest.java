@@ -87,6 +87,30 @@ class CooperationRouterTest {
     }
 
     @Test
+    void doesNotConfuseThaiWantWordWithMedicine() {
+        CooperationRoutingDecision decision = router.decide("มีรูปผลงานที่น่าสนใจอยากแนะนำไหม");
+
+        assertEquals(CooperationRisk.LOW, decision.risk());
+        assertTrue(!decision.needsExpert());
+    }
+
+    @Test
+    void doesNotConfuseSignalWithContract() {
+        CooperationRoutingDecision decision = router.decide("สัญญาณอินเทอร์เน็ตวันนี้ไม่ค่อยดี");
+
+        assertEquals(CooperationRisk.LOW, decision.risk());
+        assertTrue(!decision.needsExpert());
+    }
+
+    @Test
+    void stillRoutesThaiMedicineWithoutWhitespace() {
+        CooperationRoutingDecision decision = router.decide("ควรกินยานี้หลังอาหารไหม");
+
+        assertEquals(CooperationRisk.HIGH, decision.risk());
+        assertTrue(decision.needsExpert());
+    }
+
+    @Test
     void keepsCreativeWritingOnOllamaEvenWhenThePromptIsLong() {
         CooperationRoutingDecision decision = router.decide(
                 "ช่วยแต่งเรื่องสั้นแนวแฟนตาซีที่มีตัวละครหลายตัวและช่วยเล่าให้ละเอียดมาก ๆ "

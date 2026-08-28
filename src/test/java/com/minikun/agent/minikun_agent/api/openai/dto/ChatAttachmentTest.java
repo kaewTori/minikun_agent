@@ -12,6 +12,8 @@ class ChatAttachmentTest {
         assertEquals("image", attachment.type());
         assertEquals("https://example.com/image.jpg", attachment.url());
         assertEquals("Example image", attachment.title());
+        assertEquals("web", attachment.origin());
+        assertEquals("https://example.com/image.jpg", attachment.originalUrl());
         assertEquals(attachment, new ChatAttachment("image", "https://example.com/image.jpg", "Example image"));
     }
 }

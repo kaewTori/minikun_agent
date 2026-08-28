@@ -21,6 +21,7 @@ import com.minikun.memory.event.ObservationSource;
 import com.minikun.memory.event.ObservationType;
 import com.minikun.memory.event.SafeObservationPublisher;
 import com.minikun.memory.model.CompletedConversation;
+import com.minikun.relationship.ConversationThreadService;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -33,6 +34,7 @@ final class ChatTurnFinalizer {
     private final ObservationPublisher observationPublisher;
     private final ConversationSummaryService conversationSummaryService;
     private final boolean reflectionEnabled;
+    private final ConversationThreadService conversationThreadService;
 
     ChatTurnFinalizer(
             ConversationMemoryService conversationMemoryService,
@@ -41,12 +43,25 @@ final class ChatTurnFinalizer {
             ObservationPublisher observationPublisher,
             ConversationSummaryService conversationSummaryService,
             boolean reflectionEnabled) {
+        this(conversationMemoryService, reflectionService, deferredReflectionService, observationPublisher,
+                conversationSummaryService, null, reflectionEnabled);
+    }
+
+    ChatTurnFinalizer(
+            ConversationMemoryService conversationMemoryService,
+            ObjectProvider<ReflectionService> reflectionService,
+            DeferredReflectionService deferredReflectionService,
+            ObservationPublisher observationPublisher,
+            ConversationSummaryService conversationSummaryService,
+            ConversationThreadService conversationThreadService,
+            boolean reflectionEnabled) {
         this.conversationMemoryService = conversationMemoryService;
         this.reflectionService = reflectionService;
         this.deferredReflectionService = deferredReflectionService;
         this.observationPublisher = observationPublisher;
         this.conversationSummaryService = conversationSummaryService;
         this.reflectionEnabled = reflectionEnabled;
+        this.conversationThreadService = conversationThreadService;
     }
 
     void complete(
@@ -66,6 +81,7 @@ final class ChatTurnFinalizer {
                 streaming ? " stream=true" : "");
         publishTurnCompleted(ownerId, conversationId, requestId);
         updateConversationSummary(ownerId, conversationId);
+        observeConversationThread(ownerId, conversationId, userMessage.content(), assistantContent);
         reflectOnCompletedConversation(ownerId, conversationId);
     }
 
@@ -86,6 +102,7 @@ final class ChatTurnFinalizer {
                 streaming ? " stream=true" : "");
         publishTurnCompleted(ownerId, conversationId, requestId);
         updateConversationSummary(ownerId, conversationId);
+        observeConversationThread(ownerId, conversationId, userMessage.content(), assistantContent);
         // Operational snapshots are intentionally excluded from long-term reflection.
     }
 
@@ -198,5 +215,17 @@ final class ChatTurnFinalizer {
         }
         conversationSummaryService.schedule(
                 ownerId, conversationId, () -> conversationMemoryService.load(conversationId));
+    }
+
+    private void observeConversationThread(
+            String ownerId, ConversationId conversationId, String userMessage, String assistantContent) {
+        if (conversationThreadService == null || conversationId == null) return;
+        try {
+            conversationThreadService.observeTurn(
+                    ownerId, conversationId.value(), userMessage, assistantContent);
+        } catch (RuntimeException exception) {
+            log.warn("conversation_thread observation failed conversation_id={}",
+                    conversationId.value(), exception);
+        }
     }
 }

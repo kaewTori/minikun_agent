@@ -25,11 +25,12 @@ class ImageAttachmentSelectorTest {
     void limitsSelectedImages() {
         List<ImageSource> attachments = ImageAttachmentSelector.select(List.of(
                 image("one", "one"), image("two", "two"), image("three", "three"),
-                image("four", "four")));
+                image("four", "four"), image("five", "five"), image("six", "six"),
+                image("seven", "seven")));
 
-        assertEquals(3, attachments.size());
+        assertEquals(6, attachments.size());
         assertEquals("one", attachments.get(0).url());
-        assertEquals("three", attachments.get(2).url());
+        assertEquals("six", attachments.get(5).url());
     }
 
     @Test

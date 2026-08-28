@@ -29,8 +29,18 @@ public final class DefaultSearchQueryPlanningService implements SearchQueryPlann
     private static final List<String> ENGLISH_STOPWORDS = List.of(
             "please", "could", "you", "tell", "me", "about", "what", "is", "the", "a", "an", "for");
     private static final List<String> FOLLOW_UP_MARKERS = List.of(
-            "แล้ว", "อีก", "นั้น", "นี้", "ของ", "รุ่น", "ปีนี้", "เทียบกัน", "what about", "how about",
-            "and this", "that one", "this one", "also");
+            "แล้ว", "อีก", "อันนี้", "ตัวนี้", "คนนี้", "เรื่องนี้", "แบบนี้", "สิ่งนี้", "ดังกล่าว",
+            "ของเขา", "ของเธอ", "ปีนี้", "เทียบกัน", "what about", "how about", "and this",
+            "that one", "this one", "also");
+    private static final Pattern TOPIC_DEPENDENT_FOLLOW_UP = Pattern.compile(
+            "^(?:(?:มี|ขอ|ช่วยหา|ช่วยแนะนำ|อยากดู)?(?:(?:รูป|ภาพ)?ผลงาน|"
+                    + "(?:รูป|ภาพ)(?:อื่น|เพิ่มเติม)|ตัวอย่าง|ลิงก์|รายละเอียด|ข้อดี|ข้อเสีย)|"
+                    + "(?:any|more|show me|recommend)(?:\\s+more)?\\s+"
+                    + "(?:images?|pictures?|photos?|works?|examples?|links?|details?))",
+            Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+    private static final Pattern EXPLICIT_FOLLOW_UP_TOPIC = Pattern.compile(
+            "(?:รูป|ภาพ|ผลงาน|ตัวอย่าง|ลิงก์|รายละเอียด)(?:ของ|\\s+(?:of|by|from)\\b)",
+            Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
     private final MeterRegistry meterRegistry;
     private final int maxAlternates;
 
@@ -72,7 +82,10 @@ public final class DefaultSearchQueryPlanningService implements SearchQueryPlann
         if (contextual) {
             String previousUserQuery = lastUserQuery(conversationContext);
             if (!previousUserQuery.isBlank()) {
-                primary = previousUserQuery + " " + primary;
+                String previousTopic = trimNoise(stripConversationalPrefix(previousUserQuery));
+                if (!previousTopic.isBlank() && !containsTopic(primary, previousTopic)) {
+                    primary = previousTopic + " " + primary;
+                }
             }
         }
         primary = trimNoise(primary);
@@ -179,7 +192,15 @@ public final class DefaultSearchQueryPlanningService implements SearchQueryPlann
         if (FOLLOW_UP_MARKERS.stream().anyMatch(lower::contains)) {
             return true;
         }
+        if (!EXPLICIT_FOLLOW_UP_TOPIC.matcher(lower).find()
+                && TOPIC_DEPENDENT_FOLLOW_UP.matcher(lower).find()) {
+            return true;
+        }
         return query.length() <= 24 && lower.matches("^(ราคา|สเปก|รุ่น|เวอร์ชัน|ปีนี้|price|spec|version|release)\\s*[?!.。！？]*$");
+    }
+
+    private boolean containsTopic(String query, String topic) {
+        return query.toLowerCase(Locale.ROOT).contains(topic.toLowerCase(Locale.ROOT));
     }
 
     private String lastUserQuery(String conversationContext) {

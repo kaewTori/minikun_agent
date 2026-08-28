@@ -120,7 +120,8 @@ public final class DefaultSearchManager implements SearchManager {
                 retryCount += execution.retryCount();
             }
             if (isImageSearch(request)) {
-                KnowledgeContext result = formatter.formatImages(providerImageResults, request.resultLimit());
+                KnowledgeContext result = formatter.formatImages(
+                        providerImageResults, request.resultLimit(), request.query());
                 recordQuality(result);
                 return result;
             }

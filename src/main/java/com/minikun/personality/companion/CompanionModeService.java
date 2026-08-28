@@ -1,9 +1,6 @@
 package com.minikun.personality.companion;
 
-import java.util.Collections;
-import java.util.LinkedHashMap;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -29,39 +26,45 @@ public final class CompanionModeService {
     };
 
     private final boolean enabled;
-    private final Map<SessionKey, CompanionMode> sessions;
+    private final CompanionModeStore store;
 
     public CompanionModeService(boolean enabled, int maximumSessions) {
+        this(enabled, new InMemoryCompanionModeStore(maximumSessions));
+    }
+
+    public CompanionModeService(boolean enabled, CompanionModeStore store) {
         this.enabled = enabled;
-        int boundedMaximum = Math.max(10, Math.min(maximumSessions, 100_000));
-        this.sessions = Collections.synchronizedMap(new LinkedHashMap<>(16, .75f, true) {
-            @Override
-            protected boolean removeEldestEntry(Map.Entry<SessionKey, CompanionMode> eldest) {
-                return size() > boundedMaximum;
-            }
-        });
+        this.store = Objects.requireNonNull(store);
     }
 
     public Optional<CompanionModeContext> evaluate(
             String ownerId, String conversationId, String latestUserMessage) {
         if (!enabled) return Optional.empty();
-        SessionKey key = new SessionKey(required(ownerId, "owner id"),
-                required(conversationId, "conversation id"));
+        String owner = required(ownerId, "owner id");
+        String conversation = required(conversationId, "conversation id");
         Optional<CompanionMode> requested = requestedMode(latestUserMessage);
         if (requested.isPresent()) {
             CompanionMode mode = requested.get();
-            if (mode == CompanionMode.BALANCED) sessions.remove(key);
-            else sessions.put(key, mode);
+            if (mode == CompanionMode.BALANCED) store.delete(owner, conversation);
+            else store.save(owner, conversation, mode);
             return Optional.of(context(mode, true));
         }
-        CompanionMode active = sessions.get(key);
-        return active == null ? Optional.empty() : Optional.of(context(active, false));
+        return store.find(owner, conversation).map(mode -> context(mode, false));
     }
 
     public Optional<CompanionMode> activeMode(String ownerId, String conversationId) {
         if (!enabled) return Optional.empty();
-        return Optional.ofNullable(sessions.get(new SessionKey(
-                required(ownerId, "owner id"), required(conversationId, "conversation id"))));
+        return store.find(required(ownerId, "owner id"), required(conversationId, "conversation id"));
+    }
+
+    public CompanionModeContext setMode(String ownerId, String conversationId, CompanionMode mode) {
+        if (!enabled) throw new IllegalStateException("companion mode is disabled");
+        String owner = required(ownerId, "owner id");
+        String conversation = required(conversationId, "conversation id");
+        CompanionMode selected = Objects.requireNonNull(mode);
+        if (selected == CompanionMode.BALANCED) store.delete(owner, conversation);
+        else store.save(owner, conversation, selected);
+        return context(selected, true);
     }
 
     private Optional<CompanionMode> requestedMode(String message) {
@@ -116,5 +119,4 @@ public final class CompanionModeService {
         return value.trim();
     }
 
-    private record SessionKey(String ownerId, String conversationId) {}
 }

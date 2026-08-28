@@ -77,6 +77,9 @@ import com.minikun.runtime.VersionService;
 import com.minikun.search.SearchDecisionService;
 import com.minikun.search.SearchService;
 import com.minikun.search.model.SearchDecision;
+import com.minikun.search.model.SearchDecisionReason;
+import com.minikun.search.model.SearchOptions;
+import com.minikun.search.model.SearchRequest;
 import com.minikun.tools.DefaultToolExecutor;
 import com.minikun.tools.DefaultToolRegistry;
 import com.minikun.tools.ToolEvidence;
@@ -710,17 +713,23 @@ class ChatServiceChatOrchestrationTest {
             SearchDecisionService decisionService = mock(SearchDecisionService.class);
             when(conversation.load(any())).thenReturn(List.of());
             when(chatModel.call(any(Prompt.class))).thenReturn(response("answer"));
-            when(decisionService.decide(any())).thenReturn(new SearchDecision(true, "image query"));
+            when(decisionService.decide(any())).thenReturn(new SearchDecision(
+                    true, "image query", SearchDecisionReason.IMAGE_REQUEST));
             ImageSource first = new ImageSource(
                     "https://example.com/first.jpg", "First", "https://source.example/first", "first description");
             ImageSource second = new ImageSource(
                     "https://example.com/second.jpg", "Second", "https://source.example/second", "second description");
             ImageSource third = new ImageSource(
                     "https://example.com/third.jpg", "Third", "https://source.example/third", "third description");
-            when(searchService.search(any())).thenReturn(new KnowledgeContext(
-                "search text",
-                List.of(new KnowledgeCandidate("search-1", KnowledgeSource.SEARCH, "search text", 0)),
-                List.of(first, second, third)));
+            when(searchService.search(any())).thenAnswer(invocation -> {
+                SearchRequest searchRequest = invocation.getArgument(0);
+                if (SearchOptions.IMAGE_CATEGORY.equals(searchRequest.options().category())) {
+                    return new KnowledgeContext("", List.of(), List.of(first, second, third));
+                }
+                return new KnowledgeContext("search text",
+                        List.of(new KnowledgeCandidate("search-1", KnowledgeSource.SEARCH, "search text", 0)),
+                        List.of());
+            });
 
             ChatService service = service(chatModel, conversation, searchService, decisionService);
             setField(service, "searchEnabled", true);
@@ -729,11 +738,7 @@ class ChatServiceChatOrchestrationTest {
 
             var response = service.chatCompletion(request(), new ConversationId("images"));
 
-            assertEquals(List.of(
-                new com.minikun.agent.minikun_agent.api.openai.dto.ChatAttachment("image", first.url(), first.title()),
-                new com.minikun.agent.minikun_agent.api.openai.dto.ChatAttachment("image", second.url(), second.title()),
-                new com.minikun.agent.minikun_agent.api.openai.dto.ChatAttachment("image", third.url(), third.title())),
-                response.attachments());
+            assertEquals(ImageAttachmentMapper.map(List.of(first, second, third)), response.attachments());
             assertEquals("answer", response.choices().get(0).message().content());
             ArgumentCaptor<Prompt> prompt = ArgumentCaptor.forClass(Prompt.class);
             verify(chatModel).call(prompt.capture());
@@ -756,7 +761,7 @@ class ChatServiceChatOrchestrationTest {
             assertFalse(promptText.contains(second.description()));
             assertFalse(promptText.contains(third.description()));
             assertFalse(promptText.contains("ChatAttachment"));
-            verify(searchService).search(any());
+            verify(searchService, org.mockito.Mockito.times(2)).search(any());
             verify(chatModel, org.mockito.Mockito.times(1)).call(any(Prompt.class));
 
             JsonNode serialized = new ObjectMapper().readTree(
@@ -764,10 +769,12 @@ class ChatServiceChatOrchestrationTest {
             JsonNode attachment = serialized.get("attachments").get(0);
             assertEquals(3, serialized.get("attachments").size());
             assertEquals("image", attachment.get("type").asText());
-            assertEquals(first.url(), attachment.get("url").asText());
+            assertEquals("/v1/images/proxy?url=https%3A%2F%2Fexample.com%2Ffirst.jpg", attachment.get("url").asText());
             assertEquals(first.title(), attachment.get("title").asText());
-            assertFalse(attachment.has("sourceUrl"));
-            assertFalse(attachment.has("description"));
+            assertEquals(first.sourceUrl(), attachment.get("source_url").asText());
+            assertEquals(first.description(), attachment.get("description").asText());
+            assertEquals(first.url(), attachment.get("original_url").asText());
+            assertEquals("web", attachment.get("origin").asText());
             }
 
     @Test

@@ -28,6 +28,7 @@ import com.minikun.pcs.model.KnowledgeContext;
 import com.minikun.pcs.model.PromptMessage;
 import com.minikun.pcs.model.PromptRole;
 import com.minikun.pcs.model.RuntimeContext;
+import com.minikun.pcs.model.CapabilityInstruction;
 import com.minikun.personality.companion.CompanionModeContext;
 import com.minikun.personality.model.PersonalUserModel;
 import com.minikun.personality.profile.UserModelService;
@@ -37,6 +38,8 @@ import com.minikun.tokenbudget.config.TokenBudgetProperties;
 import com.minikun.tokenbudget.runtime.DynamicGenerationOptionsFactory;
 import com.minikun.tools.ToolEvidence;
 import com.minikun.vision.VisionInput;
+import com.minikun.relationship.ConversationThreadService;
+import java.util.ArrayList;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -56,6 +59,7 @@ final class ChatPromptFactory {
     private final TokenBudgetProperties tokenBudgetProperties;
     private final AdaptivePersonaService adaptivePersonaService;
     private final UserModelService userModelService;
+    private final ConversationThreadService conversationThreadService;
     private final ChatGenerationProfileSelector generationProfileSelector;
     private final ChatPerformanceMetrics performanceMetrics;
     private final Configuration configuration;
@@ -76,6 +80,7 @@ final class ChatPromptFactory {
             TokenBudgetProperties tokenBudgetProperties,
             AdaptivePersonaService adaptivePersonaService,
             UserModelService userModelService,
+            ConversationThreadService conversationThreadService,
             ChatGenerationProfileSelector generationProfileSelector,
             ChatPerformanceMetrics performanceMetrics,
             Configuration configuration) {
@@ -92,6 +97,7 @@ final class ChatPromptFactory {
         this.tokenBudgetProperties = tokenBudgetProperties;
         this.adaptivePersonaService = adaptivePersonaService;
         this.userModelService = userModelService;
+        this.conversationThreadService = conversationThreadService;
         this.generationProfileSelector = generationProfileSelector;
         this.performanceMetrics = performanceMetrics;
         this.configuration = configuration;
@@ -160,7 +166,8 @@ final class ChatPromptFactory {
                 ? KnowledgeConsolidation.EMPTY : input.knowledgeSelection().consolidation();
         KnowledgeContext promptKnowledge = factFirstToolTurn
                 ? KnowledgeContext.empty() : input.knowledgeSelection().selection().knowledgeContext();
-        var conversationStyle = conversationStyleAdvisor.advise(userMessage.content());
+        var conversationStyle = conversationStyleAdvisor.advise(
+                userMessage.content(), conversationWindow.messages());
         var personaSignals = adaptivePersonaService == null
                 ? com.minikun.personality.signal.PersonaSelectionSignals.EMPTY
                 : adaptivePersonaService.evaluate(
@@ -178,11 +185,7 @@ final class ChatPromptFactory {
                         : new ConversationContext(
                                 conversationContent, conversationSystemContent, conversationMessages),
                 promptKnowledge,
-                capabilityFactory.create(
-                        userMessage.content(),
-                        input.knowledgeSelection(), input.imageAwareness(), input.verifiedToolResult(),
-                        input.visionInput(), input.interactionMode(), conversationStyle.instruction(),
-                        configuration.nativeToolsAvailable(), creativeRequest),
+                capabilities(input, conversationStyle.instruction(), creativeRequest),
                 new com.minikun.pcs.model.UserMessage(userMessage.content()),
                 promptSearchSignals,
                 promptSearchContext,
@@ -248,6 +251,27 @@ final class ChatPromptFactory {
                     ownerId, exception);
             return PersonalUserModel.EMPTY;
         }
+    }
+
+    private List<CapabilityInstruction> capabilities(
+            Request input, String conversationStyleInstruction, boolean creativeRequest) {
+        List<CapabilityInstruction> values = new ArrayList<>(capabilityFactory.create(
+                input.userMessage().content(), input.knowledgeSelection(), input.imageAwareness(),
+                input.verifiedToolResult(), input.visionInput(), input.interactionMode(),
+                conversationStyleInstruction, configuration.nativeToolsAvailable(), creativeRequest));
+        if (conversationThreadService != null) {
+            try {
+                String context = conversationThreadService.promptContext(
+                        input.ownerId(), java.util.Objects.requireNonNullElse(
+                                input.request().conversation_id(), ""), input.userMessage().content());
+                if (hasText(context)) {
+                    values.add(new CapabilityInstruction("Relationship continuity", context, true));
+                }
+            } catch (RuntimeException exception) {
+                log.warn("Conversation thread context failed; continuing without it", exception);
+            }
+        }
+        return List.copyOf(values);
     }
 
     private boolean isVerifiedToolResult(ToolEvidence evidence) {

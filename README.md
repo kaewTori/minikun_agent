@@ -14,7 +14,10 @@
 - Storytelling advisor สำหรับจัดคำตอบเป็น explanation, comparison, timeline, analysis หรือ narrative ตามเจตนา
 - Adaptive Companion ที่เรียนรู้ภาษา ความยาว รูปแบบ ระดับเทคนิค และโทนการตอบแบบ owner-scoped
 - Natural Conversation Advisor ที่ใช้เจตนา บริบทต่อเนื่อง และสัญญาณอารมณ์เพื่อปรับคำตอบโดยไม่เก็บข้อความเพิ่ม
+- Conversation Policy Engine ที่แยกการรับฟัง ชวนคิด ตัดสินใจ อธิบาย สร้างงาน และลงมือทำ พร้อม question/initiative/challenge contract ราย turn
 - Companion Mode แบบ conversation-scoped สำหรับสลับพฤติกรรมระหว่าง `companion`, `work` และ `focus`
+- Relationship Thread Memory สำหรับจำเรื่องที่ยังคุยไม่จบ และ consent-based check-in ที่เคารพ quiet hours
+- Feedback learning จาก 👍/👎 และเหตุผลแบบ closed category เพื่อปรับความยาว น้ำเสียง จำนวนคำถาม initiative และระดับการทักท้วง
 - Communication Assistant สำหรับ draft, rewrite, reply และ summarize โดยใช้โมเดลหลักแบบ draft-only
 - Agent Planner + Execution Loop สำหรับคำสั่งหลายขั้น พร้อม state, retry, confirmation stop และ resume จาก PostgreSQL
 - Investment Copilot แบบ owner-scoped สำหรับ policy, transaction ledger, average-cost portfolio,
@@ -176,6 +179,9 @@ Actuator ที่เปิดให้เข้าถึงคือ `/actuator
 | `MINIKUN_TASK_MANAGEMENT_TOKEN` | ใช้ค่า memory token ถ้ามี | token สำหรับ Task API ที่ใช้โดย dashboard/automation |
 | `MINIKUN_COMPANION_MODE_ENABLED` | `true` | เปิด interaction mode แบบ conversation-scoped |
 | `MINIKUN_COMPANION_MODE_MAXIMUM_SESSIONS` | `1000` | จำนวน owner/conversation modes ที่เก็บใน memory สูงสุด |
+| `MINIKUN_RELATIONSHIP_TIMEZONE` | `Asia/Bangkok` | timezone สำหรับตีความวันและเวลา check-in จากบทสนทนา |
+| `MINIKUN_RELATIONSHIP_CHECK_IN_POLL_INTERVAL_MS` | `60000` | รอบตรวจ conversational check-in ที่ได้รับ consent แล้ว |
+| `MINIKUN_RELATIONSHIP_MANAGEMENT_TOKEN` | ใช้ค่า memory token ถ้ามี | token สำหรับจัดการ relationship threads |
 | `MINIKUN_AGENT_EXECUTION_ENABLED` | `true` | เปิดแผนและ execution tracking สำหรับคำสั่งหลายขั้น |
 | `MINIKUN_AGENT_MAX_PLANNED_STEPS` | `8` | จำนวนขั้นในแผนภายในสูงสุด |
 | `MINIKUN_AGENT_MAX_TOOL_STEPS` | `12` | จำนวน tool calls ที่บันทึกได้สูงสุดต่อ run |
@@ -828,6 +834,8 @@ schema อยู่ใน `personal-loop-schema.sql` และใช้ token �
 
 - [Conversation memory](docs/conversation-memory.md)
 - [Provider Composition System](docs/pcs.md)
+- [Conversation policy and relationship continuity](docs/conversation-policy-runtime.md)
+- [Visual Companion](docs/visual-companion.md)
 
 ## การทดสอบ
 

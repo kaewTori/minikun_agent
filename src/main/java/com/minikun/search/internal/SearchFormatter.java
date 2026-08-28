@@ -56,27 +56,72 @@ final class SearchFormatter {
     }
 
     KnowledgeContext formatImages(List<ImageSearchResult> results, int resultLimit) {
+        return formatImages(results, resultLimit, "");
+    }
+
+    KnowledgeContext formatImages(List<ImageSearchResult> results, int resultLimit, String query) {
         if (results == null || results.isEmpty() || resultLimit < 1) {
             return KnowledgeContext.empty();
         }
         List<ImageSource> images = new ArrayList<>();
         java.util.Set<String> seenUrls = new java.util.HashSet<>();
-        for (ImageSearchResult result : results) {
+        for (ImageSearchResult result : rankImages(results, query)) {
             if (result == null || result.url() == null) {
                 continue;
             }
             String normalizedUrl = result.url().trim();
-            if (normalizedUrl.isBlank()) {
+            if (normalizedUrl.isBlank() || !isSafeImageUrl(normalizedUrl)) {
                 continue;
             }
-            if (seenUrls.add(normalizedUrl)) {
+            String canonicalUrl = canonicalImageUrl(normalizedUrl);
+            if (seenUrls.add(canonicalUrl)) {
                 images.add(new ImageSource(
-                        normalizedUrl, result.title(), result.sourceUrl(), result.description()));
+                        normalizedUrl, result.title(), result.sourceUrl(), result.description(),
+                        result.thumbnailUrl(), result.width(), result.height(),
+                        result.provider(), result.license()));
             }
             if (images.size() == resultLimit) {
                 break;
             }
         }
         return new KnowledgeContext("", List.of(), images);
+    }
+
+    private List<ImageSearchResult> rankImages(List<ImageSearchResult> results, String query) {
+        java.util.Set<String> terms = java.util.Arrays.stream(
+                        java.util.Objects.requireNonNullElse(query, "").toLowerCase(java.util.Locale.ROOT)
+                                .split("[^\\p{L}\\p{N}]+"))
+                .filter(term -> term.length() > 1)
+                .collect(java.util.stream.Collectors.toSet());
+        return results.stream().filter(java.util.Objects::nonNull)
+                .sorted(java.util.Comparator.comparingInt((ImageSearchResult result) -> {
+                    String text = (result.title() + " " + result.description()).toLowerCase(java.util.Locale.ROOT);
+                    int matches = (int) terms.stream().filter(text::contains).count();
+                    int metadata = (result.sourceUrl().isBlank() ? 0 : 2)
+                            + (result.description().isBlank() ? 0 : 1)
+                            + (result.width() == null || result.height() == null ? 0 : 1);
+                    return matches * 10 + metadata;
+                }).reversed())
+                .toList();
+    }
+
+    private boolean isSafeImageUrl(String value) {
+        try {
+            java.net.URI uri = java.net.URI.create(value);
+            return "https".equalsIgnoreCase(uri.getScheme()) && uri.getHost() != null;
+        } catch (IllegalArgumentException exception) {
+            return false;
+        }
+    }
+
+    private String canonicalImageUrl(String value) {
+        try {
+            java.net.URI uri = java.net.URI.create(value).normalize();
+            return new java.net.URI(uri.getScheme().toLowerCase(java.util.Locale.ROOT), uri.getUserInfo(),
+                    uri.getHost().toLowerCase(java.util.Locale.ROOT), uri.getPort(), uri.getPath(),
+                    uri.getQuery(), null).toASCIIString();
+        } catch (java.net.URISyntaxException | IllegalArgumentException exception) {
+            return value;
+        }
     }
 }

@@ -27,6 +27,7 @@
     timelineLimit: 6,
     experimentAction: null,
     currentLocation: null,
+    activeVisual: null,
     sync: {
       paired: false,
       deviceId: "",
@@ -45,6 +46,8 @@
   const experimentDialog = $("#experiment-dialog");
   const experimentActionDialog = $("#experiment-action-dialog");
   const clearHistoryDialog = $("#clear-history-dialog");
+  const visualLightboxDialog = $("#visual-lightbox-dialog");
+  const inspirationBoardsDialog = $("#inspiration-boards-dialog");
 
   function headers(json = false) {
     const value = {};
@@ -84,6 +87,137 @@
     if (className) node.className = className;
     if (text !== undefined) node.textContent = text;
     return node;
+  }
+
+  function normalizeVisual(attachment = {}) {
+    const originalUrl = attachment.original_url || attachment.originalUrl || attachment.image_url?.url
+      || attachment.remoteUrl || attachment.url || "";
+    return {
+      title: attachment.title || "Visual reference",
+      url: attachment.url || originalUrl,
+      originalUrl,
+      sourceUrl: attachment.source_url || attachment.sourceUrl || "",
+      description: attachment.description || "",
+      origin: attachment.origin || "web",
+      provider: attachment.provider || "",
+      license: attachment.license || "",
+      width: attachment.width || null,
+      height: attachment.height || null
+    };
+  }
+
+  function visualOriginLabel(origin) {
+    return origin === "generated" ? "ภาพที่สร้างโดย AI" : origin === "user" ? "ภาพของเรา" : "ภาพจากเว็บ";
+  }
+
+  function visualHost(visual) {
+    try { return new URL(visual.sourceUrl || visual.originalUrl).hostname.replace(/^www\./, ""); }
+    catch (_) { return visual.provider || "แหล่งภาพ"; }
+  }
+
+  function proxyImageUrl(url) {
+    if (!url || url.startsWith("/") || url.startsWith("data:")) return url;
+    return `/v1/images/proxy?url=${encodeURIComponent(url)}`;
+  }
+
+  function openVisualLightbox(attachment) {
+    const visual = normalizeVisual(attachment);
+    state.activeVisual = visual;
+    $("#visual-origin-label").textContent = visualOriginLabel(visual.origin);
+    $("#visual-lightbox-title").textContent = visual.title;
+    $("#visual-lightbox-image").src = visual.url || proxyImageUrl(visual.originalUrl);
+    $("#visual-lightbox-image").alt = visual.title;
+    $("#visual-lightbox-description").textContent = visual.description
+      || [visualHost(visual), visual.license].filter(Boolean).join(" · ");
+    const source = $("#visual-lightbox-source");
+    const sourceUrl = visual.sourceUrl || visual.originalUrl;
+    source.href = sourceUrl || "#";
+    source.classList.toggle("hidden", !sourceUrl);
+    if (!visualLightboxDialog.open) visualLightboxDialog.showModal();
+  }
+
+  function attachVisualReference(visual, create = false) {
+    const reference = normalizeVisual(visual);
+    state.attachments.push({
+      kind: "image", name: reference.title, type: "image/remote",
+      remoteUrl: reference.originalUrl, previewUrl: reference.url,
+      sourceUrl: reference.sourceUrl, origin: reference.origin
+    });
+    renderAttachmentTray();
+    const composer = $("#chat-composer");
+    composer.value = create
+      ? `ใช้ภาพ reference ที่แนบมานี้เป็นทิศทาง แล้วช่วยออกแบบภาพใหม่ให้ต่างจากต้นฉบับอย่างชัดเจน: `
+      : `ช่วยดูและคุยต่อจากภาพ reference นี้หน่อยครับ: `;
+    autoGrowComposer();
+    visualLightboxDialog.close();
+    composer.focus();
+    toast(create ? "แนบ reference สำหรับสร้างงานต่อแล้วครับ" : "แนบรูปไว้ถามต่อแล้วครับ");
+  }
+
+  async function defaultInspirationBoard() {
+    let boards = await api("/v1/personal/inspiration-boards");
+    if (!boards.length) {
+      const created = await api("/v1/personal/inspiration-boards", {
+        method: "POST", body: JSON.stringify({ owner_id: state.ownerId, title: "แรงบันดาลใจ" })
+      });
+      boards = [created];
+    }
+    return boards[0];
+  }
+
+  async function saveVisualReference(attachment) {
+    const visual = normalizeVisual(attachment);
+    const board = await defaultInspirationBoard();
+    await api(`/v1/personal/inspiration-boards/${board.id}/items`, {
+      method: "POST", body: JSON.stringify({
+        owner_id: state.ownerId, image_url: visual.originalUrl, source_url: visual.sourceUrl,
+        title: visual.title, description: visual.description, origin: visual.origin
+      })
+    });
+    toast(`เก็บไว้ในบอร์ด “${board.title}” แล้วครับ`);
+  }
+
+  async function loadInspirationBoards() {
+    const list = $("#inspiration-board-list");
+    list.replaceChildren(element("p", "dialog-copy", "กำลังเปิดบอร์ด…"));
+    try {
+      const boards = await api("/v1/personal/inspiration-boards");
+      list.replaceChildren();
+      if (!boards.length) list.append(element("p", "dialog-copy", "ยังไม่มีบอร์ดครับ เก็บรูปแรกแล้วมินิคุงจะสร้างให้เอง"));
+      for (const board of boards) {
+        const section = element("section", "inspiration-board");
+        const heading = element("div", "inspiration-board-heading");
+        heading.append(element("h3", "", board.title));
+        const removeBoard = element("button", "", "ลบบอร์ด");
+        removeBoard.type = "button";
+        removeBoard.addEventListener("click", async () => {
+          if (!window.confirm(`ลบบอร์ด “${board.title}” และ reference ทั้งหมดใช่ไหมครับ?`)) return;
+          await api(`/v1/personal/inspiration-boards/${board.id}`, { method: "DELETE" });
+          await loadInspirationBoards();
+        });
+        heading.append(removeBoard); section.append(heading);
+        const grid = element("div", "inspiration-items");
+        const items = await api(`/v1/personal/inspiration-boards/${board.id}/items`);
+        for (const item of items) {
+          const card = element("div", "inspiration-item");
+          const image = element("img");
+          image.src = proxyImageUrl(item.imageUrl);
+          image.alt = item.title || "reference";
+          image.addEventListener("click", () => openVisualLightbox({
+            ...item, url: proxyImageUrl(item.imageUrl), originalUrl: item.imageUrl
+          }));
+          const remove = element("button", "", "×");
+          remove.type = "button";
+          remove.addEventListener("click", async () => {
+            await api(`/v1/personal/inspiration-boards/${board.id}/items/${item.id}`, { method: "DELETE" });
+            await loadInspirationBoards();
+          });
+          card.append(image, remove); grid.append(card);
+        }
+        if (!items.length) grid.append(element("p", "dialog-copy", "บอร์ดนี้ยังว่างครับ"));
+        section.append(grid); list.append(section);
+      }
+    } catch (error) { list.replaceChildren(element("p", "dialog-copy", error.message)); }
   }
 
   function thaiDate(value = new Date()) {
@@ -161,6 +295,12 @@
         .map((attachment) => ({
           title: attachment.title || attachment.name || "ไฟล์แนบ",
           url: attachment.url && !attachment.url.startsWith("data:") ? attachment.url : "",
+          originalUrl: attachment.originalUrl || attachment.original_url || attachment.remoteUrl || "",
+          sourceUrl: attachment.sourceUrl || attachment.source_url || "",
+          description: attachment.description || "",
+          origin: attachment.origin || "",
+          provider: attachment.provider || "",
+          license: attachment.license || "",
           assetId: attachment.assetId || "",
           kind: attachment.kind || "image",
           type: attachment.type || ""
@@ -487,6 +627,7 @@
     showView("chat");
     restoreDraft();
     $("#chat-composer").focus();
+    loadCompanionMode();
   }
 
   function switchConversation(id) {
@@ -501,6 +642,29 @@
     syncChatState();
     showView("chat");
     restoreDraft();
+    loadCompanionMode();
+  }
+
+  async function loadCompanionMode() {
+    const select = $("#companion-mode");
+    if (!select || !state.currentConversationId) return;
+    try {
+      const result = await api(`/v1/chat/companion-mode?conversation_id=${encodeURIComponent(state.currentConversationId)}`);
+      select.value = result?.mode || "BALANCED";
+    } catch (_) { select.value = "BALANCED"; }
+  }
+
+  async function saveCompanionMode() {
+    const select = $("#companion-mode");
+    if (!select || !state.currentConversationId) return;
+    await api("/v1/chat/companion-mode", {
+      method: "PUT",
+      body: JSON.stringify({
+        owner_id: state.ownerId,
+        conversation_id: state.currentConversationId,
+        mode: select.value
+      })
+    });
   }
 
   function draftKey() {
@@ -737,7 +901,7 @@
     return region;
   }
 
-  function setMessageFeedback(message, value) {
+  async function setMessageFeedback(message, value) {
     if (message.feedback === value) {
       message.feedback = "";
       message.feedbackReason = "";
@@ -749,7 +913,26 @@
     }
     saveConversation("", state.currentConversationId, state.chatMessages);
     renderChat();
-    toast(message.feedback ? "บันทึก feedback แล้วครับ" : "ยกเลิก feedback แล้วครับ");
+    try {
+      const query = `conversation_id=${encodeURIComponent(state.currentConversationId)}&message_id=${encodeURIComponent(message.id || "")}`;
+      if (!message.feedback) {
+        await api(`/v1/chat/feedback?${query}`, { method: "DELETE" });
+      } else {
+        await api("/v1/chat/feedback", {
+          method: "POST",
+          body: JSON.stringify({
+            owner_id: state.ownerId,
+            conversation_id: state.currentConversationId,
+            message_id: message.id,
+            rating: message.feedback,
+            reason: message.feedbackReason || ""
+          })
+        });
+      }
+      toast(message.feedback ? "บันทึก feedback และนำไปปรับการตอบแล้วครับ" : "ยกเลิก feedback แล้วครับ");
+    } catch (error) {
+      toast(`เก็บ feedback ไว้ในเครื่องแล้ว · ${error.message}`, true);
+    }
   }
 
   function renderLiveProgress(message) {
@@ -787,16 +970,29 @@
     if (message.attachments?.length) {
       const images = element("div", "message-image-grid");
       for (const attachment of message.attachments) {
-        if (!attachment.url) continue;
-        const link = element("a");
-        link.href = attachment.url;
-        link.target = "_blank";
-        link.rel = "noopener noreferrer";
+        const visual = normalizeVisual(attachment);
+        if (!visual.url) continue;
+        const card = element("figure", "visual-card");
+        const open = element("button", "visual-card-image");
+        open.type = "button";
+        open.addEventListener("click", () => openVisualLightbox(visual));
         const image = element("img");
-        image.src = attachment.url;
-        image.alt = attachment.title || "ภาพจากมินิคุง";
-        link.append(image);
-        images.append(link);
+        image.src = visual.url;
+        image.alt = visual.title;
+        image.loading = "lazy";
+        image.addEventListener("error", () => {
+          image.classList.add("visual-broken");
+          image.alt = "โหลดภาพนี้ไม่สำเร็จ";
+        }, { once: true });
+        open.append(image, element("span", "visual-origin", visualOriginLabel(visual.origin)));
+        const copy = element("figcaption", "visual-card-copy");
+        copy.append(element("strong", "", visual.title), element("small", "", visualHost(visual)));
+        const actions = element("div", "visual-card-actions");
+        const ask = element("button", "", "ถามต่อ");
+        ask.type = "button"; ask.addEventListener("click", () => attachVisualReference(visual));
+        const save = element("button", "", "เก็บ reference");
+        save.type = "button"; save.addEventListener("click", () => saveVisualReference(visual).catch(error => toast(error.message, true)));
+        actions.append(ask, save); copy.append(actions); card.append(open, copy); images.append(card);
       }
       if (images.childElementCount) body.append(images);
     }
@@ -974,7 +1170,7 @@
       const chip = element("div", "attachment-chip");
       if (attachment.kind === "image") {
         const image = element("img");
-        image.src = attachment.data;
+        image.src = attachment.data || attachment.previewUrl || proxyImageUrl(attachment.remoteUrl);
         image.alt = "";
         chip.append(image);
       }
@@ -1005,7 +1201,9 @@
     if (!images.length) return combined;
     return [
       { type: "text", text: combined || "ช่วยดูภาพที่แนบมานี้ให้หน่อยครับ" },
-      ...images.map((image) => ({ type: "image_url", image_url: { url: image.data, detail: "auto" } }))
+      ...images.map((image) => ({
+        type: "image_url", image_url: { url: image.data || image.remoteUrl, detail: "auto" }
+      }))
     ];
   }
 
@@ -1107,11 +1305,13 @@
               totalTokens: Number(chunk.usage.total_tokens) || 0
             };
           }
-          const images = [...(chunk.attachments || []), ...(delta?.images || [])].map((image) => ({
-            title: image.title || "ภาพจากมินิคุง",
-            url: image.url || image.image_url?.url
-          })).filter((image) => image.url);
-          if (images.length) assistant.attachments = [...(assistant.attachments || []), ...images];
+          const images = [...(chunk.attachments || []), ...(delta?.images || [])]
+            .map(normalizeVisual).filter((image) => image.url);
+          if (images.length) {
+            const merged = [...(assistant.attachments || []), ...images];
+            assistant.attachments = merged.filter((image, index) => merged.findIndex(candidate =>
+              normalizeVisual(candidate).url === normalizeVisual(image).url) === index);
+          }
           update();
         } catch (_) { /* ignore keep-alive and incomplete event lines */ }
       }
@@ -1137,6 +1337,17 @@
   async function hydrateMessageAttachments(message) {
     const hydrated = [];
     for (const attachment of (message.attachments || []).slice(0, 6)) {
+      const remoteUrl = attachment.remoteUrl || attachment.originalUrl || attachment.original_url;
+      if (attachment.kind === "image" && remoteUrl) {
+        hydrated.push({
+          kind: "image", name: attachment.title || attachment.name || "Visual reference",
+          type: attachment.type || "image/remote", remoteUrl,
+          previewUrl: attachment.url || attachment.previewUrl || proxyImageUrl(remoteUrl),
+          sourceUrl: attachment.sourceUrl || attachment.source_url || "",
+          origin: attachment.origin || "web"
+        });
+        continue;
+      }
       const asset = await loadAttachmentAsset(attachment.assetId);
       if (asset) {
         hydrated.push({
@@ -1241,8 +1452,9 @@
     const userMessage = {
       id: uniqueId("message-"), role: "user", content: text || "ช่วยดูไฟล์ที่แนบมานี้ให้หน่อยครับ", files,
       attachments: attachments.map((item) => ({
-        title: item.name, url: item.kind === "image" ? item.data : "", assetId: item.assetId,
-        kind: item.kind, type: item.type
+        title: item.name, url: item.kind === "image" ? (item.previewUrl || item.data) : "",
+        originalUrl: item.remoteUrl || "", sourceUrl: item.sourceUrl || "", origin: item.origin || "user",
+        assetId: item.assetId, kind: item.kind, type: item.type
       })),
       branchId: conversationId, status: "complete", createdAt: Date.now()
     };
@@ -1471,6 +1683,8 @@
       await stopRecording();
       return;
     }
+    // Barge-in: starting a voice turn immediately stops Mini-kun's current speech.
+    stopSpeech();
     if (!permissionSecureContext()) {
       showPermissionHelp("microphone", true);
       return;
@@ -1694,6 +1908,35 @@
       const time = element("time", "", relativeTime(item.occurredAt));
       time.dateTime = item.occurredAt;
       row.append(copy, time);
+      list.append(row);
+    }
+  }
+
+  function renderConversationThreads(items = []) {
+    const list = $("#conversation-thread-list");
+    list.replaceChildren();
+    $("#conversation-thread-count").textContent = items.length;
+    $("#conversation-thread-empty").classList.toggle("hidden", items.length > 0);
+    for (const thread of items.slice(0, 6)) {
+      const row = element("div", "inbox-item");
+      const copy = element("div");
+      copy.append(element("strong", "", thread.topic));
+      const detail = thread.checkInAt
+        ? `นัดถามอีกครั้ง ${relativeTime(thread.checkInAt)}`
+        : (thread.unresolvedQuestion || thread.summary || "เรื่องที่กำลังติดตาม");
+      copy.append(element("small", "", detail));
+      const controls = element("div", "item-controls");
+      const resolve = element("button", "", "จบเรื่องนี้");
+      resolve.type = "button";
+      resolve.addEventListener("click", async () => {
+        try {
+          await api(`/v1/personal/conversation-threads/${thread.id}`, { method: "DELETE" });
+          toast("ปิดเรื่องค้างให้แล้วครับ");
+          loadDashboard();
+        } catch (error) { toast(error.message, true); }
+      });
+      controls.append(resolve);
+      row.append(copy, controls);
       list.append(row);
     }
   }
@@ -2030,9 +2273,10 @@
       api("/v1/agent/runs?limit=12"),
       api("/v1/memory?limit=30"),
       api("/v1/knowledge/status"),
-      api("/v1/system/health")
+      api("/v1/system/health"),
+      api("/v1/personal/conversation-threads?status=OPEN&limit=20")
     ]);
-    const [status, actions, experiments, inbox, timeline, decisions, agentRuns, memories, knowledge, systemHealth] = calls;
+    const [status, actions, experiments, inbox, timeline, decisions, agentRuns, memories, knowledge, systemHealth, threads] = calls;
     const decisionCount = renderDecisions(decisions.status === "fulfilled" ? decisions.value : []);
     renderStatus(status.status === "fulfilled" ? status.value : {}, decisionCount);
     renderActions(actions.status === "fulfilled" ? actions.value : []);
@@ -2044,6 +2288,7 @@
     await loadToolTimeline(runItems);
     renderContextMemory(memories.status === "fulfilled" ? memories.value : [], knowledge.status === "fulfilled" ? knowledge.value : {});
     renderSystemHealth(systemHealth.status === "fulfilled" ? systemHealth.value : null);
+    renderConversationThreads(threads.status === "fulfilled" ? threads.value : []);
     const failures = calls.filter((call) => call.status === "rejected");
     setSync(failures.length === 0, failures.length ? "มีบางส่วนยังไม่พร้อม" : "พร้อมดูแล");
     if (failures.length === calls.length) toast("เชื่อมกับมินิคุงไม่ได้ ลองตรวจ Owner ID หรือ token ครับ", true);
@@ -2214,6 +2459,28 @@
   renderChat();
   restoreDraft();
 
+  $("#visual-ask").addEventListener("click", () => state.activeVisual && attachVisualReference(state.activeVisual));
+  $("#visual-create").addEventListener("click", () => state.activeVisual && attachVisualReference(state.activeVisual, true));
+  $("#visual-save").addEventListener("click", () => {
+    if (state.activeVisual) saveVisualReference(state.activeVisual).catch(error => toast(error.message, true));
+  });
+  $("#open-inspiration-boards").addEventListener("click", async () => {
+    inspirationBoardsDialog.showModal();
+    await loadInspirationBoards();
+  });
+  $("#create-inspiration-board").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const title = $("#new-board-title").value.trim();
+    if (!title) return;
+    try {
+      await api("/v1/personal/inspiration-boards", {
+        method: "POST", body: JSON.stringify({ owner_id: state.ownerId, title })
+      });
+      $("#new-board-title").value = "";
+      await loadInspirationBoards();
+    } catch (error) { toast(error.message, true); }
+  });
+
   document.querySelectorAll("[data-close-dialog]").forEach((button) => {
     button.addEventListener("click", () => button.closest("dialog")?.close("cancel"));
   });
@@ -2381,11 +2648,13 @@
   $("#open-settings").addEventListener("click", () => {
     settingsDialog.showModal();
     loadPairedDevices();
+    loadCompanionMode();
   });
   $("#mobile-menu-settings").addEventListener("click", () => {
     mobileMenuDialog.close();
     settingsDialog.showModal();
     loadPairedDevices();
+    loadCompanionMode();
   });
   $("#create-pairing").addEventListener("click", createDevicePairing);
   $("#copy-pair-link").addEventListener("click", async () => {
@@ -2413,7 +2682,7 @@
   $("#capture-form").addEventListener("submit", capture);
   $("#experiment-form").addEventListener("submit", createExperiment);
   $("#experiment-action-form").addEventListener("submit", submitExperimentAction);
-  $("#settings-form").addEventListener("submit", (event) => {
+  $("#settings-form").addEventListener("submit", async (event) => {
     if (event.submitter?.value === "cancel") return;
     event.preventDefault();
     state.ownerId = $("#owner-id").value.trim() || "default";
@@ -2423,6 +2692,7 @@
     sessionStorage.setItem("minikun.token", state.token);
     localStorage.setItem("minikun.model", state.model);
     $("#model-pill").textContent = state.model.toUpperCase();
+    try { await saveCompanionMode(); } catch (error) { toast(error.message, true); }
     settingsDialog.close();
     toast("บันทึกการตั้งค่าแล้วครับ");
   });

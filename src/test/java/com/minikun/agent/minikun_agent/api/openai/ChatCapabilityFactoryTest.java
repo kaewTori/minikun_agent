@@ -117,4 +117,42 @@ class ChatCapabilityFactoryTest {
         assertTrue(normalizedText.contains("Concrete search evidence"));
         assertTrue(normalizedText.contains("https://www.pixiv.net/en/users/24515230"));
     }
+
+    @Test
+    void retrievedImagesForbidFalseCapabilityDenial() {
+        SearchContext imageSearch = new SearchContext(
+                "ขอดูผลงาน", true, false, true, true, true, true,
+                com.minikun.search.model.SearchDecisionReason.IMAGE_REQUEST);
+        ChatKnowledgeSelection knowledge = new ChatKnowledgeSelection(
+                KnowledgeSelection.EMPTY, KnowledgeConsolidation.EMPTY,
+                new SearchSelectionSignals(true), imageSearch);
+
+        var capabilities = new ChatCapabilityFactory().create(
+                "ขอดูผลงาน", knowledge, new ImageAwareness(3), null, null, null, "", false);
+        String text = capabilities.stream().map(capability -> capability.name() + "\n" + capability.content())
+                .reduce((left, right) -> left + "\n" + right).orElse("");
+
+        assertTrue(text.contains("Retrieved Images"));
+        assertTrue(text.contains("Do not claim that you cannot display or return images"));
+        assertTrue(text.contains("Briefly introduce the attached results"));
+    }
+
+    @Test
+    void failedImageRetrievalDescribesTheAttemptInsteadOfDenyingCapability() {
+        SearchContext imageSearch = new SearchContext(
+                "ขอดูผลงาน", true, false, true, true, true, false,
+                com.minikun.search.model.SearchDecisionReason.IMAGE_REQUEST);
+        ChatKnowledgeSelection knowledge = new ChatKnowledgeSelection(
+                KnowledgeSelection.EMPTY, KnowledgeConsolidation.EMPTY,
+                new SearchSelectionSignals(true), imageSearch);
+
+        var capabilities = new ChatCapabilityFactory().create(
+                "ขอดูผลงาน", knowledge, null, null, null, null, "", false);
+        String text = capabilities.stream().map(capability -> capability.name() + "\n" + capability.content())
+                .reduce((left, right) -> left + "\n" + right).orElse("");
+
+        assertTrue(text.contains("Image retrieval outcome"));
+        assertTrue(text.contains("supports returning search-result images"));
+        assertTrue(text.contains("Never claim categorically"));
+    }
 }
