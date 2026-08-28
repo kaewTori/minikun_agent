@@ -12,6 +12,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Import;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
@@ -29,6 +30,7 @@ import com.minikun.memory.MemoryRepository;
 import com.minikun.memory.MemoryRetrievalProperties;
 import com.minikun.memory.MemoryService;
 import com.minikun.memory.ReflectionService;
+import com.minikun.memory.DeferredReflectionService;
 import com.minikun.memory.ReflectionDecisionService;
 import com.minikun.memory.reflection.ReflectionProvider;
 import com.minikun.memory.reflection.ReflectionParser;
@@ -41,6 +43,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 
 @Configuration(proxyBeanMethods = false)
 @EnableConfigurationProperties(MemoryRetrievalProperties.class)
+@Import(DeferredReflectionService.class)
 public class MemoryConfiguration {
     @Bean(name = "memoryObjectMapper")
     ObjectMapper memoryObjectMapper() {
@@ -107,13 +110,15 @@ public class MemoryConfiguration {
             @Value("${minikun.memory.recall.maximum-count:10}") int maximumCount,
             @Value("${minikun.memory.recall.maximum-characters:4000}") int maximumCharacters,
             @Value("${minikun.memory.semantic.enabled:true}") boolean semanticEnabled,
-            @Value("${minikun.memory.semantic.weight:0.85}") double semanticWeight) {
+            @Value("${minikun.memory.semantic.weight:0.85}") double semanticWeight,
+            @Value("${minikun.memory.semantic.cache.maximum-entries:1000}") int semanticCacheMaximumEntries) {
         MemorySelector selector = new MemorySelector(maximumCount);
         MemoryFormatter formatter = new MemoryFormatter(maximumCharacters);
         MemoryRanker ranker = MemoryRelevanceRanker::rank;
         EmbeddingModel embeddingModel = embeddingModels.getIfAvailable();
         if (semanticEnabled && embeddingModel != null) {
-            ranker = new EmbeddingMemoryRelevanceRanker(embeddingModel, semanticWeight, meterRegistry);
+            ranker = new EmbeddingMemoryRelevanceRanker(
+                    embeddingModel, semanticWeight, meterRegistry, semanticCacheMaximumEntries);
         }
         return new MemoryRecallService(repository,
             memories -> formatter.format(selector.select(memories)), ranker);

@@ -14,8 +14,8 @@ public final class DefaultContextBudgetPolicy implements ContextBudgetPolicy {
             ContextBudgetSection.CONVERSATION, 30L,
             ContextBudgetSection.USER_MODEL, 5L,
             ContextBudgetSection.MEMORY, 10L,
-            ContextBudgetSection.KNOWLEDGE, 5L,
-            ContextBudgetSection.CAPABILITIES, 5L,
+            ContextBudgetSection.KNOWLEDGE, 15L,
+            ContextBudgetSection.CAPABILITIES, 10L,
             ContextBudgetSection.USER_MESSAGE, 20L);
 
     private final Map<ContextBudgetSection, Long> weights;

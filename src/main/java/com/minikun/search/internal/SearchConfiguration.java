@@ -30,9 +30,13 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Configuration(proxyBeanMethods = false)
 public class SearchConfiguration {
+    private static final Logger LOGGER = LoggerFactory.getLogger(SearchConfiguration.class);
+
     @Bean(name = "searxngSearchProvider")
     SearchProvider searxngProvider(
             ObjectMapper objectMapper,
@@ -52,7 +56,7 @@ public class SearchConfiguration {
     }
 
     @Bean(name = "tavilySearchProvider")
-    SearchProvider tavilyProvider(
+    TavilySearchProvider tavilyProvider(
             ObjectMapper objectMapper,
             Clock memoryClock,
             @Value("${minikun.search.tavily.url:https://api.tavily.com}") String baseUrl,
@@ -76,13 +80,17 @@ public class SearchConfiguration {
 
     @Bean
     SearchProvider searchProvider(
-            @Qualifier("tavilySearchProvider") SearchProvider tavilyProvider,
+            @Qualifier("tavilySearchProvider") TavilySearchProvider tavilyProvider,
             @Qualifier("searxngSearchProvider") SearchProvider searxngProvider,
             Clock memoryClock,
             MeterRegistry meterRegistry,
             @Value("${minikun.search.failover.enabled:true}") boolean failoverEnabled,
             @Value("${minikun.search.failover.cooldown:PT120S}") Duration cooldown,
             @Value("${minikun.search.failover.failure-threshold:3}") int failureThreshold) {
+        if (!tavilyProvider.configured()) {
+            LOGGER.info("process=search_configuration event=tavily_disabled reason=missing_or_disabled_api_key provider=searxng");
+            return searxngProvider;
+        }
         if (!failoverEnabled) {
             return tavilyProvider;
         }

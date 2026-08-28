@@ -10,12 +10,10 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
 @Component
-@ConditionalOnBean(JdbcTemplate.class)
 @ConditionalOnProperty(name = "minikun.goal.enabled", havingValue = "true", matchIfMissing = true)
 public final class JdbcGoalStore implements GoalStore {
     private final JdbcTemplate jdbc;

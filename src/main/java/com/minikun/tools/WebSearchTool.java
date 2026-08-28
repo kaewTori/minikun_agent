@@ -90,6 +90,9 @@ public final class WebSearchTool implements Tool {
                 result.put("content", snippet(candidate.content()));
                 result.put("source", candidate.source().name());
                 result.put("position", candidate.sourcePosition());
+                if (!candidate.provenance().isBlank()) {
+                    result.put("url", candidate.provenance());
+                }
                 results.add(result);
             }
         }

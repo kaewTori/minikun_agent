@@ -37,15 +37,15 @@ class DefaultContextBudgetPolicyTest {
     @Test
     void exactWeightedBudgetHasNoRemainder() {
         DefaultContextBudgetPolicy policy = new DefaultContextBudgetPolicy();
-        ContextBudget budget = policy.allocate(100);
+        ContextBudget budget = policy.allocate(115);
 
         assertEquals(15, budget.allocation(ContextBudgetSection.CHARACTER));
         assertEquals(10, budget.allocation(ContextBudgetSection.RUNTIME));
         assertEquals(30, budget.allocation(ContextBudgetSection.CONVERSATION));
         assertEquals(5, budget.allocation(ContextBudgetSection.USER_MODEL));
         assertEquals(10, budget.allocation(ContextBudgetSection.MEMORY));
-        assertEquals(5, budget.allocation(ContextBudgetSection.KNOWLEDGE));
-        assertEquals(5, budget.allocation(ContextBudgetSection.CAPABILITIES));
+        assertEquals(15, budget.allocation(ContextBudgetSection.KNOWLEDGE));
+        assertEquals(10, budget.allocation(ContextBudgetSection.CAPABILITIES));
         assertEquals(20, budget.allocation(ContextBudgetSection.USER_MESSAGE));
     }
 

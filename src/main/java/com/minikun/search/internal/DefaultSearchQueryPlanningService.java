@@ -15,6 +15,10 @@ import java.util.regex.Pattern;
 /** Deterministic, conservative planner. It never invents terms. */
 public final class DefaultSearchQueryPlanningService implements SearchQueryPlanningService {
     private static final Pattern SPACE = Pattern.compile("\\s+");
+    private static final Pattern THAI_NAMED_ENTITY_WRAPPER = Pattern.compile(
+            "^(?:ข้อมูล|ประวัติ)(?:ของ)?(?:นักวาด|ศิลปิน|นักเขียน|นักร้อง|นักแสดง|บุคคล|คน)?"
+                    + "(?:ที่)?ชื่อ\\s+",
+            Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
     private static final List<String> THAI_PREFIXES = List.of(
             "ช่วยค้นคว้าเรื่อง", "ช่วยค้นคว้า", "ค้นคว้าเรื่อง", "วิจัยเรื่อง", "เจาะลึกเรื่อง",
             "ช่วยค้นหา", "ช่วยหา", "ค้นหาให้หน่อย", "อยากรู้ว่า", "ช่วยบอกหน่อยว่า", "ขอข้อมูล");
@@ -103,7 +107,7 @@ public final class DefaultSearchQueryPlanningService implements SearchQueryPlann
         String lower = value.toLowerCase(Locale.ROOT);
         for (String prefix : THAI_PREFIXES) {
             if (lower.startsWith(prefix)) {
-                return value.substring(prefix.length()).trim();
+                return stripNamedEntityWrapper(value.substring(prefix.length()).trim());
             }
         }
         for (String prefix : ENGLISH_PREFIXES) {
@@ -111,7 +115,11 @@ public final class DefaultSearchQueryPlanningService implements SearchQueryPlann
                 return value.substring(prefix.length()).trim();
             }
         }
-        return value;
+        return stripNamedEntityWrapper(value);
+    }
+
+    private String stripNamedEntityWrapper(String value) {
+        return THAI_NAMED_ENTITY_WRAPPER.matcher(value).replaceFirst("").trim();
     }
 
     private String trimNoise(String value) {

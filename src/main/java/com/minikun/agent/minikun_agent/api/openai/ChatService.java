@@ -49,7 +49,6 @@ import com.minikun.browser.BrowserContentException;
 import com.minikun.browser.BrowserContentService;
 import com.minikun.context.runtime.PersonalContextRuntime;
 import com.minikun.pcs.PromptComposer;
-import com.minikun.pcs.PromptException;
 import com.minikun.pcs.KnowledgeConsolidationService;
 import com.minikun.pcs.KnowledgeSelectionService;
 import com.minikun.search.SearchDecisionService;
@@ -82,7 +81,6 @@ import org.slf4j.MDC;
 @RequiredArgsConstructor(onConstructor_ = @Autowired)
 @Slf4j
 public class ChatService {
-    private static final String PUBLIC_MODEL_NAME = "mini-kun";
     private static final String DEFAULT_CHAT_MODEL = "hf.co/llmfan46/gemma-4-E4B-it-ultra-uncensored-heretic-GGUF:Q5_K_M";
 
 
@@ -117,6 +115,7 @@ public class ChatService {
     private final SpringAiPromptAdapter promptAdapter = new SpringAiPromptAdapter();
     private final ChatCapabilityFactory capabilityFactory = new ChatCapabilityFactory();
     private final ChatGenerationOptionsResolver generationOptionsResolver = new ChatGenerationOptionsResolver();
+    private final ChatRequestInspector requestInspector = new ChatRequestInspector();
 
     private SpringAiToolCallingRuntime toolCallingRuntime;
 
@@ -289,9 +288,6 @@ public class ChatService {
                     titleGenerationService);
         }
 
-    @Value("${spring.ai.ollama.embedding.options.model:qwen3-embedding:0.6b}")
-    private String configuredEmbeddingModel;
-
     @Value("${minikun.search.enabled:false}")
     private boolean searchEnabled;
 
@@ -362,16 +358,16 @@ public class ChatService {
         VisionInput visionInput = visionInput(request);
         ChatMessage userMessage = userMessage(request, visionInput);
         var commandResponse = commandHandler().blocking(
-                userMessage, modelName(request.model(), effectiveConfiguredChatModel()),
+                userMessage, requestInspector.publicModelName(),
                 diagnosticsConversationalEnabled, modelGateway());
         if (commandResponse != null) {
             log.info("process=command event=completed");
             return commandResponse;
         }
-        if (isInternalTitleRequest(request)) {
-            return responseForContent(request, titleGenerationService.generateTitle(titleMessages(request)));
+        if (requestInspector.isInternalTitleRequest(request)) {
+            return responseForContent(request, titleGenerationService.generateTitle(requestInspector.titleMessages(request)));
         }
-        String model = modelName(request.model(), effectiveConfiguredChatModel());
+        String model = requestInspector.publicModelName();
         ChatTransactionLogger.Transaction transaction = transactionLogger.start(
                 "chatcmpl-" + UUID.randomUUID(), model, false, request.messages().size());
         long requestStarted = System.nanoTime();
@@ -384,7 +380,7 @@ public class ChatService {
                 String ownerId = memoryOwnerId(request, conversationId);
                 turnFinalizer().persistDeterministic(
                         conversationId, userMessage, content, ownerId,
-                        transaction.requestId(), shouldPersistConversation(request), false);
+                        transaction.requestId(), requestInspector.shouldPersist(request), false);
                 recordExplainability(ownerId, conversationId, transaction.requestId(),
                         ChatExplainabilityRecorder.forTool(verifiedToolResult.get()));
                 transaction.success();
@@ -400,7 +396,7 @@ public class ChatService {
                         userMessage.content(), exception, browserContentService);
                 turnFinalizer().persistDeterministic(
                         conversationId, userMessage, content, memoryOwnerId(request, conversationId),
-                        transaction.requestId(), shouldPersistConversation(request), false);
+                        transaction.requestId(), requestInspector.shouldPersist(request), false);
                 recordExplainability(memoryOwnerId(request, conversationId), conversationId, transaction.requestId(),
                         ChatExplainabilityRecorder.browserFailure());
                 transaction.success();
@@ -427,7 +423,7 @@ public class ChatService {
             ModelUsage usage = modelUsage(response);
             String content = response.getResult().getOutput().getText();
             CreativeResponseContinuation continuation = creativeContinuation();
-            if (hasText(content) && continuation.shouldContinue(context.generationProfile(), response)) {
+            if (requestInspector.hasText(content) && continuation.shouldContinue(context.generationProfile(), response)) {
                 log.info("process=creative_continuation event=started request_id={} stream=false",
                         transaction.requestId());
                 try {
@@ -445,7 +441,7 @@ public class ChatService {
                 }
             }
             recordModelUsage(usage, generationStarted);
-            if (!hasText(content)) {
+            if (!requestInspector.hasText(content)) {
                 log.warn("process=model_response event=blank request_id={}", transaction.requestId());
                 content = "ขออภัยครับ โมเดลยังไม่ได้ส่งคำตอบที่สมบูรณ์ กรุณาลองสั่งอีกครั้งครับ";
             }
@@ -475,10 +471,10 @@ public class ChatService {
         if (command != null) {
             return commandStream(command, request);
         }
-        if (isInternalTitleRequest(request)) {
-            return commandStream(titleGenerationService.generateTitle(titleMessages(request)), request);
+        if (requestInspector.isInternalTitleRequest(request)) {
+            return commandStream(titleGenerationService.generateTitle(requestInspector.titleMessages(request)), request);
         }
-        String model = modelName(request.model(), effectiveConfiguredChatModel());
+        String model = requestInspector.publicModelName();
         String requestId = "chatcmpl-" + UUID.randomUUID();
         ChatTransactionLogger.Transaction transaction = transactionLogger.start(
                 requestId, model, true, request.messages().size());
@@ -496,7 +492,7 @@ public class ChatService {
             String ownerId = memoryOwnerId(request, conversationId);
             turnFinalizer().persistDeterministic(
                     conversationId, userMessage, content, ownerId,
-                    transaction.requestId(), shouldPersistConversation(request), true);
+                    transaction.requestId(), requestInspector.shouldPersist(request), true);
             recordExplainability(ownerId, conversationId, transaction.requestId(),
                     ChatExplainabilityRecorder.forTool(verifiedToolResult.get()));
             transaction.success();
@@ -513,7 +509,7 @@ public class ChatService {
                     userMessage.content(), exception, browserContentService);
             turnFinalizer().persistDeterministic(
                     conversationId, userMessage, content, memoryOwnerId(request, conversationId),
-                    transaction.requestId(), shouldPersistConversation(request), true);
+                    transaction.requestId(), requestInspector.shouldPersist(request), true);
             recordExplainability(memoryOwnerId(request, conversationId), conversationId, transaction.requestId(),
                     ChatExplainabilityRecorder.browserFailure());
             transaction.success();
@@ -610,7 +606,7 @@ public class ChatService {
             boolean streaming,
             ToolEvidence verifiedToolResult,
             VisionInput visionInput) {
-        boolean persistConversation = shouldPersistConversation(request);
+        boolean persistConversation = requestInspector.shouldPersist(request);
         String ownerId = memoryOwnerId(request, conversationId);
         long conversationStarted = System.nanoTime();
         List<ChatMessage> history;
@@ -719,12 +715,12 @@ public class ChatService {
     }
 
     private ChatCompletionResponse responseForContent(ChatCompletionRequest request, String content) {
-        String model = modelName(request.model(), effectiveConfiguredChatModel());
+        String model = requestInspector.publicModelName();
         return responseFactory.contentCompletion(model, content);
     }
 
     private Flux<String> commandStream(String content, ChatCompletionRequest request) {
-        String model = modelName(request.model(), effectiveConfiguredChatModel());
+        String model = requestInspector.publicModelName();
         return Flux.fromIterable(responseFactory.contentStream(model, content));
     }
 
@@ -756,7 +752,8 @@ public class ChatService {
 
     public ModelsResponse listModels() {
         return new ModelsResponse("list", List.of(
-                new ModelsResponse.Model(PUBLIC_MODEL_NAME, "model", Instant.now().getEpochSecond(), "minikun")));
+                new ModelsResponse.Model(
+                        requestInspector.publicModelName(), "model", Instant.now().getEpochSecond(), "minikun")));
     }
 
     public EmbeddingResponse embeddings(EmbeddingRequest request) {
@@ -766,7 +763,7 @@ public class ChatService {
                         "embedding", toFloatList(embeddingModel.embed(request.texts().get(index))), index))
                 .toList();
         EmbeddingResponse result = new EmbeddingResponse("list", data,
-                modelName(request.model(), configuredEmbeddingModel),
+                requestInspector.publicModelName(),
                 new EmbeddingResponse.Usage(0, 0));
         logModelDuration("embedding_model", started, null);
         return result;
@@ -876,10 +873,10 @@ public class ChatService {
     private boolean hasConversationContext(
             List<ChatMessage> history, ChatCompletionRequest request) {
         boolean hasHistory = history.stream()
-                .anyMatch(message -> !isCommandMessage(message.content()));
+                .anyMatch(message -> !requestInspector.isCommand(message.content(), commandCatalog));
         long requestConversationMessages = request.messages().stream()
                 .filter(message -> !"system".equals(message.role()))
-                .filter(message -> hasText(message.content()))
+                .filter(message -> requestInspector.hasText(message.content()))
                 .count();
         return hasHistory || requestConversationMessages > 1;
     }
@@ -889,8 +886,9 @@ public class ChatService {
             return "";
         }
         return history.stream()
-                .filter(message -> message != null && !isSystemMessage(message)
-                        && hasText(message.content()) && !isCommandMessage(message.content()))
+                .filter(message -> message != null && !requestInspector.isSystemMessage(message)
+                        && requestInspector.hasText(message.content())
+                        && !requestInspector.isCommand(message.content(), commandCatalog))
                 .skip(Math.max(0, history.size() - 6L))
                 .map(message -> message.role() + ": " + message.content())
                 .reduce((left, right) -> left + "\n" + right)
@@ -917,7 +915,7 @@ public class ChatService {
             long requestStarted,
             long modelStarted) {
         if (response == null || response.getResult() == null || response.getResult().getOutput() == null
-                || !hasText(response.getResult().getOutput().getText())
+                || !requestInspector.hasText(response.getResult().getOutput().getText())
                 || !recorded.compareAndSet(false, true)) {
             return;
         }
@@ -926,7 +924,7 @@ public class ChatService {
     }
 
     private VisionInput visionInput(ChatCompletionRequest request) {
-        int userMessageIndex = lastUserMessageIndex(request.messages());
+        int userMessageIndex = requestInspector.lastUserMessageIndex(request.messages());
         var message = request.messages().get(userMessageIndex);
         if (!message.hasImageContent()) {
             return VisionInput.EMPTY;
@@ -941,66 +939,12 @@ public class ChatService {
     }
 
     private ChatMessage userMessage(ChatCompletionRequest request, VisionInput visionInput) {
-        int userMessageIndex = lastUserMessageIndex(request.messages());
+        int userMessageIndex = requestInspector.lastUserMessageIndex(request.messages());
         String content = request.messages().get(userMessageIndex).content();
-        if (!hasText(content) && visionInput != null && visionInput.hasImages()) {
+        if (!requestInspector.hasText(content) && visionInput != null && visionInput.hasImages()) {
             content = "ช่วยวิเคราะห์รูปภาพที่แนบมา";
         }
         return new ChatMessage("user", content);
-    }
-
-    private boolean isSystemMessage(ChatMessage message) {
-        return "system".equalsIgnoreCase(message.role());
-    }
-
-    private int lastUserMessageIndex(List<com.minikun.agent.minikun_agent.api.openai.dto.Message> messages) {
-        for (int index = messages.size() - 1; index >= 0; index--) {
-            if ("user".equals(messages.get(index).role())
-                    && (hasText(messages.get(index).content()) || messages.get(index).hasImageContent())) {
-                return index;
-            }
-        }
-        throw new PromptException("chat request must contain user text or an image");
-    }
-
-    private boolean hasText(String value) {
-        return value != null && !value.isBlank();
-    }
-
-    private boolean isCommandMessage(String content) {
-        return hasText(content) && commandCatalog.findExact(content.trim()).isPresent();
-    }
-
-    private boolean shouldPersistConversation(ChatCompletionRequest request) {
-        return request.messages().stream()
-                .map(com.minikun.agent.minikun_agent.api.openai.dto.Message::content)
-                .filter(this::hasText)
-                .noneMatch(this::isInternalTitleRequest);
-    }
-
-    private boolean isInternalTitleRequest(ChatCompletionRequest request) {
-        return request.messages().stream()
-                .map(com.minikun.agent.minikun_agent.api.openai.dto.Message::content)
-                .filter(this::hasText)
-                .anyMatch(this::isInternalTitleRequest);
-    }
-
-    private List<ChatMessage> titleMessages(ChatCompletionRequest request) {
-        return request.messages().stream()
-                .filter(message -> hasText(message.content()))
-                .filter(message -> "user".equals(message.role()) || "assistant".equals(message.role()))
-                .map(message -> new ChatMessage(message.role(), message.content()))
-                .toList();
-    }
-
-    private boolean isInternalTitleRequest(String content) {
-        if (!hasText(content)) {
-            return false;
-        }
-        String normalized = content.toLowerCase();
-        return normalized.contains("generate a concise title summarizing the chat history")
-                || normalized.contains("your entire response must consist solely of the json object")
-                || normalized.contains("### task:\n") && normalized.contains("### chat history:");
     }
 
     private void logModelDuration(String process, long started, String requestId) {
@@ -1039,9 +983,4 @@ public class ChatService {
                 || "creative".equals(profile);
     }
 
-    private String modelName(String requestedModel, String configuredModel) {
-        // Backend model identifiers are implementation details. Keep the public API stable
-        // even when Ollama/TinyGrad is switched or its configured model changes.
-        return PUBLIC_MODEL_NAME;
-    }
 }

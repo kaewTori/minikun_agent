@@ -11,14 +11,12 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.stereotype.Service;
 import com.minikun.task.PersonalTask;
 import com.minikun.task.TaskStatus;
 import com.minikun.task.TaskStore;
 
 @Service
-@ConditionalOnBean(GoalStore.class)
 public final class GoalService {
     private final GoalStore store;
     private final Clock clock;

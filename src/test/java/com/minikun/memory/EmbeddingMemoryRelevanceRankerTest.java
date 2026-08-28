@@ -3,6 +3,8 @@ package com.minikun.memory;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 
 import java.time.Instant;
 import java.util.List;
@@ -45,6 +47,26 @@ class EmbeddingMemoryRelevanceRankerTest {
                 model, 0.9, new SimpleMeterRegistry());
 
         assertEquals(matching.id(), ranker.rank(List.of(other, matching), "Bangkok home", 1).getFirst().id());
+    }
+
+    @Test
+    void evictsLeastRecentlyUsedDocumentEmbeddingAtConfiguredLimit() {
+        EmbeddingModel model = mock(EmbeddingModel.class);
+        Memory first = memory("00000000-0000-0000-0000-000000000005", "first", 0.8);
+        Memory second = memory("00000000-0000-0000-0000-000000000006", "second", 0.8);
+        when(model.embed("q1")).thenReturn(new float[] {1, 0});
+        when(model.embed("q2")).thenReturn(new float[] {1, 0});
+        when(model.embed("q3")).thenReturn(new float[] {1, 0});
+        when(model.embed("PREFERENCE: first")).thenReturn(new float[] {1, 0});
+        when(model.embed("PREFERENCE: second")).thenReturn(new float[] {1, 0});
+        EmbeddingMemoryRelevanceRanker ranker = new EmbeddingMemoryRelevanceRanker(
+                model, 0.9, new SimpleMeterRegistry(), 1);
+
+        ranker.rank(List.of(first), "q1", 1);
+        ranker.rank(List.of(second), "q2", 1);
+        ranker.rank(List.of(first), "q3", 1);
+
+        verify(model, times(2)).embed("PREFERENCE: first");
     }
 
     private Memory memory(String id, String content, double confidence) {

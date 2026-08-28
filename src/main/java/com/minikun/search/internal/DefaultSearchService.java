@@ -127,7 +127,7 @@ public final class DefaultSearchService implements SearchService {
                         SearchCacheKey key = keys.get(index);
                         try {
                             Optional<KnowledgeContext> cached = cache.get(key);
-                            if (cached.isPresent()) {
+                            if (cached.filter(this::hasUsableKnowledge).isPresent()) {
                                 cachedContexts.add(cached.get());
                             } else {
                                 missingQueries.add(expandedSearchQuery.expandedQueries().get(index));
@@ -157,7 +157,7 @@ public final class DefaultSearchService implements SearchService {
                                     new ExpandedSearchQuery(missingQuery, missingQuery, List.of(missingQuery)));
                             contexts.add(live);
                             try {
-                                cache.put(SearchCacheKey.from(missingQuery, request.resultLimit(),
+                                putUsableCacheEntry(SearchCacheKey.from(missingQuery, request.resultLimit(),
                                         request.options(), providerVersion), live);
                             } catch (RuntimeException exception) {
                                 LOGGER.warn("Search cache insertion failed for missing query", exception);
@@ -177,7 +177,7 @@ public final class DefaultSearchService implements SearchService {
             if (cacheEnabled) {
                 for (SearchCacheKey key : keys) {
                     try {
-                        cache.put(key, context);
+                        putUsableCacheEntry(key, context);
                     } catch (RuntimeException exception) {
                         LOGGER.warn("Search cache insertion failed; returning live search result", exception);
                     }
@@ -187,6 +187,19 @@ public final class DefaultSearchService implements SearchService {
         } finally {
             recordTimer(sample);
         }
+    }
+
+    private void putUsableCacheEntry(SearchCacheKey key, KnowledgeContext context) {
+        if (hasUsableKnowledge(context)) {
+            cache.put(key, context);
+        } else {
+            LOGGER.info("process=search_cache event=skip_empty key={}", key.normalizedQuery());
+        }
+    }
+
+    private boolean hasUsableKnowledge(KnowledgeContext context) {
+        return context != null && (!context.content().isBlank()
+                || !context.candidates().isEmpty() || !context.images().isEmpty());
     }
 
     private KnowledgeContext combineCachedContexts(List<KnowledgeContext> contexts, SearchRequest request) {

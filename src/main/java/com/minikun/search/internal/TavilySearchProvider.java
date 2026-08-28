@@ -50,12 +50,17 @@ public final class TavilySearchProvider implements SearchProvider {
         this.searchDepth = normalizeDepth(searchDepth);
     }
 
+    /** Allows configuration to avoid routing every request through a knowingly unavailable provider. */
+    public boolean configured() {
+        return enabled && !apiKey.isBlank();
+    }
+
     @Override
     public SearchProviderResponse search(SearchRequest request) {
         Objects.requireNonNull(request, "request must not be null");
         Instant started = clock.instant();
         try {
-            if (!enabled || apiKey.isBlank()) {
+            if (!configured()) {
                 throw new SearchProviderUnavailableException("Tavily is not configured");
             }
             Map<String, Object> payload = new HashMap<>();

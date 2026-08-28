@@ -23,7 +23,7 @@ public final class ChatGenerationProfileSelector {
             @Value("${minikun.model.generation.profiles.enabled:true}") boolean enabled,
             @Value("${minikun.model.generation.profiles.companion-max-tokens:384}") int companionMaxTokens,
             @Value("${minikun.model.generation.profiles.focus-max-tokens:512}") int focusMaxTokens,
-            @Value("${minikun.model.generation.profiles.general-max-tokens:768}") int generalMaxTokens,
+            @Value("${minikun.model.generation.profiles.general-max-tokens:1536}") int generalMaxTokens,
             @Value("${minikun.model.generation.profiles.work-max-tokens:1536}") int workMaxTokens,
             @Value("${minikun.model.generation.profiles.technical-max-tokens:2048}") int technicalMaxTokens,
             @Value("${minikun.model.generation.profiles.creative-max-tokens:4096}") int creativeMaxTokens) {

@@ -21,9 +21,15 @@ public final class SyncEventBroker {
         List<SseEmitter> ownerSubscribers = subscribers.computeIfAbsent(
                 ownerId, ignored -> new CopyOnWriteArrayList<>());
         ownerSubscribers.add(emitter);
-        Runnable remove = () -> ownerSubscribers.remove(emitter);
+        Runnable remove = () -> {
+            ownerSubscribers.remove(emitter);
+            if (ownerSubscribers.isEmpty()) subscribers.remove(ownerId, ownerSubscribers);
+        };
         emitter.onCompletion(remove);
-        emitter.onTimeout(remove);
+        emitter.onTimeout(() -> {
+            remove.run();
+            emitter.complete();
+        });
         emitter.onError(error -> remove.run());
         try {
             emitter.send(SseEmitter.event().name("ready").data(new SyncEvent(
@@ -46,6 +52,7 @@ public final class SyncEventBroker {
                 emitter.complete();
             }
         }
+        if (ownerSubscribers.isEmpty()) subscribers.remove(ownerId, ownerSubscribers);
     }
 
     public record SyncEvent(long revision, String type, UUID sourceDeviceId) { }

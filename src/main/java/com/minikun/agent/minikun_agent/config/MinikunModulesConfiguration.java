@@ -114,12 +114,13 @@ import com.minikun.voice.VoiceConfiguration;
 import com.minikun.voice.VoiceController;
 import com.minikun.voice.VoiceExceptionHandler;
 import com.minikun.weather.WeatherConfiguration;
+import com.minikun.research.ResearchConfiguration;
 
 /** Explicit module graph kept separate from the executable application entry point. */
 @Configuration(proxyBeanMethods = false)
 @Import({
         MemoryConfiguration.class, ConversationSummaryConfiguration.class, GoalConfiguration.class,
-        SearchConfiguration.class, BrowserConfiguration.class,
+        SearchConfiguration.class, BrowserConfiguration.class, ResearchConfiguration.class,
         MeterRegistryMetricsReader.class, DiagnosticsService.class, DiagnosticsFormatter.class,
         DiagnosticsPromptBuilder.class, MinikunPersonaProvider.class, KnowledgeSelectionConfiguration.class,
         CommandCatalog.class, CommandFormatter.class, VersionService.class, VersionFormatter.class,

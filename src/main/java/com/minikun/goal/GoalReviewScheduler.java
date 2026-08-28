@@ -8,7 +8,6 @@ import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -21,7 +20,6 @@ import com.minikun.proactive.ProactiveNotificationPolicy;
 
 /** Sends one bounded reminder when a personal goal reaches its review date. */
 @Component
-@ConditionalOnBean(GoalService.class)
 @ConditionalOnProperty(name = "minikun.goal.review.enabled", havingValue = "true", matchIfMissing = true)
 public final class GoalReviewScheduler {
     private static final Logger LOG = LoggerFactory.getLogger(GoalReviewScheduler.class);

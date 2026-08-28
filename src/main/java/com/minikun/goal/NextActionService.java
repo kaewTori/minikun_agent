@@ -6,7 +6,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import com.minikun.task.PersonalTask;
 import com.minikun.task.TaskService;
@@ -14,7 +14,7 @@ import com.minikun.task.TaskStatus;
 
 /** Selects the smallest useful next step from the user's current goals and tasks. */
 @Service
-@ConditionalOnBean({GoalService.class, TaskService.class})
+@ConditionalOnProperty(name = "minikun.task.enabled", havingValue = "true", matchIfMissing = true)
 public final class NextActionService {
     private final GoalService goals;
     private final TaskService tasks;

@@ -18,6 +18,8 @@
     <dict>
         <key>JAVA_BIN</key>
         <string>/usr/bin/java</string>
+        <key>JDK_JAVA_OPTIONS</key>
+        <string>--enable-native-access=ALL-UNNAMED</string>
         <key>OLLAMA_NATIVE_BASE_URL</key>
         <string>http://127.0.0.1:11434</string>
         <key>MINIKUN_HTTPS_ENABLED</key>

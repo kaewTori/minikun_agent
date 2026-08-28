@@ -6,17 +6,19 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import com.minikun.agent.execution.AgentExecutionService;
 import com.minikun.agent.execution.AgentRunStatus;
+import com.minikun.goal.PersonalGoal;
 import com.minikun.goal.GoalService;
 import com.minikun.task.PersonalTask;
 import com.minikun.task.TaskService;
 
 /** Owner-scoped compact snapshot for daily care dashboards and agent self-awareness. */
 @Service
-@ConditionalOnBean({TaskService.class, GoalService.class})
+@ConditionalOnProperty(name = {"minikun.task.enabled", "minikun.goal.enabled"},
+        havingValue = "true", matchIfMissing = true)
 public final class PersonalCareStatusService {
     private final TaskService tasks;
     private final GoalService goals;
@@ -35,7 +37,9 @@ public final class PersonalCareStatusService {
         Instant now = clock.instant();
         var ownerTasks = tasks.list(ownerId, null);
         var openTasks = ownerTasks.stream().filter(PersonalTask::active).toList();
-        var openGoals = goals.syncOpenProgress(ownerId, ownerTasks);
+        var openGoals = goals.syncOpenProgress(ownerId, ownerTasks).stream()
+                .filter(PersonalGoal::open)
+                .toList();
         var dueTasks = openTasks.stream().filter(task -> task.dueAt() != null && !task.dueAt().isAfter(now)).count();
         var dueGoals = openGoals.stream()
                 .filter(goal -> goal.nextReviewAt() != null && !goal.nextReviewAt().isAfter(now)).count();

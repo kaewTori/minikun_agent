@@ -71,4 +71,50 @@ class ChatCapabilityFactoryTest {
         assertTrue(text.contains("Reserve enough space"));
         assertTrue(text.contains("scene or chapter"));
     }
+
+    @Test
+    void failedSearchForbidsSimulatedSearchAndRequestsFocusedRetry() {
+        SearchContext failedSearch = new SearchContext(
+                "ช่วยค้นหา RenaRaziel", false, false, true, true, true, false,
+                com.minikun.search.model.SearchDecisionReason.FACT_LOOKUP);
+        ChatKnowledgeSelection knowledge = new ChatKnowledgeSelection(
+                KnowledgeSelection.EMPTY, KnowledgeConsolidation.EMPTY,
+                new SearchSelectionSignals(true), failedSearch);
+
+        var capabilities = new ChatCapabilityFactory().create(
+                "ช่วยค้นหา RenaRaziel", knowledge, null, null, null, null, "", true);
+        String text = capabilities.stream().map(capability -> capability.name() + "\n" + capability.content())
+                .reduce((left, right) -> left + "\n" + right).orElse("");
+
+        assertTrue(text.contains("Web search outcome"));
+        assertTrue(text.contains("do not narrate a simulated search"));
+        assertTrue(text.contains("shorter, focused query"));
+    }
+
+    @Test
+    void successfulSearchRequiresAnsweringFromEvidenceWithSourceUrls() {
+        KnowledgeCandidate source = new KnowledgeCandidate(
+                "search-0", KnowledgeSource.SEARCH,
+                "S.RenaRaziel (https://www.pixiv.net/en/users/24515230): artist profile", 0,
+                "https://www.pixiv.net/en/users/24515230");
+        SearchContext successfulSearch = new SearchContext(
+                "ช่วยค้นหา RenaRaziel", false, false, true, true, true, true,
+                com.minikun.search.model.SearchDecisionReason.FACT_LOOKUP);
+        ChatKnowledgeSelection knowledge = new ChatKnowledgeSelection(
+                new KnowledgeSelection(List.of(source), false), KnowledgeConsolidation.EMPTY,
+                new SearchSelectionSignals(true), successfulSearch);
+
+        var capabilities = new ChatCapabilityFactory().create(
+                "ช่วยค้นหา RenaRaziel", knowledge, null, null, null, null, "", false);
+        String text = capabilities.stream().map(capability -> capability.name() + "\n" + capability.content())
+                .reduce((left, right) -> left + "\n" + right).orElse("");
+        String normalizedText = text.replaceAll("\\s+", " ");
+
+        assertTrue(normalizedText.contains("Web search evidence"));
+        assertTrue(normalizedText.contains("Answer the original question now"));
+        assertTrue(normalizedText.contains("cite its URLs"));
+        assertTrue(normalizedText.contains("Do not say information was unavailable"));
+        assertTrue(normalizedText.contains("Concrete search evidence"));
+        assertTrue(normalizedText.contains("https://www.pixiv.net/en/users/24515230"));
+    }
 }

@@ -181,6 +181,8 @@ public final class ConversationSummaryService implements AutoCloseable {
             pending.remove(scope);
             if (latestHistories.containsKey(scope)) {
                 submitIfNeeded(scope);
+            } else {
+                suppressed.remove(scope);
             }
         }
     }
@@ -231,7 +233,9 @@ public final class ConversationSummaryService implements AutoCloseable {
         suppressed.add(scope);
         latestHistories.remove(scope);
         synchronized (lockFor(scope)) {
-            return store.delete(owner, conversationId);
+            boolean deleted = store.delete(owner, conversationId);
+            if (!pending.contains(scope)) suppressed.remove(scope);
+            return deleted;
         }
     }
 

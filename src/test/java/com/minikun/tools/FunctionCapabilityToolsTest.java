@@ -56,7 +56,7 @@ class FunctionCapabilityToolsTest {
             captured[0] = request;
             return new KnowledgeContext("search content", List.of(
                     new KnowledgeCandidate("result-1", KnowledgeSource.SEARCH,
-                            "A useful result", 0)));
+                            "A useful result", 0, "https://example.com/result")));
         };
         WebSearchTool tool = new WebSearchTool(searchService, Duration.ofSeconds(10));
 
@@ -67,6 +67,8 @@ class FunctionCapabilityToolsTest {
         assertEquals("Spring AI tools", captured[0].query());
         assertEquals(3, captured[0].resultLimit());
         assertEquals(1, value.get("resultCount"));
+        Map<?, ?> firstResult = (Map<?, ?>) ((List<?>) value.get("results")).getFirst();
+        assertEquals("https://example.com/result", firstResult.get("url"));
     }
 
     @Test

@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withServerError;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.minikun.search.SearchExecutionException;
@@ -69,6 +70,41 @@ class SearXNGProviderTest {
 
         provider.search(request("{\"title\":\"Java\"}", 5));
 
+        server.verify();
+    }
+
+    @Test
+    void encodesThaiQueryAndMapsUnsupportedWeekRange() {
+        RestClient.Builder builder = RestClient.builder().baseUrl("http://searxng.test");
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        SearXNGProvider provider = new SearXNGProvider(builder.build(), new ObjectMapper(), CLOCK);
+        server.expect(requestTo(
+                        "http://searxng.test/search?q=%E0%B8%82%E0%B9%88%E0%B8%B2%E0%B8%A7%20AI&format=json&number_of_results=5&language=th&categories=news&time_range=month"))
+                .andRespond(withSuccess("{\"results\":[]}", MediaType.APPLICATION_JSON));
+
+        provider.search(new SearchRequest(
+                UUID.randomUUID(), "ข่าว AI", 5, CLOCK.instant().plusSeconds(60),
+                new SearchOptions("th", "news", "week", false), java.util.List.of()));
+
+        server.verify();
+    }
+
+    @Test
+    void retriesServerFailureOnceWithoutOptionalFilters() {
+        RestClient.Builder builder = RestClient.builder().baseUrl("http://searxng.test");
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        SearXNGProvider provider = new SearXNGProvider(builder.build(), new ObjectMapper(), CLOCK);
+        server.expect(requestTo(
+                        "http://searxng.test/search?q=news&format=json&number_of_results=5&language=th&categories=news&time_range=day&safesearch=1"))
+                .andRespond(withServerError());
+        server.expect(requestTo("http://searxng.test/search?q=news&format=json&number_of_results=5"))
+                .andRespond(withSuccess("{\"results\":[]}", MediaType.APPLICATION_JSON));
+
+        var response = provider.search(new SearchRequest(
+                UUID.randomUUID(), "news", 5, CLOCK.instant().plusSeconds(60),
+                new SearchOptions("th", "news", "day", true), java.util.List.of()));
+
+        assertEquals(0, response.results().size());
         server.verify();
     }
 

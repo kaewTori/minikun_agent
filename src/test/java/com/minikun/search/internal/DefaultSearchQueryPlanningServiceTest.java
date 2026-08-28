@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.minikun.search.model.SearchDecision;
 import com.minikun.search.model.SearchDecisionReason;
 import com.minikun.search.model.SearchQueryPlan;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class DefaultSearchQueryPlanningServiceTest {
@@ -47,6 +48,18 @@ class DefaultSearchQueryPlanningServiceTest {
                         SearchDecisionReason.CURRENT_INFORMATION));
 
         assertEquals("all", plan.language());
+    }
+
+    @Test
+    void extractsNamedArtistFromThaiLookupWrapper() {
+        SearchQueryPlan plan = planner.plan(
+                "ช่วยค้นหาข้อมูลของนักวาดที่ชื่อ RenaRaziel หน่อย",
+                new SearchDecision(true, "ช่วยค้นหาข้อมูลของนักวาดที่ชื่อ RenaRaziel หน่อย",
+                        SearchDecisionReason.FACT_LOOKUP));
+
+        assertEquals("RenaRaziel", plan.primaryQuery());
+        assertEquals("en", plan.language());
+        assertEquals(List.of("RenaRaziel"), plan.coreTerms());
     }
 
     @Test

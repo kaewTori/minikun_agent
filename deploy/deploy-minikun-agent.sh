@@ -25,10 +25,20 @@ cd "$app_root"
 if [ -z "${SPRING_DATASOURCE_PASSWORD:-}" ]; then
   source_launcher="$workspace_root/java/script/minikun-agent.sh"
   datasource_password_export="$(sed -n '/^export SPRING_DATASOURCE_PASSWORD=/p' "$source_launcher")"
+
   if [ -n "$datasource_password_export" ]; then
     eval "$datasource_password_export"
   fi
 fi
+if [ -z "${MINIKUN_SEARCH_TAVILY_API_KEY:-}" ]; then
+  source_launcher="$workspace_root/java/script/minikun-agent.sh"
+  tavily_api_key_export="$(sed -n '/^export MINIKUN_SEARCH_TAVILY_API_KEY=/p' "$source_launcher")"
+
+  if [ -n "$tavily_api_key_export" ]; then
+    eval "$tavily_api_key_export"
+  fi
+fi
+
 "$app_root/deploy/migrate-database.sh"
 
 mkdir -p \
@@ -51,8 +61,18 @@ trap - EXIT HUP INT TERM
 source_launcher="$workspace_root/java/script/minikun-agent.sh"
 # The legacy shared launcher contains an environment-file loader. Deploy only
 # its stable bootstrap and explicit runtime configuration sections so Mini-kun
-# never reads an environment file.
-sed -n '1,7p;/^export MCS_ROOT/,$p' "$source_launcher" > "$local_script/minikun-agent.sh"
+# never reads an environment file. Preserve Tavily's explicit key export even
+# though it appears immediately before the MCS_ROOT section.
+staged_launcher="$local_script/.minikun-agent.sh.$$"
+trap 'rm -f "$staged_launcher"' EXIT HUP INT TERM
+{
+  sed -n '1,7p' "$source_launcher"
+  sed -n '/^export MINIKUN_SEARCH_TAVILY_API_KEY=/p' "$source_launcher"
+  sed -n '/^export MCS_ROOT/,$p' "$source_launcher" \
+    | sed '/^export MINIKUN_SEARCH_TAVILY_API_KEY=/d'
+} > "$staged_launcher"
+mv "$staged_launcher" "$local_script/minikun-agent.sh"
+trap - EXIT HUP INT TERM
 chmod 700 "$local_script/minikun-agent.sh"
 cp "$app_root/voice/whisper_transcribe.py" "$local_voice/whisper_transcribe.py"
 chmod 700 "$local_voice/whisper_transcribe.py"
@@ -67,11 +87,85 @@ elif cmp -s "$app_root/deploy/knowledge/README.legacy.md" "$knowledge_readme"; t
   cp "$app_root/deploy/knowledge/README.md" "$knowledge_readme"
 fi
 
-cp "$plist" "$HOME/Library/LaunchAgents/$label.plist"
-launchctl bootout "gui/$(id -u)/$label" 2>/dev/null || true
-sleep 1
-launchctl bootstrap "gui/$(id -u)" "$HOME/Library/LaunchAgents/$label.plist"
-launchctl kickstart -k "gui/$(id -u)/$label"
+installed_plist="$HOME/Library/LaunchAgents/$label.plist"
+launch_domain="gui/$(id -u)"
+launch_service="$launch_domain/$label"
+cp "$plist" "$installed_plist"
+
+# Some restricted shells allow bootout but deny bootstrap with the generic
+# "Bootstrap failed: 5" error. Verify bootstrap access before stopping the
+# running application so a failed deploy cannot leave Mini-kun offline.
+preflight_label="$label.deploy-preflight.$$"
+preflight_service="$launch_domain/$preflight_label"
+preflight_tmp="$(mktemp "${TMPDIR:-/tmp}/minikun-launchctl-preflight.XXXXXX")"
+preflight_plist="$preflight_tmp.plist"
+mv "$preflight_tmp" "$preflight_plist"
+cleanup_launchctl_preflight() {
+  launchctl bootout "$preflight_service" 2>/dev/null || true
+  rm -f "$preflight_plist"
+}
+trap cleanup_launchctl_preflight EXIT HUP INT TERM
+{
+  printf '%s\n' '<?xml version="1.0" encoding="UTF-8"?>'
+  printf '%s\n' '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">'
+  printf '%s\n' '<plist version="1.0"><dict>'
+  printf '%s\n' '<key>Label</key>' "<string>$preflight_label</string>"
+  printf '%s\n' '<key>ProgramArguments</key><array><string>/usr/bin/true</string></array>'
+  printf '%s\n' '</dict></plist>'
+} > "$preflight_plist"
+preflight_error=''
+if ! preflight_error="$(launchctl bootstrap "$launch_domain" "$preflight_plist" 2>&1)"; then
+  echo "Cannot deploy $label because this shell cannot bootstrap LaunchAgents." >&2
+  if [ -n "$preflight_error" ]; then
+    printf '%s\n' "$preflight_error" >&2
+  fi
+  echo "Run this script directly from Terminal as the logged-in user; do not use sudo." >&2
+  exit 1
+fi
+cleanup_launchctl_preflight
+trap - EXIT HUP INT TERM
+
+launchctl bootout "$launch_service" 2>/dev/null || true
+
+# bootout may return before launchd has fully removed the job or before the
+# application's listeners have closed. Starting the same label during this
+# interval can fail with Bootstrap failed: 5 (Input/output error).
+stop_attempt=0
+while launchctl print "$launch_service" >/dev/null 2>&1 \
+    || curl --silent --max-time 1 \
+        http://127.0.0.1:8080/actuator/health/liveness >/dev/null 2>&1; do
+  stop_attempt=$((stop_attempt + 1))
+  if [ "$stop_attempt" -ge 30 ]; then
+    echo "Timed out waiting for the previous $label process to stop" >&2
+    exit 1
+  fi
+  sleep 1
+done
+
+launchctl enable "$launch_service" 2>/dev/null || true
+bootstrap_attempt=0
+bootstrap_error=''
+until bootstrap_error="$(launchctl bootstrap "$launch_domain" "$installed_plist" 2>&1)"; do
+  # Treat the service as loaded if bootstrap completed despite a non-zero exit.
+  if launchctl print "$launch_service" >/dev/null 2>&1; then
+    break
+  fi
+  bootstrap_attempt=$((bootstrap_attempt + 1))
+  if [ "$bootstrap_attempt" -ge 30 ]; then
+    echo "Unable to bootstrap $label after 30 attempts" >&2
+    if [ -n "$bootstrap_error" ]; then
+      printf '%s\n' "$bootstrap_error" >&2
+    fi
+    plutil -lint "$installed_plist" >&2 || true
+    echo "Run this script directly from Terminal as the logged-in user; do not use sudo." >&2
+    exit 1
+  fi
+  sleep 2
+done
+
+# RunAtLoad normally starts the job during bootstrap. kickstart without -k
+# starts an idle job but does not terminate one that is already initializing.
+launchctl kickstart "$launch_service"
 
 attempt=0
 until curl --fail --silent --show-error http://127.0.0.1:8080/actuator/health/readiness; do

@@ -1,10 +1,11 @@
 package com.minikun.memory;
 
 import java.util.Comparator;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 
 import org.springframework.ai.embedding.EmbeddingModel;
 
@@ -17,7 +18,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 public final class EmbeddingMemoryRelevanceRanker implements MemoryRanker {
     private final EmbeddingModel embeddingModel;
     private final double semanticWeight;
-    private final ConcurrentMap<String, float[]> memoryEmbeddings = new ConcurrentHashMap<>();
+    private final Map<String, float[]> memoryEmbeddings;
     private final Counter semanticSuccess;
     private final Counter semanticFallback;
 
@@ -25,11 +26,28 @@ public final class EmbeddingMemoryRelevanceRanker implements MemoryRanker {
             EmbeddingModel embeddingModel,
             double semanticWeight,
             MeterRegistry meterRegistry) {
+        this(embeddingModel, semanticWeight, meterRegistry, 1_000);
+    }
+
+    public EmbeddingMemoryRelevanceRanker(
+            EmbeddingModel embeddingModel,
+            double semanticWeight,
+            MeterRegistry meterRegistry,
+            int maximumCacheEntries) {
         this.embeddingModel = Objects.requireNonNull(embeddingModel, "embedding model must not be null");
         if (semanticWeight < 0 || semanticWeight > 1) {
             throw new IllegalArgumentException("semantic memory weight must be between 0 and 1");
         }
+        if (maximumCacheEntries < 1) {
+            throw new IllegalArgumentException("semantic memory cache size must be positive");
+        }
         this.semanticWeight = semanticWeight;
+        this.memoryEmbeddings = Collections.synchronizedMap(new LinkedHashMap<>(16, 0.75f, true) {
+            @Override
+            protected boolean removeEldestEntry(Map.Entry<String, float[]> eldest) {
+                return size() > maximumCacheEntries;
+            }
+        });
         this.semanticSuccess = Counter.builder("minikun.memory.semantic.rankings")
                 .tag("status", "success").register(meterRegistry);
         this.semanticFallback = Counter.builder("minikun.memory.semantic.rankings")
@@ -58,8 +76,18 @@ public final class EmbeddingMemoryRelevanceRanker implements MemoryRanker {
 
     private double blendedScore(Memory memory, float[] queryEmbedding) {
         String key = memory.id().value() + ":" + Integer.toHexString(memory.content().hashCode());
-        float[] memoryEmbedding = memoryEmbeddings.computeIfAbsent(key,
-                ignored -> embeddingModel.embed(memory.category().name() + ": " + memory.content()));
+        float[] memoryEmbedding;
+        synchronized (memoryEmbeddings) {
+            memoryEmbedding = memoryEmbeddings.get(key);
+        }
+        if (memoryEmbedding == null) {
+            float[] created = embeddingModel.embed(memory.category().name() + ": " + memory.content());
+            synchronized (memoryEmbeddings) {
+                float[] existing = memoryEmbeddings.get(key);
+                memoryEmbedding = existing == null ? created : existing;
+                if (existing == null) memoryEmbeddings.put(key, created);
+            }
+        }
         double semantic = (cosine(queryEmbedding, memoryEmbedding) + 1.0) / 2.0;
         return semantic * semanticWeight + memory.confidence() * (1.0 - semanticWeight);
     }

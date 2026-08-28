@@ -13,7 +13,6 @@ import com.minikun.search.model.ImageSearchResult;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -22,7 +21,6 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.util.UriComponentsBuilder;
-import org.springframework.web.util.UriUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -45,25 +43,22 @@ public final class SearXNGProvider implements SearchProvider {
         SearchProviderResponse response = null;
         RuntimeException failure = null;
         try {
-            var uri = UriComponentsBuilder.fromPath("/search")
-                    .queryParam("q", UriUtils.encodeQueryParam(request.query(), StandardCharsets.UTF_8))
-                .queryParam("format", "json")
-                .queryParam("number_of_results", request.resultLimit())
-                    .queryParamIfPresent("language", optional(request.options().language()))
-                    .queryParamIfPresent("categories", optional(request.options().category()))
-                    .queryParamIfPresent("time_range", optional(request.options().timeRange()))
-                    .queryParamIfPresent("safesearch", request.options().safeSearch()
-                            ? java.util.Optional.of("1") : java.util.Optional.empty())
-                .build(true)
-                .toUri();
+            var uri = requestUri(request, true);
             LOGGER.info("process=searxng event=request request_id={} query={} result_limit={}",
                     request.requestId(), request.query(), request.resultLimit());
-            String body = restClient.get()
-                .uri(uri)
-                    .accept(MediaType.APPLICATION_JSON)
-                    .retrieve()
-                    .body(String.class);
-                response = request.options().category().equalsIgnoreCase(
+            String body;
+            try {
+                body = execute(uri);
+            } catch (RestClientResponseException exception) {
+                if (exception.getStatusCode().is5xxServerError() && hasOptionalFilters(request)) {
+                    LOGGER.warn("process=searxng event=retry_without_filters request_id={} status={}",
+                            request.requestId(), exception.getStatusCode().value());
+                    body = execute(requestUri(request, false));
+                } else {
+                    throw exception;
+                }
+            }
+            response = request.options().category().equalsIgnoreCase(
                     com.minikun.search.model.SearchOptions.IMAGE_CATEGORY)
                     ? new SearchProviderResponse(List.of(), parseImageResults(body))
                     : new SearchProviderResponse(parseResults(body));
@@ -86,8 +81,51 @@ public final class SearXNGProvider implements SearchProvider {
         }
     }
 
+    private java.net.URI requestUri(SearchRequest request, boolean includeOptionalFilters) {
+        UriComponentsBuilder builder = UriComponentsBuilder.fromPath("/search")
+                    .queryParam("q", request.query())
+                    .queryParam("format", "json")
+                    .queryParam("number_of_results", request.resultLimit());
+        if (includeOptionalFilters) {
+            builder
+                    .queryParamIfPresent("language", optional(request.options().language()))
+                    .queryParamIfPresent("categories", optional(request.options().category()))
+                    .queryParamIfPresent("time_range", optional(normalizeTimeRange(request.options().timeRange())))
+                    .queryParamIfPresent("safesearch", request.options().safeSearch()
+                            ? java.util.Optional.of("1") : java.util.Optional.empty());
+        }
+        return builder.build()
+                .encode()
+                .toUri();
+    }
+
+    private String execute(java.net.URI uri) {
+        return restClient.get()
+                .uri(uri)
+                .accept(MediaType.APPLICATION_JSON)
+                .retrieve()
+                .body(String.class);
+    }
+
+    private boolean hasOptionalFilters(SearchRequest request) {
+        return !request.options().language().isBlank()
+                || !request.options().category().isBlank()
+                || !request.options().timeRange().isBlank()
+                || request.options().safeSearch();
+    }
+
     private java.util.Optional<String> optional(String value) {
         return value == null || value.isBlank() ? java.util.Optional.empty() : java.util.Optional.of(value);
+    }
+
+    private String normalizeTimeRange(String value) {
+        if (value == null) return "";
+        return switch (value.trim().toLowerCase(java.util.Locale.ROOT)) {
+            case "day", "month", "year" -> value.trim().toLowerCase(java.util.Locale.ROOT);
+            // SearXNG has no week value. A month is the closest supported superset.
+            case "week" -> "month";
+            default -> "";
+        };
     }
 
     private void logProviderOutcome(

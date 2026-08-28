@@ -8,13 +8,13 @@ import org.junit.jupiter.api.Test;
 
 class ChatGenerationProfileSelectorTest {
     private final ChatGenerationProfileSelector selector = new ChatGenerationProfileSelector(
-            new CooperationRouter(), true, 384, 512, 768, 1_536, 2_048, 4_096);
+            new CooperationRouter(), true, 384, 512, 1_536, 1_536, 2_048, 4_096);
 
     @Test
     void usesSmallCeilingsForCompanionAndGeneralConversation() {
         assertEquals(new ChatGenerationProfileSelector.Selection("companion", 384),
                 selector.select("วันนี้เหนื่อยจัง", CompanionMode.COMPANION, false, 2_048));
-        assertEquals(new ChatGenerationProfileSelector.Selection("general", 768),
+        assertEquals(new ChatGenerationProfileSelector.Selection("general", 1_536),
                 selector.select("วันนี้กินอะไรดี", null, false, 4_096));
     }
 

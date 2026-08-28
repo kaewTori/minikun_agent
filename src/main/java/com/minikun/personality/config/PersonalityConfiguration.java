@@ -19,6 +19,8 @@ import com.minikun.personality.learning.ResponsePreferenceDetector;
 import com.minikun.personality.management.AdaptationController;
 import com.minikun.personality.management.AdaptationExceptionHandler;
 import com.minikun.personality.management.UserModelController;
+import com.minikun.personality.management.PersonaManagementController;
+import com.minikun.personality.management.PersonaManagementService;
 import com.minikun.personality.profile.UserModelService;
 import com.minikun.personality.companion.CompanionModeService;
 import com.minikun.memory.MemoryRepository;
@@ -31,7 +33,8 @@ import org.springframework.context.annotation.Import;
 
 @Configuration
 @Import({AdaptivePreferenceLearningService.class,
-        AdaptationController.class, AdaptationExceptionHandler.class})
+        AdaptationController.class, AdaptationExceptionHandler.class,
+        PersonaManagementService.class, PersonaManagementController.class})
 public class PersonalityConfiguration {
     @Bean
     CompanionModeService companionModeService(

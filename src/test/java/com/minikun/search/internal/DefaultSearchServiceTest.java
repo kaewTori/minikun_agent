@@ -57,6 +57,22 @@ class DefaultSearchServiceTest {
     }
 
     @Test
+    void emptyCachedResultIsRetriedAndEmptyLiveResultIsNotCached() {
+        RecordingCache cache = new RecordingCache(Optional.of(KnowledgeContext.empty()));
+        AtomicInteger calls = new AtomicInteger();
+        SearchManager manager = request -> {
+            calls.incrementAndGet();
+            return KnowledgeContext.empty();
+        };
+
+        KnowledgeContext result = new DefaultSearchService(manager, cache, true, true).search(REQUEST);
+
+        assertEquals(KnowledgeContext.empty(), result);
+        assertEquals(1, calls.get());
+        assertEquals(0, cache.putCalls);
+    }
+
+    @Test
     void disabledSearchReturnsEmptyWithoutTouchingCacheOrManager() {
         RecordingCache cache = new RecordingCache(Optional.of(new KnowledgeContext("cached")));
         SearchManager manager = request -> {

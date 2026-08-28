@@ -933,58 +933,12 @@
     });
   }
 
-  function attachmentDatabase() {
-    return new Promise((resolve, reject) => {
-      if (!("indexedDB" in globalThis)) {
-        reject(new Error("Browser นี้ไม่รองรับที่เก็บไฟล์สำหรับแชตต่อเนื่อง"));
-        return;
-      }
-      const request = indexedDB.open("minikun-chat-assets", 1);
-      request.onupgradeneeded = () => request.result.createObjectStore("assets", { keyPath: "id" });
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error || new Error("เปิดที่เก็บไฟล์ไม่สำเร็จ"));
-    });
-  }
-
   async function saveAttachmentAsset(attachment) {
-    const asset = {
-      id: attachment.assetId || uniqueId("asset-"),
-      kind: attachment.kind,
-      name: attachment.name,
-      type: attachment.type,
-      value: attachment.kind === "image" ? attachment.data : attachment.text,
-      createdAt: Date.now()
-    };
-    try {
-      const database = await attachmentDatabase();
-      await new Promise((resolve, reject) => {
-        const transaction = database.transaction("assets", "readwrite");
-        transaction.objectStore("assets").put(asset);
-        transaction.oncomplete = resolve;
-        transaction.onerror = () => reject(transaction.error);
-      });
-      database.close();
-      attachment.assetId = asset.id;
-    } catch (error) {
-      console.warn("Chat attachment persistence unavailable", error);
-    }
-    return attachment;
+    return globalThis.MinikunChatAssets.save(attachment);
   }
 
   async function loadAttachmentAsset(assetId) {
-    if (!assetId) return null;
-    try {
-      const database = await attachmentDatabase();
-      const result = await new Promise((resolve, reject) => {
-        const request = database.transaction("assets", "readonly").objectStore("assets").get(assetId);
-        request.onsuccess = () => resolve(request.result || null);
-        request.onerror = () => reject(request.error);
-      });
-      database.close();
-      return result;
-    } catch (_) {
-      return null;
-    }
+    return globalThis.MinikunChatAssets.load(assetId);
   }
 
   async function addFiles(files) {

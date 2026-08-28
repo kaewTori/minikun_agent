@@ -37,6 +37,7 @@ import org.springframework.http.MediaType;
 @SpringBootTest(properties = {
 	"spring.autoconfigure.exclude=org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration,org.springframework.ai.model.chat.memory.repository.jdbc.autoconfigure.JdbcChatMemoryRepositoryAutoConfiguration",
 	"minikun.memory.persistence.enabled=false",
+	"minikun.goal.enabled=false",
 	"minikun.planner.enabled=false",
 	"minikun.task.enabled=false",
 	"minikun.investment.enabled=false",
@@ -88,6 +89,12 @@ class MinikunAgentApplicationTests {
 	void contextLoads() {
 		org.junit.jupiter.api.Assertions.assertNotNull(
 				applicationContext.getBean(com.minikun.personality.companion.CompanionModeService.class));
+		org.junit.jupiter.api.Assertions.assertNotNull(
+				applicationContext.getBean(com.minikun.personality.management.PersonaManagementController.class));
+		org.junit.jupiter.api.Assertions.assertNotNull(
+				applicationContext.getBean(com.minikun.memory.DeferredReflectionService.class));
+		org.junit.jupiter.api.Assertions.assertNotNull(
+				applicationContext.getBean(com.minikun.research.AutonomousResearchService.class));
 	}
 
 	@Test
@@ -121,6 +128,11 @@ class MinikunAgentApplicationTests {
 				.andExpect(status().isOk())
 				.andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content()
 						.contentTypeCompatibleWith(MediaType.IMAGE_JPEG));
+
+		mockMvc.perform(get("/cockpit/cockpit-chat-assets.js"))
+				.andExpect(status().isOk())
+				.andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content()
+						.string(org.hamcrest.Matchers.containsString("MinikunChatAssets")));
 	}
 
 	@Test
