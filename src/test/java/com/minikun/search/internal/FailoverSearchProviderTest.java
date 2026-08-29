@@ -4,7 +4,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import com.minikun.search.SearchProvider;
 import com.minikun.search.SearchProviderUnavailableException;
+import com.minikun.search.model.ImageSearchResult;
 import com.minikun.search.model.SearchProviderResponse;
+import com.minikun.search.model.SearchOptions;
 import com.minikun.search.model.SearchRequest;
 import com.minikun.search.model.SearchResult;
 import com.minikun.search.model.SearchSource;
@@ -66,8 +68,38 @@ class FailoverSearchProviderTest {
         assertEquals(4, fallbackCalls.get());
     }
 
+    @Test
+    void fallsBackWhenImageRequestOnlyGetsTextResultsFromPrimary() {
+        AtomicInteger primaryCalls = new AtomicInteger();
+        AtomicInteger fallbackCalls = new AtomicInteger();
+        SearchProvider primary = request -> {
+            primaryCalls.incrementAndGet();
+            return new SearchProviderResponse(List.of(result("text-only")));
+        };
+        SearchProvider fallback = request -> {
+            fallbackCalls.incrementAndGet();
+            return new SearchProviderResponse(List.of(), List.of(new ImageSearchResult(
+                    "https://images.example/rena.jpg", "RenaRaziel artwork",
+                    "https://pixiv.example/rena", "Illustration")));
+        };
+        FailoverSearchProvider provider = new FailoverSearchProvider(
+                primary, fallback, CLOCK, Duration.ofMinutes(2), 3, new SimpleMeterRegistry());
+
+        var response = provider.search(imageRequest());
+
+        assertEquals(1, primaryCalls.get());
+        assertEquals(1, fallbackCalls.get());
+        assertEquals("https://images.example/rena.jpg", response.images().getFirst().url());
+    }
+
     private static SearchRequest request() {
         return new SearchRequest(UUID.randomUUID(), "java records", 5, CLOCK.instant().plusSeconds(60));
+    }
+
+    private static SearchRequest imageRequest() {
+        return new SearchRequest(UUID.randomUUID(), "RenaRaziel artwork", 5,
+                CLOCK.instant().plusSeconds(60),
+                new SearchOptions("all", SearchOptions.IMAGE_CATEGORY, "", false), List.of());
     }
 
     private static SearchResult result(String title) {

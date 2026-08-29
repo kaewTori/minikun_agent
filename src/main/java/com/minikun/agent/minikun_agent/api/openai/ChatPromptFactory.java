@@ -293,6 +293,14 @@ final class ChatPromptFactory {
                 log.warn("Conversation thread context failed; continuing without it", exception);
             }
         }
+        if (input.illustrationPlanned()) {
+            values.add(new CapabilityInstruction("Generated story illustration", """
+                    A generated image attachment is planned after this response. Write the story or concise visual
+                    brief that best fulfills the request. Do not output a fabricated image URL, do not redirect the
+                    user to an image search, and do not claim that image creation is impossible. Do not promise that
+                    generation will succeed; the application handles the image separately after the text is ready.
+                    """.strip(), true));
+        }
         return List.copyOf(values);
     }
 
@@ -394,7 +402,8 @@ final class ChatPromptFactory {
             ToolEvidence verifiedToolResult,
             String ownerId,
             CompanionModeContext interactionMode,
-            VisionInput visionInput) {
+            VisionInput visionInput,
+            boolean illustrationPlanned) {
     }
 
     record Result(Prompt prompt, String generationProfile) {

@@ -73,6 +73,7 @@ import com.minikun.runtime.VersionService;
 import com.minikun.vision.VisionInput;
 import com.minikun.vision.VisionInputException;
 import com.minikun.vision.VisionInputService;
+import com.minikun.visual.StoryIllustrationService;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -161,6 +162,8 @@ public class ChatService {
 
     private AutonomousResearchService autonomousResearchService;
 
+    private StoryIllustrationService storyIllustrationService;
+
     private ChatExplainabilityRecorder explainabilityRecorder = new ChatExplainabilityRecorder(null);
 
     @Autowired
@@ -186,6 +189,7 @@ public class ChatService {
         conversationSummaryService = collaborators.conversationSummaryService();
         conversationThreadService = collaborators.conversationThreadService();
         autonomousResearchService = collaborators.autonomousResearchService();
+        storyIllustrationService = collaborators.storyIllustrationService();
         explainabilityRecorder = new ChatExplainabilityRecorder(collaborators.explainabilitySink());
     }
 
@@ -454,6 +458,8 @@ public class ChatService {
                 content = "ขออภัยครับ โมเดลยังไม่ได้ส่งคำตอบที่สมบูรณ์ กรุณาลองสั่งอีกครั้งครับ";
             }
             content = CitationLinker.normalize(content, context.citations());
+            List<ChatAttachment> attachments = combineAttachments(
+                    context.attachments(), illustrate(userMessage.content(), content));
             turnFinalizer().complete(
                     context.conversationId(), userMessage, context.ownerId(), transaction.requestId(), content,
                     context.persistConversation(), false);
@@ -461,7 +467,7 @@ public class ChatService {
                     context.explainability());
             ChatCompletionResponse result = responseFactory.completion(
                     transaction.requestId(), Instant.now().getEpochSecond(), model, content, usage,
-                    context.attachments());
+                    attachments);
             transaction.success();
             return result;
         } catch (RuntimeException exception) {
@@ -594,6 +600,12 @@ public class ChatService {
                 Flux.just(responseFactory.initialChunk(id, created, model, context.attachments())),
                 chunks,
                 Flux.defer(() -> {
+                    List<ChatAttachment> generated = illustrate(
+                            userMessage.content(), assistantContent.toString());
+                    String attachmentChunk = responseFactory.attachmentChunk(id, created, model, generated);
+                    return attachmentChunk.isEmpty() ? Flux.empty() : Flux.just(attachmentChunk);
+                }),
+                Flux.defer(() -> {
                     String usageChunk = responseFactory.usageChunk(modelUsage.get(), id, created, model);
                     return usageChunk.isEmpty() ? Flux.empty() : Flux.just(usageChunk);
                 }),
@@ -665,7 +677,8 @@ public class ChatService {
                     verifiedToolResult,
                     ownerId,
                     interactionMode,
-                    visionInput));
+                    visionInput,
+                    shouldIllustrate(userMessage.content())));
         } catch (RuntimeException exception) {
             promptResult = "error";
             throw exception;
@@ -930,6 +943,30 @@ public class ChatService {
         if (text != null) {
             content.append(text);
         }
+    }
+
+    private boolean shouldIllustrate(String userMessage) {
+        return storyIllustrationService != null && storyIllustrationService.shouldIllustrate(userMessage);
+    }
+
+    private List<ChatAttachment> illustrate(String userMessage, String assistantContent) {
+        if (storyIllustrationService == null || !requestInspector.hasText(assistantContent)) {
+            return List.of();
+        }
+        return storyIllustrationService.illustrate(userMessage, assistantContent);
+    }
+
+    private List<ChatAttachment> combineAttachments(
+            List<ChatAttachment> existing, List<ChatAttachment> generated) {
+        if (generated == null || generated.isEmpty()) {
+            return existing == null ? List.of() : existing;
+        }
+        java.util.ArrayList<ChatAttachment> combined = new java.util.ArrayList<>();
+        if (existing != null) {
+            combined.addAll(existing);
+        }
+        combined.addAll(generated);
+        return List.copyOf(combined);
     }
 
     private void recordFirstToken(

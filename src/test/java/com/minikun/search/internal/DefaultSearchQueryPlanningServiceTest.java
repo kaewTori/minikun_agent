@@ -128,8 +128,20 @@ class DefaultSearchQueryPlanningServiceTest {
                         SearchDecisionReason.IMAGE_REQUEST),
                 "user: ช่วยค้นหาข้อมูลของนักวาดที่ชื่อ RenaRaziel หน่อย\nassistant: ...");
 
-        assertTrue(plan.primaryQuery().startsWith("RenaRaziel "));
-        assertTrue(plan.primaryQuery().contains("รูปผลงาน"));
+        assertEquals("RenaRaziel artwork", plan.primaryQuery());
+        assertEquals("images", plan.intent());
+        assertEquals("contextual_query", plan.reason());
+    }
+
+    @Test
+    void resolvesGenericArtistWorksFollowUpToAFocusedImageQuery() {
+        SearchQueryPlan plan = planner.plan(
+                "ขอดูผลงานของนักวาดคนนี้หน่อย",
+                new SearchDecision(true, "ขอดูผลงานของนักวาดคนนี้หน่อย",
+                        SearchDecisionReason.IMAGE_REQUEST),
+                "user: ช่วยหาข้อมูลของ RenaRaziel ให้เราหน่อย\nassistant: ...");
+
+        assertEquals("RenaRaziel artwork", plan.primaryQuery());
         assertEquals("images", plan.intent());
         assertEquals("contextual_query", plan.reason());
     }

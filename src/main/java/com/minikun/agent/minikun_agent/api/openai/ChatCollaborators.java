@@ -24,6 +24,7 @@ import com.minikun.tokenbudget.runtime.DynamicGenerationOptionsFactory;
 import com.minikun.tools.ToolRequestRouter;
 import com.minikun.tools.springai.SpringAiToolCallingRuntime;
 import com.minikun.vision.VisionInputService;
+import com.minikun.visual.StoryIllustrationService;
 
 /** Resolves optional chat capabilities once at the composition boundary. */
 @Component
@@ -50,6 +51,7 @@ final class ChatCollaborators {
     private final AutonomousResearchService autonomousResearchService;
     private final ChatExplainabilitySink explainabilitySink;
     private final ConversationThreadService conversationThreadService;
+    private final StoryIllustrationService storyIllustrationService;
 
     ChatCollaborators(
             ObjectProvider<SpringAiToolCallingRuntime> toolCallingRuntime,
@@ -73,7 +75,8 @@ final class ChatCollaborators {
             ObjectProvider<ConversationSummaryService> conversationSummaryService,
             ObjectProvider<AutonomousResearchService> autonomousResearchService,
             ObjectProvider<ChatExplainabilitySink> explainabilitySink,
-            ObjectProvider<ConversationThreadService> conversationThreadService) {
+            ObjectProvider<ConversationThreadService> conversationThreadService,
+            ObjectProvider<StoryIllustrationService> storyIllustrationService) {
         this.toolCallingRuntime = toolCallingRuntime.getIfAvailable();
         this.toolRequestRouters = toolRequestRouters.orderedStream().toList();
         this.dynamicGenerationOptionsFactory = dynamicGenerationOptionsFactory.getIfAvailable();
@@ -96,6 +99,7 @@ final class ChatCollaborators {
         this.autonomousResearchService = autonomousResearchService.getIfAvailable();
         this.explainabilitySink = explainabilitySink.getIfAvailable();
         this.conversationThreadService = conversationThreadService.getIfAvailable();
+        this.storyIllustrationService = storyIllustrationService.getIfAvailable();
     }
 
     SpringAiToolCallingRuntime toolCallingRuntime() { return toolCallingRuntime; }
@@ -120,4 +124,5 @@ final class ChatCollaborators {
     AutonomousResearchService autonomousResearchService() { return autonomousResearchService; }
     ChatExplainabilitySink explainabilitySink() { return explainabilitySink; }
     ConversationThreadService conversationThreadService() { return conversationThreadService; }
+    StoryIllustrationService storyIllustrationService() { return storyIllustrationService; }
 }

@@ -94,6 +94,26 @@ final class OpenAiChatResponseFactory {
                 attachments));
     }
 
+    String attachmentChunk(
+            String id,
+            long created,
+            String model,
+            List<ChatAttachment> attachments) {
+        if (attachments == null || attachments.isEmpty()) {
+            return "";
+        }
+        return data(new ChatCompletionResponse.StreamChunk(
+                id,
+                CHUNK_OBJECT,
+                created,
+                model,
+                List.of(new ChatCompletionResponse.StreamChoice(
+                        0,
+                        new ChatCompletionResponse.Delta(null, null, imageDeltas(attachments)),
+                        null)),
+                attachments));
+    }
+
     String contentChunk(ChatResponse response, String id, long created, String model) {
         String content = response.getResult().getOutput().getText();
         return contentChunk(content, id, created, model);

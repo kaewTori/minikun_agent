@@ -34,6 +34,7 @@
       deviceId: "",
       canonicalOrigin: "https://mini-kun:8443",
       timers: new Map(),
+      inFlight: new Map(),
       eventSource: null,
       pairingUrl: "",
       refreshing: false,
@@ -483,7 +484,7 @@
 
   async function refreshSyncedConversations() {
     if (!state.sync.paired || state.sync.refreshing) return;
-    if (state.pendingChats.size) {
+    if (state.pendingChats.size || state.sync.timers.size || state.sync.inFlight.size) {
       state.sync.remoteDirty = true;
       return;
     }
@@ -512,19 +513,42 @@
   function scheduleConversationSync(conversationId) {
     if (!state.sync.paired) return;
     window.clearTimeout(state.sync.timers.get(conversationId));
-    state.sync.timers.set(conversationId, window.setTimeout(async () => {
+    state.sync.timers.set(conversationId, window.setTimeout(() => {
       state.sync.timers.delete(conversationId);
+      pushConversationSync(conversationId);
+    }, 220));
+  }
+
+  function pushConversationSync(conversationId) {
+    if (!state.sync.paired) return Promise.resolve(false);
+    window.clearTimeout(state.sync.timers.get(conversationId));
+    state.sync.timers.delete(conversationId);
+    const previous = state.sync.inFlight.get(conversationId) || Promise.resolve();
+    const operation = previous.catch(() => false).then(async () => {
       const conversation = state.conversations.find((value) => value.id === conversationId);
-      if (!conversation) return;
+      if (!conversation) return false;
       try {
         await syncFetch(`/v1/sync/conversations/${encodeURIComponent(conversationId)}`, {
           method: "PUT", body: JSON.stringify(syncPayload(conversation))
         });
         renderSyncState("ซิงก์แล้ว", "paired");
+        return true;
       } catch (error) {
         renderSyncState("รอซิงก์", "unpaired");
+        return false;
       }
-    }, 220));
+    });
+    state.sync.inFlight.set(conversationId, operation);
+    operation.then((synced) => {
+      if (state.sync.inFlight.get(conversationId) === operation) {
+        state.sync.inFlight.delete(conversationId);
+      }
+      if (synced && state.sync.remoteDirty && !state.pendingChats.size
+          && !state.sync.timers.size && !state.sync.inFlight.size) {
+        refreshSyncedConversations();
+      }
+    });
+    return operation;
   }
 
   function connectSyncEvents() {
@@ -830,29 +854,7 @@
   }
 
   function markdown(value) {
-    const source = String(value || "");
-    const blocks = [];
-    const tokenized = source.replace(/```([\w.+-]*)\n?([\s\S]*?)```/g, (_, language, code) => {
-      const token = `@@CODE_BLOCK_${blocks.length}@@`;
-      blocks.push(`<div class="code-block"><header><span>${escapeHtml(language || "code")}</span><button type="button" data-copy-code>คัดลอก</button></header><pre><code>${escapeHtml(code.replace(/\n$/, ""))}</code></pre></div>`);
-      return token;
-    });
-    let html = escapeHtml(tokenized)
-      .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>')
-      .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
-      .replace(/`([^`\n]+)`/g, "<code>$1</code>");
-    html = html.split(/\n{2,}/).map((part) => {
-      if (/^@@CODE_BLOCK_\d+@@$/.test(part.trim())) return part.trim();
-      const lines = part.split("\n");
-      if (lines.every((line) => /^\s*[-*]\s+/.test(line))) {
-        return `<ul>${lines.map((line) => `<li>${line.replace(/^\s*[-*]\s+/, "")}</li>`).join("")}</ul>`;
-      }
-      if (lines.every((line) => /^\s*\d+[.)]\s+/.test(line))) {
-        return `<ol>${lines.map((line) => `<li>${line.replace(/^\s*\d+[.)]\s+/, "")}</li>`).join("")}</ol>`;
-      }
-      return `<p>${lines.join("<br>")}</p>`;
-    }).join("");
-    return blocks.reduce((result, block, index) => result.replace(`@@CODE_BLOCK_${index}@@`, block), html);
+    return window.MinikunMarkdown.render(value);
   }
 
   async function copyText(value) {
@@ -986,6 +988,64 @@
     return progress;
   }
 
+  function renderVisualGallery(attachments = []) {
+    if (!attachments.length) return null;
+    const visuals = attachments.map(normalizeVisual).filter((visual) => visual.url);
+    if (!visuals.length) return null;
+    const gallery = element("section", "message-visual-gallery");
+    const galleryHeading = element("div", "message-visual-heading");
+    const generatedCount = visuals.filter((visual) => visual.origin === "generated").length;
+    const galleryMeta = generatedCount === visuals.length
+      ? `${visuals.length} ภาพ · สร้างโดย AI`
+      : generatedCount > 0
+        ? `${visuals.length} ภาพ · สร้างใหม่ ${generatedCount} ภาพ`
+        : `${visuals.length} ภาพ · เปิดดูต้นทางได้`;
+    galleryHeading.append(
+      element("strong", "", "รูปประกอบคำตอบ"),
+      element("span", "", galleryMeta)
+    );
+    gallery.append(galleryHeading);
+    const images = element("div", "message-image-grid");
+    for (const visual of visuals) {
+      const card = element("figure", "visual-card");
+      const open = element("button", "visual-card-image");
+      open.type = "button";
+      open.addEventListener("click", () => openVisualLightbox(visual));
+      const image = element("img");
+      image.src = visual.url || proxyImageUrl(visual.originalUrl);
+      image.alt = visual.title;
+      image.loading = "lazy";
+      image.addEventListener("error", () => {
+        if (visual.thumbnailUrl && image.dataset.thumbnailFallback !== "true") {
+          image.dataset.thumbnailFallback = "true";
+          image.src = proxyImageUrl(visual.thumbnailUrl);
+          return;
+        }
+        image.classList.add("visual-broken");
+        image.alt = "โหลดภาพนี้ไม่สำเร็จ";
+      });
+      open.append(image, element("span", "visual-origin", visualOriginLabel(visual.origin)));
+      const copy = element("figcaption", "visual-card-copy");
+      copy.append(element("strong", "", visual.title), element("small", "", visualMetadata(visual)));
+      const sourceUrl = safeExternalUrl(visual.sourceUrl || visual.originalUrl);
+      if (sourceUrl) {
+        const source = element("a", "visual-card-source", `เปิดต้นทาง ${visualHost(visual)} ↗`);
+        source.href = sourceUrl; source.target = "_blank"; source.rel = "noopener noreferrer";
+        copy.append(source);
+      }
+      const actions = element("div", "visual-card-actions");
+      const ask = element("button", "", "ถามต่อ");
+      ask.type = "button"; ask.addEventListener("click", () => attachVisualReference(visual));
+      const similar = element("button", "", "รูปคล้ายกัน");
+      similar.type = "button"; similar.addEventListener("click", () => findSimilarVisual(visual));
+      const save = element("button", "", "เก็บ reference");
+      save.type = "button"; save.addEventListener("click", () => saveVisualReference(visual).catch(error => toast(error.message, true)));
+      actions.append(ask, similar, save); copy.append(actions); card.append(open, copy); images.append(card);
+    }
+    gallery.append(images);
+    return gallery;
+  }
+
   function renderMessage(message, live = false) {
     const row = element("article", `message ${message.role}`);
     row.dataset.messageId = message.id || "";
@@ -1006,59 +1066,8 @@
       content.innerHTML = markdown(message.content);
     }
     body.append(content);
-    if (message.attachments?.length) {
-      const gallery = element("section", "message-visual-gallery");
-      const galleryHeading = element("div", "message-visual-heading");
-      const visualCount = message.attachments.filter((attachment) => normalizeVisual(attachment).url).length;
-      galleryHeading.append(
-        element("strong", "", "รูปประกอบคำตอบ"),
-        element("span", "", `${visualCount} ภาพ · เปิดดูต้นทางได้`)
-      );
-      gallery.append(galleryHeading);
-      const images = element("div", "message-image-grid");
-      for (const attachment of message.attachments) {
-        const visual = normalizeVisual(attachment);
-        if (!visual.url) continue;
-        const card = element("figure", "visual-card");
-        const open = element("button", "visual-card-image");
-        open.type = "button";
-        open.addEventListener("click", () => openVisualLightbox(visual));
-        const image = element("img");
-        image.src = visual.url || proxyImageUrl(visual.originalUrl);
-        image.alt = visual.title;
-        image.loading = "lazy";
-        image.addEventListener("error", () => {
-          if (visual.thumbnailUrl && image.dataset.thumbnailFallback !== "true") {
-            image.dataset.thumbnailFallback = "true";
-            image.src = proxyImageUrl(visual.thumbnailUrl);
-            return;
-          }
-          image.classList.add("visual-broken");
-          image.alt = "โหลดภาพนี้ไม่สำเร็จ";
-        });
-        open.append(image, element("span", "visual-origin", visualOriginLabel(visual.origin)));
-        const copy = element("figcaption", "visual-card-copy");
-        copy.append(element("strong", "", visual.title), element("small", "", visualMetadata(visual)));
-        const sourceUrl = safeExternalUrl(visual.sourceUrl || visual.originalUrl);
-        if (sourceUrl) {
-          const source = element("a", "visual-card-source", `เปิดต้นทาง ${visualHost(visual)} ↗`);
-          source.href = sourceUrl; source.target = "_blank"; source.rel = "noopener noreferrer";
-          copy.append(source);
-        }
-        const actions = element("div", "visual-card-actions");
-        const ask = element("button", "", "ถามต่อ");
-        ask.type = "button"; ask.addEventListener("click", () => attachVisualReference(visual));
-        const similar = element("button", "", "รูปคล้ายกัน");
-        similar.type = "button"; similar.addEventListener("click", () => findSimilarVisual(visual));
-        const save = element("button", "", "เก็บ reference");
-        save.type = "button"; save.addEventListener("click", () => saveVisualReference(visual).catch(error => toast(error.message, true)));
-        actions.append(ask, similar, save); copy.append(actions); card.append(open, copy); images.append(card);
-      }
-      if (images.childElementCount) {
-        gallery.append(images);
-        body.append(gallery);
-      }
-    }
+    const visualGallery = renderVisualGallery(message.attachments);
+    if (visualGallery) body.append(visualGallery);
     const sourceCards = renderSourceCards(message);
     if (sourceCards) body.append(sourceCards);
     const responseMeta = renderResponseMeta(message);
@@ -1342,6 +1351,15 @@
       if (node && assistant.content) node.innerHTML = markdown(assistant.content);
       scrollToLatest();
     };
+    const updateVisuals = () => {
+      const row = document.querySelector(`[data-message-id="${assistant.id}"]`);
+      if (!row) return;
+      const existing = row.querySelector(".message-visual-gallery");
+      const gallery = renderVisualGallery(assistant.attachments);
+      if (existing && gallery) existing.replaceWith(gallery);
+      else if (existing) existing.remove();
+      else if (gallery) row.querySelector(".message-content")?.after(gallery);
+    };
     while (true) {
       const { value, done } = await reader.read();
       buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
@@ -1374,6 +1392,7 @@
             const merged = [...(assistant.attachments || []), ...images];
             assistant.attachments = merged.filter((image, index) => merged.findIndex(candidate =>
               normalizeVisual(candidate).url === normalizeVisual(image).url) === index);
+            updateVisuals();
           }
           update();
         } catch (_) { /* ignore keep-alive and incomplete event lines */ }
@@ -1495,7 +1514,10 @@
       if (state.pendingChats.get(conversationId) === task) state.pendingChats.delete(conversationId);
       renderConversationList();
       syncChatState();
-      if (!state.pendingChats.size && state.sync.remoteDirty) refreshSyncedConversations();
+      if (!state.pendingChats.size && state.sync.remoteDirty && !assistant.localOnly) {
+        const synced = await pushConversationSync(conversationId);
+        if (synced) await refreshSyncedConversations();
+      }
       if (state.currentConversationId === conversationId && !window.matchMedia("(pointer: coarse)").matches) {
         $("#chat-composer").focus();
       }

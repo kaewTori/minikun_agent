@@ -70,6 +70,8 @@ class ChatCapabilityFactoryTest {
         assertTrue(text.contains("Creative pacing"));
         assertTrue(text.contains("Reserve enough space"));
         assertTrue(text.contains("scene or chapter"));
+        assertTrue(text.contains("protagonist desire, obstacle, stakes"));
+        assertTrue(text.contains("stock metaphors"));
     }
 
     @Test

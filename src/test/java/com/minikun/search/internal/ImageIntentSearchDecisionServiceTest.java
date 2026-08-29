@@ -53,6 +53,19 @@ class ImageIntentSearchDecisionServiceTest {
     }
 
     @Test
+    void promotesVisualArtistLookupSoSearchReturnsImagesWithProfileEvidence() {
+        String query = "ช่วยค้นหาข้อมูลของนักวาดที่ชื่อ RenaRaziel หน่อย";
+        SearchDecision original = new SearchDecision(
+                true, query, SearchDecisionReason.FACT_LOOKUP);
+
+        SearchDecision decision = serviceReturning(original).decide(query);
+
+        assertTrue(decision.shouldSearch());
+        assertEquals(SearchDecisionReason.IMAGE_REQUEST, decision.reason());
+        assertEquals(query, decision.query());
+    }
+
+    @Test
     void detectsArtworkRecommendationFromVisualArtistContext() {
         SearchDecision original = new SearchDecision(
                 false,

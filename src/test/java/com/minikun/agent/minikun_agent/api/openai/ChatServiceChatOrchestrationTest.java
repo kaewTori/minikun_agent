@@ -13,12 +13,14 @@ import static org.mockito.Mockito.when;
 
 import java.nio.file.Path;
 import java.time.Duration;
+import java.time.Clock;
 import java.util.List;
 import java.util.Optional;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.mockito.ArgumentCaptor;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.model.ChatModel;
@@ -89,11 +91,41 @@ import com.minikun.tools.WeatherToolRouter;
 import com.minikun.tools.springai.SpringAiToolCallingRuntime;
 import com.minikun.weather.WeatherReport;
 import com.minikun.vision.VisionInputService;
+import com.minikun.visual.GeneratedImage;
+import com.minikun.visual.GeneratedImageStore;
+import com.minikun.visual.StoryIllustrationService;
 
 import reactor.core.publisher.Flux;
 
 class ChatServiceChatOrchestrationTest {
     private static final Path MCS_ROOT = Path.of("../../config/minikun-agent/mcs");
+    @TempDir Path temporaryDirectory;
+
+    @Test
+    void generatesAnAttachmentAfterCreativeStoryTextIsReady() throws Exception {
+        ChatModel chatModel = mock(ChatModel.class);
+        ConversationMemoryService conversation = mock(ConversationMemoryService.class);
+        when(conversation.load(any())).thenReturn(List.of());
+        when(chatModel.call(any(Prompt.class))).thenReturn(response(
+                "มะลิยืนอยู่บนหอดูดาว ขณะที่ดาวดวงแรกส่องแสงตอบกลับมาครับ"));
+        ChatService service = service(chatModel, conversation);
+        setField(service, "storyIllustrationService", new StoryIllustrationService(prompt ->
+                new GeneratedImage(
+                        new byte[] {(byte) 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1},
+                        "เด็กหญิงบนหอดูดาว", "test-image-model"),
+                new GeneratedImageStore(temporaryDirectory, 1024, Clock.systemUTC()), true, 2000));
+
+        ChatCompletionResponse result = service.chatCompletion(new ChatCompletionRequest(
+                "mini-kun", List.of(new Message("user", "แต่งเรื่องสั้นเกี่ยวกับเด็กที่ตามหาดวงดาว")),
+                "story-image", false, null, null, null), new ConversationId("story-image"));
+
+        assertEquals(1, result.attachments().size());
+        assertEquals("generated", result.attachments().getFirst().origin());
+        assertEquals("test-image-model", result.attachments().getFirst().provider());
+        ArgumentCaptor<Prompt> prompt = ArgumentCaptor.forClass(Prompt.class);
+        verify(chatModel).call(prompt.capture());
+        assertTrue(promptText(prompt.getValue()).contains("Generated story illustration"));
+    }
 
     @Test
     void anchorsAmbiguousVisualFollowUpAndAddsRepairGuardToPrompt() throws Exception {

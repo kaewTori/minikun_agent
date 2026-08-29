@@ -33,13 +33,27 @@ class ImageIntentDetectorTest {
     }
 
     @Test
+    void detectsVisualArtistLookupsThatShouldIncludeRepresentativeWork() {
+        List<String> queries = List.of(
+                "ช่วยค้นหาข้อมูลของนักวาดที่ชื่อ RenaRaziel หน่อย",
+                "อยากรู้ประวัตินักวาดภาพประกอบคนนี้",
+                "who is the illustrator RenaRaziel",
+                "find information about digital artist RenaRaziel");
+
+        queries.forEach(query -> assertTrue(detector.detects(query), query));
+    }
+
+    @Test
     void rejectsStructuralAndAmbiguousImageWords() {
         List<String> queries = List.of(
                 "รูปแบบการทำงาน",
                 "รูปแบบ design pattern",
                 "ภาพรวมระบบ",
                 "อธิบายรูปแบบ architecture",
-                "architecture explanation");
+                "architecture explanation",
+                "ช่วยค้นหาข้อมูลของนักเขียนชื่อ RenaRaziel",
+                "ช่วยค้นหาข้อมูลของศิลปินนักร้องชื่อ RenaRaziel",
+                "who is the musician RenaRaziel");
 
         queries.forEach(query -> assertFalse(detector.detects(query), query));
     }

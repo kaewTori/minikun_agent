@@ -71,9 +71,16 @@ public final class DefaultSearchQueryPlanningService implements SearchQueryPlann
         ConversationContinuity continuity = continuityResolver.resolve(original, conversationContext);
         boolean contextual = continuity.followUp();
         if (contextual) {
-            String previousTopic = trimNoise(stripConversationalPrefix(continuity.previousTopic()));
-            if (!previousTopic.isBlank() && !containsTopic(primary, previousTopic)) {
-                primary = previousTopic + " " + primary;
+            if (decision.reason() == SearchDecisionReason.IMAGE_REQUEST
+                    && continuity.visualFollowUp()
+                    && !continuity.searchAnchor().isBlank()
+                    && original.toLowerCase(Locale.ROOT).contains("ผลงาน")) {
+                primary = continuity.searchAnchor() + " artwork";
+            } else {
+                String previousTopic = trimNoise(stripConversationalPrefix(continuity.previousTopic()));
+                if (!previousTopic.isBlank() && !containsTopic(primary, previousTopic)) {
+                    primary = previousTopic + " " + primary;
+                }
             }
         }
         primary = trimNoise(primary);

@@ -116,7 +116,24 @@ button:focus-visible, a:focus-visible, textarea:focus-visible, input:focus-visib
 .message-content p:last-child { margin-bottom: 0; }
 .message-content a { color: #65eca2; text-underline-offset: 3px; }
 .message-content strong { color: #f2faf5; }
+.message-content h1, .message-content h2, .message-content h3, .message-content h4, .message-content h5, .message-content h6 { margin: 22px 0 9px; color: #f1f8f3; line-height: 1.35; letter-spacing: -.018em; }
+.message-content h1:first-child, .message-content h2:first-child, .message-content h3:first-child { margin-top: 0; }
+.message-content h1 { font-size: 1.48em; }
+.message-content h2 { font-size: 1.3em; }
+.message-content h3 { font-size: 1.14em; }
+.message-content h4, .message-content h5, .message-content h6 { font-size: 1em; }
+.message-content hr { height: 1px; margin: 20px 0; border: 0; background: linear-gradient(90deg, transparent, #2b4537 8%, #2b4537 92%, transparent); }
 .message-content ul, .message-content ol { margin: 8px 0 12px; padding-left: 22px; }
+.message-content li { margin: 4px 0; padding-left: 3px; }
+.message-content blockquote { margin: 14px 0; padding: 9px 14px; border-left: 3px solid #3d9e68; border-radius: 0 10px 10px 0; background: rgba(57,229,140,.045); color: #afc4b6; }
+.message-content del { color: #82948a; }
+.markdown-table-wrap { max-width: 100%; margin: 13px 0 17px; overflow-x: auto; border: 1px solid #26392f; border-radius: 13px; background: rgba(8,14,10,.72); -webkit-overflow-scrolling: touch; }
+.message-content table { width: 100%; min-width: 430px; border-collapse: collapse; font-size: .92em; line-height: 1.55; }
+.message-content th, .message-content td { padding: 10px 13px; border-right: 1px solid #203128; border-bottom: 1px solid #203128; text-align: left; vertical-align: top; }
+.message-content th:last-child, .message-content td:last-child { border-right: 0; }
+.message-content tbody tr:last-child td { border-bottom: 0; }
+.message-content th { background: rgba(57,229,140,.075); color: #c9f5d9; font-size: .88em; font-weight: 800; letter-spacing: .025em; }
+.message-content tbody tr:nth-child(even) { background: rgba(255,255,255,.018); }
 .message-content code { padding: 2px 5px; border: 1px solid #26372e; border-radius: 6px; background: #0a0f0c; color: #9aefbc; font: 11px ui-monospace, SFMono-Regular, Menlo, monospace; }
 .code-block { position: relative; margin: 12px 0; overflow: hidden; border: 1px solid #24342c; border-radius: 13px; background: #030504; }
 .code-block header { display: flex; justify-content: space-between; align-items: center; padding: 7px 10px; border-bottom: 1px solid #18231d; color: #5f7368; font-size: 9px; }

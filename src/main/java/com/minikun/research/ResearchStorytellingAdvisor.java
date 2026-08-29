@@ -72,15 +72,20 @@ public final class ResearchStorytellingAdvisor {
 
     private String narrativeInstruction(NarrativeMode mode) {
         String structure = switch (mode) {
-            case STORY -> "Use a truthful arc: compelling opening, necessary context, turning points, and meaning.";
+            case STORY -> "Use a truthful arc: open inside a concrete moment, establish desire and stakes, escalate "
+                    + "through meaningful turning points, and land on an earned emotional or intellectual payoff.";
             case TIMELINE -> "Use chronological anchors: origin, major transitions, present state, and why it matters.";
             case COMPARISON -> "Establish one common baseline, compare the same dimensions, explain trade-offs, then conclude.";
             case ANALYSIS -> "Lead with the thesis, connect evidence to causes, include counterpoints or limits, then implications.";
             case EXPLANATION -> "Move from intuition to mechanism to a concrete example, then finish with the practical takeaway.";
             case DIRECT -> "Lead with the answer, add only the context needed to understand it, then finish with the takeaway.";
         };
-        return structure + " Use clear transitions and concrete details only when supported by the conversation or evidence. "
-                + "Do not fabricate scenes, quotations, motives, causality, or suspense. Keep citations attached to factual "
-                + "claims without letting citation mechanics break the flow. Match the user's language and desired depth.";
+        return structure + " Build scenes around specific action, consequence, and change rather than summary alone. "
+                + "Choose a stable point of view and tense; use selective sensory detail and purposeful dialogue when the "
+                + "material supports them. Vary sentence rhythm with the scene and let important moments breathe. Use clear "
+                + "transitions and concrete details only when supported by the conversation or evidence. Do not fabricate "
+                + "scenes, quotations, motives, causality, or suspense in factual narratives. Keep citations attached to "
+                + "factual claims without letting citation mechanics break the flow. Match the user's language, genre, age "
+                + "range, tone, and desired depth.";
     }
 }

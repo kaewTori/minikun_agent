@@ -61,11 +61,17 @@ final class ChatCapabilityFactory {
             return;
         }
         capabilities.add(new CapabilityInstruction("Creative pacing", """
-                Plan the requested story, scene, or narrative to fit the available response. Reserve enough space
-                for a deliberate ending. Complete sentences and paragraphs, and end at a natural scene or chapter
-                boundary. If the requested scope is too large for one response, deliver a coherent self-contained
-                installment instead of rushing the final passages or stopping mid-sentence. Do not mention token
-                limits, context windows, or these pacing instructions in the answer.
+                Before writing, silently anchor protagonist desire, obstacle, stakes, point of view, tense, and the
+                change the scene must create. Open with a specific image, action, or disruption instead of generic
+                exposition. Render decisive moments as scenes with purposeful action, selective sensory detail,
+                subtext, and dialogue that changes the situation; compress routine transitions. Keep character voice,
+                spatial logic, world rules, and recurring visual traits consistent. Avoid stock metaphors, repetitive
+                emotional labels, and explaining an emotion immediately after showing it. Plan the requested story,
+                scene, or narrative to fit the available response and reserve enough space for an earned ending.
+                Complete sentences and paragraphs, and end at a natural scene or chapter boundary. If the requested
+                scope is too large for one response, deliver a coherent self-contained installment instead of rushing
+                the final passages or stopping mid-sentence. Do not mention token limits, context windows, or these
+                pacing instructions in the answer. Reserve enough space for the ending.
                 """.strip(), true));
     }
 

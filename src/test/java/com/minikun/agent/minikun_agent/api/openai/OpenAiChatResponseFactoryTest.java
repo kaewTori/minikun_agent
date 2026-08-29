@@ -45,6 +45,44 @@ class OpenAiChatResponseFactoryTest {
     }
 
     @Test
+    void emitsRichImageAttachmentsInInitialStreamingChunk() throws Exception {
+        ChatAttachment attachment = new ChatAttachment(
+                "image",
+                "/v1/images/proxy?url=https%3A%2F%2Fimages.example%2Fwork.jpg",
+                "Representative work",
+                "https://artist.example/gallery",
+                "Artwork description",
+                "web",
+                "https://images.example/work.jpg",
+                "https://images.example/thumb.jpg",
+                1200,
+                800,
+                "searxng",
+                "");
+
+        JsonNode chunk = objectMapper.readTree(factory.initialChunk(
+                "id", 123L, "mini-kun", List.of(attachment)));
+
+        assertEquals(1, chunk.path("attachments").size());
+        assertEquals("Representative work", chunk.at("/attachments/0/title").asText());
+        assertEquals(attachment.url(), chunk.at("/choices/0/delta/images/0/image_url/url").asText());
+    }
+
+    @Test
+    void emitsGeneratedAttachmentAfterStreamingText() throws Exception {
+        ChatAttachment attachment = new ChatAttachment(
+                "image", "/v1/images/generated/example.png", "Story illustration",
+                "", "Generated for this story", "generated",
+                "/v1/images/generated/example.png", "", null, null, "gpt-image-2", "");
+
+        JsonNode chunk = objectMapper.readTree(factory.attachmentChunk(
+                "id", 123L, "mini-kun", List.of(attachment)));
+
+        assertEquals("generated", chunk.at("/attachments/0/origin").asText());
+        assertEquals(attachment.url(), chunk.at("/choices/0/delta/images/0/image_url/url").asText());
+    }
+
+    @Test
     void omitsUsageChunkWhenProviderDidNotReportUsage() {
         assertTrue(factory.usageChunk(ModelUsage.empty(), "id", 123L, "mini-kun").isEmpty());
         assertFalse(factory.usageChunk(new ModelUsage(1, 2), "id", 123L, "mini-kun").isEmpty());

@@ -117,6 +117,7 @@ import com.minikun.voice.VoiceController;
 import com.minikun.voice.VoiceExceptionHandler;
 import com.minikun.weather.WeatherConfiguration;
 import com.minikun.visual.VisualCompanionConfiguration;
+import com.minikun.visual.StoryIllustrationConfiguration;
 import com.minikun.research.ResearchConfiguration;
 import com.minikun.relationship.RelationshipConfiguration;
 
@@ -137,7 +138,7 @@ import com.minikun.relationship.RelationshipConfiguration;
         TitleGenerationConfiguration.class, TitleGenerationService.class, ContextRuntimeConfiguration.class,
         VisionInputService.class, GuardianConfiguration.class, ComputerConfiguration.class,
         VoiceConfiguration.class, VoiceController.class, VoiceExceptionHandler.class,
-        VisualCompanionConfiguration.class,
+        VisualCompanionConfiguration.class, StoryIllustrationConfiguration.class,
         PersonalKnowledgeConfiguration.class, KnowledgeAcquisitionConfiguration.class,
         PersonalityConfiguration.class, ChatFeedbackConfiguration.class,
         PersonalCareConfiguration.class,

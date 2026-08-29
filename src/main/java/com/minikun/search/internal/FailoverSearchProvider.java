@@ -4,6 +4,7 @@ import com.minikun.search.SearchException;
 import com.minikun.search.SearchProvider;
 import com.minikun.search.model.SearchProviderResponse;
 import com.minikun.search.model.SearchRequest;
+import com.minikun.search.model.SearchOptions;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Clock;
@@ -65,8 +66,8 @@ public final class FailoverSearchProvider implements SearchProvider {
 
         try {
             SearchProviderResponse response = primary.search(request);
-            if (isEmpty(response)) {
-                recordPrimaryFailure("empty_results");
+            if (isEmptyForRequest(response, request)) {
+                recordPrimarySuccess();
                 LOGGER.info("process=search_provider event=fallback request_id={} from=primary to=fallback reason=empty_results",
                         request.requestId());
                 increment(FALLBACK_COUNTER, "reason", "empty_results");
@@ -82,7 +83,7 @@ public final class FailoverSearchProvider implements SearchProvider {
             increment(FALLBACK_COUNTER, "reason", exception.getClass().getSimpleName());
             try {
                 SearchProviderResponse response = fallback.search(request);
-                if (!isEmpty(response)) {
+                if (!isEmptyForRequest(response, request)) {
                     increment(SUCCESS_COUNTER, "provider", "fallback");
                 }
                 return response;
@@ -118,8 +119,14 @@ public final class FailoverSearchProvider implements SearchProvider {
         increment(FAILURE_COUNTER, "provider", "primary");
     }
 
-    private boolean isEmpty(SearchProviderResponse response) {
-        return response == null || (response.results().isEmpty() && response.images().isEmpty());
+    private boolean isEmptyForRequest(SearchProviderResponse response, SearchRequest request) {
+        if (response == null) {
+            return true;
+        }
+        if (SearchOptions.IMAGE_CATEGORY.equalsIgnoreCase(request.options().category())) {
+            return response.images().isEmpty();
+        }
+        return response.results().isEmpty();
     }
 
     private void increment(String name, String tagKey, String tagValue) {

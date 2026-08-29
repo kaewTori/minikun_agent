@@ -12,7 +12,8 @@
 - Personal Knowledge แบบ local สำหรับ index เอกสาร, hybrid retrieval และ citation ในบทสนทนา
 - Self-learning Knowledge Agent สำหรับกวาดข้อมูลตามหัวข้อแบบมีตารางเวลา เปิดอ่านต้นฉบับ ตรวจสอบ claim และนำเฉพาะความรู้ที่ผ่านเกณฑ์มาใช้ตอบแชต
 - Autonomous Deep Research แบบ bounded สำหรับวาง subquestions, ค้นซ้ำตาม evidence gap, เปิดแหล่งต้นฉบับ และระบุข้อจำกัด
-- Storytelling advisor สำหรับจัดคำตอบเป็น explanation, comparison, timeline, analysis หรือ narrative ตามเจตนา
+- Storytelling advisor สำหรับวางแรงขับ อุปสรรค stakes ฉาก จังหวะ มุมมอง และตอนจบ พร้อมจัดคำตอบเป็น explanation, comparison, timeline, analysis หรือ narrative ตามเจตนา
+- Story Illustration สำหรับสร้างภาพของจังหวะสำคัญหลังเล่าเรื่องเสร็จ แล้วแนบภาพเข้า response ทั้งแบบ JSON และ streaming โดยไม่เก็บ image bytes ใน conversation history
 - Adaptive Companion ที่เรียนรู้ภาษา ความยาว รูปแบบ ระดับเทคนิค และโทนการตอบแบบ owner-scoped
 - Natural Conversation Advisor ที่ใช้เจตนา บริบทต่อเนื่อง และสัญญาณอารมณ์เพื่อปรับคำตอบโดยไม่เก็บข้อความเพิ่ม
 - Conversation Policy Engine ที่แยกการรับฟัง ชวนคิด ตัดสินใจ อธิบาย สร้างงาน และลงมือทำ พร้อม question/initiative/challenge contract ราย turn
@@ -167,6 +168,15 @@ Actuator ที่เปิดให้เข้าถึงคือ `/actuator
 | `MINIKUN_SEARCH_FAILOVER_COOLDOWN` | `PT120S` | ระยะพัก primary หลัง circuit เปิด |
 | `MINIKUN_SEARCH_FAILOVER_FAILURE_THRESHOLD` | `3` | จำนวน failure ก่อนเปิด circuit |
 | `MINIKUN_SEARCH_ENABLED` | `true` | เปิด/ปิด web search |
+| `MINIKUN_VISUAL_GENERATION_ENABLED` | `false` | เปิดการสร้างภาพจากเรื่องผ่าน OpenAI-compatible Images API |
+| `MINIKUN_VISUAL_AUTO_ILLUSTRATE_STORIES` | `true` | สร้างภาพหนึ่งภาพอัตโนมัติสำหรับ creative story; คำขอสร้างภาพโดยตรงยังตรวจพบได้เสมอเมื่อระบบเปิด |
+| `MINIKUN_VISUAL_GENERATION_BASE_URL` | `https://api.openai.com/v1` | base URL ของ image provider ที่รองรับ `/images/generations` |
+| `MINIKUN_VISUAL_GENERATION_API_KEY` | ใช้ `OPENAI_API_KEY` ถ้ามี | API key ของ image provider; เว้นว่างได้สำหรับ gateway ภายในที่ไม่ใช้ auth |
+| `MINIKUN_VISUAL_GENERATION_MODEL` | `gpt-image-2` | โมเดลสร้างภาพ |
+| `MINIKUN_VISUAL_GENERATION_SIZE` | `1536x1024` | ขนาดภาพแนวนอนสำหรับภาพประกอบเรื่อง |
+| `MINIKUN_VISUAL_GENERATION_QUALITY` | `medium` | ระดับคุณภาพที่ส่งให้ image provider |
+| `MINIKUN_VISUAL_GENERATION_TIMEOUT` | `PT120S` | timeout ต่อภาพ |
+| `MINIKUN_VISUAL_GENERATION_OUTPUT_DIRECTORY` | `${user.home}/.minikun/generated-images` | ที่เก็บ image bytes; conversation จะเก็บเฉพาะ local URL |
 | `MINIKUN_WEATHER_ENABLED` | `true` | เปิด/ปิด weather capability |
 | `MINIKUN_WEATHER_GEOCODING_URL` | `https://geocoding-api.open-meteo.com` | endpoint สำหรับ resolve สถานที่ |
 | `MINIKUN_WEATHER_FORECAST_URL` | `https://api.open-meteo.com` | endpoint สำหรับ forecast |
@@ -345,6 +355,19 @@ deterministic seed query และส่งต่อแบบ fail-open แท�
 คำขอให้เล่า อธิบาย เปรียบเทียบ วิเคราะห์ หรือเรียงประวัติจะเลือกโครงสร้างตอบแบบ dynamic ได้แก่
 `STORY`, `EXPLANATION`, `COMPARISON`, `ANALYSIS` และ `TIMELINE` โดยคงภาษา น้ำเสียง และตัวตนจาก MCS
 เหมือนเดิม คำถามทั่วไปที่ไม่มี intent เหล่านี้จะไม่เพิ่ม prompt overhead และยังใช้ fast path เดิม
+
+เมื่อเปิด `MINIKUN_VISUAL_GENERATION_ENABLED=true` ระบบจะสร้างภาพหนึ่งภาพหลังข้อความพร้อมแล้วสำหรับ
+คำขอสร้างภาพโดยตรง, เรื่องที่ขอภาพประกอบอย่างชัดเจน และ creative story (ถ้าเปิด auto-illustrate)
+ภาพจะถูกเก็บเป็นไฟล์ local แบบตรวจ magic bytes และจำกัดขนาด แล้วส่งกลับเป็น attachment ที่มี
+`origin=generated`; หาก image provider ล้มเหลว คำตอบข้อความยังสำเร็จตามปกติ ตัวอย่างค่าขั้นต่ำ:
+
+```sh
+export MINIKUN_VISUAL_GENERATION_ENABLED=true
+export OPENAI_API_KEY='...'
+```
+
+สามารถชี้ `MINIKUN_VISUAL_GENERATION_BASE_URL` ไปยัง gateway ภายในที่รองรับ
+`POST /images/generations` และคืน `data[0].b64_json` ได้ โดยไม่จำเป็นต้องส่ง key ถ้า gateway ไม่ใช้ auth
 
 ดูค่าทั้งหมดและ default เพิ่มเติมได้ที่ [`application.properties`](src/main/resources/application.properties)
 

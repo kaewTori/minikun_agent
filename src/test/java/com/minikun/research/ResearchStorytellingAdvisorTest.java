@@ -30,6 +30,8 @@ class ResearchStorytellingAdvisorTest {
         assertTrue(text.contains("Narrative craft: ANALYSIS"));
         assertTrue(text.contains("adjacent citation"));
         assertTrue(text.contains("Surface meaningful disagreement"));
+        assertTrue(text.contains("specific action, consequence, and change"));
+        assertTrue(text.contains("stable point of view and tense"));
         assertTrue(capabilities.stream().allMatch(com.minikun.pcs.model.CapabilityInstruction::required));
     }
 
