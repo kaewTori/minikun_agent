@@ -49,4 +49,12 @@ class OpenAiChatResponseFactoryTest {
         assertTrue(factory.usageChunk(ModelUsage.empty(), "id", 123L, "mini-kun").isEmpty());
         assertFalse(factory.usageChunk(new ModelUsage(1, 2), "id", 123L, "mini-kun").isEmpty());
     }
+
+    @Test
+    void emitsAlreadyNormalizedStreamingContent() throws Exception {
+        String chunk = factory.contentChunk("[Docs](https://example.test/docs)", "id", 123L, "mini-kun");
+
+        assertEquals("[Docs](https://example.test/docs)",
+                objectMapper.readTree(chunk).at("/choices/0/delta/content").asText());
+    }
 }

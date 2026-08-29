@@ -40,6 +40,7 @@ import com.minikun.personality.companion.CompanionModeContext;
 import com.minikun.relationship.ConversationThreadService;
 import com.minikun.personality.profile.UserModelService;
 import com.minikun.knowledge.PersonalKnowledgeService;
+import com.minikun.knowledge.acquisition.AcquiredKnowledgeIndex;
 import com.minikun.model.ActiveChatModelProvider;
 import com.minikun.model.ModelUsage;
 import com.minikun.model.CooperativeChatModelService;
@@ -152,6 +153,8 @@ public class ChatService {
 
     private PersonalKnowledgeService personalKnowledgeService;
 
+    private AcquiredKnowledgeIndex acquiredKnowledgeIndex;
+
     private ConversationSummaryService conversationSummaryService;
 
     private ConversationThreadService conversationThreadService;
@@ -179,6 +182,7 @@ public class ChatService {
         browserContentService = collaborators.browserContentService();
         visionInputService = collaborators.visionInputService();
         personalKnowledgeService = collaborators.personalKnowledgeService();
+        acquiredKnowledgeIndex = collaborators.acquiredKnowledgeIndex();
         conversationSummaryService = collaborators.conversationSummaryService();
         conversationThreadService = collaborators.conversationThreadService();
         autonomousResearchService = collaborators.autonomousResearchService();
@@ -449,6 +453,7 @@ public class ChatService {
                 log.warn("process=model_response event=blank request_id={}", transaction.requestId());
                 content = "ขออภัยครับ โมเดลยังไม่ได้ส่งคำตอบที่สมบูรณ์ กรุณาลองสั่งอีกครั้งครับ";
             }
+            content = CitationLinker.normalize(content, context.citations());
             turnFinalizer().complete(
                     context.conversationId(), userMessage, context.ownerId(), transaction.requestId(), content,
                     context.persistConversation(), false);
@@ -532,6 +537,7 @@ public class ChatService {
         long modelStarted = System.nanoTime();
         String traceId = MDC.get("trace_id");
         CreativeResponseContinuation continuation = creativeContinuation();
+        CitationLinker.Stream citationStream = CitationLinker.stream(context.citations());
         AtomicBoolean primaryLengthLimited = new AtomicBoolean();
         Flux<ChatResponse> primaryResponses = verifiedToolResult.isPresent()
             ? modelGateway().stream(context.prompt(), context.conversationId())
@@ -566,12 +572,18 @@ public class ChatService {
                         return Flux.empty();
                     });
         }));
-        Flux<String> chunks = modelResponses
+        Flux<String> modelChunks = modelResponses
                 .doOnNext(response -> recordFirstToken(
                         response, firstTokenRecorded, requestStarted, modelStarted))
                 .doOnNext(response -> appendAssistantText(assistantContent, response))
-                .map(response -> responseFactory.contentChunk(response, id, created, model))
-                .filter(chunk -> !chunk.isBlank())
+                .map(response -> responseFactory.contentChunk(
+                        citationStream.accept(response.getResult().getOutput().getText()), id, created, model))
+                .filter(chunk -> !chunk.isBlank());
+        Flux<String> chunks = Flux.concat(modelChunks, Flux.defer(() -> {
+                    String tail = citationStream.finish();
+                    String chunk = responseFactory.contentChunk(tail, id, created, model);
+                    return chunk.isBlank() ? Flux.empty() : Flux.just(chunk);
+                }))
                 .doFinally(signal -> ChatTraceScope.run(traceId, () -> {
                     logModelDuration("chat_model_stream", modelStarted, requestId);
                     recordStage("model", modelStarted, signalResult(signal));
@@ -589,9 +601,11 @@ public class ChatService {
                 Flux.just("[DONE]"))
                 .doOnComplete(() -> {
                     if (!assistantContent.isEmpty()) {
+                        String finalizedContent = CitationLinker.normalize(
+                                assistantContent.toString(), context.citations());
                         turnFinalizer().complete(
                                 context.conversationId(), userMessage, context.ownerId(), transaction.requestId(),
-                                assistantContent.toString(), context.persistConversation(), true);
+                                finalizedContent, context.persistConversation(), true);
                         recordExplainability(context.ownerId(), context.conversationId(), transaction.requestId(),
                                 context.explainability());
                     }
@@ -662,7 +676,8 @@ public class ChatService {
         return new ChatExecutionContext(
                 preparedPrompt.prompt(), conversationId, persistConversation, ownerId,
                 preparedImages.attachments(), preparedPrompt.generationProfile(),
-                explainabilityRecorder.context(knowledgeSelection, verifiedToolResult, preparedPrompt.generationProfile()));
+                explainabilityRecorder.context(knowledgeSelection, verifiedToolResult, preparedPrompt.generationProfile()),
+                CitationLinker.from(knowledgeSelection.selection()));
     }
 
     private ChatCommandHandler commandHandler() {
@@ -794,6 +809,7 @@ public class ChatService {
         return new ChatKnowledgeResolver(
                 memoryRecallService,
                 personalKnowledgeService,
+                acquiredKnowledgeIndex,
                 searchService,
                 searchDecisionService,
                 searchQueryPlanningService,
@@ -873,7 +889,8 @@ public class ChatService {
             String ownerId,
             List<ChatAttachment> attachments,
             String generationProfile,
-            ChatExplainabilityRecorder.Context explainability) {
+            ChatExplainabilityRecorder.Context explainability,
+            CitationLinker.Context citations) {
     }
 
     private boolean hasConversationContext(

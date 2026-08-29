@@ -12,6 +12,7 @@ import org.springframework.http.MediaType;
 import org.springframework.web.client.RestClient;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonNode;
 
 public final class OllamaTaskModelProvider implements TaskModelProvider {
     private final RestClient restClient;
@@ -43,7 +44,9 @@ public final class OllamaTaskModelProvider implements TaskModelProvider {
             if (response == null || response.isBlank()) {
                 throw new IllegalStateException("task model returned an empty response");
             }
-            return response.trim();
+            String normalized = response.trim();
+            return request.responseFormat() == TaskModelRequest.ResponseFormat.JSON_OBJECT
+                    ? normalizeJsonObject(normalized) : normalized;
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("task model generation was interrupted", exception);
@@ -56,6 +59,38 @@ public final class OllamaTaskModelProvider implements TaskModelProvider {
             throw new IllegalStateException("task model generation failed", cause);
         } catch (RuntimeException exception) {
             throw new IllegalStateException("task model generation failed", exception);
+        }
+    }
+
+    private String normalizeJsonObject(String response) {
+        JsonNode direct = readObject(response);
+        if (direct != null) return response;
+
+        String candidate = response;
+        if (candidate.startsWith("```")) {
+            int firstLine = candidate.indexOf('\n');
+            int closingFence = candidate.lastIndexOf("```");
+            if (firstLine >= 0 && closingFence > firstLine) {
+                candidate = candidate.substring(firstLine + 1, closingFence).strip();
+            }
+        }
+        if (readObject(candidate) != null) return candidate;
+
+        int firstObject = candidate.indexOf('{');
+        int lastObject = candidate.lastIndexOf('}');
+        if (firstObject >= 0 && lastObject > firstObject) {
+            String embedded = candidate.substring(firstObject, lastObject + 1).strip();
+            if (readObject(embedded) != null) return embedded;
+        }
+        throw new IllegalStateException("task model did not return a valid JSON object");
+    }
+
+    private JsonNode readObject(String value) {
+        try {
+            JsonNode node = objectMapper.readTree(value);
+            return node != null && node.isObject() ? node : null;
+        } catch (java.io.IOException exception) {
+            return null;
         }
     }
 

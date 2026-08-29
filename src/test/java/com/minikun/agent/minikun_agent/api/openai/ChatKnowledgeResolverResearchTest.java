@@ -4,10 +4,12 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import com.minikun.browser.BrowserContent;
 import com.minikun.browser.BrowserContentService;
 import com.minikun.memory.MemoryRecallService;
+import com.minikun.knowledge.acquisition.AcquiredKnowledgeIndex;
 import com.minikun.pcs.DefaultKnowledgeConsolidationService;
 import com.minikun.pcs.DefaultKnowledgeSelectionService;
 import com.minikun.pcs.KnowledgeCandidate;
@@ -28,6 +30,31 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
 
 class ChatKnowledgeResolverResearchTest {
+    @Test
+    void recallsPublishedAcquiredKnowledgeThroughThePersonalKnowledgeLane() {
+        ObjectProvider<MemoryRecallService> memory = mock(ObjectProvider.class);
+        AcquiredKnowledgeIndex acquired = mock(AcquiredKnowledgeIndex.class);
+        KnowledgeCandidate learned = new KnowledgeCandidate("acquired-1", KnowledgeSource.PERSONAL,
+                "[Verified acquired knowledge] Spring AI supports portable model APIs.", 0,
+                "https://docs.spring.io/spring-ai/reference/");
+        when(acquired.recall("default", "Spring AI model APIs", 5))
+                .thenReturn(KnowledgeContext.fromCandidates(List.of(learned)));
+        ChatKnowledgeResolver resolver = new ChatKnowledgeResolver(
+                memory, null, acquired, request -> KnowledgeContext.empty(),
+                query -> new SearchDecision(false, query), new DefaultSearchQueryPlanningService(),
+                new DefaultSearchContextAwarenessService(), new DefaultKnowledgeSelectionService(),
+                new DefaultKnowledgeConsolidationService(), new SearchSelectionSignalMapper(), null,
+                null, null, new ChatKnowledgeResolver.Configuration(
+                        false, Duration.ofSeconds(5), true, true, 8, 5, 5, 3,
+                        Duration.ofSeconds(30)));
+
+        ChatKnowledgeSelection result = resolver.resolve(new ChatKnowledgeResolver.Request(
+                "Spring AI model APIs", "request-learned", null, "default", false, ""));
+
+        assertTrue(result.selection().selectedCandidates().stream()
+                .anyMatch(candidate -> candidate.candidateId().equals("acquired-1")));
+    }
+
     @Test
     void deepResearchDelegatesToAutonomousLoopAndPropagatesTrace() {
         KnowledgeCandidate evidence = searchCandidate(0, "https://official.example/autonomous");

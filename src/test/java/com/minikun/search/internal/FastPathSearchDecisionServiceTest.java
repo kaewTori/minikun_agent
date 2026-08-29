@@ -87,4 +87,34 @@ class FastPathSearchDecisionServiceTest {
 
         assertTrue(delegated.get());
     }
+
+    @Test
+    void bypassesModelForCreativeThaiRequest() {
+        SearchDecisionService delegate = query -> {
+            throw new AssertionError("model should not be called");
+        };
+        SearchDecisionService service = new FastPathSearchDecisionService(
+                delegate, new RuleBasedSearchDecisionService(null));
+
+        var decision = service.decide("ช่วยแต่งคำอวยพรวันเกิดน่ารัก ๆ");
+
+        assertFalse(decision.shouldSearch());
+        assertEquals(SearchDecisionReason.GENERAL_KNOWLEDGE, decision.reason());
+    }
+
+    @Test
+    void appliesRulesToAResolvedThaiFollowUpBeforeCallingTheModel() {
+        SearchDecisionService delegate = query -> {
+            throw new AssertionError("model should not be called");
+        };
+        SearchDecisionService service = new FastPathSearchDecisionService(
+                delegate, new RuleBasedSearchDecisionService(null));
+
+        var decision = service.decide(
+                "แล้วเวอร์ชันใหม่ล่ะ",
+                "user: ตอนนี้ Java ล่าสุดคือเวอร์ชันอะไร\nassistant: ...");
+
+        assertTrue(decision.shouldSearch());
+        assertTrue(decision.query().contains("Java"));
+    }
 }

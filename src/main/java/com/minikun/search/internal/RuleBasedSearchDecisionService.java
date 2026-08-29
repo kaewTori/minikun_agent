@@ -16,8 +16,9 @@ public final class RuleBasedSearchDecisionService implements SearchDecisionServi
     private static final String DECISION_TIMER = "minikun.search.decision.duration";
     private static final String NO_SEARCH_COUNTER = "minikun.search.quality.no_search";
     private static final List<String> KEYWORDS = List.of(
-            "search", "ค้นหา", "แนะนำ", "ร้าน", "เมนู", "อาหาร", "ราคา", "ที่ไหน", "อยู่ที่ไหน",
-            "ข่าว", "ล่าสุด", "วันนี้", "ปัจจุบัน", "ข้อมูล", "current", "latest", "news", "recommend",
+            "search", "ค้นหา", "ค้นข้อมูล", "หาข้อมูล", "เช็กข้อมูล", "เช็คข้อมูล", "แนะนำ", "ร้าน", "เมนู",
+            "อาหาร", "ราคา", "ที่ไหน", "อยู่ที่ไหน", "ข่าว", "ล่าสุด", "วันนี้", "ตอนนี้", "ปัจจุบัน",
+            "ข้อมูล", "current", "latest", "news", "recommend",
             "where", "who is", "what is", "ค้นคว้า", "วิจัย", "เจาะลึก", "สืบค้น",
             "ตรวจสอบข้อเท็จจริง", "research", "investigate", "fact-check", "deep dive");
     private final MeterRegistry meterRegistry;

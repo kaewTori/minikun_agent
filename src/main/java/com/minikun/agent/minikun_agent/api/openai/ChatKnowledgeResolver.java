@@ -16,6 +16,7 @@ import com.minikun.browser.BrowserContentException;
 import com.minikun.browser.BrowserContentService;
 import com.minikun.browser.BrowserReadResult;
 import com.minikun.knowledge.PersonalKnowledgeService;
+import com.minikun.knowledge.acquisition.AcquiredKnowledgeIndex;
 import com.minikun.memory.LongTermMemoryScope;
 import com.minikun.memory.MemoryRecallService;
 import com.minikun.pcs.KnowledgeCandidate;
@@ -52,6 +53,7 @@ import lombok.extern.slf4j.Slf4j;
 final class ChatKnowledgeResolver {
     private final ObjectProvider<MemoryRecallService> memoryRecallService;
     private final PersonalKnowledgeService personalKnowledgeService;
+    private final AcquiredKnowledgeIndex acquiredKnowledgeIndex;
     private final SearchService searchService;
     private final SearchDecisionService searchDecisionService;
     private final SearchQueryPlanningService searchQueryPlanningService;
@@ -80,8 +82,30 @@ final class ChatKnowledgeResolver {
             AutonomousResearchService autonomousResearchService,
             ChatPerformanceMetrics performanceMetrics,
             Configuration configuration) {
+        this(memoryRecallService, personalKnowledgeService, null, searchService, searchDecisionService,
+                searchQueryPlanningService, searchContextAwarenessService, knowledgeSelectionService,
+                knowledgeConsolidationService, searchSelectionSignalMapper, browserContentService,
+                autonomousResearchService, performanceMetrics, configuration);
+    }
+
+    ChatKnowledgeResolver(
+            ObjectProvider<MemoryRecallService> memoryRecallService,
+            PersonalKnowledgeService personalKnowledgeService,
+            AcquiredKnowledgeIndex acquiredKnowledgeIndex,
+            SearchService searchService,
+            SearchDecisionService searchDecisionService,
+            SearchQueryPlanningService searchQueryPlanningService,
+            SearchContextAwarenessService searchContextAwarenessService,
+            KnowledgeSelectionService knowledgeSelectionService,
+            KnowledgeConsolidationService knowledgeConsolidationService,
+            SearchSelectionSignalMapper searchSelectionSignalMapper,
+            BrowserContentService browserContentService,
+            AutonomousResearchService autonomousResearchService,
+            ChatPerformanceMetrics performanceMetrics,
+            Configuration configuration) {
         this.memoryRecallService = memoryRecallService;
         this.personalKnowledgeService = personalKnowledgeService;
+        this.acquiredKnowledgeIndex = acquiredKnowledgeIndex;
         this.searchService = searchService;
         this.searchDecisionService = searchDecisionService;
         this.searchQueryPlanningService = searchQueryPlanningService;
@@ -204,6 +228,7 @@ final class ChatKnowledgeResolver {
                                 configuration.safeSearch(),
                                 Math.max(1, Math.min(100, configuration.searchResultLimit())),
                                 configuration.researchSourceReadLimit(),
+                                List.of(),
                                 Instant.now().plus(configuration.autonomousResearchTimeout())));
                 if (research.trace().autonomous()) {
                     List<KnowledgeCandidate> explicitBrowserCandidates = joinBrowser(browserFuture);
@@ -286,20 +311,33 @@ final class ChatKnowledgeResolver {
     }
 
     private KnowledgeContext recallPersonal(String query, String ownerId) {
-        if (personalKnowledgeService == null || ownerId == null || ownerId.isBlank()
+        if (ownerId == null || ownerId.isBlank()
                 || query == null || query.isBlank() || configuration.personalKnowledgeLimit() < 1) {
             return KnowledgeContext.empty();
         }
-        try {
-            KnowledgeContext knowledge = personalKnowledgeService.recall(
-                    ownerId, query, Math.min(20, configuration.personalKnowledgeLimit()));
-            log.info("process=personal_knowledge event=recall_completed candidates={}",
-                    knowledge.candidates().size());
-            return knowledge;
-        } catch (RuntimeException exception) {
-            log.warn("Personal knowledge recall failed; continuing without document context");
-            return KnowledgeContext.empty();
+        KnowledgeContext documents = KnowledgeContext.empty();
+        KnowledgeContext acquired = KnowledgeContext.empty();
+        if (personalKnowledgeService != null) {
+            try {
+                documents = personalKnowledgeService.recall(
+                        ownerId, query, Math.min(20, configuration.personalKnowledgeLimit()));
+                log.info("process=personal_knowledge event=recall_completed candidates={}",
+                        documents.candidates().size());
+            } catch (RuntimeException exception) {
+                log.warn("Personal knowledge recall failed; continuing without document context", exception);
+            }
         }
+        if (acquiredKnowledgeIndex != null) {
+            try {
+                acquired = acquiredKnowledgeIndex.recall(
+                        ownerId, query, Math.min(20, configuration.personalKnowledgeLimit()));
+                log.info("process=acquired_knowledge event=recall_completed candidates={}",
+                        acquired.candidates().size());
+            } catch (RuntimeException exception) {
+                log.warn("Acquired knowledge recall failed; continuing without learned context", exception);
+            }
+        }
+        return combine(documents, acquired);
     }
 
     private ChatKnowledgeSelection selection(

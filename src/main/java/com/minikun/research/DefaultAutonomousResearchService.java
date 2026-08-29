@@ -9,8 +9,10 @@ import com.minikun.search.SearchService;
 import com.minikun.search.model.SearchOptions;
 import com.minikun.search.model.SearchRequest;
 import java.time.Instant;
+import java.net.URI;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -204,6 +206,8 @@ public final class DefaultAutonomousResearchService implements AutonomousResearc
         }
         int remaining = request.sourceReadLimit() - browserEvidence.size();
         List<String> urls = found.candidates().stream()
+                .sorted(Comparator.comparingInt(candidate -> preferredRank(
+                        candidate.provenance(), request.preferredDomains())))
                 .map(KnowledgeCandidate::provenance)
                 .filter(value -> value != null && !value.isBlank())
                 .filter(readUrls::add)
@@ -220,6 +224,19 @@ public final class DefaultAutonomousResearchService implements AutonomousResearc
                     failure.url(), failure.reason()));
         } catch (RuntimeException exception) {
             log.warn("Autonomous research source reading failed; retaining search evidence", exception);
+        }
+    }
+
+    private int preferredRank(String url, List<String> preferredDomains) {
+        if (preferredDomains == null || preferredDomains.isEmpty()) return 0;
+        try {
+            String host = URI.create(Objects.requireNonNullElse(url, "")).getHost();
+            if (host == null) return 1;
+            String normalized = host.toLowerCase(Locale.ROOT);
+            return preferredDomains.stream().anyMatch(domain -> normalized.equals(domain)
+                    || normalized.endsWith("." + domain)) ? 0 : 1;
+        } catch (RuntimeException exception) {
+            return 1;
         }
     }
 

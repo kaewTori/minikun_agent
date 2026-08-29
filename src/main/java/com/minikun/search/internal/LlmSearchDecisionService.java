@@ -53,7 +53,9 @@ public final class LlmSearchDecisionService implements SearchDecisionService {
             SearchDecisionPrompt prompt = conversationContext == null
                     ? promptBuilder.build(LocalDate.now(clock), query)
                     : promptBuilder.build(LocalDate.now(clock), query, conversationContext);
-            decision = client.classify(prompt);
+            SearchDecision classified = client.classify(prompt);
+            decision = new SearchDecision(
+                    classified.shouldSearch(), query.trim(), classified.reason());
             return decision;
         } catch (RuntimeException exception) {
             warnOnce(exception);

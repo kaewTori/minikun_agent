@@ -97,6 +97,30 @@ class DefaultSearchQueryPlanningServiceTest {
     }
 
     @Test
+    void resolvesExplicitSearchFollowUpBeforeBuildingTheSearchQuery() {
+        SearchQueryPlan plan = planner.plan(
+                "ค้นข้อมูลให้",
+                new SearchDecision(true, "ค้นข้อมูลให้", SearchDecisionReason.CURRENT_INFORMATION),
+                "user: ตอนนี้ Java ล่าสุดคือเวอร์ชันอะไร\nassistant: ...");
+
+        assertTrue(plan.primaryQuery().contains("Java"));
+        assertFalse(plan.primaryQuery().equals("ข้อมูล"));
+        assertEquals("contextual_query", plan.reason());
+    }
+
+    @Test
+    void resolvesThaiPreviousTurnReferenceBeforeBuildingTheSearchQuery() {
+        SearchQueryPlan plan = planner.plan(
+                "ช่วยเช็กเรื่องเมื่อกี้ให้หน่อย",
+                new SearchDecision(true, "ช่วยเช็กเรื่องเมื่อกี้ให้หน่อย",
+                        SearchDecisionReason.CURRENT_INFORMATION),
+                "user: Spring Boot รุ่นล่าสุดรองรับ Java อะไรบ้าง\nassistant: ...");
+
+        assertTrue(plan.primaryQuery().contains("Spring Boot"));
+        assertEquals("contextual_query", plan.reason());
+    }
+
+    @Test
     void resolvesImageRecommendationAgainstThePreviousArtist() {
         SearchQueryPlan plan = planner.plan(
                 "มีรูปผลงานที่น่าสนใจอยากแนะนำไหม",

@@ -96,6 +96,31 @@ class ChatServiceChatOrchestrationTest {
     private static final Path MCS_ROOT = Path.of("../../config/minikun-agent/mcs");
 
     @Test
+    void anchorsAmbiguousVisualFollowUpAndAddsRepairGuardToPrompt() throws Exception {
+        ChatModel chatModel = mock(ChatModel.class);
+        ConversationMemoryService conversation = mock(ConversationMemoryService.class);
+        when(conversation.load(any())).thenReturn(List.of(
+                new ChatMessage("user", "ช่วยค้นหาข้อมูลของนักวาดที่ชื่อ RenaRaziel หน่อย"),
+                new ChatMessage("assistant", "RenaRaziel เป็นนักวาดที่น่าสนใจครับ")));
+        when(chatModel.call(any(Prompt.class))).thenReturn(response("ได้เลยครับ"));
+        ChatService service = service(chatModel, conversation);
+
+        service.chatCompletion(new ChatCompletionRequest(
+                "mini-kun",
+                List.of(new Message("user", "มีอะไรที่น่าสนใจอีกไหม คืนรูปที่ค้นหามาด้วย")),
+                "continuity-visual", false, null, null, null),
+                new ConversationId("continuity-visual"));
+
+        ArgumentCaptor<Prompt> prompt = ArgumentCaptor.forClass(Prompt.class);
+        verify(chatModel).call(prompt.capture());
+        String text = promptText(prompt.getValue());
+        assertTrue(text.contains("Turn continuity"));
+        assertTrue(text.contains("RenaRaziel"));
+        assertTrue(text.contains("Conversation repair"));
+        assertTrue(text.contains("Do not switch to a different person"));
+    }
+
+    @Test
     void injectsNaturalConversationAndEmotionalGuidanceIntoOrdinaryTurns() throws Exception {
         ChatModel chatModel = mock(ChatModel.class);
         ConversationMemoryService conversation = mock(ConversationMemoryService.class);

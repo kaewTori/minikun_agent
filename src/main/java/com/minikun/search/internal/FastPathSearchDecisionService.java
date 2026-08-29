@@ -1,5 +1,7 @@
 package com.minikun.search.internal;
 
+import com.minikun.conversation.continuity.ConversationContinuity;
+import com.minikun.conversation.continuity.ConversationContinuityResolver;
 import com.minikun.search.SearchDecisionService;
 import com.minikun.search.model.SearchDecision;
 import com.minikun.search.model.SearchDecisionReason;
@@ -13,8 +15,10 @@ import io.micrometer.core.instrument.MeterRegistry;
 public final class FastPathSearchDecisionService implements SearchDecisionService {
     private static final String FAST_PATH_COUNTER = "minikun.search.fast_path.decisions";
     private static final Pattern LIVE_INFORMATION = Pattern.compile(
-            "(ค้นหา|เสิร์ช|ข่าว|อากาศ|พยากรณ์|ราคา|หุ้น|คริปโต|คะแนน|ผลการแข่งขัน|ตารางแข่ง|"
+            "(ค้นหา|ค้นข้อมูล|หาข้อมูล|เช็กข้อมูล|เช็คข้อมูล|เช็กเรื่อง|เช็คเรื่อง|เสิร์ช|ข่าว|อากาศ|พยากรณ์|"
+                    + "ราคา|หุ้น|คริปโต|คะแนน|ผลการแข่งขัน|ตารางแข่ง|"
                     + "เที่ยวบิน|จราจร|ร้าน|ใกล้ฉัน|ที่ไหน|ใครเป็น|ล่าสุด|ปัจจุบัน|สุขภาพ|ยา|การแพทย์|"
+                    + "ตอนนี้|"
                     + "ค้นคว้า|วิจัย|เจาะลึก|สืบค้น|ตรวจสอบข้อเท็จจริง|"
                     + "กฎหมาย|ภาษี|ลงทุน|การเงิน|search|look\\s*up|news|weather|forecast|price|stock|crypto|"
                     + "score|schedule|flight|traffic|near me|current|latest|health|medical|legal|tax|invest|finance|"
@@ -30,9 +34,15 @@ public final class FastPathSearchDecisionService implements SearchDecisionServic
             "^(?:(?:อธิบาย|ช่วยอธิบาย|คืออะไร|ทำไม|อย่างไร|แปล|สรุป).*|"
                     + "(?:explain|what is|how does|why does|translate|summarize)\\b.*)$",
             Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+    private static final Pattern CREATIVE_CONTENT = Pattern.compile(
+            "^(?:(?:ช่วย\\s*)?(?:แต่ง|เขียน|คิด|สร้าง)(?:คำอวยพร|นิยาย|เรื่องสั้น|ฟิค|บทกวี|กลอน|"
+                    + "เรื่อง|ตัวละคร|พล็อต|แคปชัน|ข้อความ).*|"
+                    + "(?:write|create|compose|brainstorm)\\b.*)$",
+            Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
 
     private final SearchDecisionService delegate;
     private final SearchDecisionService rules;
+    private final ConversationContinuityResolver continuityResolver;
     private final MeterRegistry meterRegistry;
     private final boolean enabled;
 
@@ -50,6 +60,7 @@ public final class FastPathSearchDecisionService implements SearchDecisionServic
             MeterRegistry meterRegistry, boolean enabled) {
         this.delegate = Objects.requireNonNull(delegate, "delegate must not be null");
         this.rules = Objects.requireNonNull(rules, "rules must not be null");
+        this.continuityResolver = new ConversationContinuityResolver();
         this.meterRegistry = meterRegistry;
         this.enabled = enabled;
     }
@@ -63,7 +74,19 @@ public final class FastPathSearchDecisionService implements SearchDecisionServic
     @Override
     public SearchDecision decide(String query, String conversationContext) {
         SearchDecision fast = fastDecision(query);
-        return fast == null ? delegate.decide(query, conversationContext) : fast;
+        if (fast != null) {
+            return fast;
+        }
+        ConversationContinuity continuity = continuityResolver.resolve(query, conversationContext);
+        if (!continuity.followUp()) {
+            return delegate.decide(query, conversationContext);
+        }
+        SearchDecision contextual = fastDecision(
+                continuity.previousTopic() + " " + query);
+        return contextual == null
+                ? delegate.decide(continuity.resolvedQuery(), conversationContext)
+                : new SearchDecision(
+                        contextual.shouldSearch(), continuity.resolvedQuery(), contextual.reason());
     }
 
     private SearchDecision fastDecision(String query) {
@@ -81,6 +104,10 @@ public final class FastPathSearchDecisionService implements SearchDecisionServic
         if (!LIVE_INFORMATION.matcher(value).find()
                 && GENERAL_KNOWLEDGE.matcher(value).matches()) {
             return fastNoSearch(query, "general_knowledge");
+        }
+        if (!LIVE_INFORMATION.matcher(value).find()
+                && CREATIVE_CONTENT.matcher(value).matches()) {
+            return fastNoSearch(query, "creative_content");
         }
         SearchDecision ruleDecision = rules.decide(query);
         if (ruleDecision.shouldSearch()) {

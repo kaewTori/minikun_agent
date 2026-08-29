@@ -2,6 +2,7 @@ package com.minikun.search.internal;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -19,6 +20,11 @@ import com.minikun.search.model.SearchDecisionPrompt;
 import com.minikun.search.model.SearchDecisionReason;
 
 final class TaskModelSearchDecisionProvider implements SearchDecisionClient {
+    private static final Set<SearchDecisionReason> MODEL_REASONS = Set.of(
+            SearchDecisionReason.CURRENT_INFORMATION,
+            SearchDecisionReason.FACT_LOOKUP,
+            SearchDecisionReason.EXTERNAL_RESOURCE,
+            SearchDecisionReason.GENERAL_KNOWLEDGE);
     private final TaskModelProvider taskModelProvider;
     private final ObjectMapper objectMapper;
     private final Duration timeout;
@@ -55,8 +61,9 @@ final class TaskModelSearchDecisionProvider implements SearchDecisionClient {
             }
             JsonNode root = objectMapper.readTree(response);
             validateSchema(root);
-            return new SearchDecision(root.get("shouldSearch").booleanValue(),
-                    prompt.userMessage(), SearchDecisionReason.valueOf(root.get("reason").textValue()));
+            SearchDecisionReason reason = SearchDecisionReason.valueOf(root.get("reason").textValue());
+            boolean reasonRequiresSearch = reason != SearchDecisionReason.GENERAL_KNOWLEDGE;
+            return new SearchDecision(reasonRequiresSearch, prompt.userMessage(), reason);
         } catch (SearchDecisionClientException exception) {
             throw exception;
         } catch (RuntimeException | java.io.IOException exception) {
@@ -76,8 +83,8 @@ final class TaskModelSearchDecisionProvider implements SearchDecisionClient {
         } catch (IllegalArgumentException exception) {
             throw new SearchDecisionClientException("search decision response has an invalid reason", exception);
         }
-        if (reason == SearchDecisionReason.RULE_FALLBACK) {
-            throw new SearchDecisionClientException("search decision response contains an internal reason", null);
+        if (!MODEL_REASONS.contains(reason)) {
+            throw new SearchDecisionClientException("search decision response contains a disallowed reason", null);
         }
     }
 }

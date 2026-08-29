@@ -96,6 +96,10 @@ final class OpenAiChatResponseFactory {
 
     String contentChunk(ChatResponse response, String id, long created, String model) {
         String content = response.getResult().getOutput().getText();
+        return contentChunk(content, id, created, model);
+    }
+
+    String contentChunk(String content, String id, long created, String model) {
         if (content == null || content.isEmpty()) {
             return "";
         }

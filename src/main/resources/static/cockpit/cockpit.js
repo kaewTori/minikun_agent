@@ -25,6 +25,7 @@
     activeAudio: null,
     cockpitPage: "overview",
     timelineLimit: 6,
+    learningBusy: new Set(),
     experimentAction: null,
     currentLocation: null,
     activeVisual: null,
@@ -44,6 +45,7 @@
   const settingsDialog = $("#settings-dialog");
   const mobileMenuDialog = $("#mobile-menu-dialog");
   const experimentDialog = $("#experiment-dialog");
+  const learningTopicDialog = $("#learning-topic-dialog");
   const experimentActionDialog = $("#experiment-action-dialog");
   const clearHistoryDialog = $("#clear-history-dialog");
   const visualLightboxDialog = $("#visual-lightbox-dialog");
@@ -101,6 +103,7 @@
       origin: attachment.origin || "web",
       provider: attachment.provider || "",
       license: attachment.license || "",
+      thumbnailUrl: attachment.thumbnail_url || attachment.thumbnailUrl || "",
       width: attachment.width || null,
       height: attachment.height || null
     };
@@ -111,8 +114,22 @@
   }
 
   function visualHost(visual) {
-    try { return new URL(visual.sourceUrl || visual.originalUrl).hostname.replace(/^www\./, ""); }
+    try { return new URL(visual.sourceUrl || visual.originalUrl).hostname.replace(/^www\./, "")
+      || visual.provider || "แหล่งภาพ"; }
     catch (_) { return visual.provider || "แหล่งภาพ"; }
+  }
+
+  function safeExternalUrl(url) {
+    try {
+      const parsed = new URL(url);
+      return parsed.protocol === "https:" || parsed.protocol === "http:" ? parsed.href : "";
+    } catch (_) { return ""; }
+  }
+
+  function visualMetadata(visual) {
+    const dimensions = visual.width && visual.height ? `${visual.width}×${visual.height}` : "";
+    return [visual.provider || visualHost(visual), dimensions, visual.license]
+      .filter(Boolean).filter((value, index, values) => values.indexOf(value) === index).join(" · ");
   }
 
   function proxyImageUrl(url) {
@@ -125,12 +142,25 @@
     state.activeVisual = visual;
     $("#visual-origin-label").textContent = visualOriginLabel(visual.origin);
     $("#visual-lightbox-title").textContent = visual.title;
-    $("#visual-lightbox-image").src = visual.url || proxyImageUrl(visual.originalUrl);
-    $("#visual-lightbox-image").alt = visual.title;
-    $("#visual-lightbox-description").textContent = visual.description
-      || [visualHost(visual), visual.license].filter(Boolean).join(" · ");
+    const lightboxImage = $("#visual-lightbox-image");
+    lightboxImage.dataset.thumbnailFallback = "false";
+    lightboxImage.classList.remove("visual-broken");
+    lightboxImage.src = visual.url || proxyImageUrl(visual.originalUrl);
+    lightboxImage.alt = visual.title;
+    lightboxImage.onerror = () => {
+      if (visual.thumbnailUrl && lightboxImage.dataset.thumbnailFallback !== "true") {
+        lightboxImage.dataset.thumbnailFallback = "true";
+        lightboxImage.src = proxyImageUrl(visual.thumbnailUrl);
+        return;
+      }
+      lightboxImage.classList.add("visual-broken");
+      lightboxImage.alt = "โหลดภาพนี้ไม่สำเร็จ";
+    };
+    const metadata = visualMetadata(visual);
+    $("#visual-lightbox-description").textContent = [visual.description, metadata]
+      .filter(Boolean).join("\n");
     const source = $("#visual-lightbox-source");
-    const sourceUrl = visual.sourceUrl || visual.originalUrl;
+    const sourceUrl = safeExternalUrl(visual.sourceUrl || visual.originalUrl);
     source.href = sourceUrl || "#";
     source.classList.toggle("hidden", !sourceUrl);
     if (!visualLightboxDialog.open) visualLightboxDialog.showModal();
@@ -152,6 +182,15 @@
     visualLightboxDialog.close();
     composer.focus();
     toast(create ? "แนบ reference สำหรับสร้างงานต่อแล้วครับ" : "แนบรูปไว้ถามต่อแล้วครับ");
+  }
+
+  function findSimilarVisual(visual) {
+    attachVisualReference(visual);
+    const composer = $("#chat-composer");
+    composer.value = `ช่วยค้นหารูปที่มีสไตล์หรือบรรยากาศคล้าย reference นี้ พร้อมบอกแหล่งที่มาของแต่ละรูปครับ: `;
+    autoGrowComposer();
+    composer.focus();
+    toast("แนบรูปต้นแบบสำหรับค้นหาภาพคล้ายกันแล้วครับ");
   }
 
   async function defaultInspirationBoard() {
@@ -766,7 +805,7 @@
   }
 
   function switchCockpitPage(page = "overview", focusId = "") {
-    const allowed = new Set(["overview", "work", "tools", "health", "memory", "permissions", "experiments"]);
+    const allowed = new Set(["overview", "work", "tools", "health", "learning", "memory", "permissions", "experiments"]);
     state.cockpitPage = allowed.has(page) ? page : "overview";
     document.querySelectorAll("[data-cockpit-page]").forEach((node) => {
       const pages = String(node.dataset.cockpitPage || "").split(/\s+/);
@@ -968,6 +1007,14 @@
     }
     body.append(content);
     if (message.attachments?.length) {
+      const gallery = element("section", "message-visual-gallery");
+      const galleryHeading = element("div", "message-visual-heading");
+      const visualCount = message.attachments.filter((attachment) => normalizeVisual(attachment).url).length;
+      galleryHeading.append(
+        element("strong", "", "รูปประกอบคำตอบ"),
+        element("span", "", `${visualCount} ภาพ · เปิดดูต้นทางได้`)
+      );
+      gallery.append(galleryHeading);
       const images = element("div", "message-image-grid");
       for (const attachment of message.attachments) {
         const visual = normalizeVisual(attachment);
@@ -977,24 +1024,40 @@
         open.type = "button";
         open.addEventListener("click", () => openVisualLightbox(visual));
         const image = element("img");
-        image.src = visual.url;
+        image.src = visual.url || proxyImageUrl(visual.originalUrl);
         image.alt = visual.title;
         image.loading = "lazy";
         image.addEventListener("error", () => {
+          if (visual.thumbnailUrl && image.dataset.thumbnailFallback !== "true") {
+            image.dataset.thumbnailFallback = "true";
+            image.src = proxyImageUrl(visual.thumbnailUrl);
+            return;
+          }
           image.classList.add("visual-broken");
           image.alt = "โหลดภาพนี้ไม่สำเร็จ";
-        }, { once: true });
+        });
         open.append(image, element("span", "visual-origin", visualOriginLabel(visual.origin)));
         const copy = element("figcaption", "visual-card-copy");
-        copy.append(element("strong", "", visual.title), element("small", "", visualHost(visual)));
+        copy.append(element("strong", "", visual.title), element("small", "", visualMetadata(visual)));
+        const sourceUrl = safeExternalUrl(visual.sourceUrl || visual.originalUrl);
+        if (sourceUrl) {
+          const source = element("a", "visual-card-source", `เปิดต้นทาง ${visualHost(visual)} ↗`);
+          source.href = sourceUrl; source.target = "_blank"; source.rel = "noopener noreferrer";
+          copy.append(source);
+        }
         const actions = element("div", "visual-card-actions");
         const ask = element("button", "", "ถามต่อ");
         ask.type = "button"; ask.addEventListener("click", () => attachVisualReference(visual));
+        const similar = element("button", "", "รูปคล้ายกัน");
+        similar.type = "button"; similar.addEventListener("click", () => findSimilarVisual(visual));
         const save = element("button", "", "เก็บ reference");
         save.type = "button"; save.addEventListener("click", () => saveVisualReference(visual).catch(error => toast(error.message, true)));
-        actions.append(ask, save); copy.append(actions); card.append(open, copy); images.append(card);
+        actions.append(ask, similar, save); copy.append(actions); card.append(open, copy); images.append(card);
       }
-      if (images.childElementCount) body.append(images);
+      if (images.childElementCount) {
+        gallery.append(images);
+        body.append(gallery);
+      }
     }
     const sourceCards = renderSourceCards(message);
     if (sourceCards) body.append(sourceCards);
@@ -2138,6 +2201,234 @@
     }
   }
 
+  function dateTime(value) {
+    if (!value) return "ยังไม่กำหนด";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "ยังไม่กำหนด";
+    return new Intl.DateTimeFormat("th-TH", {
+      day: "numeric", month: "short", hour: "2-digit", minute: "2-digit"
+    }).format(date);
+  }
+
+  function percentage(value) {
+    return `${Math.round((Number(value) || 0) * 100)}%`;
+  }
+
+  function renderLearning(topics = [], runs = [], claims = []) {
+    const activeTopics = topics.filter((topic) => topic.status === "ACTIVE");
+    const published = claims.filter((claim) => claim.status === "PUBLISHED");
+    const reviewable = claims.filter((claim) => ["CANDIDATE", "DISPUTED", "STALE"].includes(claim.status));
+    const next = activeTopics.map((topic) => topic.nextRunAt).filter(Boolean)
+      .sort((left, right) => new Date(left).getTime() - new Date(right).getTime())[0];
+    $("#learning-active-count").textContent = activeTopics.length.toLocaleString("th-TH");
+    $("#learning-published-count").textContent = published.length.toLocaleString("th-TH");
+    $("#learning-candidate-count").textContent = reviewable.length.toLocaleString("th-TH");
+    $("#learning-next-run").textContent = next ? relativeTime(next) : "สั่งเอง";
+
+    $("#learning-topic-count").textContent = `${topics.length.toLocaleString("th-TH")} หัวข้อ`;
+    $("#learning-topic-empty").classList.toggle("hidden", topics.length > 0);
+    const topicList = $("#learning-topic-list");
+    topicList.replaceChildren();
+    const refreshLabels = { HOURLY: "ทุกชั่วโมง", DAILY: "ทุกวัน", WEEKLY: "ทุกสัปดาห์", MONTHLY: "ทุกเดือน", MANUAL: "สั่งเอง" };
+    const policyLabels = { OFFICIAL_ONLY: "เฉพาะแหล่งทางการ", OFFICIAL_FIRST: "แหล่งทางการก่อน", BALANCED: "หลายแหล่งสมดุล" };
+    for (const topic of topics) {
+      const card = element("article", "learning-topic-card");
+      const heading = element("div", "learning-topic-heading");
+      const copy = element("div");
+      copy.append(element("strong", "", topic.name), element("p", "", topic.objective));
+      const status = element("span", "learning-status", topic.status === "ACTIVE" ? "กำลังเรียน" : "พักไว้");
+      status.dataset.state = String(topic.status || "").toLowerCase();
+      heading.append(copy, status);
+      const meta = element("div", "learning-topic-meta");
+      meta.append(
+        element("span", "", refreshLabels[topic.refreshPolicy] || topic.refreshPolicy),
+        element("span", "", policyLabels[topic.sourcePolicy] || topic.sourcePolicy),
+        element("span", "", `สำคัญ ${topic.priority}`),
+        element("span", "", topic.nextRunAt ? `รอบถัดไป ${dateTime(topic.nextRunAt)}` : "ไม่มีรอบอัตโนมัติ")
+      );
+      const domains = element("div", "trusted-domain-list");
+      for (const domain of topic.trustedDomains || []) domains.append(element("span", "", domain));
+      if (!(topic.trustedDomains || []).length) domains.append(element("span", "muted-domain", "ยังไม่จำกัด domain"));
+      const actions = element("div", "learning-topic-actions");
+      const run = element("button", "primary-button", state.learningBusy.has(topic.id) ? "กำลังเรียน…" : "เรียนตอนนี้");
+      run.type = "button";
+      run.disabled = state.learningBusy.has(topic.id);
+      run.addEventListener("click", () => runLearningTopic(topic, run));
+      const toggle = element("button", "secondary-button", topic.status === "ACTIVE" ? "พักตาราง" : "เปิดตาราง");
+      toggle.type = "button";
+      toggle.addEventListener("click", () => setLearningTopicStatus(topic, toggle));
+      actions.append(run, toggle);
+      card.append(heading, meta, domains, actions);
+      topicList.append(card);
+    }
+
+    $("#learning-review-count").textContent = reviewable.length.toLocaleString("th-TH");
+    $("#learning-claim-empty").classList.toggle("hidden", reviewable.length > 0);
+    const claimList = $("#learning-claim-list");
+    claimList.replaceChildren();
+    for (const claim of reviewable.slice(0, 15)) {
+      const row = element("article", "learning-claim");
+      const copy = element("div", "learning-claim-copy");
+      const meta = element("div", "learning-claim-meta");
+      meta.append(element("span", "", claim.topicName), element("small", "", `มั่นใจ ${percentage(claim.confidence)}`));
+      copy.append(meta, element("p", "", claim.text));
+      if (claim.verificationReason) copy.append(element("small", "claim-reason", claim.verificationReason));
+      const citations = element("div", "claim-citations");
+      for (const url of (claim.evidenceUrls || []).slice(0, 3)) {
+        const safe = safeExternalUrl(url);
+        if (!safe) continue;
+        const link = element("a", "", new URL(safe).hostname.replace(/^www\./, ""));
+        link.href = safe; link.target = "_blank"; link.rel = "noopener noreferrer";
+        citations.append(link);
+      }
+      if (citations.childElementCount) copy.append(citations);
+      const actions = element("div", "claim-review-actions");
+      const publish = element("button", "primary-button", "Publish");
+      publish.type = "button";
+      publish.addEventListener("click", () => reviewLearningClaim(claim, "PUBLISHED", publish));
+      const retract = element("button", "secondary-button", "Retract");
+      retract.type = "button";
+      retract.addEventListener("click", () => reviewLearningClaim(claim, "RETRACTED", retract));
+      actions.append(publish, retract);
+      row.append(copy, actions);
+      claimList.append(row);
+    }
+
+    $("#learning-run-count").textContent = `${runs.length.toLocaleString("th-TH")} รอบ`;
+    $("#learning-run-empty").classList.toggle("hidden", runs.length > 0);
+    const runList = $("#learning-run-list");
+    runList.replaceChildren();
+    const topicNames = new Map(topics.map((topic) => [topic.id, topic.name]));
+    const runStatusLabels = { RUNNING: "กำลังเรียน", COMPLETED: "เสร็จแล้ว", FAILED: "ไม่สำเร็จ" };
+    for (const run of runs.slice(0, 12)) {
+      const row = element("article", "learning-run");
+      row.dataset.state = String(run.status || "").toLowerCase();
+      const heading = element("div", "learning-run-heading");
+      heading.append(element("strong", "", topicNames.get(run.topicId) || run.objective));
+      heading.append(element("span", "", runStatusLabels[run.status] || run.status));
+      const counts = element("div", "learning-run-counts");
+      counts.append(
+        element("span", "", `${run.sourceCount || 0} แหล่ง`),
+        element("span", "", `${run.candidateCount || 0} claims`),
+        element("span", "", `${run.publishedCount || 0} ผ่านอัตโนมัติ`)
+      );
+      const detail = element("small", "", `${run.trigger === "SCHEDULED" ? "ตามตาราง" : "สั่งเอง"} · ${dateTime(run.completedAt || run.startedAt)} · ${run.stopReason || "—"}`);
+      row.append(heading, counts, detail);
+      runList.append(row);
+    }
+  }
+
+  async function runLearningTopic(topic, button) {
+    state.learningBusy.add(topic.id);
+    button.disabled = true;
+    button.textContent = "กำลังค้นและอ่าน…";
+    try {
+      const run = await api(`/v1/knowledge/acquisition/topics/${topic.id}/runs`, { method: "POST" });
+      toast(`เรียนจบแล้ว: ${run.sourceCount} แหล่ง · publish ${run.publishedCount} claim`);
+      state.learningBusy.delete(topic.id);
+      await loadDashboard();
+    } catch (error) { toast(error.message, true); }
+    finally {
+      state.learningBusy.delete(topic.id);
+      button.disabled = false;
+      button.textContent = "เรียนตอนนี้";
+    }
+  }
+
+  async function setLearningTopicStatus(topic, button) {
+    button.disabled = true;
+    const status = topic.status === "ACTIVE" ? "PAUSED" : "ACTIVE";
+    try {
+      await api(`/v1/knowledge/acquisition/topics/${topic.id}`, {
+        method: "PATCH", body: JSON.stringify({ owner_id: state.ownerId, status })
+      });
+      toast(status === "ACTIVE" ? "เปิดตารางเรียนแล้วครับ" : "พักตารางเรียนแล้วครับ");
+      await loadDashboard();
+    } catch (error) { toast(error.message, true); button.disabled = false; }
+  }
+
+  async function reviewLearningClaim(claim, status, button) {
+    button.disabled = true;
+    try {
+      await api(`/v1/knowledge/acquisition/claims/${claim.id}`, {
+        method: "PATCH", body: JSON.stringify({ owner_id: state.ownerId, status })
+      });
+      toast(status === "PUBLISHED" ? "เผยแพร่ claim ให้ใช้ตอบแล้วครับ" : "กัน claim นี้ออกแล้วครับ");
+      await loadDashboard();
+    } catch (error) { toast(error.message, true); button.disabled = false; }
+  }
+
+  function renderMemorySystem(memories = [], knowledge = {}, sources = [], claims = []) {
+    const published = claims.filter((claim) => claim.status === "PUBLISHED");
+    $("#memory-lane-count").textContent = `${memories.length.toLocaleString("th-TH")} รายการ`;
+    $("#knowledge-lane-count").textContent = `${Number(knowledge.chunks || 0).toLocaleString("th-TH")} chunks`;
+    $("#acquired-lane-count").textContent = `${published.length.toLocaleString("th-TH")} claims`;
+    $("#memory-record-count").textContent = `${memories.length.toLocaleString("th-TH")} รายการ`;
+    $("#knowledge-ready-count").textContent = `${(Number(knowledge.chunks || 0) + published.length).toLocaleString("th-TH")} พร้อมใช้`;
+
+    const categoryLabels = { FACT: "ข้อมูล", PREFERENCE: "ความชอบ", GOAL: "เป้าหมาย", CONSTRAINT: "ข้อจำกัด", RELATIONSHIP: "ความสัมพันธ์", ROUTINE: "กิจวัตร" };
+    const records = $("#memory-record-list");
+    records.replaceChildren();
+    $("#memory-record-empty").classList.toggle("hidden", memories.length > 0);
+    for (const memory of memories.slice(0, 20)) {
+      const row = element("article", "memory-record");
+      const copy = element("div");
+      const meta = element("div", "memory-record-meta");
+      meta.append(
+        element("span", "", categoryLabels[memory.category] || memory.category),
+        element("small", "", `${percentage(memory.confidence)} · ${dateTime(memory.createdAt)}`)
+      );
+      copy.append(meta, element("p", "", memory.content));
+      if (memory.reason) copy.append(element("small", "memory-reason", `เหตุผลที่จำ: ${memory.reason}`));
+      const remove = element("button", "text-button", "ลบความจำ");
+      remove.type = "button";
+      remove.addEventListener("click", () => deleteMemoryRecord(memory, remove));
+      row.append(copy, remove);
+      records.append(row);
+    }
+
+    const sourceList = $("#knowledge-source-list");
+    sourceList.replaceChildren();
+    for (const source of sources.slice(0, 12)) {
+      const row = element("article", "knowledge-source-row");
+      const copy = element("div");
+      copy.append(element("strong", "", source.name || source.path));
+      copy.append(element("small", "", `${source.root} · ${source.chunkCount || 0} chunks · ${source.status}`));
+      row.append(copy, element("time", "", dateTime(source.indexedAt)));
+      sourceList.append(row);
+    }
+    if (!sources.length) sourceList.append(element("p", "library-empty", "ยังไม่มีไฟล์ที่ทำดัชนี"));
+
+    const publishedList = $("#published-claim-list");
+    publishedList.replaceChildren();
+    for (const claim of published.slice(0, 12)) {
+      const row = element("article", "published-claim");
+      row.append(element("span", "", claim.topicName), element("p", "", claim.text));
+      const citations = element("div", "claim-citations");
+      for (const url of (claim.evidenceUrls || []).slice(0, 2)) {
+        const safe = safeExternalUrl(url);
+        if (!safe) continue;
+        const link = element("a", "", `อ้างอิง · ${new URL(safe).hostname.replace(/^www\./, "")}`);
+        link.href = safe; link.target = "_blank"; link.rel = "noopener noreferrer";
+        citations.append(link);
+      }
+      row.append(citations);
+      publishedList.append(row);
+    }
+    if (!published.length) publishedList.append(element("p", "library-empty", "ยังไม่มี acquired claim ที่ผ่านการตรวจ"));
+  }
+
+  async function deleteMemoryRecord(memory, button) {
+    const id = memory.id?.value || memory.id;
+    if (!id || !window.confirm("ลบความจำรายการนี้ออกจากมินิคุงใช่ไหมครับ?")) return;
+    button.disabled = true;
+    try {
+      await api(`/v1/memory/${id}`, { method: "DELETE" });
+      toast("ลบความจำรายการนี้แล้วครับ");
+      await loadDashboard();
+    } catch (error) { toast(error.message, true); button.disabled = false; }
+  }
+
   const permissionLabels = {
     granted: "อนุญาตแล้ว", denied: "ถูกปิด", prompt: "ยังไม่อนุญาต",
     unsupported: "ไม่รองรับ", insecure: "ต้องใช้ HTTPS"
@@ -2274,9 +2565,19 @@
       api("/v1/memory?limit=30"),
       api("/v1/knowledge/status"),
       api("/v1/system/health"),
-      api("/v1/personal/conversation-threads?status=OPEN&limit=20")
+      api("/v1/personal/conversation-threads?status=OPEN&limit=20"),
+      api("/v1/knowledge/sources?limit=30"),
+      api("/v1/knowledge/acquisition/topics?limit=50"),
+      api("/v1/knowledge/acquisition/runs?limit=50"),
+      api("/v1/knowledge/acquisition/claims?status=CANDIDATE&limit=100"),
+      api("/v1/knowledge/acquisition/claims?status=PUBLISHED&limit=100")
     ]);
-    const [status, actions, experiments, inbox, timeline, decisions, agentRuns, memories, knowledge, systemHealth, threads] = calls;
+    const [status, actions, experiments, inbox, timeline, decisions, agentRuns, memories, knowledge, systemHealth,
+      threads, knowledgeSources, learningTopics, learningRuns, learningCandidates, learningPublished] = calls;
+    const learningClaims = [
+      ...(learningCandidates.status === "fulfilled" ? learningCandidates.value : []),
+      ...(learningPublished.status === "fulfilled" ? learningPublished.value : [])
+    ];
     const decisionCount = renderDecisions(decisions.status === "fulfilled" ? decisions.value : []);
     renderStatus(status.status === "fulfilled" ? status.value : {}, decisionCount);
     renderActions(actions.status === "fulfilled" ? actions.value : []);
@@ -2287,6 +2588,17 @@
     renderAgentRuns(runItems);
     await loadToolTimeline(runItems);
     renderContextMemory(memories.status === "fulfilled" ? memories.value : [], knowledge.status === "fulfilled" ? knowledge.value : {});
+    renderLearning(
+      learningTopics.status === "fulfilled" ? learningTopics.value : [],
+      learningRuns.status === "fulfilled" ? learningRuns.value : [],
+      learningClaims
+    );
+    renderMemorySystem(
+      memories.status === "fulfilled" ? memories.value : [],
+      knowledge.status === "fulfilled" ? knowledge.value : {},
+      knowledgeSources.status === "fulfilled" ? knowledgeSources.value : [],
+      learningClaims
+    );
     renderSystemHealth(systemHealth.status === "fulfilled" ? systemHealth.value : null);
     renderConversationThreads(threads.status === "fulfilled" ? threads.value : []);
     const failures = calls.filter((call) => call.status === "rejected");
@@ -2460,6 +2772,7 @@
   restoreDraft();
 
   $("#visual-ask").addEventListener("click", () => state.activeVisual && attachVisualReference(state.activeVisual));
+  $("#visual-similar").addEventListener("click", () => state.activeVisual && findSimilarVisual(state.activeVisual));
   $("#visual-create").addEventListener("click", () => state.activeVisual && attachVisualReference(state.activeVisual, true));
   $("#visual-save").addEventListener("click", () => {
     if (state.activeVisual) saveVisualReference(state.activeVisual).catch(error => toast(error.message, true));
@@ -2676,11 +2989,39 @@
   $("#request-microphone").addEventListener("click", requestMicrophonePermission);
   $("#request-notifications").addEventListener("click", requestNotificationPermission);
   $("#new-experiment").addEventListener("click", () => experimentDialog.showModal());
+  $("#new-learning-topic").addEventListener("click", () => learningTopicDialog.showModal());
   document.querySelectorAll("[data-open-experiment]").forEach((button) => {
     button.addEventListener("click", () => experimentDialog.showModal());
   });
   $("#capture-form").addEventListener("submit", capture);
   $("#experiment-form").addEventListener("submit", createExperiment);
+  $("#learning-topic-form").addEventListener("submit", async (event) => {
+    if (event.submitter?.value !== "default") return;
+    event.preventDefault();
+    const form = event.currentTarget;
+    const data = new FormData(form);
+    const trustedDomains = String(data.get("trustedDomains") || "").split(",")
+      .map((value) => value.trim()).filter(Boolean);
+    const sourcePolicy = String(data.get("sourcePolicy"));
+    if (sourcePolicy === "OFFICIAL_ONLY" && !trustedDomains.length) {
+      toast("หัวข้อที่ใช้เฉพาะแหล่งทางการต้องระบุ trusted domain อย่างน้อยหนึ่งแห่งครับ", true);
+      return;
+    }
+    try {
+      await api("/v1/knowledge/acquisition/topics", {
+        method: "POST", body: JSON.stringify({
+          owner_id: state.ownerId,
+          name: data.get("name"), objective: data.get("objective"), origin: "SUBSCRIBED",
+          priority: Number(data.get("priority")), refresh_policy: data.get("refreshPolicy"),
+          source_policy: sourcePolicy, trusted_domains: trustedDomains, status: "ACTIVE"
+        })
+      });
+      form.reset();
+      learningTopicDialog.close();
+      toast("เพิ่มหัวข้อและเปิดตารางเรียนแล้วครับ");
+      await loadDashboard();
+    } catch (error) { toast(error.message, true); }
+  });
   $("#experiment-action-form").addEventListener("submit", submitExperimentAction);
   $("#settings-form").addEventListener("submit", async (event) => {
     if (event.submitter?.value === "cancel") return;

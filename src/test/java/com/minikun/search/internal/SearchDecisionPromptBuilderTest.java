@@ -24,7 +24,8 @@ class SearchDecisionPromptBuilderTest {
         assertTrue(first.instructions().contains(
             "CURRENT_INFORMATION, FACT_LOOKUP, EXTERNAL_RESOURCE, GENERAL_KNOWLEDGE"));
         assertTrue(first.instructions().contains(
-            "shouldSearch=false for GENERAL_KNOWLEDGE"));
+            "GENERAL_KNOWLEDGE always requires shouldSearch=false"));
+        assertTrue(first.instructions().contains("แล้วตอนนี้ล่ะ"));
         assertTrue(first.instructions().contains("Never output RULE_FALLBACK"));
         assertFalse(first.instructions().contains("system prompt"));
         assertFalse(first.instructions().contains("chat messages"));

@@ -117,6 +117,12 @@ public final class CooperativeQualityGate {
         Double count = firstNumber(APP_COUNT, request);
         Double memoryMib = systemMemoryMib(request);
         boolean thai = Pattern.compile("[ก-๙]").matcher(request).find();
+        if (!hasDeterministicConstraints(original)) {
+            return thai
+                    ? "มินิคุงยังสร้างคำตอบที่ครบและผ่านการตรวจความสอดคล้องไม่ได้ครับ ลองถามใหม่โดยเพิ่มบริบทอีกเล็กน้อย"
+                    : "Mini-kun could not produce a complete answer that passed its consistency checks. "
+                            + "Please retry with a little more context.";
+        }
         if (thai) {
             StringBuilder text = new StringBuilder("มินิคุงยังไม่ควรเสนอ JVM flags จากคำตอบนี้ครับ "
                     + "เพราะการตรวจความสอดคล้องพบว่าค่าที่คำนวณหรือข้อเท็จจริงยังไม่ผ่านข้อจำกัดของโจทย์");

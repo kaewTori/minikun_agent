@@ -65,4 +65,18 @@ class LlmSearchDecisionServiceTest {
         assertFalse(decision.shouldSearch());
         assertEquals(SearchDecisionReason.RULE_FALLBACK, decision.reason());
     }
+
+    @Test
+    void keepsResolvedQuerySeparateFromPromptContext() {
+        SearchDecisionClient client = prompt -> new SearchDecision(
+                true, prompt.userMessage(), SearchDecisionReason.CURRENT_INFORMATION);
+        var service = new LlmSearchDecisionService(
+                client, new RuleBasedSearchDecisionService(null), CLOCK,
+                new SearchDecisionPromptBuilder(), new SimpleMeterRegistry());
+
+        SearchDecision decision = service.decide(
+                "Java latest version", "user: previous topic\nassistant: previous answer");
+
+        assertEquals("Java latest version", decision.query());
+    }
 }

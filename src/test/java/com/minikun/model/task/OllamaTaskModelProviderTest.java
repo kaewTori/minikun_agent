@@ -56,4 +56,23 @@ class OllamaTaskModelProviderTest {
                 TaskModelRequest.ResponseFormat.TEXT)));
         server.verify();
     }
+
+    @Test
+    void unwrapsMarkdownFenceForJsonObjectResponses() {
+        RestClient.Builder builder = RestClient.builder().baseUrl("http://ollama.test/v1/chat/completions");
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        OllamaTaskModelProvider provider = new OllamaTaskModelProvider(
+                builder.build(), new ObjectMapper(), "qwen3.5:0.6b", Duration.ofSeconds(2));
+        server.expect(requestTo("http://ollama.test/v1/chat/completions"))
+                .andRespond(withSuccess("""
+                        {"choices":[{"message":{"role":"assistant","content":"```json\\n{\\\"claims\\\":[]}\\n```"}}]}
+                        """, MediaType.APPLICATION_JSON));
+
+        String response = provider.generate(new TaskModelRequest(
+                List.of(new TaskModelMessage("user", "Extract claims")), 64, 0.0,
+                TaskModelRequest.ResponseFormat.JSON_OBJECT));
+
+        assertEquals("{\"claims\":[]}", response);
+        server.verify();
+    }
 }

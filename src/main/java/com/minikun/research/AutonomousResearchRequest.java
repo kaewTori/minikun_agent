@@ -14,6 +14,7 @@ public record AutonomousResearchRequest(
         boolean safeSearch,
         int resultLimit,
         int sourceReadLimit,
+        List<String> preferredDomains,
         Instant deadline) {
     public AutonomousResearchRequest {
         userQuery = requireText(userQuery, "user query");
@@ -23,6 +24,9 @@ public record AutonomousResearchRequest(
                 .filter(Objects::nonNull).map(String::strip).filter(value -> !value.isBlank()).distinct().toList();
         language = Objects.requireNonNullElse(language, "all");
         timeRange = Objects.requireNonNullElse(timeRange, "");
+        preferredDomains = preferredDomains == null ? List.of() : preferredDomains.stream()
+                .filter(Objects::nonNull).map(String::strip).filter(value -> !value.isBlank())
+                .map(value -> value.toLowerCase(java.util.Locale.ROOT)).distinct().limit(50).toList();
         Objects.requireNonNull(deadline, "deadline must not be null");
         if (resultLimit < 1 || sourceReadLimit < 0) {
             throw new IllegalArgumentException("research limits must not be negative");

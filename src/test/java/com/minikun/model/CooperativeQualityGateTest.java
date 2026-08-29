@@ -87,6 +87,15 @@ class CooperativeQualityGateTest {
     }
 
     @Test
+    void usesAGenericFallbackForAnUnconstrainedTechnicalQuestion() {
+        String fallback = gate.safeFallback(new Prompt(
+                "What does the Spring AI reference say about Redis chat memory?"));
+
+        assertTrue(fallback.contains("consistency checks"));
+        assertFalse(fallback.toLowerCase().contains("jvm"));
+    }
+
+    @Test
     void rejectsMutuallyExclusiveGarbageCollectors() {
         String revised = """
                 สำหรับ JDK25 Spring Boot 4.1 แบบ bare metal บน RAM 32 GB จำนวน 130 apps

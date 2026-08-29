@@ -10,6 +10,7 @@
 - Embeddings API สำหรับข้อความเดี่ยวหรือ array ของข้อความ
 - Voice Companion แบบ local สำหรับ speech-to-text, text-to-speech และ voice turn ต่อเนื่อง
 - Personal Knowledge แบบ local สำหรับ index เอกสาร, hybrid retrieval และ citation ในบทสนทนา
+- Self-learning Knowledge Agent สำหรับกวาดข้อมูลตามหัวข้อแบบมีตารางเวลา เปิดอ่านต้นฉบับ ตรวจสอบ claim และนำเฉพาะความรู้ที่ผ่านเกณฑ์มาใช้ตอบแชต
 - Autonomous Deep Research แบบ bounded สำหรับวาง subquestions, ค้นซ้ำตาม evidence gap, เปิดแหล่งต้นฉบับ และระบุข้อจำกัด
 - Storytelling advisor สำหรับจัดคำตอบเป็น explanation, comparison, timeline, analysis หรือ narrative ตามเจตนา
 - Adaptive Companion ที่เรียนรู้ภาษา ความยาว รูปแบบ ระดับเทคนิค และโทนการตอบแบบ owner-scoped
@@ -65,7 +66,7 @@ src/main/java/
 ├── api/                 OpenAI-compatible HTTP API และ conversation ID
 ├── conversation/        short-term conversation memory
 ├── memory/              long-term memory และ reflection
-├── knowledge/           personal document ingestion, indexing และ retrieval
+├── knowledge/           personal documents และ autonomous knowledge acquisition/retrieval
 ├── personality/         profile, preferences และ adaptive response learning
 ├── communication/       draft/rewrite/reply/summarize แบบไม่ส่งออกภายนอก
 ├── investment/          policy, immutable ledger, portfolio analysis และ thesis journal
@@ -81,6 +82,7 @@ src/main/resources/
 ├── application.properties
 ├── memory-schema.sql
 ├── personal-knowledge-schema.sql
+├── knowledge-acquisition-schema.sql
 ├── investment-schema.sql
 └── logback-spring.xml
 
@@ -262,6 +264,8 @@ TinyGrad อย่างน้อยระดับ `MEDIUM` เสมอ แม
 | `MINIKUN_SEARCH_CACHE_PROVIDER_VERSION` | `v2` | version ของ provider ที่รวมใน cache key |
 | `MINIKUN_SEARCH_PARALLEL_QUERIES_ENABLED` | `true` | ทำ expanded search queries แบบ parallel |
 | `MINIKUN_SEARCH_PARALLEL_QUERIES_MAX_CONCURRENCY` | `3` | จำนวน search query สูงสุดที่ทำพร้อมกัน |
+| `MINIKUN_SEARCH_DECISION_OLLAMA_BASE_URL` | `http://127.0.0.1:11434` | Ollama endpoint เฉพาะ search classifier |
+| `MINIKUN_SEARCH_DECISION_OLLAMA_MODEL` | `hf.co/mradermacher/llama3.2-typhoon2-3b-GGUF:Q4_K_M` | โมเดล fallback หลัง rule และ continuity guardrail |
 | `MINIKUN_SEARCH_DECISION_TIMEOUT` | `PT15S` | timeout เฉพาะ search classifier |
 | `MINIKUN_BROWSER_ENABLED` | `true` | เปิด/ปิดการอ่าน URL ผ่าน minikun-browser-worker |
 | `MINIKUN_BROWSER_WORKER_URL` | `http://127.0.0.1:3000` | endpoint ของ browser worker |
@@ -278,6 +282,14 @@ TinyGrad อย่างน้อยระดับ `MEDIUM` เสมอ แม
 | `MINIKUN_RESEARCH_AUTONOMOUS_MAX_FOLLOW_UP_QUERIES` | `3` | จำนวน gap queries ที่ evaluator สร้างได้ต่อรอบ (`1-4`) |
 | `MINIKUN_RESEARCH_AUTONOMOUS_EVALUATION_MAX_CHARACTERS` | `12000` | evidence budget สำหรับ coverage evaluator |
 | `MINIKUN_RESEARCH_AUTONOMOUS_TIMEOUT` | `PT60S` | deadline รวมของ autonomous research loop |
+| `MINIKUN_KNOWLEDGE_ACQUISITION_ENABLED` | `true` | เปิด topic API, acquisition agent และ verified retrieval |
+| `MINIKUN_KNOWLEDGE_ACQUISITION_SCHEDULER_ENABLED` | `true` | เปิดการกวาดหัวข้อที่ถึงกำหนดอัตโนมัติ |
+| `MINIKUN_KNOWLEDGE_ACQUISITION_POLL_INTERVAL_MS` | `300000` | ช่วงเวลาที่ scheduler ตรวจหัวข้อที่ถึงกำหนด |
+| `MINIKUN_KNOWLEDGE_ACQUISITION_TOPICS_PER_RUN` | `1` | จำนวนหัวข้อสูงสุดต่อ scheduler batch |
+| `MINIKUN_KNOWLEDGE_ACQUISITION_TIMEOUT` | `PT60S` | deadline ของ research run ต่อหัวข้อ |
+| `MINIKUN_KNOWLEDGE_ACQUISITION_SOURCE_READ_LIMIT` | `5` | จำนวนแหล่งต้นฉบับสูงสุดที่เปิดอ่านต่อ run |
+| `MINIKUN_KNOWLEDGE_ACQUISITION_MINIMUM_CONFIDENCE` | `0.7` | confidence ขั้นต่ำก่อนเข้า publication gate |
+| `MINIKUN_KNOWLEDGE_ACQUISITION_TOKEN` | ใช้ knowledge/memory token ถ้ามี | token สำหรับ API จัดการหัวข้อ run และ claim |
 | `SPRING_AI_CHAT_MEMORY_MAX_MESSAGES` | `20` | จำนวนข้อความ short-term memory สูงสุด |
 | `MINIKUN_MEMORY_RECALL_MAXIMUM_COUNT` | `10` | จำนวน long-term memories ที่เรียกคืนสูงสุด |
 | `MINIKUN_MEMORY_RECALL_MAXIMUM_CHARACTERS` | `4000` | ขนาด Knowledge context สูงสุด |

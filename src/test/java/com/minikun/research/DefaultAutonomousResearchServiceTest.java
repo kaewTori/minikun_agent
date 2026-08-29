@@ -119,9 +119,45 @@ class DefaultAutonomousResearchServiceTest {
         assertTrue(result.trace().autonomous());
     }
 
+    @Test
+    void readsPreferredDomainBeforeEarlierUntrustedSearchResults() {
+        SearchService search = request -> {
+            KnowledgeCandidate untrusted = new KnowledgeCandidate("untrusted", KnowledgeSource.SEARCH,
+                    "Third-party result", 0, "https://example.com/spring-ai");
+            KnowledgeCandidate official = new KnowledgeCandidate("official", KnowledgeSource.SEARCH,
+                    "Official result", 1, "https://docs.spring.io/spring-ai/reference/api/index.html");
+            return KnowledgeContext.fromCandidates(List.of(untrusted, official));
+        };
+        List<String> rendered = new ArrayList<>();
+        BrowserContentService browser = new BrowserContentService(url -> {
+            rendered.add(url);
+            return new BrowserContent(url, "Rendered official evidence with enough detail.", "text/html", false);
+        }, true, 1);
+        ResearchReasoningProvider reasoning = new ResearchReasoningProvider() {
+            @Override
+            public ResearchPlan plan(String query, String context, int max) {
+                return ResearchPlan.fallback(query);
+            }
+
+            @Override
+            public ResearchEvaluation evaluate(ResearchPlan plan, List<String> queries, String evidence, int max) {
+                return new ResearchEvaluation(true, List.of(), List.of());
+            }
+        };
+        DefaultAutonomousResearchService service = new DefaultAutonomousResearchService(
+                search, browser, reasoning, true, 1, 3, 1, 4_000);
+        AutonomousResearchRequest request = new AutonomousResearchRequest(
+                "Spring AI", "", "Spring AI", List.of(), "en", "", true, 8, 1,
+                List.of("docs.spring.io"), Instant.now().plusSeconds(30));
+
+        service.research(request);
+
+        assertEquals(List.of("https://docs.spring.io/spring-ai/reference/api/index.html"), rendered);
+    }
+
     private AutonomousResearchRequest request(String query, int sourceReadLimit) {
         return new AutonomousResearchRequest(
                 query, "", query, List.of(), "en", "", true, 8,
-                sourceReadLimit, Instant.now().plusSeconds(30));
+                sourceReadLimit, List.of(), Instant.now().plusSeconds(30));
     }
 }

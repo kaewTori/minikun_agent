@@ -10,7 +10,12 @@ final class SearchDecisionPromptBuilder {
             Output exactly one object in this format:
             {"shouldSearch":true,"reason":"CURRENT_INFORMATION"}
             Use exactly these reason values: CURRENT_INFORMATION, FACT_LOOKUP, EXTERNAL_RESOURCE, GENERAL_KNOWLEDGE.
-            Use shouldSearch=false for GENERAL_KNOWLEDGE when external search is unnecessary.
+            CURRENT_INFORMATION, FACT_LOOKUP, and EXTERNAL_RESOURCE always require shouldSearch=true.
+            GENERAL_KNOWLEDGE always requires shouldSearch=false.
+            Thai requests containing explicit freshness or lookup intent such as ล่าสุด, ตอนนี้, ปัจจุบัน,
+            ค้นหา, ค้นข้อมูล, เช็กข้อมูล, or ตรวจสอบข้อเท็จจริง require search.
+            Resolve short Thai follow-ups such as เรื่องเมื่อกี้, แล้วตอนนี้ล่ะ, and ช่วยเช็กให้หน่อย
+            against the supplied prior conversation context.
             Never output RULE_FALLBACK.
             """.strip();
 

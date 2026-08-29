@@ -26,6 +26,7 @@ import com.minikun.https.LocalHttpsConfiguration;
 import com.minikun.investment.InvestmentService;
 import com.minikun.investment.JdbcInvestmentStore;
 import com.minikun.knowledge.PersonalKnowledgeConfiguration;
+import com.minikun.knowledge.acquisition.KnowledgeAcquisitionConfiguration;
 import com.minikun.memory.internal.MemoryConfiguration;
 import com.minikun.memory.management.MemoryManagementController;
 import com.minikun.memory.management.MemoryManagementService;
@@ -137,7 +138,8 @@ import com.minikun.relationship.RelationshipConfiguration;
         VisionInputService.class, GuardianConfiguration.class, ComputerConfiguration.class,
         VoiceConfiguration.class, VoiceController.class, VoiceExceptionHandler.class,
         VisualCompanionConfiguration.class,
-        PersonalKnowledgeConfiguration.class, PersonalityConfiguration.class, ChatFeedbackConfiguration.class,
+        PersonalKnowledgeConfiguration.class, KnowledgeAcquisitionConfiguration.class,
+        PersonalityConfiguration.class, ChatFeedbackConfiguration.class,
         PersonalCareConfiguration.class,
         PersonalLoopConfiguration.class, RelationshipConfiguration.class,
         CommunicationConfiguration.class, AgentExecutionConfiguration.class, HomelabGuardianScheduler.class,

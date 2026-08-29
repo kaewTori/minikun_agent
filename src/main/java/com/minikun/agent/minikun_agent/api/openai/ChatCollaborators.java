@@ -8,6 +8,7 @@ import org.springframework.stereotype.Component;
 import com.minikun.browser.BrowserContentService;
 import com.minikun.agent.minikun_agent.conversation.ConversationSummaryService;
 import com.minikun.knowledge.PersonalKnowledgeService;
+import com.minikun.knowledge.acquisition.AcquiredKnowledgeIndex;
 import com.minikun.memory.DeferredReflectionService;
 import com.minikun.memory.event.ObservationPublisher;
 import com.minikun.model.CooperativeChatModelService;
@@ -44,6 +45,7 @@ final class ChatCollaborators {
     private final BrowserContentService browserContentService;
     private final VisionInputService visionInputService;
     private final PersonalKnowledgeService personalKnowledgeService;
+    private final AcquiredKnowledgeIndex acquiredKnowledgeIndex;
     private final ConversationSummaryService conversationSummaryService;
     private final AutonomousResearchService autonomousResearchService;
     private final ChatExplainabilitySink explainabilitySink;
@@ -67,6 +69,7 @@ final class ChatCollaborators {
             BrowserContentService browserContentService,
             ObjectProvider<VisionInputService> visionInputService,
             ObjectProvider<PersonalKnowledgeService> personalKnowledgeService,
+            ObjectProvider<AcquiredKnowledgeIndex> acquiredKnowledgeIndex,
             ObjectProvider<ConversationSummaryService> conversationSummaryService,
             ObjectProvider<AutonomousResearchService> autonomousResearchService,
             ObjectProvider<ChatExplainabilitySink> explainabilitySink,
@@ -88,6 +91,7 @@ final class ChatCollaborators {
         this.browserContentService = browserContentService;
         this.visionInputService = visionInputService.getIfAvailable();
         this.personalKnowledgeService = personalKnowledgeService.getIfAvailable();
+        this.acquiredKnowledgeIndex = acquiredKnowledgeIndex.getIfAvailable();
         this.conversationSummaryService = conversationSummaryService.getIfAvailable();
         this.autonomousResearchService = autonomousResearchService.getIfAvailable();
         this.explainabilitySink = explainabilitySink.getIfAvailable();
@@ -111,6 +115,7 @@ final class ChatCollaborators {
     BrowserContentService browserContentService() { return browserContentService; }
     VisionInputService visionInputService() { return visionInputService; }
     PersonalKnowledgeService personalKnowledgeService() { return personalKnowledgeService; }
+    AcquiredKnowledgeIndex acquiredKnowledgeIndex() { return acquiredKnowledgeIndex; }
     ConversationSummaryService conversationSummaryService() { return conversationSummaryService; }
     AutonomousResearchService autonomousResearchService() { return autonomousResearchService; }
     ChatExplainabilitySink explainabilitySink() { return explainabilitySink; }

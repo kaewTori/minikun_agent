@@ -12,9 +12,9 @@ public final class ModelsService {
 
     public ModelsService(
             @Value("${spring.ai.ollama.chat.options.model:}") String chatModel,
-            @Value("${spring.ai.embedding.options.model:}") String embeddingModel,
+            @Value("${spring.ai.ollama.embedding.options.model:}") String embeddingModel,
             @Value("${minikun.memory.model:}") String memoryModel,
-            @Value("${minikun.search.decision.model:}") String searchDecisionModel) {
+            @Value("${minikun.search.decision.ollama.model:}") String searchDecisionModel) {
         this.chatModel = chatModel;
         this.embeddingModel = embeddingModel;
         this.memoryModel = memoryModel;

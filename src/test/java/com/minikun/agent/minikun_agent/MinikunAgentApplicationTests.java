@@ -95,6 +95,15 @@ class MinikunAgentApplicationTests {
 				applicationContext.getBean(com.minikun.memory.DeferredReflectionService.class));
 		org.junit.jupiter.api.Assertions.assertNotNull(
 				applicationContext.getBean(com.minikun.research.AutonomousResearchService.class));
+		org.junit.jupiter.api.Assertions.assertNotNull(
+				applicationContext.getBean(com.minikun.knowledge.acquisition.KnowledgeAcquisitionService.class));
+	}
+
+	@Test
+	void contextWiresKnowledgeAcquisitionManagementApi() throws Exception {
+		mockMvc.perform(get("/v1/knowledge/acquisition/topics").param("owner_id", "test-owner"))
+				.andExpect(status().isOk())
+				.andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content().json("[]"));
 	}
 
 	@Test
@@ -122,7 +131,10 @@ class MinikunAgentApplicationTests {
 		mockMvc.perform(get("/cockpit/index.html"))
 				.andExpect(status().isOk())
 				.andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content()
-						.string(org.hamcrest.Matchers.containsString("YOUR PERSONAL AGENT")));
+						.string(org.hamcrest.Matchers.allOf(
+								org.hamcrest.Matchers.containsString("YOUR PERSONAL AGENT"),
+								org.hamcrest.Matchers.containsString("SELF-LEARNING CONTROL"),
+								org.hamcrest.Matchers.containsString("MEMORY &amp; KNOWLEDGE"))));
 
 		mockMvc.perform(get("/cockpit/minikun-avatar.jpg"))
 				.andExpect(status().isOk())

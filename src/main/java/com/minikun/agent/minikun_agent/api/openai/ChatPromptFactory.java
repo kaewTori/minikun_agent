@@ -11,6 +11,10 @@ import com.minikun.character.model.CharacterSpecification;
 import com.minikun.commands.CommandCatalog;
 import com.minikun.context.runtime.PersonalContextRuntime;
 import com.minikun.context.runtime.PersonalContextRuntimeResult;
+import com.minikun.conversation.continuity.ConversationContinuity;
+import com.minikun.conversation.continuity.ConversationContinuityResolver;
+import com.minikun.conversation.repair.ConversationRepairAdvice;
+import com.minikun.conversation.repair.ConversationRepairAdvisor;
 import com.minikun.model.ActiveChatModelProvider;
 import com.minikun.model.GenerationOptions;
 import com.minikun.model.capability.ModelCapability;
@@ -65,6 +69,8 @@ final class ChatPromptFactory {
     private final Configuration configuration;
     private final ConversationStyleAdvisor conversationStyleAdvisor = new ConversationStyleAdvisor();
     private final ConversationHistoryWindow conversationHistoryWindow = new ConversationHistoryWindow();
+    private final ConversationContinuityResolver continuityResolver = new ConversationContinuityResolver();
+    private final ConversationRepairAdvisor conversationRepairAdvisor = new ConversationRepairAdvisor();
 
     ChatPromptFactory(
             CharacterSpecification characterSpecification,
@@ -259,6 +265,22 @@ final class ChatPromptFactory {
                 input.userMessage().content(), input.knowledgeSelection(), input.imageAwareness(),
                 input.verifiedToolResult(), input.visionInput(), input.interactionMode(),
                 conversationStyleInstruction, configuration.nativeToolsAvailable(), creativeRequest));
+        ConversationContinuity continuity = continuityResolver.resolve(
+                input.userMessage().content(), continuityContext(input.history()));
+        if (continuity.followUp()) {
+            values.add(new CapabilityInstruction(
+                    "Turn continuity", continuity.promptInstruction(), true));
+            ConversationRepairAdvice repair = conversationRepairAdvisor.advise(
+                    continuity,
+                    input.knowledgeSelection().selection(),
+                    input.knowledgeSelection().searchContext());
+            if (repair.required()) {
+                values.add(new CapabilityInstruction(
+                        "Conversation repair", repair.instruction(), true));
+            }
+            log.debug("process=conversation_continuity event=resolved confidence={} repair_reason={}",
+                    continuity.confidence(), repair.reason());
+        }
         if (conversationThreadService != null) {
             try {
                 String context = conversationThreadService.promptContext(
@@ -272,6 +294,20 @@ final class ChatPromptFactory {
             }
         }
         return List.copyOf(values);
+    }
+
+    private String continuityContext(List<ChatMessage> history) {
+        if (history == null || history.isEmpty()) {
+            return "";
+        }
+        return history.stream()
+                .filter(java.util.Objects::nonNull)
+                .filter(message -> hasText(message.content()))
+                .filter(message -> !isCommandMessage(message.content()))
+                .skip(Math.max(0, history.size() - 6L))
+                .map(message -> message.role() + ": " + message.content())
+                .reduce((left, right) -> left + "\n" + right)
+                .orElse("");
     }
 
     private boolean isVerifiedToolResult(ToolEvidence evidence) {
