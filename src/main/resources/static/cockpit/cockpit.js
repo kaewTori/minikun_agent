@@ -33,8 +33,8 @@
       style: "",
       light: "",
       frame: "",
-      width: 512,
-      height: 768,
+      width: 768,
+      height: 1280,
       result: null,
       busy: false
     },
