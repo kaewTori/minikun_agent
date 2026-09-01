@@ -3,11 +3,11 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#050806">
+  <meta name="theme-color" content="#07110f">
   <meta name="description" content="Minikun — ผู้ช่วยส่วนตัวที่คุย คิด ค้นหา และลงมือทำร่วมกับคุณ">
   <title>Minikun</title>
   <link rel="icon" href="/cockpit/minikun-avatar.jpg">
-  <link rel="stylesheet" href="/cockpit/cockpit.css?v=20260829-markdown1">
+  <link rel="stylesheet" href="/cockpit/cockpit.css?v=20260831-pony-studio3">
 </head>
 <body>
   <a class="skip-link" href="#chat-composer">ข้ามไปยังช่องพิมพ์ข้อความ</a>
@@ -19,10 +19,9 @@
       </a>
       <button class="new-chat-button" id="new-chat" type="button"><span aria-hidden="true">＋</span> แชตใหม่</button>
       <nav class="main-nav">
-        <button class="nav-item active" type="button" data-view-target="chat"><span aria-hidden="true">◉</span><b>แชต</b></button>
-        <button class="nav-item" type="button" data-view-target="cockpit"><span aria-hidden="true">⌁</span><b>Cockpit</b></button>
-        <button class="nav-item" type="button" data-view-target="cockpit" data-section="experiments"><span aria-hidden="true">◇</span><b>การทดลอง</b></button>
-        <button class="nav-item" type="button" data-view-target="cockpit" data-section="inbox"><span aria-hidden="true">＋</span><b>Inbox</b></button>
+        <button class="nav-item active" type="button" data-view-target="chat" aria-current="page"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 17.5 3.5 21l4.2-1.4c1.3.6 2.7.9 4.3.9 5.2 0 9.5-3.8 9.5-8.5S17.2 3.5 12 3.5 2.5 7.3 2.5 12c0 2.1.9 4 2.5 5.5Z"/><path d="M8 12h.01M12 12h.01M16 12h.01"/></svg><b>แชต</b></button>
+        <button class="nav-item" type="button" data-view-target="studio"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7.5h4l1.4-2h5.2l1.4 2h4v11H4Z"/><circle cx="12" cy="13" r="3.5"/><path d="m18 3 .5 1.5L20 5l-1.5.5L18 7l-.5-1.5L16 5l1.5-.5Z"/></svg><b>สร้างภาพ</b></button>
+        <button class="nav-item" type="button" data-view-target="cockpit"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19v-7a8 8 0 0 1 16 0v7"/><path d="M7 19v-2a5 5 0 0 1 10 0v2M12 9v3l2 1"/></svg><b>Cockpit</b></button>
       </nav>
       <section class="conversation-panel" aria-labelledby="conversation-heading">
         <div class="conversation-heading"><span id="conversation-heading">บทสนทนา</span><button id="clear-chat-list" type="button" aria-label="ล้างรายการบทสนทนา">•••</button></div>
@@ -82,128 +81,242 @@
         </div>
       </section>
 
+      <section class="studio-view hidden" id="studio-view" data-view="studio" aria-labelledby="studio-title">
+        <header class="studio-topbar">
+          <div class="studio-heading">
+            <button class="mobile-menu-trigger" type="button" data-open-mobile-menu aria-label="เปิดเมนูมินิคุง"><img src="/cockpit/minikun-avatar.jpg" alt=""></button>
+            <div><p class="eyebrow">MINIKUN IMAGE STUDIO</p><h1 id="studio-title">เล่าภาพในหัว แล้วเราค่อย ๆ ทำให้ชัดครับ</h1></div>
+          </div>
+          <button class="secondary-button studio-board-button" id="studio-open-boards" type="button"><span aria-hidden="true">▧</span> บอร์ดแรงบันดาลใจ</button>
+        </header>
+
+        <div class="studio-workbench">
+          <form class="prompt-lab" id="studio-form">
+            <div class="prompt-lab-intro">
+              <div class="minikun-coach-avatar"><img src="/cockpit/minikun-avatar.jpg" alt="มินิคุง"><i></i></div>
+              <div><strong>Pony ชอบ tag ชัด ๆ เรียงจากภาพรวมไปหารายละเอียด</strong><p id="studio-coach-copy">เริ่มด้วยจำนวนและตัวละครเป็น English tags สั้น ๆ เช่น 1girl, solo, black bob hair ครับ</p></div>
+            </div>
+
+            <ol class="prompt-ribbon" aria-label="ลำดับ tag สำหรับ Pony">
+              <li class="active complete" data-studio-step="quality"><button type="button"><span>1</span><b>คุณภาพ</b><small>Score</small></button></li>
+              <li data-studio-step="subject"><button type="button"><span>2</span><b>ตัวละคร</b><small>Character</small></button></li>
+              <li data-studio-step="action"><button type="button"><span>3</span><b>ท่าทาง</b><small>Action</small></button></li>
+              <li data-studio-step="scene"><button type="button"><span>4</span><b>ฉาก</b><small>Scene</small></button></li>
+              <li data-studio-step="finish"><button type="button"><span>5</span><b>ภาพจบ</b><small>Finish</small></button></li>
+            </ol>
+
+            <div class="pony-quality-seed" data-studio-field="quality" tabindex="-1">
+              <span>ใส่ให้อัตโนมัติ</span><code>score_9</code><code>score_8_up</code><code>score_7_up</code>
+            </div>
+
+            <div class="studio-field-grid">
+              <label class="studio-field studio-field-wide" data-studio-field="subject"><span><b>จำนวน + ตัวละคร</b><small>ใช้ English tags คั่นด้วย comma</small></span><textarea id="studio-subject" rows="3" maxlength="1200" required placeholder="1girl, solo, short black hair, green sweater, cat ears"></textarea></label>
+              <label class="studio-field" data-studio-field="action"><span><b>ท่าทาง + สีหน้า</b><small>บอกกริยา มือ สายตา และอารมณ์</small></span><input id="studio-detail" maxlength="500" placeholder="holding a glass jar, looking down, gentle smile"></label>
+              <label class="studio-field" data-studio-field="scene"><span><b>ฉาก + สิ่งแวดล้อม</b><small>สถานที่ เวลา และวัตถุรอบตัว</small></span><input id="studio-scene" maxlength="500" placeholder="observatory workshop, rainy night, wooden desk"></label>
+            </div>
+
+            <fieldset class="studio-choice" data-studio-field="finish"><legend><b>ลายเส้นของภาพ</b><small>เลือก tag ที่เข้ากับ Pony Anime</small></legend><div>
+              <button type="button" data-studio-option="style" data-value="anime screencap, clean lineart">Anime screencap</button>
+              <button type="button" data-studio-option="style" data-value="anime key visual, vibrant colors">Anime key visual</button>
+              <button type="button" data-studio-option="style" data-value="soft painterly anime illustration">Painterly anime</button>
+              <button type="button" data-studio-option="style" data-value="visual novel cg, detailed background">Visual novel CG</button>
+              <button type="button" data-studio-option="style" data-value="retro anime, cel shading">Retro cel</button>
+            </div></fieldset>
+
+            <div class="studio-choice-row">
+              <fieldset class="studio-choice" data-studio-field="finish"><legend><b>แสง + อารมณ์</b><small>ใช้คำสั้นและเป็นภาพ</small></legend><div>
+                <button type="button" data-studio-option="light" data-value="soft window light, calm mood">นุ่มและสงบ</button>
+                <button type="button" data-studio-option="light" data-value="golden hour, warm light, hopeful mood">อุ่นมีความหวัง</button>
+                <button type="button" data-studio-option="light" data-value="moonlight, blue shadows, mysterious mood">แสงจันทร์ลึกลับ</button>
+              </div></fieldset>
+              <fieldset class="studio-choice" data-studio-field="finish"><legend><b>ระยะภาพ + กล้อง</b><small>กำหนดสิ่งที่อยู่ในเฟรม</small></legend><div>
+                <button type="button" data-studio-option="frame" data-value="close-up, upper body, depth of field">Close-up</button>
+                <button type="button" data-studio-option="frame" data-value="medium shot, centered composition">Medium shot</button>
+                <button type="button" data-studio-option="frame" data-value="wide shot, dynamic composition, detailed background">Wide shot</button>
+              </div></fieldset>
+            </div>
+
+            <label class="studio-field studio-constraint"><span><b>Negative tags เพิ่มเติม</b><small>จะถูกรวมกับ negative prompt ด้านล่าง ไม่ปนใน positive prompt</small></span><input id="studio-constraints" maxlength="500" placeholder="multiple views, speech bubble, crowded background"></label>
+
+            <details class="studio-generation-settings" open>
+              <summary><span><b>ค่ากล้องของ TinyGrad</b><small>Mala Anime Mix · SDXL</small></span><i>ปรับแต่ง</i></summary>
+              <div class="studio-settings-body">
+                <fieldset class="studio-size-choice"><legend>สัดส่วนภาพ</legend><div>
+                  <button class="selected" type="button" data-studio-size="512x768"><span>PORTRAIT</span><b>512 × 768</b></button>
+                  <button type="button" data-studio-size="1024x1024"><span>SQUARE</span><b>1024 × 1024</b></button>
+                  <button type="button" data-studio-size="1280x768"><span>LANDSCAPE</span><b>1280 × 768</b></button>
+                </div></fieldset>
+                <div class="studio-number-grid">
+                  <label><span>Steps <small>รายละเอียด</small></span><input id="studio-steps" type="number" min="1" max="200" value="40"></label>
+                  <label><span>Guidance <small>ความเข้ม prompt</small></span><input id="studio-guidance" type="number" min="0" max="30" step="0.1" value="6.0"></label>
+                  <label class="studio-seed-field"><span>Seed <small>เว้นว่างเพื่อสุ่ม</small></span><div><input id="studio-seed" type="number" min="0" max="2147483647" placeholder="Random"><button id="studio-random-seed" type="button">สุ่ม</button></div></label>
+                </div>
+                <div class="studio-sampler-grid">
+                  <label>Scheduler<select id="studio-scheduler"><option value="dpmpp2m">DPM++ 2M</option><option value="euler">Euler</option></select></label>
+                  <label>Noise schedule<select id="studio-schedule"><option value="karras">Karras</option><option value="legacy">Legacy</option></select></label>
+                </div>
+                <label class="studio-advanced-prompt"><span><b>Negative prompt</b><small>กันข้อผิดพลาดที่พบบ่อยของโมเดลนี้</small></span><textarea id="studio-negative-prompt" rows="3" maxlength="8000">score_4, score_3, score_2, score_1, worst quality, low quality, bad anatomy, bad hands, extra arm, extra fingers, missing fingers, fused fingers, extra limbs, duplicate person, deformed face, asymmetrical eyes, monochrome, source_furry, source_pony, text, signature, watermark</textarea></label>
+                <label class="studio-advanced-prompt"><span><b>Face prompts</b><small>หนึ่งบรรทัดต่อหนึ่งใบหน้า เรียงจากซ้ายไปขวา · ไม่บังคับ</small></span><textarea id="studio-face-prompts" rows="2" maxlength="4000" placeholder="เช่น gentle smile, detailed eyes"></textarea></label>
+              </div>
+            </details>
+
+            <section class="assembled-prompt" aria-labelledby="assembled-prompt-title">
+              <header><div><p class="eyebrow">PROMPT ที่ประกอบแล้ว</p><h2 id="assembled-prompt-title">มินิคุงจะส่งคำอธิบายนี้ให้โมเดล</h2></div><button id="studio-copy-prompt" type="button">คัดลอก</button></header>
+              <p id="studio-prompt-preview">ใส่ character tags แล้ว Pony prompt จะประกอบตรงนี้ครับ</p>
+              <div class="prompt-readiness" id="studio-readiness"><span></span><small>เริ่มด้วย count + character tags</small></div>
+            </section>
+
+            <div class="studio-form-actions"><button class="text-button" id="studio-load-example" type="button">ลองดู prompt ตัวอย่าง</button><button class="generate-button" id="studio-generate" type="submit"><span>สร้างภาพนี้</span><small>มินิคุงจะใช้ prompt ที่ประกอบแล้ว</small><i aria-hidden="true">↗</i></button></div>
+          </form>
+
+          <aside class="studio-canvas" aria-live="polite">
+            <div class="canvas-toolbar"><span><i></i> TINYGRAD GENERATION CANVAS</span><small id="studio-canvas-meta">512 × 768 · 40 steps</small></div>
+            <div class="canvas-stage" id="studio-canvas-stage" data-state="empty">
+              <div class="canvas-grid" aria-hidden="true"></div>
+              <div class="canvas-empty" id="studio-canvas-empty"><span class="focus-frame"><i></i><i></i><i></i><i></i></span><strong>ภาพจะเกิดขึ้นตรงนี้</strong><p>เรียง character, action, scene และ camera tags ให้ครบ แล้ว TinyGrad จะส่งทั้งหมดเข้า SDXL ครับ</p></div>
+              <div class="canvas-generating hidden" id="studio-canvas-generating"><div class="developing-image"><span></span></div><strong>กำลังล้างภาพจากคำบรรยาย…</strong><p>ภาพคุณภาพสูงอาจใช้เวลาสักครู่ครับ</p></div>
+              <figure class="canvas-result hidden" id="studio-canvas-result"><img id="studio-result-image" alt="ภาพที่สร้างโดยมินิคุง"><figcaption><span>CREATED WITH MINIKUN</span><time id="studio-result-time"></time></figcaption></figure>
+            </div>
+            <div class="canvas-result-actions hidden" id="studio-result-actions"><button class="primary-button" id="studio-save-result" type="button">เก็บเป็น reference</button><a class="secondary-button" id="studio-download-result" download="minikun-image.png">ดาวน์โหลด</a></div>
+          </aside>
+        </div>
+
+        <section class="prompt-field-guide" aria-labelledby="prompt-guide-title">
+          <header><div><p class="eyebrow">PONY PROMPT FIELD GUIDE</p><h2 id="prompt-guide-title">Pony ไม่อ่านเหมือนแชต—เรียง tag จากคุณภาพไปถึงกล้อง</h2></div><p>ใช้ English tags คั่นด้วย comma วางสิ่งสำคัญก่อน และใช้ weight เฉพาะจุดที่ต้องการย้ำจริง ๆ</p></header>
+          <div class="prompt-method-grid">
+            <article><span>01 · QUALITY</span><h3>เริ่มด้วย score tags</h3><p><code>score_9, score_8_up, score_7_up</code> วางไว้ต้น prompt เพื่อกำหนดฐานคุณภาพของ Pony โดยไม่บังคับ source</p></article>
+            <article><span>02 · COUNT / CHARACTER</span><h3>นับก่อน แล้วค่อยบอกตัวละคร</h3><p><code>1girl, solo, short black hair, green sweater</code> ช่วยลดตัวละครซ้ำและแยกคุณลักษณะได้ชัดกว่าประโยคยาว</p></article>
+            <article><span>03 · ACTION / EXPRESSION</span><h3>บอกมือ สายตา และการกระทำ</h3><p><code>holding a glass jar, looking down, gentle smile</code> ทำให้ pose มีเจตนา ไม่ใช่เพียงยืนอยู่ในฉาก</p></article>
+            <article><span>04 · SCENE / LIGHT</span><h3>สร้างฉากด้วยคำนามที่มองเห็น</h3><p><code>observatory workshop, rainy night, moonlight</code> ตรงกว่าอารมณ์นามธรรมที่ CLIP ตีความได้กว้าง</p></article>
+            <article><span>05 · CAMERA / EMPHASIS</span><h3>ปิดท้ายด้วยเฟรมและน้ำหนัก</h3><p><code>close-up, upper body, depth of field, (detailed eyes:1.15)</code> ใช้ weight เบา ๆ และเฉพาะรายละเอียดสำคัญ</p></article>
+          </div>
+          <div class="prompt-before-after"><div><span>ประโยคแบบแชต</span><p>ผู้หญิงผมดำกำลังถือดาวในหอดูดาว ภาพสวย ๆ</p></div><i aria-hidden="true">→</i><div><span>PONY TAG ORDER</span><p>score_9, score_8_up, score_7_up, 1girl, solo, short black hair, green sweater, holding a glowing glass jar, looking down, gentle smile, observatory workshop, rainy night, moonlight, anime key visual, close-up, depth of field, (detailed eyes:1.15)</p></div></div>
+          <div class="pony-negative-guide"><span>NEGATIVE แยกอีกช่อง</span><p>score_4, score_3, score_2, score_1, worst quality, bad anatomy, bad hands, extra fingers, text, watermark</p><small>ใส่สิ่งที่ไม่ต้องการเป็น tag ตรง ๆ ไม่ต้องเขียน “no …” และอย่านำ negative tags ไปปนกับ positive prompt</small></div>
+        </section>
+      </section>
+
       <section class="cockpit-view hidden" id="cockpit-view" data-view="cockpit" aria-label="Cockpit ส่วนตัว">
         <header class="topbar"><div class="cockpit-heading"><button class="mobile-menu-trigger" type="button" data-open-mobile-menu aria-label="เปิดเมนูมินิคุง"><img src="/cockpit/minikun-avatar.jpg" alt=""></button><div><p class="eyebrow" id="today-label">วันของเรา</p><h1 id="greeting">สวัสดีครับ พี่สาว</h1></div></div><div class="top-actions"><span class="sync-state" id="sync-state"><span class="status-dot"></span> พร้อมดูแล</span><button class="icon-button" id="refresh" type="button" aria-label="โหลดข้อมูลใหม่">↻</button></div></header>
-        <section class="attention-strip" id="today" data-cockpit-page="overview" aria-labelledby="attention-title"><div><p class="eyebrow light">MINIKUN SIGNAL</p><h2 id="attention-title">วันนี้เอาแค่สิ่งสำคัญให้เดินหน้าก็พอครับ</h2><p id="attention-copy">มินิคุงกำลังรวบรวมงาน เป้าหมาย และสิ่งที่รอการตัดสินใจให้ครับ</p></div><div class="signal-stats" aria-label="สรุปวันนี้"><div><strong id="due-count">—</strong><span>ถึงกำหนด</span></div><div><strong id="goal-count">—</strong><span>เป้าหมาย</span></div><div><strong id="waiting-count">—</strong><span>รอยืนยัน</span></div></div></section>
+        <section class="attention-strip" id="today" data-cockpit-page="today" data-state="checking" aria-labelledby="attention-title">
+          <div class="minikun-pulse" aria-hidden="true"><span></span><img src="/cockpit/minikun-avatar.jpg" alt=""><i></i></div>
+          <div class="signal-copy"><p class="eyebrow light">MINIKUN PULSE</p><h2 id="attention-title">วันนี้เอาแค่สิ่งสำคัญให้เดินหน้าก็พอครับ</h2><p id="attention-copy">มินิคุงกำลังรวบรวมงาน เป้าหมาย และสิ่งที่รอการตัดสินใจให้ครับ</p></div>
+          <div class="signal-stats" aria-label="สรุปวันนี้"><div><strong id="due-count">—</strong><span>ถึงกำหนด</span></div><div><strong id="goal-count">—</strong><span>เป้าหมาย</span></div><div><strong id="waiting-count">—</strong><span>รอยืนยัน</span></div></div>
+        </section>
         <nav class="cockpit-shortcuts" aria-label="เมนู Cockpit">
-          <button class="active" type="button" data-cockpit-target="overview"><span aria-hidden="true">⌂</span> ภาพรวม</button>
-          <button type="button" data-cockpit-target="work"><span aria-hidden="true">◎</span> งาน</button>
-          <button type="button" data-cockpit-target="tools"><span aria-hidden="true">⌁</span> เครื่องมือ</button>
-          <button type="button" data-cockpit-target="health"><span aria-hidden="true">△</span> สุขภาพ</button>
-          <button type="button" data-cockpit-target="learning"><span aria-hidden="true">↗</span> Self-learning</button>
-          <button type="button" data-cockpit-target="memory"><span aria-hidden="true">◫</span> Memory &amp; Knowledge</button>
-          <button type="button" data-cockpit-target="permissions"><span aria-hidden="true">○</span> สิทธิ์</button>
-          <button type="button" data-cockpit-target="experiments"><span aria-hidden="true">◇</span> ทดลอง</button>
+          <button class="active" type="button" data-cockpit-target="today" aria-current="page"><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10.5 12 4l8 6.5V20h-5v-6H9v6H4Z"/></svg><span>วันนี้</span></button>
+          <button type="button" data-cockpit-target="agent"><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v3M5.6 5.6l2.1 2.1M3 12h3M18 12h3M16.3 7.7l2.1-2.1"/><path d="M8 19h8M9 15.5a5 5 0 1 1 6 0V17H9Z"/></svg><span>งานของมินิคุง</span></button>
+          <button type="button" data-cockpit-target="memory"><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4a4 4 0 0 0-7 2.6A4 4 0 0 0 4 14a4 4 0 0 0 5 4h3ZM12 4a4 4 0 0 1 7 2.6A4 4 0 0 1 20 14a4 4 0 0 1-5 4h-3Z"/><path d="M9 9h3M15 12h-3M8 14h4"/></svg><span>ความจำ</span></button>
+          <button type="button" data-cockpit-target="system"><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4 7v5c0 4.8 3.2 7.8 8 9 4.8-1.2 8-4.2 8-9V7Z"/><path d="m9 12 2 2 4-5"/></svg><span>ระบบ</span></button>
         </nav>
         <section class="dashboard-grid" aria-label="ภาพรวมส่วนตัว">
-          <article class="panel quick-actions-panel" id="quick-actions" data-cockpit-page="overview" aria-labelledby="quick-actions-title">
-            <div class="panel-heading"><div><p class="eyebrow">QUICK ACTIONS</p><h2 id="quick-actions-title">ให้มินิคุงช่วยตอนนี้</h2></div></div>
-            <div class="quick-action-list">
-              <button type="button" data-quick-action="image"><span aria-hidden="true">▧</span><strong>ถามจากรูป</strong><small>ถ่ายหรือเลือกรูป</small></button>
-              <button type="button" data-quick-action="idea"><span aria-hidden="true">＋</span><strong>จดไอเดีย</strong><small>ฝากเข้า Inbox</small></button>
-              <button type="button" data-quick-action="reminder"><span aria-hidden="true">◷</span><strong>สร้าง Reminder</strong><small>บอกเวลาในแชต</small></button>
-              <button type="button" data-quick-action="location"><span aria-hidden="true">⌖</span><strong>แชร์ตำแหน่ง</strong><small>เฉพาะ session นี้</small></button>
-              <button type="button" data-quick-action="voice"><span aria-hidden="true">●</span><strong>คุยด้วยเสียง</strong><small>พูดแทนการพิมพ์</small></button>
-            </div>
-          </article>
-          <article class="panel task-center-panel" id="task-center" data-cockpit-page="work" aria-labelledby="task-center-title">
-            <div class="panel-heading"><div><p class="eyebrow">TASK CENTER</p><h2 id="task-center-title">งานที่มินิคุงกำลังดูแล</h2></div><span class="count-badge" id="agent-run-count">—</span></div>
+          <article class="panel task-center-panel" id="task-center" data-cockpit-page="agent" aria-labelledby="task-center-title">
+            <div class="panel-heading"><div><p class="eyebrow">งานที่กำลังเดิน</p><h2 id="task-center-title">งานที่มินิคุงกำลังดูแล</h2></div><span class="count-badge" id="agent-run-count">—</span></div>
             <div class="agent-run-list" id="agent-run-list" aria-live="polite"><div class="loading-row"><span></span><div><i></i><i></i></div></div></div>
             <p class="empty-state hidden" id="agent-run-empty">ยังไม่มีงานเบื้องหลังครับ</p>
           </article>
-          <article class="panel tool-timeline-panel" id="tool-timeline" data-cockpit-page="tools" aria-labelledby="tool-timeline-title">
-            <div class="panel-heading"><div><p class="eyebrow">TOOL TIMELINE</p><h2 id="tool-timeline-title">เครื่องมือที่มินิคุงเพิ่งใช้</h2></div><span class="soft-badge" id="tool-step-count">— ขั้นตอน</span></div>
+          <article class="panel tool-timeline-panel" id="tool-timeline" data-cockpit-page="agent" aria-labelledby="tool-timeline-title">
+            <div class="panel-heading"><div><p class="eyebrow">ร่องรอยการทำงาน</p><h2 id="tool-timeline-title">ขั้นตอนที่มินิคุงเพิ่งทำ</h2></div><span class="soft-badge" id="tool-step-count">— ขั้นตอน</span></div>
             <ol class="tool-step-list" id="tool-step-list" aria-live="polite"><li class="loading-line wide"></li></ol>
             <p class="empty-state hidden" id="tool-step-empty">ยังไม่มีการเรียกใช้เครื่องมือครับ</p>
           </article>
-          <article class="panel system-health-panel" id="system-health" data-cockpit-page="health" aria-labelledby="system-health-title">
-            <div class="panel-heading"><div><p class="eyebrow">SYSTEM HEALTH</p><h2 id="system-health-title">ระบบที่มินิคุงพึ่งพา</h2></div><span class="health-overall" id="health-overall">กำลังตรวจ</span></div>
+          <article class="panel system-health-panel" id="system-health" data-cockpit-page="system" aria-labelledby="system-health-title">
+            <div class="panel-heading"><div><p class="eyebrow">สุขภาพระบบ</p><h2 id="system-health-title">ระบบที่มินิคุงพึ่งพา</h2></div><span class="health-overall" id="health-overall">กำลังตรวจ</span></div>
             <div class="health-resource-grid" aria-label="ทรัพยากรเครื่อง">
               <div><span>CPU</span><strong id="health-cpu">—</strong><i><b id="health-cpu-bar"></b></i></div>
               <div><span>Memory</span><strong id="health-memory">—</strong><i><b id="health-memory-bar"></b></i></div>
               <div><span>Disk</span><strong id="health-disk">—</strong><i><b id="health-disk-bar"></b></i></div>
               <div><span>Uptime</span><strong id="health-uptime">—</strong><small id="health-runtime">JVM</small></div>
             </div>
-            <div class="health-allocator-card" id="health-nv-allocator" data-state="unknown" aria-label="NV allocator memory">
-              <div class="health-allocator-name"><span class="health-dot" aria-hidden="true"></span><div><strong>NV allocator_memory</strong><small id="health-nv-status">กำลังอ่าน</small></div></div>
+            <div class="health-allocator-card" id="health-nv-allocator" data-state="unknown" aria-label="หน่วยความจำตัวประมวลผล AI">
+              <div class="health-allocator-name"><span class="health-dot" aria-hidden="true"></span><div><strong>หน่วยความจำตัวประมวลผล AI</strong><small id="health-nv-status">กำลังอ่าน</small></div></div>
               <div class="health-allocator-value"><strong id="health-nv-current">—</strong><span>ใช้อยู่</span></div>
               <div class="health-allocator-value"><strong id="health-nv-peak">—</strong><span>Peak</span></div>
             </div>
             <div class="health-dependency-list" id="health-dependency-list" aria-live="polite"><div class="loading-line wide"></div></div>
             <p class="empty-state hidden" id="health-empty">ยังอ่านสถานะระบบไม่ได้ครับ</p>
           </article>
-          <article class="panel learning-overview-panel" id="self-learning" data-cockpit-page="learning" aria-labelledby="learning-title">
-            <div class="panel-heading"><div><p class="eyebrow">SELF-LEARNING CONTROL</p><h2 id="learning-title">สิ่งที่มินิคุงกำลังเรียนรู้</h2></div><button class="primary-button" id="new-learning-topic" type="button">+ เพิ่มหัวข้อ</button></div>
-            <div class="learning-stats" aria-label="สรุป self-learning">
+          <article class="panel learning-overview-panel" id="self-learning" data-cockpit-page="memory" aria-labelledby="learning-title">
+            <div class="panel-heading"><div><p class="eyebrow">การเรียนรู้</p><h2 id="learning-title">สิ่งที่มินิคุงกำลังเรียนรู้</h2></div><button class="primary-button" id="new-learning-topic" type="button">+ เพิ่มหัวข้อ</button></div>
+            <div class="learning-stats" aria-label="สรุปการเรียนรู้">
               <div><strong id="learning-active-count">—</strong><span>หัวข้อที่เปิดอยู่</span></div>
               <div><strong id="learning-published-count">—</strong><span>ความรู้ที่ใช้ตอบได้</span></div>
               <div><strong id="learning-candidate-count">—</strong><span>รอตรวจสอบ</span></div>
               <div><strong id="learning-next-run">—</strong><span>รอบถัดไป</span></div>
             </div>
             <ol class="learning-flow" aria-label="กระบวนการเรียนรู้ของมินิคุง">
-              <li><span>1</span><div><strong>ค้นหา</strong><small>วางแผน query และเลือกแหล่งที่เชื่อถือได้</small></div></li>
-              <li><span>2</span><div><strong>อ่านต้นฉบับ</strong><small>เปิดหน้าเว็บจริง ไม่ใช้แค่ search snippet</small></div></li>
-              <li><span>3</span><div><strong>สกัด Claim</strong><small>แยกข้อความพร้อมหลักฐานและความมั่นใจ</small></div></li>
-              <li><span>4</span><div><strong>ตรวจคุณภาพ</strong><small>เช็ก grounding, topic, source และสัญญาณความเสี่ยง</small></div></li>
-              <li><span>5</span><div><strong>เผยแพร่</strong><small>เฉพาะ claim ที่ผ่านจึงถูกเรียกใช้ตอนตอบ</small></div></li>
+              <li><span>1</span><div><strong>ค้นหา</strong><small>วางแผนคำค้นและเลือกแหล่งที่เชื่อถือได้</small></div></li>
+              <li><span>2</span><div><strong>อ่านต้นฉบับ</strong><small>เปิดหน้าเว็บจริง ไม่ใช้แค่ข้อความสรุปจากหน้าค้นหา</small></div></li>
+              <li><span>3</span><div><strong>สกัดข้อเท็จจริง</strong><small>แยกข้อความพร้อมหลักฐานและความมั่นใจ</small></div></li>
+              <li><span>4</span><div><strong>ตรวจคุณภาพ</strong><small>เช็กเนื้อหา แหล่งอ้างอิง และสัญญาณความเสี่ยง</small></div></li>
+              <li><span>5</span><div><strong>พร้อมใช้งาน</strong><small>เฉพาะข้อเท็จจริงที่ผ่านแล้วจึงถูกใช้ตอบ</small></div></li>
             </ol>
           </article>
-          <article class="panel learning-topics-panel" data-cockpit-page="learning" aria-labelledby="learning-topics-title">
-            <div class="panel-heading"><div><p class="eyebrow">LEARNING TOPICS</p><h2 id="learning-topics-title">หัวข้อและตารางเรียน</h2></div><span class="soft-badge" id="learning-topic-count">— หัวข้อ</span></div>
+          <article class="panel learning-topics-panel" data-cockpit-page="memory" aria-labelledby="learning-topics-title">
+            <div class="panel-heading"><div><p class="eyebrow">หัวข้อเรียนรู้</p><h2 id="learning-topics-title">หัวข้อและตารางเรียน</h2></div><span class="soft-badge" id="learning-topic-count">— หัวข้อ</span></div>
             <div class="learning-topic-list" id="learning-topic-list" aria-live="polite"><div class="loading-line wide"></div></div>
-            <p class="empty-state hidden" id="learning-topic-empty">ยังไม่มีหัวข้อ self-learning ครับ</p>
+            <p class="empty-state hidden" id="learning-topic-empty">ยังไม่มีหัวข้อที่ให้มินิคุงเรียนรู้ครับ</p>
           </article>
-          <article class="panel learning-review-panel" data-cockpit-page="learning" aria-labelledby="learning-review-title">
-            <div class="panel-heading"><div><p class="eyebrow coral">REVIEW QUEUE</p><h2 id="learning-review-title">Claim ที่รอการตัดสินใจ</h2></div><span class="count-badge" id="learning-review-count">—</span></div>
-            <p class="panel-intro">Candidate ยังไม่ถูกใช้ตอบจนกว่าจะผ่านกฎอัตโนมัติหรือพี่สาวกดยืนยันครับ</p>
+          <article class="panel learning-review-panel" data-cockpit-page="memory" aria-labelledby="learning-review-title">
+            <div class="panel-heading"><div><p class="eyebrow coral">รอตรวจสอบ</p><h2 id="learning-review-title">ข้อเท็จจริงที่รอการตัดสินใจ</h2></div><span class="count-badge" id="learning-review-count">—</span></div>
+            <p class="panel-intro">ข้อมูลเหล่านี้จะยังไม่ถูกใช้ตอบ จนกว่าจะผ่านกฎอัตโนมัติหรือพี่สาวกดยืนยันครับ</p>
             <div class="learning-claim-list" id="learning-claim-list" aria-live="polite"><div class="loading-line wide"></div></div>
-            <p class="empty-state hidden" id="learning-claim-empty">ไม่มี claim รอตรวจครับ</p>
+            <p class="empty-state hidden" id="learning-claim-empty">ไม่มีข้อเท็จจริงรอตรวจครับ</p>
           </article>
-          <article class="panel learning-runs-panel" data-cockpit-page="learning" aria-labelledby="learning-runs-title">
-            <div class="panel-heading"><div><p class="eyebrow">ACQUISITION RUNS</p><h2 id="learning-runs-title">รอบเรียนล่าสุด</h2></div><span class="soft-badge" id="learning-run-count">— รอบ</span></div>
+          <article class="panel learning-runs-panel" data-cockpit-page="memory" aria-labelledby="learning-runs-title">
+            <div class="panel-heading"><div><p class="eyebrow">ประวัติการเรียนรู้</p><h2 id="learning-runs-title">รอบเรียนล่าสุด</h2></div><span class="soft-badge" id="learning-run-count">— รอบ</span></div>
             <div class="learning-run-list" id="learning-run-list" aria-live="polite"><div class="loading-line wide"></div></div>
             <p class="empty-state hidden" id="learning-run-empty">ยังไม่มีประวัติการเรียนครับ</p>
           </article>
           <article class="panel context-panel" id="context-memory" data-cockpit-page="memory" aria-labelledby="context-title">
-            <div class="panel-heading"><div><p class="eyebrow">MEMORY &amp; KNOWLEDGE</p><h2 id="context-title">ภาพรวมสมองระยะยาวของมินิคุง</h2></div><span class="soft-badge" id="memory-count">— ความจำ</span></div>
-            <div class="context-stats" aria-label="สรุปบริบท"><div><strong id="context-token-count">—</strong><span>Context ล่าสุด</span></div><div><strong id="knowledge-source-count">—</strong><span>แหล่งความรู้</span></div><div><strong id="knowledge-chunk-count">—</strong><span>ส่วนข้อมูล</span></div></div>
+            <div class="panel-heading"><div><p class="eyebrow">ภาพรวมความจำ</p><h2 id="context-title">สมองระยะยาวของมินิคุง</h2></div><span class="soft-badge" id="memory-count">— ความจำ</span></div>
+            <div class="context-stats" aria-label="สรุปบริบท"><div><strong id="context-token-count">—</strong><span>บริบทล่าสุด</span></div><div><strong id="knowledge-source-count">—</strong><span>แหล่งความรู้</span></div><div><strong id="knowledge-chunk-count">—</strong><span>ส่วนข้อมูล</span></div></div>
             <div class="memory-preview" id="memory-preview" aria-live="polite"></div>
             <p class="empty-state hidden" id="memory-empty">ยังไม่มีความจำที่บันทึกไว้ครับ</p>
           </article>
           <article class="panel memory-map-panel" data-cockpit-page="memory" aria-labelledby="memory-map-title">
-            <div class="panel-heading"><div><p class="eyebrow">HOW MINIKUN REMEMBERS</p><h2 id="memory-map-title">ข้อมูลเดินทางและถูกใช้ยังไง</h2></div><span class="privacy-badge">Local first</span></div>
+            <div class="panel-heading"><div><p class="eyebrow">เส้นทางของข้อมูล</p><h2 id="memory-map-title">มินิคุงจำและนำข้อมูลไปใช้ยังไง</h2></div><span class="privacy-badge">เก็บในเครื่องก่อน</span></div>
             <div class="memory-lanes">
-              <section><span class="lane-icon">◌</span><div><strong>Context ของบทสนทนา</strong><small>ข้อความล่าสุดและ summary ช่วยให้คุยต่อเนื่อง เป็นบริบทระยะสั้นของแต่ละแชต</small></div><b>ชั่วคราว</b></section>
-              <section><span class="lane-icon">♥</span><div><strong>Personal Memory</strong><small>ข้อเท็จจริง ความชอบ เป้าหมาย ข้อจำกัด และความสัมพันธ์ที่มีเหตุผลรองรับ</small></div><b id="memory-lane-count">— รายการ</b></section>
-              <section><span class="lane-icon">▤</span><div><strong>Personal Knowledge</strong><small>ไฟล์ใน knowledge roots ถูกแบ่งเป็น chunks และค้นคืนแบบ semantic เมื่อเกี่ยวข้อง</small></div><b id="knowledge-lane-count">— chunks</b></section>
-              <section><span class="lane-icon">↗</span><div><strong>Acquired Knowledge</strong><small>agent ค้นเว็บ อ่านต้นฉบับ และเก็บเฉพาะ published claim พร้อม citation</small></div><b id="acquired-lane-count">— claims</b></section>
-              <section class="retrieval-lane"><span class="lane-icon">◎</span><div><strong>ประกอบคำตอบ</strong><small>มินิคุงดึงเฉพาะส่วนที่ตรงคำถามเข้า context; candidate, retracted และข้อมูลหมดอายุจะไม่ถูกใช้</small></div><b>ตามความเกี่ยวข้อง</b></section>
+              <section><span class="lane-icon">◌</span><div><strong>บริบทบทสนทนา</strong><small>ข้อความล่าสุดและบทสรุปช่วยให้คุยต่อเนื่อง เป็นความจำระยะสั้นของแต่ละแชต</small></div><b>ชั่วคราว</b></section>
+              <section><span class="lane-icon">♥</span><div><strong>ความจำส่วนตัว</strong><small>ข้อเท็จจริง ความชอบ เป้าหมาย ข้อจำกัด และความสัมพันธ์ที่มีเหตุผลรองรับ</small></div><b id="memory-lane-count">— รายการ</b></section>
+              <section><span class="lane-icon">▤</span><div><strong>คลังความรู้ส่วนตัว</strong><small>ไฟล์ที่อนุญาตจะถูกแบ่งเป็นส่วนย่อย เพื่อค้นเฉพาะข้อมูลที่เกี่ยวข้อง</small></div><b id="knowledge-lane-count">— ส่วน</b></section>
+              <section><span class="lane-icon">↗</span><div><strong>ความรู้ที่ค้นเพิ่ม</strong><small>มินิคุงอ่านต้นฉบับและเก็บเฉพาะข้อเท็จจริงที่ผ่านการตรวจพร้อมแหล่งอ้างอิง</small></div><b id="acquired-lane-count">— ข้อเท็จจริง</b></section>
+              <section class="retrieval-lane"><span class="lane-icon">◎</span><div><strong>ประกอบคำตอบ</strong><small>มินิคุงดึงเฉพาะข้อมูลที่ตรงคำถาม ส่วนที่ยังไม่ผ่านหรือหมดอายุจะไม่ถูกใช้</small></div><b>ตามความเกี่ยวข้อง</b></section>
             </div>
           </article>
           <article class="panel memory-records-panel" data-cockpit-page="memory" aria-labelledby="memory-records-title">
-            <div class="panel-heading"><div><p class="eyebrow">PERSONAL MEMORY</p><h2 id="memory-records-title">สิ่งที่มินิคุงจำเกี่ยวกับเรา</h2></div><span class="soft-badge" id="memory-record-count">— รายการ</span></div>
+            <div class="panel-heading"><div><p class="eyebrow">ความจำส่วนตัว</p><h2 id="memory-records-title">สิ่งที่มินิคุงจำเกี่ยวกับเรา</h2></div><span class="soft-badge" id="memory-record-count">— รายการ</span></div>
             <div class="memory-record-list" id="memory-record-list" aria-live="polite"><div class="loading-line wide"></div></div>
-            <p class="empty-state hidden" id="memory-record-empty">ยังไม่มี personal memory ครับ</p>
+            <p class="empty-state hidden" id="memory-record-empty">ยังไม่มีความจำส่วนตัวครับ</p>
           </article>
           <article class="panel knowledge-library-panel" data-cockpit-page="memory" aria-labelledby="knowledge-library-title">
-            <div class="panel-heading"><div><p class="eyebrow">KNOWLEDGE LIBRARY</p><h2 id="knowledge-library-title">แหล่งข้อมูลและความรู้ที่พร้อมใช้</h2></div><span class="soft-badge" id="knowledge-ready-count">— พร้อมใช้</span></div>
-            <div class="knowledge-library-grid"><section><h3>ไฟล์ที่ทำดัชนี</h3><div id="knowledge-source-list" class="knowledge-source-list" aria-live="polite"></div></section><section><h3>Claim ที่ผ่านแล้ว</h3><div id="published-claim-list" class="published-claim-list" aria-live="polite"></div></section></div>
+            <div class="panel-heading"><div><p class="eyebrow">คลังความรู้</p><h2 id="knowledge-library-title">แหล่งข้อมูลและความรู้ที่พร้อมใช้</h2></div><span class="soft-badge" id="knowledge-ready-count">— พร้อมใช้</span></div>
+            <div class="knowledge-library-grid"><section><h3>ไฟล์ที่ค้นหาได้</h3><div id="knowledge-source-list" class="knowledge-source-list" aria-live="polite"></div></section><section><h3>ข้อเท็จจริงที่ผ่านแล้ว</h3><div id="published-claim-list" class="published-claim-list" aria-live="polite"></div></section></div>
           </article>
-          <article class="panel permission-panel" id="permission-center" data-cockpit-page="permissions" aria-labelledby="permission-title">
-            <div class="panel-heading"><div><p class="eyebrow">PERMISSIONS</p><h2 id="permission-title">สิทธิ์บนอุปกรณ์นี้</h2></div><span class="privacy-badge">เฉพาะอุปกรณ์นี้</span></div>
+          <article class="panel permission-panel" id="permission-center" data-cockpit-page="system" aria-labelledby="permission-title">
+            <div class="panel-heading"><div><p class="eyebrow">ความเป็นส่วนตัว</p><h2 id="permission-title">สิทธิ์บนอุปกรณ์นี้</h2></div><span class="privacy-badge">เฉพาะอุปกรณ์นี้</span></div>
             <div class="permission-list" id="permission-list">
               <div class="permission-item" data-permission="location"><span class="permission-icon" aria-hidden="true">⌖</span><div><strong>ตำแหน่ง</strong><small id="location-detail">ยังไม่ได้เปิดใช้งาน</small></div><span class="permission-state" id="location-state">กำลังตรวจ</span><button type="button" id="request-location">เปิดใช้</button></div>
               <div class="permission-item" data-permission="microphone"><span class="permission-icon" aria-hidden="true">●</span><div><strong>ไมโครโฟน</strong><small id="microphone-detail">ใช้คุยและถอดเสียง</small></div><span class="permission-state" id="microphone-state">กำลังตรวจ</span><button type="button" id="request-microphone">เปิดใช้</button></div>
               <div class="permission-item" data-permission="notifications"><span class="permission-icon" aria-hidden="true">◌</span><div><strong>การแจ้งเตือน</strong><small id="notifications-detail">แจ้งเมื่อหน้าเว็บเปิดใช้งาน</small></div><span class="permission-state" id="notifications-state">กำลังตรวจ</span><button type="button" id="request-notifications">เปิดใช้</button></div>
             </div>
-            <p class="permission-note" id="permission-note">มินิคุงจะขอสิทธิ์เมื่อพี่สาวแตะเท่านั้น ตำแหน่งปัจจุบันไม่ถูกบันทึกลง browser ครับ</p>
+            <p class="permission-note" id="permission-note">มินิคุงจะขอสิทธิ์เมื่อพี่สาวแตะเท่านั้น และจะไม่บันทึกตำแหน่งปัจจุบันไว้ในเบราว์เซอร์ครับ</p>
           </article>
-          <article class="panel decision-panel hidden" id="pending-panel" data-cockpit-page="work" aria-labelledby="pending-title"><div class="panel-heading"><div><p class="eyebrow coral">YOUR DECISION</p><h2 id="pending-title">เรื่องที่รอพี่สาวตัดสินใจ</h2></div><span class="count-badge" id="decision-count">0</span></div><div class="decision-list" id="decision-list" aria-live="polite"></div></article>
-          <article class="panel focus-panel" data-cockpit-page="work" aria-labelledby="focus-title"><div class="panel-heading"><div><p class="eyebrow">NEXT ACTIONS</p><h2 id="focus-title">ก้าวเล็ก ๆ ของวันนี้</h2></div><span class="soft-badge">เลือกมาให้แล้ว</span></div><div class="action-list" id="action-list" aria-live="polite"><div class="loading-row"><span></span><div><i></i><i></i></div></div></div><p class="empty-state hidden" id="action-empty">ยังไม่มีสิ่งเร่งด่วนครับ วันนี้มีพื้นที่ให้หายใจเต็มที่</p></article>
-          <article class="panel experiment-panel" id="experiments" data-cockpit-page="experiments" aria-labelledby="experiment-title"><div class="panel-heading"><div><p class="eyebrow coral">PERSONAL EXPERIMENT</p><h2 id="experiment-title">กำลังเรียนรู้ว่าอะไรเวิร์ก</h2></div><button class="text-button" id="new-experiment" type="button">+ ทดลองใหม่</button></div><div id="experiment-card" class="experiment-content" aria-live="polite"><div class="experiment-orbit" aria-hidden="true"><span>—</span></div><div><div class="loading-line wide"></div><div class="loading-line"></div></div></div><div class="empty-state hidden" id="experiment-empty"><strong>มีเรื่องเล็ก ๆ ที่อยากลองเปลี่ยนไหมครับ</strong><span>ตั้งสมมติฐาน วัดผลสั้น ๆ แล้วให้มินิคุงช่วยสรุป</span><button class="primary-button" type="button" data-open-experiment>สร้างการทดลองแรก</button></div></article>
-          <article class="panel inbox-panel" id="inbox" data-cockpit-page="work" aria-labelledby="inbox-title"><div class="panel-heading"><div><p class="eyebrow">QUICK CAPTURE</p><h2 id="inbox-title">ฝากไว้กับมินิคุง</h2></div><span class="count-badge" id="inbox-count">0</span></div><form class="capture-form" id="capture-form"><label class="sr-only" for="capture-input">ข้อความที่ต้องการฝากไว้</label><textarea id="capture-input" rows="2" placeholder="งาน ไอเดีย สิ่งที่ต้องจำ…" maxlength="20000" required></textarea><button class="primary-button" type="submit">เก็บเข้า Inbox</button></form><div class="inbox-list" id="inbox-list" aria-live="polite"></div><p class="empty-state" id="inbox-empty">Inbox โล่งแล้วครับ</p></article>
-          <article class="panel relationship-panel" id="conversation-threads" data-cockpit-page="overview" aria-labelledby="conversation-threads-title"><div class="panel-heading"><div><p class="eyebrow">ONGOING THREADS</p><h2 id="conversation-threads-title">เรื่องที่เรายังคุยกันไม่จบ</h2></div><span class="count-badge" id="conversation-thread-count">0</span></div><div class="inbox-list" id="conversation-thread-list" aria-live="polite"></div><p class="empty-state" id="conversation-thread-empty">ตอนนี้ไม่มีเรื่องค้างที่ต้องตามครับ</p></article>
-          <article class="panel timeline-panel" id="timeline" data-cockpit-page="overview" aria-labelledby="timeline-title"><div class="panel-heading"><div><p class="eyebrow">PERSONAL TIMELINE</p><h2 id="timeline-title">สิ่งที่เกิดขึ้นล่าสุด</h2></div><button class="text-button" id="show-all-timeline" type="button">ดูเพิ่ม</button></div><ol class="timeline-list" id="timeline-list" aria-live="polite"><li class="loading-line wide"></li></ol><p class="empty-state hidden" id="timeline-empty">เรื่องราวของเราจะเริ่มบันทึกตรงนี้ครับ</p></article>
+          <article class="panel decision-panel hidden" id="pending-panel" data-cockpit-page="today" aria-labelledby="pending-title"><div class="panel-heading"><div><p class="eyebrow coral">รอพี่สาว</p><h2 id="pending-title">เรื่องที่รอการตัดสินใจ</h2></div><span class="count-badge" id="decision-count">0</span></div><div class="decision-list" id="decision-list" aria-live="polite"></div></article>
+          <article class="panel focus-panel" data-cockpit-page="today" aria-labelledby="focus-title"><div class="panel-heading"><div><p class="eyebrow">ก้าวถัดไป</p><h2 id="focus-title">สิ่งที่น่าขยับต่อวันนี้</h2></div><span class="soft-badge">เลือกมาให้แล้ว</span></div><div class="action-list" id="action-list" aria-live="polite"><div class="loading-row"><span></span><div><i></i><i></i></div></div></div><p class="empty-state hidden" id="action-empty">ยังไม่มีสิ่งเร่งด่วนครับ วันนี้มีพื้นที่ให้หายใจเต็มที่</p></article>
+          <article class="panel inbox-panel" id="inbox" data-cockpit-page="today" aria-labelledby="inbox-title"><div class="panel-heading"><div><p class="eyebrow">ฝากไว้ก่อน</p><h2 id="inbox-title">จดให้มินิคุงจัดการต่อ</h2></div><span class="count-badge" id="inbox-count">0</span></div><form class="capture-form" id="capture-form"><label class="sr-only" for="capture-input">ข้อความที่ต้องการฝากไว้</label><textarea id="capture-input" rows="2" placeholder="งาน ไอเดีย หรือสิ่งที่ต้องจำ…" maxlength="20000" required></textarea><button class="primary-button" type="submit">ฝากไว้</button></form><div class="inbox-list" id="inbox-list" aria-live="polite"></div><p class="empty-state" id="inbox-empty">ตอนนี้ไม่มีเรื่องที่ฝากไว้ครับ</p></article>
+          <article class="panel experiment-panel" id="experiments" data-cockpit-page="today" aria-labelledby="experiment-title"><div class="panel-heading"><div><p class="eyebrow coral">การทดลองส่วนตัว</p><h2 id="experiment-title">กำลังเรียนรู้ว่าอะไรเวิร์ก</h2></div><button class="text-button" id="new-experiment" type="button">+ ทดลองใหม่</button></div><div id="experiment-card" class="experiment-content" aria-live="polite"><div class="experiment-orbit" aria-hidden="true"><span>—</span></div><div><div class="loading-line wide"></div><div class="loading-line"></div></div></div><div class="empty-state hidden" id="experiment-empty"><strong>มีเรื่องเล็ก ๆ ที่อยากลองเปลี่ยนไหมครับ</strong><span>ตั้งสมมติฐาน วัดผลสั้น ๆ แล้วให้มินิคุงช่วยสรุป</span><button class="primary-button" type="button" data-open-experiment>สร้างการทดลองแรก</button></div></article>
+          <article class="panel quick-actions-panel" id="quick-actions" data-cockpit-page="today" aria-labelledby="quick-actions-title">
+            <div class="panel-heading"><div><p class="eyebrow">ทางลัด</p><h2 id="quick-actions-title">ให้มินิคุงช่วยต่อ</h2></div><span class="panel-heading-note">เลือกแล้วไปต่อในแชต</span></div>
+            <div class="quick-action-list">
+              <button type="button" data-quick-action="image"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="2"/><circle cx="9" cy="10" r="1.5"/><path d="m6 17 4-4 3 3 2-2 3 3"/></svg><strong>ถามจากรูป</strong><small>ถ่ายหรือเลือกรูป</small></button>
+              <button type="button" data-quick-action="idea"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a6 6 0 0 0-3.5 10.9c.9.7 1.5 1.6 1.5 2.6h4c0-1 .6-1.9 1.5-2.6A6 6 0 0 0 12 3Z"/><path d="M10 20h4M9.5 17h5"/></svg><strong>จดไอเดีย</strong><small>ฝากไว้ให้จัดการต่อ</small></button>
+              <button type="button" data-quick-action="reminder"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2M9 3h6"/></svg><strong>สร้างการเตือน</strong><small>บอกเวลาในแชต</small></button>
+              <button type="button" data-quick-action="location"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s6-5.2 6-11a6 6 0 1 0-12 0c0 5.8 6 11 6 11Z"/><circle cx="12" cy="10" r="2"/></svg><strong>ใช้ตำแหน่ง</strong><small>เฉพาะการเปิดหน้านี้</small></button>
+              <button type="button" data-quick-action="voice"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M6 11a6 6 0 0 0 12 0M12 17v4M9 21h6"/></svg><strong>คุยด้วยเสียง</strong><small>พูดแทนการพิมพ์</small></button>
+            </div>
+          </article>
+          <article class="panel relationship-panel" id="conversation-threads" data-cockpit-page="today" aria-labelledby="conversation-threads-title"><div class="panel-heading"><div><p class="eyebrow">เรื่องที่ติดตาม</p><h2 id="conversation-threads-title">เรื่องที่เรายังคุยกันไม่จบ</h2></div><span class="count-badge" id="conversation-thread-count">0</span></div><div class="inbox-list" id="conversation-thread-list" aria-live="polite"></div><p class="empty-state" id="conversation-thread-empty">ตอนนี้ไม่มีเรื่องค้างที่ต้องตามครับ</p></article>
+          <article class="panel timeline-panel" id="timeline" data-cockpit-page="agent" aria-labelledby="timeline-title"><div class="panel-heading"><div><p class="eyebrow">ความเคลื่อนไหว</p><h2 id="timeline-title">สิ่งที่เกิดขึ้นล่าสุด</h2></div><button class="text-button" id="show-all-timeline" type="button">ดูเพิ่ม</button></div><ol class="timeline-list" id="timeline-list" aria-live="polite"><li class="loading-line wide"></li></ol><p class="empty-state hidden" id="timeline-empty">ความเคลื่อนไหวของเราจะเริ่มบันทึกตรงนี้ครับ</p></article>
         </section>
       </section>
     </main>
@@ -215,10 +328,9 @@
       <header class="mobile-menu-heading"><img src="/cockpit/minikun-avatar.jpg" alt=""><div><strong id="mobile-menu-title">MINIKUN</strong><span><i class="status-dot"></i> พร้อมอยู่ข้างพี่สาว</span></div><button class="close-button" type="button" data-close-dialog aria-label="ปิดเมนู">×</button></header>
       <button class="mobile-menu-new-chat" id="mobile-menu-new-chat" type="button"><span aria-hidden="true">＋</span> เริ่มแชตใหม่</button>
       <nav class="mobile-menu-nav" aria-label="เมนูมือถือ">
-        <button class="mobile-nav-item active" type="button" data-view-target="chat"><span aria-hidden="true">◉</span><b>แชต</b></button>
-        <button class="mobile-nav-item" type="button" data-view-target="cockpit"><span aria-hidden="true">⌁</span><b>Cockpit</b></button>
-        <button class="mobile-nav-item" type="button" data-view-target="cockpit" data-section="experiments"><span aria-hidden="true">◇</span><b>การทดลอง</b></button>
-        <button class="mobile-nav-item" type="button" data-view-target="cockpit" data-section="inbox"><span aria-hidden="true">＋</span><b>Inbox</b></button>
+        <button class="mobile-nav-item active" type="button" data-view-target="chat" aria-current="page"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 17.5 3.5 21l4.2-1.4c1.3.6 2.7.9 4.3.9 5.2 0 9.5-3.8 9.5-8.5S17.2 3.5 12 3.5 2.5 7.3 2.5 12c0 2.1.9 4 2.5 5.5Z"/><path d="M8 12h.01M12 12h.01M16 12h.01"/></svg><b>แชต</b></button>
+        <button class="mobile-nav-item" type="button" data-view-target="studio"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7.5h4l1.4-2h5.2l1.4 2h4v11H4Z"/><circle cx="12" cy="13" r="3.5"/><path d="m18 3 .5 1.5L20 5l-1.5.5L18 7l-.5-1.5L16 5l1.5-.5Z"/></svg><b>สร้างภาพ</b></button>
+        <button class="mobile-nav-item" type="button" data-view-target="cockpit"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19v-7a8 8 0 0 1 16 0v7"/><path d="M7 19v-2a5 5 0 0 1 10 0v2M12 9v3l2 1"/></svg><b>Cockpit</b></button>
       </nav>
       <section class="mobile-conversation-panel" aria-labelledby="mobile-conversation-heading">
         <div class="conversation-heading"><span id="mobile-conversation-heading">บทสนทนา</span><button id="mobile-clear-chat-list" type="button" aria-label="ล้างรายการบทสนทนา">•••</button></div>
@@ -240,6 +352,6 @@
   <dialog id="conversation-actions-dialog"><form method="dialog" class="dialog-card"><div class="dialog-heading"><div><p class="eyebrow">CONVERSATION</p><h2>จัดการบทสนทนา</h2></div><button class="close-button" type="button" data-close-dialog aria-label="ปิด">×</button></div><label>ชื่อบทสนทนา<input id="conversation-title-input" maxlength="160" autocomplete="off"></label><div class="conversation-action-grid"><button class="secondary-button" id="rename-conversation" type="button">เปลี่ยนชื่อ</button><button class="secondary-button" id="pin-conversation" type="button">ปักหมุด</button><button class="secondary-button" id="archive-conversation" type="button">เก็บเข้าคลัง</button><button class="secondary-button" id="duplicate-conversation" type="button">ทำสำเนา</button><button class="secondary-button" id="export-conversation" type="button">Export Markdown</button><button class="secondary-button" id="export-conversation-json" type="button">Export JSON</button><button class="danger-button" id="delete-conversation" type="button">ลบบทสนทนา</button></div></form></dialog>
   <script src="/cockpit/cockpit-chat-assets.js?v=20260828-storage1" defer></script>
   <script src="/cockpit/cockpit-markdown.js?v=20260829-markdown1" defer></script>
-  <script src="/cockpit/cockpit.js?v=20260829-markdown1" defer></script>
+  <script src="/cockpit/cockpit.js?v=20260831-pony-studio3" defer></script>
 </body>
 </html>

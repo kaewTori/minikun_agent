@@ -68,6 +68,7 @@ class ChatCapabilityFactoryTest {
                 .reduce((left, right) -> left + "\n" + right).orElse("");
 
         assertTrue(text.contains("Creative pacing"));
+        assertTrue(text.contains("Minikun narrative voice"));
         assertTrue(text.contains("Reserve enough space"));
         assertTrue(text.contains("scene or chapter"));
         assertTrue(text.contains("protagonist desire, obstacle, stakes"));

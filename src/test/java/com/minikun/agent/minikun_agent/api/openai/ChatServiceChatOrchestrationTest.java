@@ -93,6 +93,7 @@ import com.minikun.weather.WeatherReport;
 import com.minikun.vision.VisionInputService;
 import com.minikun.visual.GeneratedImage;
 import com.minikun.visual.GeneratedImageStore;
+import com.minikun.visual.ImageGenerationTool;
 import com.minikun.visual.StoryIllustrationService;
 
 import reactor.core.publisher.Flux;
@@ -109,11 +110,13 @@ class ChatServiceChatOrchestrationTest {
         when(chatModel.call(any(Prompt.class))).thenReturn(response(
                 "มะลิยืนอยู่บนหอดูดาว ขณะที่ดาวดวงแรกส่องแสงตอบกลับมาครับ"));
         ChatService service = service(chatModel, conversation);
-        setField(service, "storyIllustrationService", new StoryIllustrationService(prompt ->
-                new GeneratedImage(
-                        new byte[] {(byte) 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1},
-                        "เด็กหญิงบนหอดูดาว", "test-image-model"),
-                new GeneratedImageStore(temporaryDirectory, 1024, Clock.systemUTC()), true, 2000));
+        var imageTool = new ImageGenerationTool(prompt -> new GeneratedImage(
+                new byte[] {(byte) 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1},
+                "test-image-model"),
+                new GeneratedImageStore(temporaryDirectory, 1024, Clock.systemUTC()),
+                8000, 4_194_304L);
+        setField(service, "storyIllustrationService", new StoryIllustrationService(
+                imageTool, true, 2000));
 
         ChatCompletionResponse result = service.chatCompletion(new ChatCompletionRequest(
                 "mini-kun", List.of(new Message("user", "แต่งเรื่องสั้นเกี่ยวกับเด็กที่ตามหาดวงดาว")),

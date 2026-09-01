@@ -458,8 +458,11 @@ public class ChatService {
                 content = "ขออภัยครับ โมเดลยังไม่ได้ส่งคำตอบที่สมบูรณ์ กรุณาลองสั่งอีกครั้งครับ";
             }
             content = CitationLinker.normalize(content, context.citations());
+            StoryIllustrationService.IllustrationResult illustration = illustrate(
+                    context, userMessage.content(), content);
+            content = illustration.appendNoticeTo(content);
             List<ChatAttachment> attachments = combineAttachments(
-                    context.attachments(), illustrate(userMessage.content(), content));
+                    context.attachments(), illustration.attachments());
             turnFinalizer().complete(
                     context.conversationId(), userMessage, context.ownerId(), transaction.requestId(), content,
                     context.persistConversation(), false);
@@ -600,10 +603,10 @@ public class ChatService {
                 Flux.just(responseFactory.initialChunk(id, created, model, context.attachments())),
                 chunks,
                 Flux.defer(() -> {
-                    List<ChatAttachment> generated = illustrate(
-                            userMessage.content(), assistantContent.toString());
-                    String attachmentChunk = responseFactory.attachmentChunk(id, created, model, generated);
-                    return attachmentChunk.isEmpty() ? Flux.empty() : Flux.just(attachmentChunk);
+                    var illustration = illustrate(context, userMessage.content(), assistantContent.toString());
+                    assistantContent.append(illustration.notice());
+                    return Flux.fromIterable(responseFactory.illustrationChunks(
+                            id, created, model, illustration));
                 }),
                 Flux.defer(() -> {
                     String usageChunk = responseFactory.usageChunk(modelUsage.get(), id, created, model);
@@ -949,13 +952,14 @@ public class ChatService {
         return storyIllustrationService != null && storyIllustrationService.shouldIllustrate(userMessage);
     }
 
-    private List<ChatAttachment> illustrate(String userMessage, String assistantContent) {
+    private StoryIllustrationService.IllustrationResult illustrate(
+            ChatExecutionContext context, String userMessage, String assistantContent) {
         if (storyIllustrationService == null || !requestInspector.hasText(assistantContent)) {
-            return List.of();
+            return new StoryIllustrationService.IllustrationResult(List.of(), "");
         }
-        return storyIllustrationService.illustrate(userMessage, assistantContent);
+        return storyIllustrationService.illustrate(context.ownerId(), context.conversationId().value(),
+                userMessage, assistantContent);
     }
-
     private List<ChatAttachment> combineAttachments(
             List<ChatAttachment> existing, List<ChatAttachment> generated) {
         if (generated == null || generated.isEmpty()) {

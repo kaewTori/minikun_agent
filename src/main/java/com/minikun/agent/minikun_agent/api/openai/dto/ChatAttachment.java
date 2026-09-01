@@ -14,8 +14,19 @@ public record ChatAttachment(
 		Integer width,
 		Integer height,
 		String provider,
-		String license) {
+		String license,
+		String prompt,
+		@JsonProperty("negative_prompt") String negativePrompt,
+		Long seed,
+		@JsonProperty("generation_id") String generationId) {
+	public ChatAttachment(String type, String url, String title, String sourceUrl, String description,
+			String origin, String originalUrl, String thumbnailUrl, Integer width, Integer height,
+			String provider, String license) {
+		this(type, url, title, sourceUrl, description, origin, originalUrl, thumbnailUrl,
+				width, height, provider, license, "", "", null, "");
+	}
+
 	public ChatAttachment(String type, String url, String title) {
-		this(type, url, title, "", "", "web", url, "", null, null, "", "");
+		this(type, url, title, "", "", "web", url, "", null, null, "", "", "", "", null, "");
 	}
 }

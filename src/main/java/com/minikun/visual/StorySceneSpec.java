@@ -1,0 +1,88 @@
+package com.minikun.visual;
+
+import java.util.List;
+
+/** Validated visual facts for exactly one generated frame. */
+public record StorySceneSpec(
+        String title,
+        int subjectCount,
+        List<String> characterNames,
+        String action,
+        String interaction,
+        List<String> keyObjects,
+        String setting,
+        String time,
+        String weather,
+        String emotion,
+        String atmosphere,
+        String lighting,
+        String palette,
+        String composition,
+        String cameraAngle,
+        String shotDistance,
+        String focus,
+        List<String> mustInclude,
+        List<String> mustNotInclude,
+        List<String> fineDetails) {
+
+    private static final int MAX_LIST_ITEMS = 20;
+
+    public StorySceneSpec {
+        title = text(title, 120);
+        characterNames = tags(characterNames);
+        action = text(action, 240);
+        interaction = text(interaction, 240);
+        keyObjects = tags(keyObjects);
+        setting = text(setting, 240);
+        time = text(time, 120);
+        weather = text(weather, 120);
+        emotion = text(emotion, 160);
+        atmosphere = text(atmosphere, 160);
+        lighting = text(lighting, 160);
+        palette = text(palette, 160);
+        composition = text(composition, 160);
+        cameraAngle = text(cameraAngle, 120);
+        shotDistance = text(shotDistance, 120);
+        focus = text(focus, 160);
+        mustInclude = tags(mustInclude);
+        mustNotInclude = tags(mustNotInclude);
+        fineDetails = tags(fineDetails);
+        if (subjectCount < 0 || subjectCount > 8) {
+            throw new IllegalArgumentException("scene subject count must be between 0 and 8");
+        }
+        if (setting.isBlank() && mustInclude.isEmpty()) {
+            throw new IllegalArgumentException("scene setting or required visual anchor is required");
+        }
+    }
+
+    public static StorySceneSpec fallback(String visualPrompt, String title, String action,
+            String composition, String shotDistance) {
+        return new StorySceneSpec(title, 0, List.of(), action, "", List.of(), "", "", "",
+                "", "cinematic story atmosphere", "warm cinematic lighting", "", composition,
+                "eye level", shotDistance, "clear subject", splitTags(visualPrompt), List.of(),
+                List.of("detailed background"));
+    }
+
+    private static List<String> splitTags(String value) {
+        if (value == null) return List.of();
+        return java.util.Arrays.stream(value.split(",")).map(String::strip)
+                .filter(tag -> !tag.isBlank()).toList();
+    }
+
+    private static List<String> tags(List<String> values) {
+        if (values == null) return List.of();
+        return values.stream().map(value -> text(value, 180))
+                .filter(value -> !value.isBlank())
+                .filter(value -> !value.equalsIgnoreCase("none") && !value.equalsIgnoreCase("unknown"))
+                .filter(value -> !value.equalsIgnoreCase("source_anime"))
+                .distinct().limit(MAX_LIST_ITEMS).toList();
+    }
+
+    private static String text(String value, int maximum) {
+        String result = value == null ? "" : value.replaceAll("[\\r\\n\\p{Cntrl}]+", " ")
+                .replaceAll("\\s+", " ").strip();
+        if (result.equalsIgnoreCase("none") || result.equalsIgnoreCase("unknown")
+                || result.equalsIgnoreCase("source_anime")) return "";
+        return result.length() <= maximum ? result : result.substring(0, maximum).stripTrailing();
+    }
+}

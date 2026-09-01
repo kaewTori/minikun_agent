@@ -2,31 +2,83 @@ package com.minikun.visual;
 
 import com.minikun.agent.minikun_agent.api.openai.dto.ChatAttachment;
 import java.util.List;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.Objects;
+import java.time.Duration;
 import lombok.extern.slf4j.Slf4j;
 
 /** Fail-open post-processor that turns a story's defining moment into an attachment. */
 @Slf4j
 public final class StoryIllustrationService {
-    private final StoryIllustrationProvider provider;
-    private final GeneratedImageStore store;
+    static final String FAILURE_NOTICE = "\n\n> ⚠️ มินิคุงสร้างภาพประกอบไม่สำเร็จ"
+            + "หลังลองโหมดประหยัดหน่วยความจำแล้ว กรุณาลองอีกครั้งเมื่อ TinyGrad พร้อมใช้งานครับ";
+
+    private final ImageGenerationTool imageGenerationTool;
     private final StoryIllustrationIntentDetector intentDetector;
     private final boolean autoIllustrateCreativeStories;
     private final int maximumPromptCharacters;
+    private final Duration recoveryTimeout;
+    private final StoryVisualPlanGenerator visualPlanGenerator;
+    private final CharacterVisualMemory characterMemory;
+    private final PonyStoryPromptCompiler promptCompiler;
+    private final StoryIllustrationModeDetector modeDetector;
+    private final int maximumStoryboardScenes;
 
     public StoryIllustrationService(
-            StoryIllustrationProvider provider,
-            GeneratedImageStore store,
+            ImageGenerationTool imageGenerationTool,
             boolean autoIllustrateCreativeStories,
             int maximumPromptCharacters) {
-        this.provider = Objects.requireNonNull(provider, "provider must not be null");
-        this.store = Objects.requireNonNull(store, "store must not be null");
+        this(imageGenerationTool, autoIllustrateCreativeStories, maximumPromptCharacters, Duration.ZERO,
+                StoryVisualPromptGenerator::fallback);
+    }
+
+    public StoryIllustrationService(
+            ImageGenerationTool imageGenerationTool,
+            boolean autoIllustrateCreativeStories,
+            int maximumPromptCharacters,
+            Duration recoveryTimeout) {
+        this(imageGenerationTool, autoIllustrateCreativeStories, maximumPromptCharacters, recoveryTimeout,
+                StoryVisualPromptGenerator::fallback);
+    }
+
+    public StoryIllustrationService(
+            ImageGenerationTool imageGenerationTool,
+            boolean autoIllustrateCreativeStories,
+            int maximumPromptCharacters,
+            Duration recoveryTimeout,
+            StoryVisualPromptGenerator visualPromptGenerator) {
+        this(imageGenerationTool, autoIllustrateCreativeStories, maximumPromptCharacters, recoveryTimeout,
+                legacyPlanGenerator(visualPromptGenerator), new InMemoryCharacterVisualMemory(), 3);
+    }
+
+    public StoryIllustrationService(
+            ImageGenerationTool imageGenerationTool,
+            boolean autoIllustrateCreativeStories,
+            int maximumPromptCharacters,
+            Duration recoveryTimeout,
+            StoryVisualPlanGenerator visualPlanGenerator,
+            CharacterVisualMemory characterMemory,
+            int maximumStoryboardScenes) {
+        this.imageGenerationTool = Objects.requireNonNull(
+                imageGenerationTool, "image generation tool must not be null");
         this.intentDetector = new StoryIllustrationIntentDetector();
         this.autoIllustrateCreativeStories = autoIllustrateCreativeStories;
         if (maximumPromptCharacters < 500) {
             throw new IllegalArgumentException("maximum illustration prompt must be at least 500 characters");
         }
         this.maximumPromptCharacters = maximumPromptCharacters;
+        this.recoveryTimeout = recoveryTimeout == null || recoveryTimeout.isNegative()
+                ? Duration.ZERO : recoveryTimeout;
+        this.visualPlanGenerator = Objects.requireNonNull(
+                visualPlanGenerator, "visual plan generator must not be null");
+        this.characterMemory = Objects.requireNonNull(characterMemory, "character memory must not be null");
+        if (maximumStoryboardScenes < 2 || maximumStoryboardScenes > 5) {
+            throw new IllegalArgumentException("maximum storyboard scenes must be between 2 and 5");
+        }
+        this.maximumStoryboardScenes = maximumStoryboardScenes;
+        this.promptCompiler = new PonyStoryPromptCompiler();
+        this.modeDetector = new StoryIllustrationModeDetector();
     }
 
     public boolean shouldIllustrate(String userMessage) {
@@ -34,58 +86,119 @@ public final class StoryIllustrationService {
                 != StoryIllustrationIntent.NONE;
     }
 
-    public List<ChatAttachment> illustrate(String userMessage, String assistantStory) {
+    public IllustrationResult illustrate(String userMessage, String assistantStory) {
+        return illustrate("default", "standalone", userMessage, assistantStory);
+    }
+
+    public IllustrationResult illustrate(
+            String ownerId,
+            String conversationId,
+            String userMessage,
+            String assistantStory) {
         StoryIllustrationIntent intent = intentDetector.detect(userMessage, autoIllustrateCreativeStories);
         if (intent == StoryIllustrationIntent.NONE) {
-            return List.of();
+            return IllustrationResult.empty();
         }
+        StoryIllustrationMode mode = modeDetector.detect(userMessage);
+        List<CharacterVisualProfile> remembered = readMemory(ownerId, conversationId);
+        StoryVisualPlan plan = visualPlanGenerator.generate(
+                userMessage, assistantStory, mode, remembered, maximumStoryboardScenes);
+        List<CharacterVisualProfile> lockedCharacters = lockCharacters(remembered, plan.characters());
+        saveMemory(ownerId, conversationId, lockedCharacters);
+
+        List<ChatAttachment> attachments = new ArrayList<>();
+        for (int index = 0; index < plan.scenes().size(); index++) {
+            StorySceneSpec scene = plan.scenes().get(index);
+            PonyStoryPromptCompiler.CompiledPrompt compiled = promptCompiler.compile(
+                    mode, scene, lockedCharacters);
+            String attachmentTitle = title(intent, mode, scene, index, plan.scenes().size());
+            ImageGenerationTool.Generation generated = generateScene(
+                    compiled, ownerId, conversationId, mode, attachmentTitle);
+            if (generated == null) {
+                return attachments.isEmpty()
+                        ? IllustrationResult.failure(FAILURE_NOTICE)
+                        : new IllustrationResult(attachments, FAILURE_NOTICE);
+            }
+            attachments.add(attachment(attachmentTitle, generated));
+        }
+        return IllustrationResult.success(attachments);
+    }
+
+    private ChatAttachment attachment(
+            String title,
+            ImageGenerationTool.Generation generated) {
+        return new ChatAttachment(
+                "image",
+                generated.url(),
+                title,
+                "",
+                "ภาพที่ TinyGrad สร้างขึ้นเพื่อประกอบเรื่องราวในคำตอบนี้",
+                "generated",
+                generated.url(),
+                "",
+                null,
+                null,
+                generated.provider(),
+                "",
+                generated.prompt(),
+                generated.negativePrompt(),
+                generated.seed(),
+                generated.historyId().toString());
+    }
+
+    private ImageGenerationTool.Generation generateScene(
+            PonyStoryPromptCompiler.CompiledPrompt compiled,
+            String ownerId,
+            String conversationId,
+            StoryIllustrationMode mode,
+            String sceneTitle) {
+        String visualPrompt = prompt(compiled.positive());
+        ImageGenerationScope scope = new ImageGenerationScope(
+                ownerId, conversationId, "generated", mode.name().toLowerCase(java.util.Locale.ROOT), sceneTitle);
+        ImageGenerationRequest request = new ImageGenerationRequest(
+                visualPrompt, clip(compiled.negative(), maximumPromptCharacters), List.of(),
+                null, null, null, null, "", "", null);
         try {
-            GeneratedImage generated = provider.generate(prompt(userMessage, assistantStory));
-            GeneratedImageStore.StoredImage stored = store.save(generated.bytes());
-            String description = generated.revisedPrompt().isBlank()
-                    ? "ภาพที่สร้างขึ้นเพื่อประกอบเรื่องราวในคำตอบนี้"
-                    : clip(generated.revisedPrompt(), 600);
-            return List.of(new ChatAttachment(
-                    "image",
-                    stored.url(),
-                    title(intent),
-                    "",
-                    description,
-                    "generated",
-                    stored.url(),
-                    "",
-                    null,
-                    null,
-                    generated.provider(),
-                    ""));
-        } catch (RuntimeException exception) {
-            log.warn("process=story_illustration event=failed reason={}", exception.getMessage());
-            return List.of();
+            return imageGenerationTool.generate(request, scope);
+        } catch (RuntimeException firstFailure) {
+            log.warn("process=story_illustration event=retry profile=low_memory reason={}",
+                    firstFailure.getMessage());
+            if (!imageGenerationTool.awaitProviderRecovery(recoveryTimeout)) {
+                log.warn("process=story_illustration event=recovery_timeout timeout={}", recoveryTimeout);
+                return null;
+            }
+            try {
+                ImageGenerationRequest fallback = new ImageGenerationRequest(
+                        visualPrompt, clip(compiled.negative(), maximumPromptCharacters), List.of(),
+                        512, 512, 20, null, "", "", null);
+                return imageGenerationTool.generate(fallback, scope);
+            } catch (RuntimeException fallbackFailure) {
+                log.warn("process=story_illustration event=failed reason={}", fallbackFailure.getMessage());
+                return null;
+            }
         }
     }
 
-    private String prompt(String userMessage, String assistantStory) {
-        String request = clip(userMessage, Math.min(1_500, maximumPromptCharacters / 3));
-        String story = clip(assistantStory, maximumPromptCharacters - request.length() - 500);
+    private String prompt(String visualBrief) {
         return clip("""
-                Create one polished, standalone illustration for the story below. Depict the single most emotionally
-                decisive visual moment, with clear subject, setting, action, lighting, atmosphere, and composition.
-                Preserve character identity and story-specific details. Use a cinematic storybook aesthetic unless
-                the request names another style. Do not make a collage. Do not add captions, speech bubbles,
-                watermarks, logos, or readable text. Do not depict details that contradict the story.
-
-                Original request:
+                score_9, score_8_up, score_7_up, story illustration, cinematic composition,
                 %s
-
-                Story or visual brief:
-                %s
-                """.formatted(request, story).strip(), maximumPromptCharacters);
+                """.formatted(visualBrief).replaceAll("\\s+", " ").strip(), maximumPromptCharacters);
     }
 
-    private String title(StoryIllustrationIntent intent) {
-        return intent == StoryIllustrationIntent.DIRECT_IMAGE
-                ? "ภาพที่มินิคุงสร้างให้"
-                : "ภาพประกอบเรื่องราวโดยมินิคุง";
+    private String title(StoryIllustrationIntent intent, StoryIllustrationMode mode,
+            StorySceneSpec scene, int index, int total) {
+        if (intent == StoryIllustrationIntent.DIRECT_IMAGE && mode == StoryIllustrationMode.DECISIVE_SCENE) {
+            return "ภาพที่มินิคุงสร้างให้";
+        }
+        String base = switch (mode) {
+            case COVER -> "ภาพปกเรื่องโดยมินิคุง";
+            case CHARACTER_PORTRAIT -> "ภาพตัวละครโดยมินิคุง";
+            case DECISIVE_SCENE -> "ภาพฉากสำคัญโดยมินิคุง";
+            case ENDING_SCENE -> "ภาพฉากจบโดยมินิคุง";
+            case STORYBOARD -> "ภาพลำดับที่ " + (index + 1) + "/" + total;
+        };
+        return scene.title().isBlank() ? base : base + ": " + scene.title();
     }
 
     private String clip(String value, int maximum) {
@@ -94,5 +207,82 @@ public final class StoryIllustrationService {
             return result;
         }
         return result.substring(0, Math.max(0, maximum - 1)).stripTrailing() + "…";
+    }
+
+    private List<CharacterVisualProfile> readMemory(String ownerId, String conversationId) {
+        try {
+            return characterMemory.find(scope(ownerId, "default"), scope(conversationId, "standalone"));
+        } catch (RuntimeException exception) {
+            log.warn("process=character_visual_memory event=read_failed reason={}", exception.getMessage());
+            return List.of();
+        }
+    }
+
+    private void saveMemory(String ownerId, String conversationId, List<CharacterVisualProfile> profiles) {
+        if (profiles.isEmpty()) return;
+        try {
+            characterMemory.save(scope(ownerId, "default"), scope(conversationId, "standalone"), profiles);
+        } catch (RuntimeException exception) {
+            log.warn("process=character_visual_memory event=write_failed reason={}", exception.getMessage());
+        }
+    }
+
+    private List<CharacterVisualProfile> lockCharacters(
+            List<CharacterVisualProfile> remembered,
+            List<CharacterVisualProfile> extracted) {
+        LinkedHashMap<String, CharacterVisualProfile> merged = new LinkedHashMap<>();
+        remembered.forEach(profile -> merged.put(profile.key(), profile));
+        extracted.forEach(profile -> merged.merge(profile.key(), profile, CharacterVisualProfile::lockWith));
+        return List.copyOf(merged.values());
+    }
+
+    private String scope(String value, String fallback) {
+        return value == null || value.isBlank() ? fallback : value.strip();
+    }
+
+    private static StoryVisualPlanGenerator legacyPlanGenerator(StoryVisualPromptGenerator generator) {
+        StoryVisualPromptGenerator safe = Objects.requireNonNull(generator);
+        return (userMessage, assistantStory, mode, remembered, maximumStoryboardScenes) -> {
+            String visualPrompt = safe.generate(userMessage, assistantStory);
+            List<StorySceneSpec> scenes = new ArrayList<>();
+            if (mode == StoryIllustrationMode.STORYBOARD) {
+                scenes.add(StorySceneSpec.fallback(visualPrompt, "Opening", "opening story moment",
+                        "establishing composition", "wide shot"));
+                if (maximumStoryboardScenes > 2) {
+                    scenes.add(StorySceneSpec.fallback(visualPrompt, "Turning point", "decisive turning point",
+                            "dynamic composition", "medium shot"));
+                }
+                scenes.add(StorySceneSpec.fallback(visualPrompt, "Ending", "emotional ending moment",
+                        "resolved composition", "wide shot"));
+            } else {
+                scenes.add(StorySceneSpec.fallback(visualPrompt, mode.name(), "decisive story moment",
+                        "cinematic composition", "medium wide shot"));
+            }
+            return new StoryVisualPlan(mode, remembered, scenes.stream()
+                    .limit(mode == StoryIllustrationMode.STORYBOARD ? maximumStoryboardScenes : 1).toList());
+        };
+    }
+
+    public record IllustrationResult(List<ChatAttachment> attachments, String notice) {
+        public IllustrationResult {
+            attachments = attachments == null ? List.of() : List.copyOf(attachments);
+            notice = notice == null ? "" : notice;
+        }
+
+        static IllustrationResult empty() {
+            return new IllustrationResult(List.of(), "");
+        }
+
+        static IllustrationResult success(List<ChatAttachment> attachments) {
+            return new IllustrationResult(attachments, "");
+        }
+
+        static IllustrationResult failure(String notice) {
+            return new IllustrationResult(List.of(), notice);
+        }
+
+        public String appendNoticeTo(String content) {
+            return content + notice;
+        }
     }
 }

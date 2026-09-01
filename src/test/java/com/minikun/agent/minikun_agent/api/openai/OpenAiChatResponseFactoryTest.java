@@ -12,6 +12,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.minikun.agent.minikun_agent.api.openai.dto.ChatAttachment;
 import com.minikun.model.ModelUsage;
+import com.minikun.visual.StoryIllustrationService;
 
 class OpenAiChatResponseFactoryTest {
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -80,6 +81,18 @@ class OpenAiChatResponseFactoryTest {
 
         assertEquals("generated", chunk.at("/attachments/0/origin").asText());
         assertEquals(attachment.url(), chunk.at("/choices/0/delta/images/0/image_url/url").asText());
+    }
+
+    @Test
+    void emitsVisibleStreamingNoticeWhenStoryIllustrationFails() throws Exception {
+        var illustration = new StoryIllustrationService.IllustrationResult(
+                List.of(), "\n\n> ⚠️ สร้างภาพประกอบไม่สำเร็จ");
+
+        List<String> chunks = factory.illustrationChunks("id", 123L, "mini-kun", illustration);
+
+        assertEquals(1, chunks.size());
+        assertTrue(objectMapper.readTree(chunks.getFirst())
+                .at("/choices/0/delta/content").asText().contains("สร้างภาพประกอบไม่สำเร็จ"));
     }
 
     @Test

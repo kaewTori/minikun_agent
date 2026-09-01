@@ -131,10 +131,11 @@ class MinikunAgentApplicationTests {
 		mockMvc.perform(get("/cockpit/index.html"))
 				.andExpect(status().isOk())
 				.andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content()
-						.string(org.hamcrest.Matchers.allOf(
-								org.hamcrest.Matchers.containsString("YOUR PERSONAL AGENT"),
-								org.hamcrest.Matchers.containsString("SELF-LEARNING CONTROL"),
-								org.hamcrest.Matchers.containsString("MEMORY &amp; KNOWLEDGE"))));
+							.string(org.hamcrest.Matchers.allOf(
+									org.hamcrest.Matchers.containsString("YOUR PERSONAL AGENT"),
+									org.hamcrest.Matchers.containsString("MINIKUN PULSE"),
+									org.hamcrest.Matchers.containsString("data-cockpit-target=\"today\""),
+									org.hamcrest.Matchers.containsString("data-cockpit-target=\"memory\""))));
 
 		mockMvc.perform(get("/cockpit/minikun-avatar.jpg"))
 				.andExpect(status().isOk())
@@ -265,6 +266,7 @@ class MinikunAgentApplicationTests {
 		org.junit.jupiter.api.Assertions.assertTrue(names.contains("time.get_current_time"));
 		org.junit.jupiter.api.Assertions.assertTrue(names.contains("web.search"));
 		org.junit.jupiter.api.Assertions.assertTrue(names.contains("web.open_url"));
+		org.junit.jupiter.api.Assertions.assertTrue(names.contains("image.generate"));
 		org.junit.jupiter.api.Assertions.assertTrue(names.contains("service.health"));
 		org.junit.jupiter.api.Assertions.assertTrue(names.contains("system.health"));
 		org.junit.jupiter.api.Assertions.assertTrue(names.contains("homelab.guardian"));

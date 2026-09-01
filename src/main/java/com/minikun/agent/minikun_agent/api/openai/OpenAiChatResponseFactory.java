@@ -114,6 +114,19 @@ final class OpenAiChatResponseFactory {
                 attachments));
     }
 
+    List<String> illustrationChunks(
+            String id,
+            long created,
+            String model,
+            com.minikun.visual.StoryIllustrationService.IllustrationResult illustration) {
+        java.util.ArrayList<String> chunks = new java.util.ArrayList<>();
+        String noticeChunk = contentChunk(illustration.notice(), id, created, model);
+        String attachmentChunk = attachmentChunk(id, created, model, illustration.attachments());
+        if (!noticeChunk.isEmpty()) chunks.add(noticeChunk);
+        if (!attachmentChunk.isEmpty()) chunks.add(attachmentChunk);
+        return List.copyOf(chunks);
+    }
+
     String contentChunk(ChatResponse response, String id, long created, String model) {
         String content = response.getResult().getOutput().getText();
         return contentChunk(content, id, created, model);

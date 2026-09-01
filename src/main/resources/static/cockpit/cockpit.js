@@ -23,12 +23,21 @@
     recordingTimer: null,
     voiceOutput: localStorage.getItem("minikun.voice-output") === "true",
     activeAudio: null,
-    cockpitPage: "overview",
+    cockpitPage: "today",
     timelineLimit: 6,
     learningBusy: new Set(),
     experimentAction: null,
     currentLocation: null,
     activeVisual: null,
+    studio: {
+      style: "",
+      light: "",
+      frame: "",
+      width: 512,
+      height: 768,
+      result: null,
+      busy: false
+    },
     sync: {
       paired: false,
       deviceId: "",
@@ -80,7 +89,9 @@
         const body = await response.json();
         message = body.error?.message || body.message || (typeof body.error === "string" ? body.error : message);
       } catch (_) { /* keep the status-based message */ }
-      throw new Error(message);
+      const error = new Error(message);
+      error.status = response.status;
+      throw error;
     }
     return response.status === 204 ? null : response.json();
   }
@@ -106,7 +117,11 @@
       license: attachment.license || "",
       thumbnailUrl: attachment.thumbnail_url || attachment.thumbnailUrl || "",
       width: attachment.width || null,
-      height: attachment.height || null
+      height: attachment.height || null,
+      prompt: attachment.prompt || "",
+      negativePrompt: attachment.negative_prompt || attachment.negativePrompt || "",
+      seed: attachment.seed ?? null,
+      generationId: attachment.generation_id || attachment.generationId || ""
     };
   }
 
@@ -160,11 +175,60 @@
     const metadata = visualMetadata(visual);
     $("#visual-lightbox-description").textContent = [visual.description, metadata]
       .filter(Boolean).join("\n");
+    renderLightboxGenerationMetadata(visual);
     const source = $("#visual-lightbox-source");
     const sourceUrl = safeExternalUrl(visual.sourceUrl || visual.originalUrl);
     source.href = sourceUrl || "#";
     source.classList.toggle("hidden", !sourceUrl);
     if (!visualLightboxDialog.open) visualLightboxDialog.showModal();
+  }
+
+  function copyGenerationButton(label, value) {
+    const button = element("button", "generation-copy", label);
+    button.type = "button";
+    button.addEventListener("click", async () => {
+      try {
+        await copyText(value);
+        const previous = button.textContent;
+        button.textContent = "คัดลอกแล้ว";
+        setTimeout(() => { button.textContent = previous; }, 1400);
+      } catch (error) { toast(error.message, true); }
+    });
+    return button;
+  }
+
+  function generationMetadataPanel(visual, compact = false) {
+    if (visual.origin !== "generated" || (!visual.prompt && visual.seed === null)) return null;
+    const panel = element("section", compact ? "generation-meta compact" : "generation-meta");
+    const heading = element("div", "generation-meta-heading");
+    heading.append(element("strong", "", "Pony generation input"));
+    if (visual.seed !== null) {
+      const seed = element("span", "generation-seed", `Seed ${visual.seed}`);
+      heading.append(seed, copyGenerationButton("คัดลอก seed", String(visual.seed)));
+    }
+    panel.append(heading);
+    if (visual.prompt) {
+      const details = element("details", "generation-prompt");
+      if (!compact) details.open = true;
+      details.append(element("summary", "", "ดู Pony prompt"));
+      const prompt = element("code", "", visual.prompt);
+      details.append(prompt, copyGenerationButton("คัดลอก prompt", visual.prompt));
+      panel.append(details);
+    }
+    return panel;
+  }
+
+  function renderLightboxGenerationMetadata(visual) {
+    let panel = $("#visual-generation-meta");
+    if (!panel) {
+      panel = element("div");
+      panel.id = "visual-generation-meta";
+      $("#visual-lightbox-description").after(panel);
+    }
+    panel.replaceChildren();
+    const metadata = generationMetadataPanel(visual);
+    panel.classList.toggle("hidden", !metadata);
+    if (metadata) panel.append(metadata);
   }
 
   function attachVisualReference(visual, create = false) {
@@ -274,10 +338,20 @@
     return formatter.format(Math.round(seconds / 86400), "day");
   }
 
-  function toast(message, error = false) {
-    const node = element("div", `toast${error ? " error" : ""}`, message);
+  function toast(message, error = false, action = null) {
+    const node = element("div", `toast${error ? " error" : ""}`);
+    node.append(element("span", "", message));
+    if (action?.label && typeof action.onClick === "function") {
+      const button = element("button", "toast-action", action.label);
+      button.type = "button";
+      button.addEventListener("click", () => {
+        action.onClick();
+        node.remove();
+      });
+      node.append(button);
+    }
     $("#toast-region").append(node);
-    setTimeout(() => node.remove(), 3800);
+    setTimeout(() => node.remove(), action ? 7200 : 3800);
   }
 
   /* Chat --------------------------------------------------------------- */
@@ -308,7 +382,7 @@
     try {
       localStorage.setItem("minikun.conversations", JSON.stringify(state.conversations.slice(0, 40)));
     } catch (_) {
-      toast("พื้นที่เก็บประวัติบน browser เต็มครับ แชตยังทำงานต่อได้", true);
+      toast("พื้นที่เก็บประวัติในเบราว์เซอร์เต็มครับ แชตยังทำงานต่อได้", true);
     }
   }
 
@@ -341,6 +415,10 @@
           origin: attachment.origin || "",
           provider: attachment.provider || "",
           license: attachment.license || "",
+          prompt: attachment.prompt || "",
+          negativePrompt: attachment.negativePrompt || attachment.negative_prompt || "",
+          seed: attachment.seed ?? null,
+          generationId: attachment.generationId || attachment.generation_id || "",
           assetId: attachment.assetId || "",
           kind: attachment.kind || "image",
           type: attachment.type || ""
@@ -818,19 +896,28 @@
     document.querySelectorAll("[data-view-target]").forEach((node) => {
       const matchesView = node.dataset.viewTarget === view;
       const matchesSection = section ? node.dataset.section === section : !node.dataset.section;
-      node.classList.toggle("active", matchesView && matchesSection);
+      const active = matchesView && matchesSection;
+      node.classList.toggle("active", active);
+      if (active) node.setAttribute("aria-current", "page");
+      else node.removeAttribute("aria-current");
     });
     if (view === "cockpit") {
-      const page = { experiments: "experiments", inbox: "work", "permission-center": "permissions" }[section]
-        || state.cockpitPage || "overview";
+      const page = { experiments: "today", inbox: "today", "permission-center": "system" }[section]
+        || state.cockpitPage || "today";
       switchCockpitPage(page, section);
       loadDashboard();
     }
+    if (view === "studio") updateStudioPrompt();
   }
 
-  function switchCockpitPage(page = "overview", focusId = "") {
-    const allowed = new Set(["overview", "work", "tools", "health", "learning", "memory", "permissions", "experiments"]);
-    state.cockpitPage = allowed.has(page) ? page : "overview";
+  function switchCockpitPage(page = "today", focusId = "") {
+    const legacyPages = {
+      overview: "today", work: "today", experiments: "today",
+      tools: "agent", learning: "memory", health: "system", permissions: "system"
+    };
+    const requested = legacyPages[page] || page;
+    const allowed = new Set(["today", "agent", "memory", "system"]);
+    state.cockpitPage = allowed.has(requested) ? requested : "today";
     document.querySelectorAll("[data-cockpit-page]").forEach((node) => {
       const pages = String(node.dataset.cockpitPage || "").split(/\s+/);
       node.classList.toggle("cockpit-page-hidden", !pages.includes(state.cockpitPage));
@@ -883,6 +970,215 @@
     if (!copied) throw new Error("คัดลอกไม่สำเร็จ กรุณาแตะข้อความค้างไว้ครับ");
   }
 
+  /* Image studio ------------------------------------------------------ */
+  function studioValue(selector) {
+    return String($(selector)?.value || "").trim();
+  }
+
+  function assembledStudioPrompt() {
+    const subject = studioValue("#studio-subject");
+    if (!subject) return "";
+    const parts = [
+      "score_9",
+      "score_8_up",
+      "score_7_up",
+      subject
+    ];
+    const scene = studioValue("#studio-scene");
+    const detail = studioValue("#studio-detail");
+    if (detail) parts.push(detail);
+    if (scene) parts.push(scene);
+    if (state.studio.style) parts.push(state.studio.style);
+    if (state.studio.light) parts.push(state.studio.light);
+    if (state.studio.frame) parts.push(state.studio.frame);
+    return parts.map(value => value.replace(/[.!?]+$/g, "").trim()).filter(Boolean).join(", ");
+  }
+
+  function studioReadiness() {
+    const values = {
+      quality: true,
+      subject: Boolean(studioValue("#studio-subject")),
+      action: Boolean(studioValue("#studio-detail")),
+      scene: Boolean(studioValue("#studio-scene")),
+      finish: Boolean(state.studio.style && state.studio.light && state.studio.frame)
+    };
+    const score = 10 + (values.subject ? 30 : 0) + (values.action ? 20 : 0)
+      + (values.scene ? 20 : 0) + (values.finish ? 20 : 0);
+    return { values, score };
+  }
+
+  function studioNumber(selector, fallback) {
+    const value = Number($(selector)?.value);
+    return Number.isFinite(value) ? value : fallback;
+  }
+
+  function studioGenerationSettings() {
+    const seedText = studioValue("#studio-seed");
+    const negativePrompt = [studioValue("#studio-negative-prompt"), studioValue("#studio-constraints")]
+      .filter(Boolean).join(", ");
+    return {
+      negative_prompt: negativePrompt,
+      face_prompts: studioValue("#studio-face-prompts").split(/\n+/).map(value => value.trim()).filter(Boolean),
+      width: state.studio.width,
+      height: state.studio.height,
+      steps: studioNumber("#studio-steps", 40),
+      guidance: studioNumber("#studio-guidance", 6.0),
+      scheduler: $("#studio-scheduler").value,
+      schedule: $("#studio-schedule").value,
+      seed: seedText ? Number(seedText) : null
+    };
+  }
+
+  function updateStudioCanvasMeta() {
+    const steps = studioNumber("#studio-steps", 40);
+    $("#studio-canvas-meta").textContent = `${state.studio.width} × ${state.studio.height} · ${steps} steps`;
+    $("#studio-canvas-stage").style.aspectRatio = `${state.studio.width} / ${state.studio.height}`;
+  }
+
+  function selectStudioSize(button) {
+    const [width, height] = button.dataset.studioSize.split("x").map(Number);
+    state.studio.width = width;
+    state.studio.height = height;
+    document.querySelectorAll("[data-studio-size]").forEach((node) => {
+      node.classList.toggle("selected", node === button);
+    });
+    updateStudioCanvasMeta();
+  }
+
+  function setStudioActiveStep(step) {
+    if (["style", "light", "frame"].includes(step)) step = "finish";
+    if (step === "detail") step = "action";
+    document.querySelectorAll("[data-studio-step]").forEach((node) => {
+      node.classList.toggle("active", node.dataset.studioStep === step);
+    });
+  }
+
+  function updateStudioPrompt() {
+    const preview = $("#studio-prompt-preview");
+    if (!preview) return;
+    const prompt = assembledStudioPrompt();
+    preview.textContent = prompt || "ใส่ character tags แล้ว Pony prompt จะประกอบตรงนี้ครับ";
+    const { values, score } = studioReadiness();
+    document.querySelectorAll("[data-studio-step]").forEach((node) => {
+      node.classList.toggle("complete", Boolean(values[node.dataset.studioStep]));
+    });
+    const readiness = $("#studio-readiness");
+    const bar = readiness.querySelector("span");
+    const label = readiness.querySelector("small");
+    bar.style.width = `${score}%`;
+    bar.style.background = score >= 80 ? "var(--studio-mint)" : score >= 50 ? "var(--studio-silver)" : "var(--studio-coral)";
+    if (!values.subject) label.textContent = "เริ่มด้วย count + character tags เช่น 1girl, solo";
+    else if (!values.action) label.textContent = "เพิ่ม action, hands และ expression ให้ตัวละครครับ";
+    else if (!values.scene) label.textContent = "เพิ่มฉากด้วยคำที่มองเห็น เช่น room, night, rain";
+    else if (!values.finish) label.textContent = "เลือก style, light และ camera เพื่อปิด prompt ครับ";
+    else label.textContent = "Pony tags เรียงครบแล้ว พร้อมส่งให้ TinyGrad ครับ";
+    $("#studio-coach-copy").textContent = label.textContent;
+  }
+
+  function selectStudioOption(button) {
+    const group = button.dataset.studioOption;
+    const wasSelected = button.classList.contains("selected");
+    document.querySelectorAll(`[data-studio-option="${group}"]`).forEach((node) => node.classList.remove("selected"));
+    state.studio[group] = wasSelected ? "" : button.dataset.value;
+    if (!wasSelected) button.classList.add("selected");
+    setStudioActiveStep(group);
+    updateStudioPrompt();
+  }
+
+  function loadStudioExample() {
+    $("#studio-subject").value = "1girl, solo, short black hair, green sweater, black cat";
+    $("#studio-scene").value = "observatory workshop, wooden desk, rainy night, distant city lights";
+    $("#studio-detail").value = "holding a glowing glass jar, looking down, gentle smile, cat standing beside her";
+    $("#studio-constraints").value = "multiple views, speech bubble, crowded background";
+    const exampleOptions = {
+      style: "anime key visual, vibrant colors",
+      light: "moonlight, blue shadows, mysterious mood",
+      frame: "close-up, upper body, depth of field"
+    };
+    for (const [group, value] of Object.entries(exampleOptions)) {
+      state.studio[group] = value;
+      document.querySelectorAll(`[data-studio-option="${group}"]`).forEach((button) => {
+        button.classList.toggle("selected", button.dataset.value === value);
+      });
+    }
+    setStudioActiveStep("subject");
+    updateStudioPrompt();
+    $("#studio-subject").focus();
+    toast("ใส่ตัวอย่างให้แล้วครับ ลองเปลี่ยนรายละเอียดให้เป็นภาพของเราได้เลย");
+  }
+
+  function setStudioCanvasState(canvasState) {
+    $("#studio-canvas-stage").dataset.state = canvasState;
+    $("#studio-canvas-empty").classList.toggle("hidden", canvasState !== "empty");
+    $("#studio-canvas-generating").classList.toggle("hidden", canvasState !== "generating");
+    $("#studio-canvas-result").classList.toggle("hidden", canvasState !== "result");
+    $("#studio-result-actions").classList.toggle("hidden", canvasState !== "result");
+  }
+
+  function showStudioResult(result) {
+    const image = $("#studio-result-image");
+    image.onload = () => setStudioCanvasState("result");
+    image.onerror = () => {
+      setStudioCanvasState("empty");
+      toast("สร้างภาพสำเร็จ แต่เปิดไฟล์ภาพไม่ได้ครับ", true);
+    };
+    image.src = result.url;
+    image.alt = studioValue("#studio-subject") || "ภาพที่สร้างโดยมินิคุง";
+    const createdAt = result.created_at ? new Date(result.created_at) : new Date();
+    $("#studio-result-time").textContent = new Intl.DateTimeFormat("th-TH", {
+      hour: "2-digit", minute: "2-digit"
+    }).format(createdAt);
+    $("#studio-download-result").href = result.url;
+    state.studio.result = {
+      title: "ภาพที่สร้างใน Minikun Image Studio",
+      url: result.url,
+      originalUrl: result.url,
+      description: result.prompt,
+      origin: "generated",
+      provider: result.provider || "",
+      prompt: result.prompt || "",
+      negativePrompt: result.negative_prompt || "",
+      seed: result.seed ?? null,
+      generationId: result.generation_id || ""
+    };
+  }
+
+  async function generateStudioImage(event) {
+    event.preventDefault();
+    const form = $("#studio-form");
+    if (!form.reportValidity() || state.studio.busy) return;
+    const prompt = assembledStudioPrompt();
+    if (!prompt) return;
+    state.studio.busy = true;
+    $("#studio-generate").disabled = true;
+    $("#studio-generate span").textContent = "กำลังสร้างภาพ…";
+    setStudioCanvasState("generating");
+    try {
+      const result = await api("/v1/images/studio/generations", {
+        method: "POST", body: JSON.stringify({ prompt, ...studioGenerationSettings() })
+      });
+      showStudioResult(result);
+      toast("TinyGrad สร้างภาพจาก Pony tags ชุดนี้เสร็จแล้วครับ");
+    } catch (error) {
+      setStudioCanvasState(state.studio.result ? "result" : "empty");
+      let message = error.message;
+      if (error.status === 404) {
+        message = "Image Studio ยังไม่เปิดใช้งาน กรุณาตั้ง MINIKUN_VISUAL_GENERATION_ENABLED=true ครับ";
+      } else if (error.status === 503) {
+        message = "TinyGrad ยังไม่พร้อมที่ 127.0.0.1:8002 — เปิด sdxl_use.py --serve แล้วลองใหม่ครับ";
+      } else if (error.status === 504) {
+        message = "TinyGrad ใช้เวลาสร้างภาพเกินกำหนด ตรวจว่า service ยังทำงานอยู่แล้วลองใหม่ครับ";
+      } else if (error.status === 502) {
+        message = `TinyGrad ตอบกลับผิดพลาด: ${error.message}`;
+      }
+      toast(message, true);
+    } finally {
+      state.studio.busy = false;
+      $("#studio-generate").disabled = false;
+      $("#studio-generate span").textContent = "สร้างภาพนี้";
+    }
+  }
+
   function formatDuration(milliseconds) {
     const value = Math.max(0, Number(milliseconds) || 0);
     if (value < 1000) return `${Math.max(0.1, value / 1000).toFixed(1)} วิ`;
@@ -913,7 +1209,7 @@
     if (message.role !== "assistant") return null;
     const values = [];
     const contextTokens = Number(message.usage?.promptTokens);
-    if (contextTokens > 0) values.push(`Context ${contextTokens.toLocaleString("th-TH")} tokens`);
+    if (contextTokens > 0) values.push(`บริบท ${contextTokens.toLocaleString("th-TH")} โทเคน`);
     const thinkingMs = Number(message.timing?.firstTokenMs || message.timing?.totalMs);
     if (thinkingMs > 0) values.push(`คิด ${formatDuration(thinkingMs)}`);
     const totalMs = Number(message.timing?.totalMs);
@@ -1027,6 +1323,8 @@
       open.append(image, element("span", "visual-origin", visualOriginLabel(visual.origin)));
       const copy = element("figcaption", "visual-card-copy");
       copy.append(element("strong", "", visual.title), element("small", "", visualMetadata(visual)));
+      const generationMetadata = generationMetadataPanel(visual, true);
+      if (generationMetadata) copy.append(generationMetadata);
       const sourceUrl = safeExternalUrl(visual.sourceUrl || visual.originalUrl);
       if (sourceUrl) {
         const source = element("a", "visual-card-source", `เปิดต้นทาง ${visualHost(visual)} ↗`);
@@ -1051,9 +1349,8 @@
     row.dataset.messageId = message.id || "";
     const avatar = message.role === "assistant"
       ? Object.assign(element("img", "message-avatar"), { src: "/cockpit/minikun-avatar.jpg", alt: "มินิคุง" })
-      : element("span", "message-avatar user-avatar", "YOU");
+      : null;
     const body = element("div", "message-body");
-    body.append(element("div", "message-role", message.role === "assistant" ? "MINIKUN" : "YOU"));
     if (message.files?.length) {
       const files = element("div", "message-files");
       for (const file of message.files) files.append(element("span", "message-file", file));
@@ -1109,7 +1406,8 @@
       }
       body.append(tools);
     }
-    row.append(avatar, body);
+    if (avatar) row.append(avatar);
+    row.append(body);
     return row;
   }
 
@@ -1657,7 +1955,7 @@
 
   function speakWithBrowser(text) {
     if (!("speechSynthesis" in window) || !("SpeechSynthesisUtterance" in window)) {
-      return Promise.reject(new Error("อุปกรณ์นี้ไม่มีเสียงอ่านใน browser"));
+      return Promise.reject(new Error("เบราว์เซอร์บนอุปกรณ์นี้ยังไม่มีเสียงอ่าน"));
     }
     return new Promise((resolve, reject) => {
       window.speechSynthesis.cancel();
@@ -1832,16 +2130,25 @@
 
   function setSync(ok, label) {
     $("#sync-state").lastChild.textContent = ` ${label}`;
-    $("#sync-state").querySelector(".status-dot").style.background = ok ? "#78d29a" : "#e9785d";
+    $("#sync-state").querySelector(".status-dot").style.background = ok ? "var(--green)" : "var(--danger)";
   }
 
   function renderStatus(status = {}, decisionCount = 0) {
-    $("#due-count").textContent = status.due_tasks ?? "—";
-    $("#goal-count").textContent = status.open_goals ?? "—";
-    $("#waiting-count").textContent = (status.agent_waiting_confirmation || 0) + decisionCount;
+    const due = status.due_tasks ?? "—";
+    const goals = status.open_goals ?? "—";
+    const waiting = (status.agent_waiting_confirmation || 0) + decisionCount;
+    $("#due-count").textContent = due;
+    $("#goal-count").textContent = goals;
+    $("#waiting-count").textContent = waiting;
+    $("#today").dataset.state = status.attention_required || waiting > 0 ? "attention" : "calm";
+    $("#attention-title").textContent = status.attention_required || waiting > 0
+      ? "มีเรื่องที่ควรดูด้วยกันก่อนครับ"
+      : "วันนี้ยังเดินหน้าได้อย่างสบาย ๆ ครับ";
     $("#attention-copy").textContent = status.attention_required
-      ? "มีบางเรื่องที่ถึงเวลาแล้ว มินิคุงเรียงก้าวที่เล็กที่สุดไว้ให้ด้านล่างครับ"
-      : "ไม่มีเรื่องเร่งด่วนครับ เลือกหนึ่งก้าวที่อยากขยับอย่างสบาย ๆ ได้เลย";
+      ? "มินิคุงเรียงเรื่องที่ถึงเวลาและก้าวที่เล็กที่สุดไว้ให้ด้านล่างแล้วครับ"
+      : waiting > 0
+        ? "มีเรื่องที่มินิคุงเตรียมไว้และรอพี่สาวยืนยันก่อนลงมือครับ"
+        : "ไม่มีเรื่องเร่งด่วน เลือกหนึ่งก้าวที่อยากขยับต่อได้เลยครับ";
   }
 
   function renderActions(actions = []) {
@@ -1985,6 +2292,7 @@
     const list = $("#timeline-list");
     list.replaceChildren();
     $("#timeline-empty").classList.toggle("hidden", items.length > 0);
+    $("#timeline").classList.toggle("is-empty", items.length === 0);
     for (const item of items.slice(0, state.timelineLimit)) {
       const row = element("li", "timeline-event");
       const copy = element("div");
@@ -2002,6 +2310,7 @@
     list.replaceChildren();
     $("#conversation-thread-count").textContent = items.length;
     $("#conversation-thread-empty").classList.toggle("hidden", items.length > 0);
+    $("#conversation-threads").classList.toggle("is-empty", items.length === 0);
     for (const thread of items.slice(0, 6)) {
       const row = element("div", "inbox-item");
       const copy = element("div");
@@ -2270,7 +2579,7 @@
       );
       const domains = element("div", "trusted-domain-list");
       for (const domain of topic.trustedDomains || []) domains.append(element("span", "", domain));
-      if (!(topic.trustedDomains || []).length) domains.append(element("span", "muted-domain", "ยังไม่จำกัด domain"));
+      if (!(topic.trustedDomains || []).length) domains.append(element("span", "muted-domain", "ยังไม่จำกัดเว็บไซต์"));
       const actions = element("div", "learning-topic-actions");
       const run = element("button", "primary-button", state.learningBusy.has(topic.id) ? "กำลังเรียน…" : "เรียนตอนนี้");
       run.type = "button";
@@ -2305,10 +2614,10 @@
       }
       if (citations.childElementCount) copy.append(citations);
       const actions = element("div", "claim-review-actions");
-      const publish = element("button", "primary-button", "Publish");
+      const publish = element("button", "primary-button", "ยืนยันให้ใช้");
       publish.type = "button";
       publish.addEventListener("click", () => reviewLearningClaim(claim, "PUBLISHED", publish));
-      const retract = element("button", "secondary-button", "Retract");
+      const retract = element("button", "secondary-button", "กันออก");
       retract.type = "button";
       retract.addEventListener("click", () => reviewLearningClaim(claim, "RETRACTED", retract));
       actions.append(publish, retract);
@@ -2331,7 +2640,7 @@
       const counts = element("div", "learning-run-counts");
       counts.append(
         element("span", "", `${run.sourceCount || 0} แหล่ง`),
-        element("span", "", `${run.candidateCount || 0} claims`),
+        element("span", "", `${run.candidateCount || 0} ข้อเท็จจริง`),
         element("span", "", `${run.publishedCount || 0} ผ่านอัตโนมัติ`)
       );
       const detail = element("small", "", `${run.trigger === "SCHEDULED" ? "ตามตาราง" : "สั่งเอง"} · ${dateTime(run.completedAt || run.startedAt)} · ${run.stopReason || "—"}`);
@@ -2346,7 +2655,7 @@
     button.textContent = "กำลังค้นและอ่าน…";
     try {
       const run = await api(`/v1/knowledge/acquisition/topics/${topic.id}/runs`, { method: "POST" });
-      toast(`เรียนจบแล้ว: ${run.sourceCount} แหล่ง · publish ${run.publishedCount} claim`);
+      toast(`เรียนจบแล้ว: ${run.sourceCount} แหล่ง · ผ่านอัตโนมัติ ${run.publishedCount} ข้อ`);
       state.learningBusy.delete(topic.id);
       await loadDashboard();
     } catch (error) { toast(error.message, true); }
@@ -2375,7 +2684,7 @@
       await api(`/v1/knowledge/acquisition/claims/${claim.id}`, {
         method: "PATCH", body: JSON.stringify({ owner_id: state.ownerId, status })
       });
-      toast(status === "PUBLISHED" ? "เผยแพร่ claim ให้ใช้ตอบแล้วครับ" : "กัน claim นี้ออกแล้วครับ");
+      toast(status === "PUBLISHED" ? "ยืนยันให้ใช้ข้อเท็จจริงนี้ตอบแล้วครับ" : "กันข้อเท็จจริงนี้ออกแล้วครับ");
       await loadDashboard();
     } catch (error) { toast(error.message, true); button.disabled = false; }
   }
@@ -2383,8 +2692,8 @@
   function renderMemorySystem(memories = [], knowledge = {}, sources = [], claims = []) {
     const published = claims.filter((claim) => claim.status === "PUBLISHED");
     $("#memory-lane-count").textContent = `${memories.length.toLocaleString("th-TH")} รายการ`;
-    $("#knowledge-lane-count").textContent = `${Number(knowledge.chunks || 0).toLocaleString("th-TH")} chunks`;
-    $("#acquired-lane-count").textContent = `${published.length.toLocaleString("th-TH")} claims`;
+    $("#knowledge-lane-count").textContent = `${Number(knowledge.chunks || 0).toLocaleString("th-TH")} ส่วน`;
+    $("#acquired-lane-count").textContent = `${published.length.toLocaleString("th-TH")} ข้อเท็จจริง`;
     $("#memory-record-count").textContent = `${memories.length.toLocaleString("th-TH")} รายการ`;
     $("#knowledge-ready-count").textContent = `${(Number(knowledge.chunks || 0) + published.length).toLocaleString("th-TH")} พร้อมใช้`;
 
@@ -2415,7 +2724,7 @@
       const row = element("article", "knowledge-source-row");
       const copy = element("div");
       copy.append(element("strong", "", source.name || source.path));
-      copy.append(element("small", "", `${source.root} · ${source.chunkCount || 0} chunks · ${source.status}`));
+      copy.append(element("small", "", `${source.root} · ${source.chunkCount || 0} ส่วน · ${source.status}`));
       row.append(copy, element("time", "", dateTime(source.indexedAt)));
       sourceList.append(row);
     }
@@ -2437,7 +2746,7 @@
       row.append(citations);
       publishedList.append(row);
     }
-    if (!published.length) publishedList.append(element("p", "library-empty", "ยังไม่มี acquired claim ที่ผ่านการตรวจ"));
+    if (!published.length) publishedList.append(element("p", "library-empty", "ยังไม่มีข้อเท็จจริงที่ผ่านการตรวจ"));
   }
 
   async function deleteMemoryRecord(memory, button) {
@@ -2624,8 +2933,18 @@
     renderSystemHealth(systemHealth.status === "fulfilled" ? systemHealth.value : null);
     renderConversationThreads(threads.status === "fulfilled" ? threads.value : []);
     const failures = calls.filter((call) => call.status === "rejected");
-    setSync(failures.length === 0, failures.length ? "มีบางส่วนยังไม่พร้อม" : "พร้อมดูแล");
-    if (failures.length === calls.length) toast("เชื่อมกับมินิคุงไม่ได้ ลองตรวจ Owner ID หรือ token ครับ", true);
+    setSync(failures.length === 0, failures.length ? `${failures.length} ส่วนยังไม่พร้อม` : "พร้อมดูแล");
+    if (failures.length === calls.length) {
+      setSync(false, "เชื่อมต่อไม่ได้");
+      toast("เชื่อมต่อกับมินิคุงไม่ได้ครับ เปิดการตั้งค่าเพื่อตรวจอุปกรณ์และการเชื่อมต่อได้เลย", true, {
+        label: "เปิดการตั้งค่า",
+        onClick: () => {
+          if (!settingsDialog.open) settingsDialog.showModal();
+          loadPairedDevices();
+          loadCompanionMode();
+        }
+      });
+    }
   }
 
   async function completeTask(id) {
@@ -2803,6 +3122,65 @@
     inspirationBoardsDialog.showModal();
     await loadInspirationBoards();
   });
+  $("#studio-open-boards").addEventListener("click", async () => {
+    inspirationBoardsDialog.showModal();
+    await loadInspirationBoards();
+  });
+  $("#studio-form").addEventListener("submit", generateStudioImage);
+  ["#studio-subject", "#studio-scene", "#studio-detail", "#studio-constraints"].forEach((selector) => {
+    $(selector).addEventListener("input", updateStudioPrompt);
+  });
+  document.querySelectorAll("[data-studio-option]").forEach((button) => {
+    button.addEventListener("click", () => selectStudioOption(button));
+  });
+  document.querySelectorAll("[data-studio-size]").forEach((button) => {
+    button.addEventListener("click", () => selectStudioSize(button));
+  });
+  ["#studio-steps", "#studio-guidance"].forEach((selector) => {
+    $(selector).addEventListener("input", updateStudioCanvasMeta);
+  });
+  $("#studio-random-seed").addEventListener("click", () => {
+    const values = new Uint32Array(1);
+    window.crypto.getRandomValues(values);
+    $("#studio-seed").value = String(values[0] & 0x7fffffff);
+    toast(`ใช้ seed ${$("#studio-seed").value} สำหรับภาพนี้ครับ`);
+  });
+  document.querySelectorAll("[data-studio-step] button").forEach((button) => {
+    button.addEventListener("click", () => {
+      const step = button.closest("[data-studio-step]").dataset.studioStep;
+      setStudioActiveStep(step);
+      const field = document.querySelector(`[data-studio-field="${step}"]`);
+      const control = field?.matches("fieldset") ? field.querySelector("button") : field?.querySelector("textarea,input,button") || field;
+      control?.focus();
+      field?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+  });
+  document.querySelectorAll("[data-studio-field]").forEach((field) => {
+    field.addEventListener("focusin", () => {
+      if (document.querySelector(`[data-studio-step="${field.dataset.studioField}"]`)) {
+        setStudioActiveStep(field.dataset.studioField);
+      }
+    });
+  });
+  $("#studio-load-example").addEventListener("click", loadStudioExample);
+  $("#studio-copy-prompt").addEventListener("click", async () => {
+    const prompt = assembledStudioPrompt();
+    if (!prompt) {
+      $("#studio-subject").focus();
+      toast("เขียนตัวเอกของภาพก่อน แล้วมินิคุงจะประกอบ prompt ให้ครับ", true);
+      return;
+    }
+    try {
+      await copyText(prompt);
+      $("#studio-copy-prompt").textContent = "คัดลอกแล้ว";
+      setTimeout(() => { $("#studio-copy-prompt").textContent = "คัดลอก"; }, 1400);
+    } catch (error) { toast(error.message, true); }
+  });
+  $("#studio-save-result").addEventListener("click", () => {
+    if (state.studio.result) saveVisualReference(state.studio.result).catch(error => toast(error.message, true));
+  });
+  updateStudioPrompt();
+  updateStudioCanvasMeta();
   $("#create-inspiration-board").addEventListener("submit", async (event) => {
     event.preventDefault();
     const title = $("#new-board-title").value.trim();
@@ -3064,6 +3442,7 @@
     loadDashboard();
   });
 
-  showView("chat");
+  const requestedView = new URLSearchParams(window.location.search).get("view");
+  showView(new Set(["chat", "studio", "cockpit"]).has(requestedView) ? requestedView : "chat");
   initializeSync();
 })();

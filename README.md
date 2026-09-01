@@ -12,7 +12,7 @@
 - Personal Knowledge แบบ local สำหรับ index เอกสาร, hybrid retrieval และ citation ในบทสนทนา
 - Self-learning Knowledge Agent สำหรับกวาดข้อมูลตามหัวข้อแบบมีตารางเวลา เปิดอ่านต้นฉบับ ตรวจสอบ claim และนำเฉพาะความรู้ที่ผ่านเกณฑ์มาใช้ตอบแชต
 - Autonomous Deep Research แบบ bounded สำหรับวาง subquestions, ค้นซ้ำตาม evidence gap, เปิดแหล่งต้นฉบับ และระบุข้อจำกัด
-- Storytelling advisor สำหรับวางแรงขับ อุปสรรค stakes ฉาก จังหวะ มุมมอง และตอนจบ พร้อมจัดคำตอบเป็น explanation, comparison, timeline, analysis หรือ narrative ตามเจตนา
+- Storytelling advisor สำหรับวางแรงขับ อุปสรรค stakes ฉาก จังหวะ มุมมอง และตอนจบ พร้อม `Minikun narrative voice` ที่ทำให้งานเล่าเรื่องเป็นธรรมชาติ มีรายละเอียดรูปธรรม และรักษาน้ำเสียงของมินิคุงโดยอัตโนมัติ
 - Story Illustration สำหรับสร้างภาพของจังหวะสำคัญหลังเล่าเรื่องเสร็จ แล้วแนบภาพเข้า response ทั้งแบบ JSON และ streaming โดยไม่เก็บ image bytes ใน conversation history
 - Adaptive Companion ที่เรียนรู้ภาษา ความยาว รูปแบบ ระดับเทคนิค และโทนการตอบแบบ owner-scoped
 - Natural Conversation Advisor ที่ใช้เจตนา บริบทต่อเนื่อง และสัญญาณอารมณ์เพื่อปรับคำตอบโดยไม่เก็บข้อความเพิ่ม
@@ -34,7 +34,7 @@
 - ส่ง language/category/time-range/safe-search options ไปยัง SearXNG พร้อม ranking และ URL deduplication
 - Actuator health และ metrics
 - คำสั่ง runtime และ diagnostics ที่จัดการในระดับ application
-- Native function tools: `time.get_current_time`, `weather.get_forecast`, `web.search`, `web.open_url`, `calculator.add`, `planner.manage`, `calendar.manage`, `task.manage`, `investment.manage`, `investment.analyze`, `homelab.guardian`, `computer.local`, `knowledge.personal`, `communication.assist` และ `personal.loop`
+- Native function tools: `time.get_current_time`, `weather.get_forecast`, `web.search`, `web.open_url`, `image.generate`, `calculator.add`, `planner.manage`, `calendar.manage`, `task.manage`, `investment.manage`, `investment.analyze`, `homelab.guardian`, `computer.local`, `knowledge.personal`, `communication.assist` และ `personal.loop`
 - ผลลัพธ์จาก tool จะถูกส่งกลับเข้า prompt ของ MCS/PCS เพื่อให้โมเดลตอบต่อด้วยตัวตน บริบท และน้ำเสียงเดิมของมินิคุง
 - เก็บ reminder ใน PostgreSQL และส่ง notification ผ่าน ntfy
 - เชื่อม private iCalendar feed จาก Google, Apple หรือ Outlook เพื่ออ่าน agenda และเตือนก่อนนัด
@@ -168,14 +168,16 @@ Actuator ที่เปิดให้เข้าถึงคือ `/actuator
 | `MINIKUN_SEARCH_FAILOVER_COOLDOWN` | `PT120S` | ระยะพัก primary หลัง circuit เปิด |
 | `MINIKUN_SEARCH_FAILOVER_FAILURE_THRESHOLD` | `3` | จำนวน failure ก่อนเปิด circuit |
 | `MINIKUN_SEARCH_ENABLED` | `true` | เปิด/ปิด web search |
-| `MINIKUN_VISUAL_GENERATION_ENABLED` | `false` | เปิดการสร้างภาพจากเรื่องผ่าน OpenAI-compatible Images API |
+| `MINIKUN_VISUAL_GENERATION_ENABLED` | `true` | เปิดการสร้างภาพจากเรื่องและ Image Studio |
+| `MINIKUN_VISUAL_TINYGRAD_BASE_URL` | `http://127.0.0.1:8002` | TinyGrad SDXL service ที่มี `/generate` และ `/health` |
+| `MINIKUN_VISUAL_TINYGRAD_TOKEN` | ว่าง | Bearer token หากตั้ง `SDXL_SERVER_TOKEN` ฝั่ง TinyGrad |
+| `MINIKUN_VISUAL_TINYGRAD_MODEL` | `mala-anime-mix-nsfw-ponyxl` | ชื่อโมเดลที่แสดงกำกับภาพจาก local provider |
+| `MINIKUN_VISUAL_TINYGRAD_WIDTH` / `HEIGHT` | `512` / `768` | ขนาดเริ่มต้นแบบประหยัด VRAM ต้องหาร 64 ลงตัว |
+| `MINIKUN_VISUAL_TINYGRAD_STEPS` | `40` | diffusion steps เริ่มต้นสำหรับภาพหลัก 512×768 |
+| `MINIKUN_VISUAL_TINYGRAD_GUIDANCE` | `6.0` | CFG guidance เริ่มต้น |
+| `MINIKUN_VISUAL_TINYGRAD_SCHEDULER` / `SCHEDULE` | `dpmpp2m` / `karras` | sampler defaults |
+| `MINIKUN_VISUAL_TINYGRAD_TIMEOUT` | `PT10M` | timeout สำหรับ SDXL generation รวม first-run compile |
 | `MINIKUN_VISUAL_AUTO_ILLUSTRATE_STORIES` | `true` | สร้างภาพหนึ่งภาพอัตโนมัติสำหรับ creative story; คำขอสร้างภาพโดยตรงยังตรวจพบได้เสมอเมื่อระบบเปิด |
-| `MINIKUN_VISUAL_GENERATION_BASE_URL` | `https://api.openai.com/v1` | base URL ของ image provider ที่รองรับ `/images/generations` |
-| `MINIKUN_VISUAL_GENERATION_API_KEY` | ใช้ `OPENAI_API_KEY` ถ้ามี | API key ของ image provider; เว้นว่างได้สำหรับ gateway ภายในที่ไม่ใช้ auth |
-| `MINIKUN_VISUAL_GENERATION_MODEL` | `gpt-image-2` | โมเดลสร้างภาพ |
-| `MINIKUN_VISUAL_GENERATION_SIZE` | `1536x1024` | ขนาดภาพแนวนอนสำหรับภาพประกอบเรื่อง |
-| `MINIKUN_VISUAL_GENERATION_QUALITY` | `medium` | ระดับคุณภาพที่ส่งให้ image provider |
-| `MINIKUN_VISUAL_GENERATION_TIMEOUT` | `PT120S` | timeout ต่อภาพ |
 | `MINIKUN_VISUAL_GENERATION_OUTPUT_DIRECTORY` | `${user.home}/.minikun/generated-images` | ที่เก็บ image bytes; conversation จะเก็บเฉพาะ local URL |
 | `MINIKUN_WEATHER_ENABLED` | `true` | เปิด/ปิด weather capability |
 | `MINIKUN_WEATHER_GEOCODING_URL` | `https://geocoding-api.open-meteo.com` | endpoint สำหรับ resolve สถานที่ |
@@ -356,18 +358,28 @@ deterministic seed query และส่งต่อแบบ fail-open แท�
 `STORY`, `EXPLANATION`, `COMPARISON`, `ANALYSIS` และ `TIMELINE` โดยคงภาษา น้ำเสียง และตัวตนจาก MCS
 เหมือนเดิม คำถามทั่วไปที่ไม่มี intent เหล่านี้จะไม่เพิ่ม prompt overhead และยังใช้ fast path เดิม
 
-เมื่อเปิด `MINIKUN_VISUAL_GENERATION_ENABLED=true` ระบบจะสร้างภาพหนึ่งภาพหลังข้อความพร้อมแล้วสำหรับ
+เมื่อเปิด `MINIKUN_VISUAL_GENERATION_ENABLED=true` ระบบจะใช้ TinyGrad SDXL service ที่
+`http://127.0.0.1:8002` เป็นค่าเริ่มต้น และสร้างภาพหนึ่งภาพหลังข้อความพร้อมแล้วสำหรับ
 คำขอสร้างภาพโดยตรง, เรื่องที่ขอภาพประกอบอย่างชัดเจน และ creative story (ถ้าเปิด auto-illustrate)
 ภาพจะถูกเก็บเป็นไฟล์ local แบบตรวจ magic bytes และจำกัดขนาด แล้วส่งกลับเป็น attachment ที่มี
 `origin=generated`; หาก image provider ล้มเหลว คำตอบข้อความยังสำเร็จตามปกติ ตัวอย่างค่าขั้นต่ำ:
 
 ```sh
 export MINIKUN_VISUAL_GENERATION_ENABLED=true
-export OPENAI_API_KEY='...'
 ```
 
-สามารถชี้ `MINIKUN_VISUAL_GENERATION_BASE_URL` ไปยัง gateway ภายในที่รองรับ
-`POST /images/generations` และคืน `data[0].b64_json` ได้ โดยไม่จำเป็นต้องส่ง key ถ้า gateway ไม่ใช้ auth
+TinyGrad provider เรียก `POST /generate`, ส่ง prompt, negative prompt, face prompts, ขนาด, steps,
+guidance, scheduler, schedule และ seed แล้วรับ `image/png` โดยตรง ระบบสร้างภาพรองรับเฉพาะ local
+TinyGrad `sdxl_use.py --serve 8002` และไม่มี OpenAI image-generation fallback
+
+ติดตั้งหรือ restart TinyGrad SDXL เป็น LaunchAgent ที่เปิดพร้อม login และ restart อัตโนมัติ:
+
+```sh
+./deploy/deploy-minikun-sdxl.sh
+```
+
+runtime production ใช้ checkpoint และ LoRA ชุด local เดิม แต่ปิด ADetailer เป็นค่าเริ่มต้นเพื่อไม่ให้
+เกิน VRAM ระหว่าง conditioning; เปิดกลับได้ด้วย `MINIKUN_SDXL_ADETAILER_ENABLED=1` เมื่อมี VRAM เพียงพอ
 
 ดูค่าทั้งหมดและ default เพิ่มเติมได้ที่ [`application.properties`](src/main/resources/application.properties)
 

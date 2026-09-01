@@ -8,6 +8,7 @@ import com.minikun.pcs.KnowledgeSource;
 import com.minikun.pcs.model.CapabilityInstruction;
 import com.minikun.model.CooperationRouter;
 import com.minikun.personality.companion.CompanionModeContext;
+import com.minikun.research.MinikunNarrativeVoiceAdvisor;
 import com.minikun.research.ResearchStorytellingAdvisor;
 import com.minikun.search.model.SearchDecisionReason;
 import com.minikun.tools.ToolEvidence;
@@ -16,6 +17,7 @@ import com.minikun.vision.VisionInput;
 /** Builds prompt capability instructions from already-resolved request context. */
 final class ChatCapabilityFactory {
     private final ResearchStorytellingAdvisor researchStorytellingAdvisor = new ResearchStorytellingAdvisor();
+    private final MinikunNarrativeVoiceAdvisor narrativeVoiceAdvisor = new MinikunNarrativeVoiceAdvisor();
     private final CooperationRouter cooperationRouter = new CooperationRouter();
 
     List<CapabilityInstruction> create(
@@ -45,6 +47,7 @@ final class ChatCapabilityFactory {
         List<CapabilityInstruction> capabilities = new ArrayList<>();
         addConversationStyle(capabilities, conversationStyleInstruction);
         addCreativeWritingGuidance(capabilities, creativeConversation);
+        narrativeVoiceAdvisor.advise(userMessage, creativeConversation).ifPresent(capabilities::add);
         addInteractionMode(capabilities, interactionMode);
         addKnowledgeCapabilities(capabilities, selection, imageAwareness);
         capabilities.addAll(researchStorytellingAdvisor.advise(
