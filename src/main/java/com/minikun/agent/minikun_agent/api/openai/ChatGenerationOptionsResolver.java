@@ -14,6 +14,8 @@ final class ChatGenerationOptionsResolver {
             String userText,
             CompanionMode mode,
             boolean toolOrVisionRequest,
+            boolean searchRequested,
+            boolean deepResearch,
             boolean creativeConversation,
             int configuredMaxTokens,
             double configuredTemperature,
@@ -30,7 +32,10 @@ final class ChatGenerationOptionsResolver {
                 profile = "default";
             } else {
                 ChatGenerationProfileSelector.Selection selection = profileSelector.select(
-                        userText, mode, toolOrVisionRequest, creativeConversation, configuredMaxTokens);
+                        userText, mode,
+                        new ChatGenerationProfileSelector.GenerationSignals(
+                                toolOrVisionRequest, searchRequested, deepResearch, creativeConversation),
+                        configuredMaxTokens);
                 maxTokens = selection.maxTokens();
                 profile = selection.profile();
             }

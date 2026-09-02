@@ -190,7 +190,7 @@ class ChatServiceChatOrchestrationTest {
         ChatService service = service(chatModel, conversation);
         setField(service, "companionModeService", new CompanionModeService(true, 100));
         setField(service, "generationProfileSelector", new ChatGenerationProfileSelector(
-                new CooperationRouter(), true, 384, 512, 768, 1_536, 2_048, 4_096));
+                new CooperationRouter(), true, 384, 512, 768, 1_536, 3_072, 4_096, 2_048, 4_096));
         setField(service, "configuredGenerationMaxTokens", 2_048);
 
         service.chatCompletion(new ChatCompletionRequest(
@@ -320,7 +320,7 @@ class ChatServiceChatOrchestrationTest {
         when(chatModel.call(any(Prompt.class))).thenReturn(response("ตอนต่อไปครับ"));
         ChatService service = service(chatModel, conversation);
         setField(service, "generationProfileSelector", new ChatGenerationProfileSelector(
-                new CooperationRouter(), true, 384, 512, 768, 1_536, 2_048, 4_096));
+                new CooperationRouter(), true, 384, 512, 768, 1_536, 3_072, 4_096, 2_048, 4_096));
         setField(service, "configuredGenerationMaxTokens", 4_096);
 
         service.chatCompletion(new ChatCompletionRequest(
@@ -347,7 +347,7 @@ class ChatServiceChatOrchestrationTest {
                 response("ประตูและพบแสงเช้า", "stop"));
         ChatService service = service(chatModel, conversation);
         setField(service, "generationProfileSelector", new ChatGenerationProfileSelector(
-                new CooperationRouter(), true, 384, 512, 768, 1_536, 2_048, 4_096));
+                new CooperationRouter(), true, 384, 512, 768, 1_536, 3_072, 4_096, 2_048, 4_096));
         setField(service, "configuredGenerationMaxTokens", 4_096);
 
         ChatCompletionResponse result = service.chatCompletion(new ChatCompletionRequest(
@@ -366,6 +366,52 @@ class ChatServiceChatOrchestrationTest {
     }
 
     @Test
+    void lengthLimitedGeneralResponseGetsOneBoundedContinuationAndPreservesFinalReason() throws Exception {
+        ChatModel chatModel = mock(ChatModel.class);
+        ConversationMemoryService conversation = mock(ConversationMemoryService.class);
+        when(conversation.load(any())).thenReturn(List.of());
+        when(chatModel.call(any(Prompt.class))).thenReturn(
+                response("คำตอบส่วนแรก", "length"),
+                response("ส่วนแรกและปิดคำตอบ", "length"));
+        ChatService service = service(chatModel, conversation);
+        setField(service, "generationProfileSelector", new ChatGenerationProfileSelector(
+                new CooperationRouter(), true, 384, 512, 768, 1_536, 3_072, 4_096, 2_048, 4_096));
+        setField(service, "configuredGenerationMaxTokens", 4_096);
+
+        ChatCompletionResponse result = service.chatCompletion(new ChatCompletionRequest(
+                "mini-kun", List.of(new Message("user", "สรุปหัวข้อนี้ให้ครบ")),
+                "general-auto-continuation", false, null, null, null),
+                new ConversationId("general-auto-continuation"));
+
+        assertEquals("คำตอบส่วนแรกและปิดคำตอบ", result.choices().getFirst().message().content());
+        assertEquals("length", result.choices().getFirst().finish_reason());
+        ArgumentCaptor<Prompt> prompts = ArgumentCaptor.forClass(Prompt.class);
+        verify(chatModel, org.mockito.Mockito.times(2)).call(prompts.capture());
+        assertTrue(prompts.getAllValues().get(1).getContents().contains("finish it concisely"));
+        assertEquals(1_024, prompts.getAllValues().get(1).getOptions().getMaxTokens());
+    }
+
+    @Test
+    void emptyContinuationKeepsTheResponseMarkedAsLengthLimited() throws Exception {
+        ChatModel chatModel = mock(ChatModel.class);
+        ConversationMemoryService conversation = mock(ConversationMemoryService.class);
+        when(conversation.load(any())).thenReturn(List.of());
+        when(chatModel.call(any(Prompt.class))).thenReturn(
+                response("คำตอบยังไม่จบ", "length"),
+                response("", "stop"));
+        ChatService service = service(chatModel, conversation);
+
+        ChatCompletionResponse result = service.chatCompletion(new ChatCompletionRequest(
+                "mini-kun", List.of(new Message("user", "อธิบายให้ครบ")),
+                "empty-continuation", false, null, null, null),
+                new ConversationId("empty-continuation"));
+
+        assertEquals("คำตอบยังไม่จบ", result.choices().getFirst().message().content());
+        assertEquals("length", result.choices().getFirst().finish_reason());
+        verify(chatModel, org.mockito.Mockito.times(2)).call(any(Prompt.class));
+    }
+
+    @Test
     void streamingCreativeContinuationFinishesBeforeTheStopChunk() throws Exception {
         ChatModel chatModel = mock(ChatModel.class);
         ConversationMemoryService conversation = mock(ConversationMemoryService.class);
@@ -375,7 +421,7 @@ class ChatServiceChatOrchestrationTest {
                 Flux.just(response("ประตูและพบแสงเช้า", "stop")));
         ChatService service = service(chatModel, conversation);
         setField(service, "generationProfileSelector", new ChatGenerationProfileSelector(
-                new CooperationRouter(), true, 384, 512, 768, 1_536, 2_048, 4_096));
+                new CooperationRouter(), true, 384, 512, 768, 1_536, 3_072, 4_096, 2_048, 4_096));
         setField(service, "configuredGenerationMaxTokens", 4_096);
         ChatCompletionRequest request = new ChatCompletionRequest(
                 "mini-kun", List.of(new Message("user", "ช่วยแต่งเรื่องสั้นของริน")),
@@ -387,6 +433,7 @@ class ChatServiceChatOrchestrationTest {
 
         assertTrue(chunks.stream().anyMatch(chunk -> chunk.contains("รินผลักประตู")));
         assertTrue(chunks.stream().anyMatch(chunk -> chunk.contains("และพบแสงเช้า")));
+        assertTrue(chunks.stream().anyMatch(chunk -> chunk.contains("\"finish_reason\":\"stop\"")));
         assertEquals("[DONE]", chunks.get(chunks.size() - 1));
         verify(conversation).appendTurn(
                 new ConversationId("creative-stream-continuation"),
@@ -686,7 +733,7 @@ class ChatServiceChatOrchestrationTest {
         setField(service, "toolsEnabled", true);
         setField(service, "toolCallingRuntime", toolRuntime);
         setField(service, "generationProfileSelector", new ChatGenerationProfileSelector(
-                new CooperationRouter(), true, 384, 512, 768, 1_536, 2_048, 4_096));
+                new CooperationRouter(), true, 384, 512, 768, 1_536, 3_072, 4_096, 2_048, 4_096));
         setField(service, "configuredGenerationMaxTokens", 2_048);
 
         service.chatCompletionStream(request(), new ConversationId("general-direct-stream"))
@@ -708,7 +755,7 @@ class ChatServiceChatOrchestrationTest {
         setField(service, "toolsEnabled", true);
         setField(service, "toolCallingRuntime", toolRuntime);
         setField(service, "generationProfileSelector", new ChatGenerationProfileSelector(
-                new CooperationRouter(), true, 384, 512, 768, 1_536, 2_048, 4_096));
+                new CooperationRouter(), true, 384, 512, 768, 1_536, 3_072, 4_096, 2_048, 4_096));
         setField(service, "configuredGenerationMaxTokens", 2_048);
         ChatCompletionRequest technical = new ChatCompletionRequest(
                 "test-model", List.of(new Message("user", "ช่วย debug Spring Boot API นี้")),
@@ -795,6 +842,9 @@ class ChatServiceChatOrchestrationTest {
             setField(service, "searchEnabled", true);
             setField(service, "searchTimeout", Duration.ofSeconds(10));
             setField(service, "searchQueryPlanningEnabled", false);
+            setField(service, "generationProfileSelector", new ChatGenerationProfileSelector(
+                    new CooperationRouter(), true, 384, 512, 768, 1_536, 3_072, 4_096, 2_048, 4_096));
+            setField(service, "configuredGenerationMaxTokens", 4_096);
 
             var response = service.chatCompletion(request(), new ConversationId("images"));
 
@@ -821,6 +871,7 @@ class ChatServiceChatOrchestrationTest {
             assertFalse(promptText.contains(second.description()));
             assertFalse(promptText.contains(third.description()));
             assertFalse(promptText.contains("ChatAttachment"));
+            assertEquals(3_072, prompt.getValue().getOptions().getMaxTokens());
             verify(searchService, org.mockito.Mockito.times(2)).search(any());
             verify(chatModel, org.mockito.Mockito.times(1)).call(any(Prompt.class));
 
@@ -876,6 +927,9 @@ class ChatServiceChatOrchestrationTest {
         setField(service, "searchEnabled", true);
         setField(service, "searchTimeout", Duration.ofSeconds(10));
         setField(service, "searchQueryPlanningEnabled", false);
+        setField(service, "generationProfileSelector", new ChatGenerationProfileSelector(
+                new CooperationRouter(), true, 384, 512, 768, 1_536, 3_072, 4_096, 2_048, 4_096));
+        setField(service, "configuredGenerationMaxTokens", 4_096);
         setField(service, "autonomousResearchService",
                 (com.minikun.research.AutonomousResearchService) researchRequest ->
                         new com.minikun.research.AutonomousResearchResult(
@@ -908,6 +962,7 @@ class ChatServiceChatOrchestrationTest {
         assertTrue(text.contains("Narrative craft: STORY"));
         assertTrue(text.contains(sourceUrl));
         assertTrue(text.contains("Never invent, repair, or guess a citation"));
+        assertEquals(4_096, prompt.getValue().getOptions().getMaxTokens());
     }
 
     @Test

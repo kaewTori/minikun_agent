@@ -17,8 +17,9 @@ from typing import Sequence
 FAULT_MARKERS = (
     b"device fault detected",
     b"memoryerror: allocation",
-    b"brokenpipeerror: [errno 32] broken pipe",
 )
+# Broken pipes are normal client disconnects (for example an expired health
+# probe) and must never be treated as evidence that the NV runtime is corrupt.
 TAIL_BYTES = 4_096
 
 

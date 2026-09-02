@@ -33,7 +33,8 @@ public class StoryIllustrationConfiguration {
             @Value("${minikun.visual.generation.tinygrad.scheduler:dpmpp2m}") String scheduler,
             @Value("${minikun.visual.generation.tinygrad.schedule:karras}") String schedule,
             @Value("${minikun.visual.generation.tinygrad.timeout:PT10M}") Duration timeout,
-            @Value("${minikun.visual.generation.max-image-bytes:15728640}") int maximumImageBytes) {
+            @Value("${minikun.visual.generation.max-image-bytes:15728640}") int maximumImageBytes,
+            TinyGradRuntimeAccessCoordinator runtimeAccess) {
         HttpClient httpClient = HttpClient.newBuilder().connectTimeout(timeout).build();
         JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(httpClient);
         requestFactory.setReadTimeout(timeout);
@@ -46,7 +47,7 @@ public class StoryIllustrationConfiguration {
         return new TinyGradImageGenerationProvider(
                 builder.build(), objectMapper, stripTrailingSlash(baseUrl), model, negativePrompt,
                 width, height, steps, guidance,
-                scheduler, schedule, maximumImageBytes);
+                scheduler, schedule, maximumImageBytes, runtimeAccess);
     }
 
     @Bean
@@ -115,9 +116,26 @@ public class StoryIllustrationConfiguration {
     @Bean
     ImageStudioController imageStudioController(
             ImageGenerationTool imageGenerationTool,
+            TinyGradRuntimeStatusReader runtimeStatus,
             @Value("${minikun.visual.management.token:${minikun.memory.management.token:}}") String token,
             @Value("${minikun.visual.generation.max-prompt-characters:8000}") int maximumPromptCharacters) {
-        return new ImageStudioController(imageGenerationTool, token, maximumPromptCharacters);
+        return new ImageStudioController(imageGenerationTool, runtimeStatus, token, maximumPromptCharacters);
+    }
+
+    @Bean
+    TinyGradRuntimeStatusReader tinyGradRuntimeStatusReader(
+            ObjectMapper objectMapper,
+            Clock clock,
+            @Value("${minikun.visual.generation.tinygrad.base-url:http://127.0.0.1:8002}") String baseUrl,
+            @Value("${minikun.visual.generation.tinygrad.health-timeout:PT2S}") Duration timeout,
+            TinyGradRuntimeAccessCoordinator runtimeAccess) {
+        HttpClient httpClient = HttpClient.newBuilder().connectTimeout(timeout).build();
+        return new TinyGradRuntimeStatusClient(httpClient, objectMapper, clock, baseUrl, timeout, runtimeAccess);
+    }
+
+    @Bean
+    TinyGradRuntimeAccessCoordinator tinyGradRuntimeAccessCoordinator() {
+        return new TinyGradRuntimeAccessCoordinator();
     }
 
     @Bean

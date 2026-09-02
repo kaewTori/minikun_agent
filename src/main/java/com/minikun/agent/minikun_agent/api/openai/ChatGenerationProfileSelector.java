@@ -15,6 +15,8 @@ public final class ChatGenerationProfileSelector {
     private final int focusMaxTokens;
     private final int generalMaxTokens;
     private final int workMaxTokens;
+    private final int searchMaxTokens;
+    private final int researchMaxTokens;
     private final int technicalMaxTokens;
     private final int creativeMaxTokens;
 
@@ -25,6 +27,8 @@ public final class ChatGenerationProfileSelector {
             @Value("${minikun.model.generation.profiles.focus-max-tokens:512}") int focusMaxTokens,
             @Value("${minikun.model.generation.profiles.general-max-tokens:1536}") int generalMaxTokens,
             @Value("${minikun.model.generation.profiles.work-max-tokens:1536}") int workMaxTokens,
+            @Value("${minikun.model.generation.profiles.search-max-tokens:3072}") int searchMaxTokens,
+            @Value("${minikun.model.generation.profiles.research-max-tokens:4096}") int researchMaxTokens,
             @Value("${minikun.model.generation.profiles.technical-max-tokens:2048}") int technicalMaxTokens,
             @Value("${minikun.model.generation.profiles.creative-max-tokens:4096}") int creativeMaxTokens) {
         this.cooperationRouter = cooperationRouter;
@@ -33,36 +37,41 @@ public final class ChatGenerationProfileSelector {
         this.focusMaxTokens = positive(focusMaxTokens, "focus max tokens");
         this.generalMaxTokens = positive(generalMaxTokens, "general max tokens");
         this.workMaxTokens = positive(workMaxTokens, "work max tokens");
+        this.searchMaxTokens = positive(searchMaxTokens, "search max tokens");
+        this.researchMaxTokens = positive(researchMaxTokens, "research max tokens");
         this.technicalMaxTokens = positive(technicalMaxTokens, "technical max tokens");
         this.creativeMaxTokens = positive(creativeMaxTokens, "creative max tokens");
     }
 
     public Selection select(
             String userText, CompanionMode mode, boolean toolOrVisionRequest, int configuredMaximum) {
-        return select(userText, mode, toolOrVisionRequest, false, configuredMaximum);
+        return select(userText, mode,
+                new GenerationSignals(toolOrVisionRequest, false, false, false), configuredMaximum);
     }
 
     Selection select(
             String userText,
             CompanionMode mode,
-            boolean toolOrVisionRequest,
-            boolean creativeConversation,
+            GenerationSignals signals,
             int configuredMaximum) {
         int applicationMaximum = positive(configuredMaximum, "configured generation max tokens");
         if (!enabled) {
             return new Selection("default", applicationMaximum);
         }
         CooperationRoutingDecision route = cooperationRouter.decide(userText);
-        if ("creative_request".equals(route.reason())) {
+        if (signals.creativeConversation() || "creative_request".equals(route.reason())) {
             return selection("creative", creativeMaxTokens, applicationMaximum);
+        }
+        if (signals.deepResearch()) {
+            return selection("research", researchMaxTokens, applicationMaximum);
+        }
+        if (signals.searchRequested()) {
+            return selection("search", searchMaxTokens, applicationMaximum);
         }
         if (route.needsExpert()) {
             return selection("technical", technicalMaxTokens, applicationMaximum);
         }
-        if (creativeConversation) {
-            return selection("creative", creativeMaxTokens, applicationMaximum);
-        }
-        if (toolOrVisionRequest || mode == CompanionMode.WORK) {
+        if (signals.toolOrVisionRequest() || mode == CompanionMode.WORK) {
             return selection("work", workMaxTokens, applicationMaximum);
         }
         if (mode == CompanionMode.FOCUS) {
@@ -90,5 +99,12 @@ public final class ChatGenerationProfileSelector {
     }
 
     public record Selection(String profile, int maxTokens) {
+    }
+
+    record GenerationSignals(
+            boolean toolOrVisionRequest,
+            boolean searchRequested,
+            boolean deepResearch,
+            boolean creativeConversation) {
     }
 }

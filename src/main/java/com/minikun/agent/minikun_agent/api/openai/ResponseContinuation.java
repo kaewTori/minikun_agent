@@ -14,8 +14,8 @@ import org.springframework.ai.chat.prompt.Prompt;
 
 import reactor.core.publisher.Flux;
 
-/** Completes length-limited creative output at a natural scene boundary. */
-final class CreativeResponseContinuation {
+/** Finishes one response that stopped because its output budget was exhausted. */
+final class ResponseContinuation {
     private static final Set<String> LENGTH_FINISH_REASONS = Set.of("length", "max_tokens", "max-tokens");
     private static final int MAXIMUM_IDENTITY_CHARACTERS = 3_000;
     private static final int MAXIMUM_CONVERSATION_CHARACTERS = 6_000;
@@ -24,46 +24,51 @@ final class CreativeResponseContinuation {
     private final int maximumTailCharacters;
     private final int maximumContinuationTokens;
 
-    CreativeResponseContinuation(
-            boolean enabled,
-            int maximumTailCharacters,
-            int maximumContinuationTokens) {
+    ResponseContinuation(boolean enabled, int maximumTailCharacters, int maximumContinuationTokens) {
         if (maximumTailCharacters < 500) {
-            throw new IllegalArgumentException("creative continuation tail must be at least 500 characters");
+            throw new IllegalArgumentException("continuation tail must be at least 500 characters");
         }
         if (maximumContinuationTokens < 128) {
-            throw new IllegalArgumentException("creative continuation tokens must be at least 128");
+            throw new IllegalArgumentException("continuation tokens must be at least 128");
         }
         this.enabled = enabled;
         this.maximumTailCharacters = maximumTailCharacters;
         this.maximumContinuationTokens = maximumContinuationTokens;
     }
 
-    boolean shouldContinue(String generationProfile, ChatResponse response) {
-        if (!enabled || !"creative".equals(generationProfile)
-                || response == null || response.getResult() == null) {
-            return false;
-        }
-        String finishReason = response.getResult().getMetadata().getFinishReason();
-        return finishReason != null
-                && LENGTH_FINISH_REASONS.contains(finishReason.strip().toLowerCase(Locale.ROOT));
+    boolean shouldContinue(ChatResponse response) {
+        return enabled && isLengthFinishReason(finishReason(response));
     }
 
-    Prompt continuationPrompt(Prompt original, String generatedContent) {
+    boolean isLengthFinishReason(String finishReason) {
+        return finishReason != null && LENGTH_FINISH_REASONS.contains(normalizeFinishReason(finishReason));
+    }
+
+    String finishReason(ChatResponse response) {
+        if (response == null || response.getResult() == null || response.getResult().getMetadata() == null) {
+            return "";
+        }
+        return normalizeFinishReason(response.getResult().getMetadata().getFinishReason());
+    }
+
+    String normalizeFinishReason(String finishReason) {
+        if (finishReason == null || finishReason.isBlank()) {
+            return "";
+        }
+        String normalized = finishReason.strip().toLowerCase(Locale.ROOT);
+        return LENGTH_FINISH_REASONS.contains(normalized) ? "length" : normalized;
+    }
+
+    Prompt continuationPrompt(Prompt original, String generatedContent, String generationProfile) {
         String systemContext = original.getSystemMessage().getText();
         String identity = prefix(systemContext, MAXIMUM_IDENTITY_CHARACTERS);
         String conversation = suffix(roleConversation(original), MAXIMUM_CONVERSATION_CHARACTERS);
         if (conversation.isBlank()) {
             conversation = suffix(section(systemContext, "Conversation"), MAXIMUM_CONVERSATION_CHARACTERS);
         }
-        String instruction = """
-                Continue an interrupted creative response seamlessly and finish the current story or scene at a
-                natural stopping point. Preserve the same language, point of view, tense, names, characterization,
-                tone, and formatting. Start with the exact next words after the supplied draft tail. Do not repeat
-                existing text, restart the story, add a new title, mention token limits or interruption, summarize
-                what already happened, or introduce a new plot arc. Resolve only what is needed for a satisfying
-                scene ending, and keep the continuation comfortably within the available space.
-                """.strip();
+        String instruction = "creative".equals(generationProfile)
+                ? creativeInstruction()
+                : generalInstruction();
         StringBuilder context = new StringBuilder(instruction);
         if (!identity.isBlank()) {
             context.append("\n\nIdentity and style context:\n").append(identity);
@@ -115,6 +120,27 @@ final class CreativeResponseContinuation {
                     source == null ? null : source.getMetadata());
             return Flux.just(new ChatResponse(List.of(generation), last.getMetadata()));
         });
+    }
+
+    private String creativeInstruction() {
+        return """
+                Continue an interrupted creative response seamlessly and finish the current story or scene at a
+                natural stopping point. Preserve the same language, point of view, tense, names, characterization,
+                tone, and formatting. Start with the exact next words after the supplied draft tail. Do not repeat
+                existing text, restart the story, add a new title, mention token limits or interruption, summarize
+                what already happened, or introduce a new plot arc. Resolve only what is needed for a satisfying
+                scene ending, and keep the continuation comfortably within the available space.
+                """.strip();
+    }
+
+    private String generalInstruction() {
+        return """
+                Continue the interrupted answer seamlessly and finish it concisely. Preserve the same language,
+                factual constraints, citations, tone, and formatting. Start with the exact next words after the
+                supplied draft tail. Do not repeat existing text, restart with an introduction, mention token limits
+                or interruption, or add claims that are not supported by the original context. Complete the current
+                section and include only the minimum closing material needed for a self-contained answer.
+                """.strip();
     }
 
     private ChatOptions options(Prompt original) {

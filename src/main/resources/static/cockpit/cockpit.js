@@ -36,7 +36,10 @@
       width: 768,
       height: 1280,
       result: null,
-      busy: false
+      busy: false,
+      runtimeTimer: null,
+      runtimeBusy: false,
+      runtimeHistory: []
     },
     sync: {
       paired: false,
@@ -395,6 +398,7 @@
       parentId: message.parentId || "",
       branchId: message.branchId || "",
       status: message.status || "complete",
+      finishReason: message.finishReason || "",
       feedback: message.feedback || "",
       feedbackReason: message.feedbackReason || "",
       sources: (message.sources || []).slice(0, 12),
@@ -443,6 +447,7 @@
         parentId: message.parentId || message.metadata?.parentId || "",
         branchId: message.branchId || message.metadata?.branchId || "",
         status: message.status || message.metadata?.status || "complete",
+        finishReason: message.finishReason || message.metadata?.finishReason || "",
         feedback: message.feedback || message.metadata?.feedback || "",
         feedbackReason: message.feedbackReason || message.metadata?.feedbackReason || "",
         sources: Array.isArray(message.sources) ? message.sources
@@ -473,6 +478,7 @@
           parentId: message.parentId || "",
           branchId: message.branchId || "",
           status: message.status || "complete",
+          finishReason: message.finishReason || "",
           feedback: message.feedback || "",
           feedbackReason: message.feedbackReason || "",
           sources: (message.sources || []).slice(0, 12)
@@ -908,9 +914,10 @@
       loadDashboard();
     }
     if (view === "studio") updateStudioPrompt();
+    updateStudioRuntimePolling(view);
   }
 
-  function switchCockpitPage(page = "today", focusId = "") {
+  function switchCockpitPage(page = "today", focusId = "", keepShortcutsVisible = false) {
     const legacyPages = {
       overview: "today", work: "today", experiments: "today",
       tools: "agent", learning: "memory", health: "system", permissions: "system"
@@ -930,7 +937,13 @@
     });
     requestAnimationFrame(() => {
       if (focusId) document.getElementById(focusId)?.scrollIntoView({ behavior: "smooth", block: "start" });
-      else window.scrollTo(0, 0);
+      else if (keepShortcutsVisible && window.matchMedia("(max-width: 720px)").matches) {
+        const shortcuts = document.querySelector(".cockpit-shortcuts");
+        if (!shortcuts) return;
+        const stickyTop = Number.parseFloat(getComputedStyle(shortcuts).top) || 0;
+        const targetTop = window.scrollY + shortcuts.getBoundingClientRect().top - stickyTop;
+        window.scrollTo({ top: Math.max(0, targetTop), behavior: "smooth" });
+      } else window.scrollTo(0, 0);
     });
   }
 
@@ -1075,6 +1088,79 @@
     $("#studio-coach-copy").textContent = label.textContent;
   }
 
+  function renderStudioRuntime(status) {
+    const tab = $("#studio-runtime");
+    if (!tab) return;
+    const online = Boolean(status?.online);
+    const activeBytes = Number(status?.memory?.active_bytes);
+    const budgetBytes = Number(status?.vram_budget_bytes);
+    const percent = Number(status?.vram_used_percent);
+    const validPercent = Number.isFinite(percent) && percent >= 0;
+    const generating = status?.status === "GENERATING";
+    const highPressure = online && validPercent && percent >= 95;
+    tab.dataset.state = online ? "online" : "offline";
+    tab.dataset.pressure = highPressure ? "high" : "normal";
+    $("#studio-runtime-status").textContent = !online ? "TinyGrad ยังไม่พร้อม"
+      : generating ? "TinyGrad กำลังสร้างภาพ"
+      : status.recycle_requested ? "TinyGrad พร้อม · รอ recycle"
+        : highPressure ? "TinyGrad พร้อม · VRAM ใกล้เต็ม" : "TinyGrad พร้อมสร้างภาพ";
+    $("#studio-runtime-endpoint").textContent = String(status?.endpoint || "http://127.0.0.1:8002/health")
+      .replace(/^https?:\/\//, "");
+    $("#studio-runtime-vram").textContent = online ? formatBinaryBytes(activeBytes) : "—";
+    $("#studio-runtime-budget").textContent = online ? `/ ${formatBinaryBytes(budgetBytes)}` : "/ —";
+    $("#studio-runtime-percent").textContent = online && validPercent ? `${percent.toFixed(1)}%` : "—";
+    $("#studio-runtime-vram-bar").style.width = online && validPercent
+      ? `${Math.min(100, Math.max(0, percent))}%` : "0%";
+    const requests = Number(status?.request_count);
+    $("#studio-runtime-requests").textContent = online && Number.isFinite(requests) && requests >= 0
+      ? requests.toLocaleString("th-TH") : "—";
+    const compilerProcesses = Number(status?.compiler_processes);
+    const compileWorkers = Number(status?.compile_workers);
+    $("#studio-runtime-compiler").textContent = online
+      ? `${Number.isFinite(compilerProcesses) ? compilerProcesses : 0}P · ${Number.isFinite(compileWorkers) ? compileWorkers : 0}W`
+      : "—";
+    const checkedAt = status?.checked_at ? new Date(status.checked_at) : new Date();
+    const latency = Number(status?.latency_ms);
+    $("#studio-runtime-updated").textContent = online
+      ? `${checkedAt.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}${Number.isFinite(latency) ? ` · ${latency}ms` : ""}`
+      : "เชื่อมต่อไม่ได้";
+
+    if (online && validPercent) {
+      state.studio.runtimeHistory.push(Math.min(100, Math.max(0, percent)));
+      state.studio.runtimeHistory = state.studio.runtimeHistory.slice(-30);
+    }
+    const history = state.studio.runtimeHistory;
+    const graphValues = history.length === 1 ? [history[0], history[0]] : history;
+    const points = graphValues.map((value, index) => {
+      const x = graphValues.length < 2 ? 0 : index * 180 / (graphValues.length - 1);
+      const y = 32 - value * 0.29;
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    }).join(" ");
+    $("#studio-runtime-line").setAttribute("points", points);
+  }
+
+  async function refreshStudioRuntime() {
+    if (state.studio.busy || state.studio.runtimeBusy || document.hidden || $("#studio-view")?.classList.contains("hidden")) return;
+    state.studio.runtimeBusy = true;
+    try {
+      renderStudioRuntime(await api("/v1/images/studio/status"));
+    } catch (_) {
+      renderStudioRuntime({ online: false, endpoint: "http://127.0.0.1:8002/health", checked_at: new Date().toISOString() });
+    } finally {
+      state.studio.runtimeBusy = false;
+    }
+  }
+
+  function updateStudioRuntimePolling(view) {
+    if (state.studio.runtimeTimer) {
+      clearInterval(state.studio.runtimeTimer);
+      state.studio.runtimeTimer = null;
+    }
+    if (view !== "studio" || document.hidden) return;
+    refreshStudioRuntime();
+    state.studio.runtimeTimer = setInterval(refreshStudioRuntime, 2_000);
+  }
+
   function selectStudioOption(button) {
     const group = button.dataset.studioOption;
     const wasSelected = button.classList.contains("selected");
@@ -1150,6 +1236,7 @@
     const prompt = assembledStudioPrompt();
     if (!prompt) return;
     state.studio.busy = true;
+    updateStudioRuntimePolling("");
     $("#studio-generate").disabled = true;
     $("#studio-generate span").textContent = "กำลังสร้างภาพ…";
     setStudioCanvasState("generating");
@@ -1174,6 +1261,7 @@
       toast(message, true);
     } finally {
       state.studio.busy = false;
+      updateStudioRuntimePolling("studio");
       $("#studio-generate").disabled = false;
       $("#studio-generate span").textContent = "สร้างภาพนี้";
     }
@@ -1210,16 +1298,25 @@
     const values = [];
     const contextTokens = Number(message.usage?.promptTokens);
     if (contextTokens > 0) values.push(`บริบท ${contextTokens.toLocaleString("th-TH")} โทเคน`);
+    const completionTokens = Number(message.usage?.completionTokens);
+    if (completionTokens > 0) values.push(`คำตอบ ${completionTokens.toLocaleString("th-TH")} โทเคน`);
     const thinkingMs = Number(message.timing?.firstTokenMs || message.timing?.totalMs);
     if (thinkingMs > 0) values.push(`คิด ${formatDuration(thinkingMs)}`);
     const totalMs = Number(message.timing?.totalMs);
     if (totalMs > thinkingMs) values.push(`รวม ${formatDuration(totalMs)}`);
     if (message.status === "stopped") values.push("หยุดโดยผู้ใช้");
     if (message.status === "failed") values.push("ส่งไม่สำเร็จ");
+    if (message.status === "truncated" || isLengthFinishReason(message.finishReason)) {
+      values.push("คำตอบยังไม่จบ — ชนเพดาน");
+    }
     if (!values.length) return null;
     const meta = element("div", "response-meta");
     values.forEach((value) => meta.append(element("span", "", value)));
     return meta;
+  }
+
+  function isLengthFinishReason(value) {
+    return ["length", "max_tokens", "max-tokens"].includes(String(value || "").trim().toLowerCase());
   }
 
   function renderSourceCards(message) {
@@ -1392,6 +1489,12 @@
         edit.addEventListener("click", () => editUserMessage(index));
         tools.append(edit);
       } else {
+        if (message.status === "truncated" || isLengthFinishReason(message.finishReason)) {
+          const continueButton = element("button", "", "ตอบต่อ");
+          continueButton.type = "button";
+          continueButton.addEventListener("click", () => continueTruncatedMessage(index));
+          tools.append(continueButton);
+        }
         const regenerate = element("button", "", message.status === "failed" ? "ลองอีกครั้ง" : "ตอบใหม่");
         regenerate.type = "button";
         regenerate.addEventListener("click", () => regenerateMessage(index));
@@ -1669,6 +1772,8 @@
         try {
           const chunk = JSON.parse(line);
           const delta = chunk.choices?.[0]?.delta;
+          const finishReason = chunk.choices?.[0]?.finish_reason;
+          if (finishReason) assistant.finishReason = String(finishReason);
           if (delta?.tool_calls?.length || chunk.tool_calls?.length || chunk.stage === "tool") {
             updatePendingProgress(task, "กำลังใช้เครื่องมือช่วยหาคำตอบ…");
           }
@@ -1743,6 +1848,7 @@
     const assistant = {
       id: uniqueId("message-"), role: "assistant", content: "", attachments: [], createdAt: Date.now(),
       parentId: userMessage.id, branchId: userMessage.branchId || conversationId, status: "generating",
+      finishReason: "",
       timing: { startedAt: Date.now(), firstTokenMs: 0, totalMs: 0 }, sources: [], feedback: ""
     };
     $("#chat-welcome").classList.add("hidden");
@@ -1779,7 +1885,7 @@
       await consumeChatStream(response, assistant, task);
       assistant.timing.totalMs = Date.now() - assistant.timing.startedAt;
       if (!assistant.content && !assistant.attachments.length) assistant.content = "ได้รับข้อความแล้วครับ แต่ยังไม่มีคำตอบกลับมา";
-      assistant.status = "complete";
+      assistant.status = isLengthFinishReason(assistant.finishReason) ? "truncated" : "complete";
       assistant.sources = extractSources(assistant.content);
       messages.push(assistant);
       saveConversation(seed || userMessage.content, conversationId, messages);
@@ -1902,6 +2008,24 @@
     if (userIndex < 0) return;
     const hasLaterTurns = state.chatMessages.slice(index + 1).some((message) => !message.localOnly);
     await rerunFromUser(userIndex, hasLaterTurns);
+  }
+
+  async function continueTruncatedMessage(index) {
+    const source = state.chatMessages;
+    const previous = source[index];
+    const conversationId = state.currentConversationId;
+    if (!previous || previous.role !== "assistant" || state.pendingChats.has(conversationId)) return;
+    const userMessage = {
+      id: uniqueId("message-"), role: "user",
+      content: "ตอบต่อจากคำตอบก่อนหน้าให้จบ โดยไม่ทวนเนื้อหาที่ตอบไปแล้ว",
+      branchId: conversationId, parentId: previous.id, status: "complete", createdAt: Date.now()
+    };
+    source.push(userMessage);
+    renderChat();
+    await runChatTurn({
+      conversationId, messages: source, userMessage,
+      currentContent: userMessage.content, seed: userMessage.content
+    });
   }
 
   async function editUserMessage(index) {
@@ -3355,7 +3479,11 @@
     state.mediaStream?.getTracks().forEach((track) => track.stop());
     state.audioContext?.close();
     state.sync.eventSource?.close();
+    if (state.studio.runtimeTimer) clearInterval(state.studio.runtimeTimer);
     stopSpeech();
+  });
+  document.addEventListener("visibilitychange", () => {
+    updateStudioRuntimePolling($("#studio-view")?.classList.contains("hidden") ? "" : "studio");
   });
 
   $("#open-settings").addEventListener("click", () => {
@@ -3382,7 +3510,7 @@
   });
   document.querySelectorAll("[data-cockpit-target]").forEach((button) => {
     button.addEventListener("click", () => {
-      switchCockpitPage(button.dataset.cockpitTarget);
+      switchCockpitPage(button.dataset.cockpitTarget, "", true);
     });
   });
   $("#request-location").addEventListener("click", requestCurrentLocation);

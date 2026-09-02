@@ -43,6 +43,7 @@ import com.minikun.tokenbudget.runtime.DynamicGenerationOptionsFactory;
 import com.minikun.tools.ToolEvidence;
 import com.minikun.vision.VisionInput;
 import com.minikun.relationship.ConversationThreadService;
+import com.minikun.research.ResearchIntentDetector;
 import java.util.ArrayList;
 
 import lombok.extern.slf4j.Slf4j;
@@ -113,12 +114,19 @@ final class ChatPromptFactory {
         ChatCompletionRequest request = input.request();
         ChatMessage userMessage = input.userMessage();
         boolean creativeRequest = isCreativeConversation(input);
+        boolean searchRequested = input.knowledgeSelection() != null
+                && input.knowledgeSelection().searchSignals().searchRequested();
+        boolean deepResearch = input.knowledgeSelection() != null
+                && (input.knowledgeSelection().researchTrace().autonomous()
+                        || new ResearchIntentDetector().detect(userMessage.content()).deepResearch());
         ChatGenerationOptionsResolver.Result generation = generationOptionsResolver.resolve(
                 request,
                 userMessage.content(),
                 input.interactionMode() == null ? null : input.interactionMode().mode(),
                 input.verifiedToolResult() != null
                         || input.visionInput() != null && input.visionInput().hasImages(),
+                searchRequested,
+                deepResearch,
                 creativeRequest,
                 configuration.generationMaxTokens(),
                 configuration.generationTemperature(),
@@ -207,6 +215,7 @@ final class ChatPromptFactory {
             contextRuntime = new PersonalContextRuntime(promptComposer, dynamicGenerationOptionsFactory);
         }
         if (contextRuntime == null) {
+            recordEffectiveGenerationLimit(generation.profile(), generation.options().maxTokens());
             return new Result(
                     adapt(promptComposer.compose(promptRequest), generation.options(), input.visionInput()),
                     generation.profile());
@@ -233,7 +242,14 @@ final class ChatPromptFactory {
                 result.snapshot().recoveryAttempts(),
                 result.snapshot().estimatedInputTokens(),
                 result.snapshot().allocatedOutputTokens());
+        recordEffectiveGenerationLimit(generation.profile(), result.generationOptions().maxTokens());
         return new Result(adapt(result.prompt(), result.generationOptions(), input.visionInput()), generation.profile());
+    }
+
+    private void recordEffectiveGenerationLimit(String profile, Integer maxTokens) {
+        if (performanceMetrics != null) {
+            performanceMetrics.effectiveGenerationLimit(profile, maxTokens);
+        }
     }
 
     private Prompt adapt(

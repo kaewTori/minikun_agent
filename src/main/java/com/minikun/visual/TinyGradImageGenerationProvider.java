@@ -30,6 +30,7 @@ public final class TinyGradImageGenerationProvider
     private final String defaultScheduler;
     private final String defaultSchedule;
     private final int maximumImageBytes;
+    private final TinyGradRuntimeAccessCoordinator runtimeAccess;
 
     public TinyGradImageGenerationProvider(
             RestClient restClient,
@@ -44,6 +45,26 @@ public final class TinyGradImageGenerationProvider
             String defaultScheduler,
             String defaultSchedule,
             int maximumImageBytes) {
+        this(restClient, objectMapper, serviceBaseUrl, model, defaultNegativePrompt,
+                defaultWidth, defaultHeight, defaultSteps, defaultGuidance,
+                defaultScheduler, defaultSchedule, maximumImageBytes,
+                new TinyGradRuntimeAccessCoordinator());
+    }
+
+    public TinyGradImageGenerationProvider(
+            RestClient restClient,
+            ObjectMapper objectMapper,
+            String serviceBaseUrl,
+            String model,
+            String defaultNegativePrompt,
+            int defaultWidth,
+            int defaultHeight,
+            int defaultSteps,
+            double defaultGuidance,
+            String defaultScheduler,
+            String defaultSchedule,
+            int maximumImageBytes,
+            TinyGradRuntimeAccessCoordinator runtimeAccess) {
         this.restClient = Objects.requireNonNull(restClient, "rest client must not be null");
         this.objectMapper = Objects.requireNonNull(objectMapper, "object mapper must not be null");
         this.serviceBaseUrl = required(serviceBaseUrl, "service base URL");
@@ -59,6 +80,7 @@ public final class TinyGradImageGenerationProvider
             throw new IllegalArgumentException("maximum image bytes must be positive");
         }
         this.maximumImageBytes = maximumImageBytes;
+        this.runtimeAccess = Objects.requireNonNull(runtimeAccess, "runtime access must not be null");
     }
 
     @Override
@@ -69,6 +91,10 @@ public final class TinyGradImageGenerationProvider
     @Override
     public GeneratedImage generate(ImageGenerationRequest request) {
         Objects.requireNonNull(request, "image generation request must not be null");
+        return runtimeAccess.generate(() -> generateExclusively(request));
+    }
+
+    private GeneratedImage generateExclusively(ImageGenerationRequest request) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("prompt", required(request.prompt(), "prompt"));
         String negativePrompt = mergeNegativePrompt(defaultNegativePrompt, request.negativePrompt());

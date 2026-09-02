@@ -19,6 +19,9 @@ public final class ChatPerformanceMetrics implements ModelPerformanceMetrics {
     static final String GENERATION_PROFILES = "minikun.chat.generation.profile.requests";
     static final String TOKENS = "minikun.chat.generation.tokens";
     static final String TOKENS_PER_SECOND = "minikun.chat.generation.tokens.per.second";
+    static final String FINISH_REASONS = "minikun.chat.generation.finish.requests";
+    static final String TRUNCATED = "minikun.chat.generation.truncated";
+    static final String CONTINUATIONS = "minikun.chat.generation.continuation.requests";
 
     private final MeterRegistry meterRegistry;
 
@@ -83,6 +86,24 @@ public final class ChatPerformanceMetrics implements ModelPerformanceMetrics {
         }
     }
 
+    public void effectiveGenerationLimit(String profile, Integer maxTokens) {
+        if (maxTokens == null || maxTokens < 1) {
+            return;
+        }
+        try {
+            DistributionSummary.builder(TOKENS)
+                    .description("Configured and observed token counts for chat generation")
+                    .baseUnit("tokens")
+                    .tag("type", "effective_maximum")
+                    .tag("profile", safeTag(profile))
+                    .publishPercentiles(0.5, 0.95, 0.99)
+                    .register(meterRegistry)
+                    .record(maxTokens);
+        } catch (RuntimeException ignored) {
+            // Metrics must never affect prompt construction.
+        }
+    }
+
     public void modelUsage(int promptTokens, int completionTokens, long durationNanos) {
         try {
             recordTokens("prompt", promptTokens);
@@ -101,6 +122,42 @@ public final class ChatPerformanceMetrics implements ModelPerformanceMetrics {
         }
     }
 
+    public void continuation(String profile, String result) {
+        try {
+            Counter.builder(CONTINUATIONS)
+                    .description("Length-limited responses that entered automatic continuation")
+                    .tag("profile", safeTag(profile))
+                    .tag("result", safeTag(result))
+                    .register(meterRegistry)
+                    .increment();
+        } catch (RuntimeException ignored) {
+            // Metrics must never affect continuation.
+        }
+    }
+
+    public void generationOutcome(String profile, String finishReason, int continuationCount) {
+        try {
+            String safeProfile = safeTag(profile);
+            String safeReason = safeTag(finishReason);
+            Counter.builder(FINISH_REASONS)
+                    .description("Final model finish reasons after bounded recovery")
+                    .tag("profile", safeProfile)
+                    .tag("reason", safeReason)
+                    .tag("continued", continuationCount > 0 ? "true" : "false")
+                    .register(meterRegistry)
+                    .increment();
+            if ("length".equals(safeReason)) {
+                Counter.builder(TRUNCATED)
+                        .description("Responses still truncated after bounded recovery")
+                        .tag("profile", safeProfile)
+                        .register(meterRegistry)
+                        .increment();
+            }
+        } catch (RuntimeException ignored) {
+            // Metrics must never affect response delivery.
+        }
+    }
+
     private void recordTokens(String type, int tokens) {
         if (tokens < 1) {
             return;
@@ -113,5 +170,9 @@ public final class ChatPerformanceMetrics implements ModelPerformanceMetrics {
                 .publishPercentiles(0.5, 0.95, 0.99)
                 .register(meterRegistry)
                 .record(tokens);
+    }
+
+    private String safeTag(String value) {
+        return value == null || value.isBlank() ? "unknown" : value.strip().toLowerCase(java.util.Locale.ROOT);
     }
 }

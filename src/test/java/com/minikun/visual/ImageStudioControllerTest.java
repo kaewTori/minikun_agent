@@ -50,6 +50,21 @@ class ImageStudioControllerTest {
     }
 
     @Test
+    void exposesTheAuthenticatedTinyGradRuntimeStatus() {
+        TinyGradRuntimeStatusReader.RuntimeStatus expected = new TinyGradRuntimeStatusReader.RuntimeStatus(
+                true, "ONLINE", "http://127.0.0.1:8002/health", 3,
+                new TinyGradRuntimeStatusReader.RuntimeMemory(10, 0, 10), 20, 50.0,
+                2, 50, false, null, "768x1280", 1, 1, 4, Instant.now());
+        ImageStudioController controller = new ImageStudioController(
+                tool(prompt -> new GeneratedImage(GeneratedImageStoreTest.png(), "test-model"),
+                        new GeneratedImageStore(directory, 1024, Clock.systemUTC())),
+                () -> expected, "secret", 8000);
+
+        assertEquals(expected, controller.status("secret"));
+        assertThrows(ResponseStatusException.class, () -> controller.status("wrong"));
+    }
+
+    @Test
     void passesAdvancedStudioControlsToTheProvider() {
         AtomicReference<ImageGenerationRequest> captured = new AtomicReference<>();
         StoryIllustrationProvider provider = new StoryIllustrationProvider() {

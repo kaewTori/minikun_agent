@@ -23,12 +23,14 @@ class OpenAiChatResponseFactoryTest {
         ChatAttachment attachment = new ChatAttachment("image_url", "https://example.test/image.jpg", "sample");
 
         var response = factory.completion(
-                "chatcmpl-1", 123L, "mini-kun", "hello", new ModelUsage(5, 7), List.of(attachment));
+                "chatcmpl-1", 123L, "mini-kun", "hello", new ModelUsage(5, 7),
+                List.of(attachment), "length");
 
         assertEquals("chat.completion", response.object());
         assertEquals("assistant", response.choices().getFirst().message().role());
         assertEquals("hello", response.choices().getFirst().message().content());
         assertEquals(12, response.usage().total_tokens());
+        assertEquals("length", response.choices().getFirst().finish_reason());
         assertEquals(List.of(attachment), response.attachments());
     }
 
@@ -107,5 +109,13 @@ class OpenAiChatResponseFactoryTest {
 
         assertEquals("[Docs](https://example.test/docs)",
                 objectMapper.readTree(chunk).at("/choices/0/delta/content").asText());
+    }
+
+    @Test
+    void preservesStreamingLengthFinishReason() throws Exception {
+        JsonNode chunk = objectMapper.readTree(factory.stopChunk(
+                "id", 123L, "mini-kun", "length"));
+
+        assertEquals("length", chunk.at("/choices/0/finish_reason").asText());
     }
 }

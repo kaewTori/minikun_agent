@@ -39,14 +39,15 @@ final class OpenAiChatResponseFactory {
             String model,
             String content,
             ModelUsage usage,
-            List<ChatAttachment> attachments) {
+            List<ChatAttachment> attachments,
+            String finishReason) {
         return new ChatCompletionResponse(
                 id,
                 COMPLETION_OBJECT,
                 created,
                 model,
                 List.of(new ChatCompletionResponse.Choice(
-                        0, new Message("assistant", content), "stop")),
+                        0, new Message("assistant", content), safeFinishReason(finishReason))),
                 usage(usage),
                 attachments);
     }
@@ -58,7 +59,8 @@ final class OpenAiChatResponseFactory {
                 model,
                 content,
                 ModelUsage.empty(),
-                List.of());
+                List.of(),
+                "stop");
     }
 
     List<String> contentStream(String model, String content) {
@@ -72,7 +74,7 @@ final class OpenAiChatResponseFactory {
                         model,
                         List.of(new ChatCompletionResponse.StreamChoice(
                                 0, new ChatCompletionResponse.Delta("assistant", content), null)))),
-                stopChunk(id, created, model),
+                stopChunk(id, created, model, "stop"),
                 "[DONE]");
     }
 
@@ -159,14 +161,14 @@ final class OpenAiChatResponseFactory {
                 usage(modelUsage)));
     }
 
-    String stopChunk(String id, long created, String model) {
+    String stopChunk(String id, long created, String model, String finishReason) {
         return data(new ChatCompletionResponse.StreamChunk(
                 id,
                 CHUNK_OBJECT,
                 created,
                 model,
                 List.of(new ChatCompletionResponse.StreamChoice(
-                        0, new ChatCompletionResponse.Delta(null, null), "stop"))));
+                        0, new ChatCompletionResponse.Delta(null, null), safeFinishReason(finishReason)))));
     }
 
     ModelUsage modelUsage(ChatResponse response) {
@@ -197,6 +199,10 @@ final class OpenAiChatResponseFactory {
 
     private int nonNegative(Integer value) {
         return value == null ? 0 : Math.max(0, value);
+    }
+
+    private String safeFinishReason(String finishReason) {
+        return finishReason == null || finishReason.isBlank() ? "stop" : finishReason.strip();
     }
 
     private String data(ChatCompletionResponse.StreamChunk chunk) {

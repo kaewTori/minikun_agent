@@ -8,7 +8,7 @@ import org.junit.jupiter.api.Test;
 
 class ChatGenerationProfileSelectorTest {
     private final ChatGenerationProfileSelector selector = new ChatGenerationProfileSelector(
-            new CooperationRouter(), true, 384, 512, 1_536, 1_536, 2_048, 4_096);
+            new CooperationRouter(), true, 384, 512, 1_536, 1_536, 3_072, 4_096, 2_048, 4_096);
 
     @Test
     void usesSmallCeilingsForCompanionAndGeneralConversation() {
@@ -34,6 +34,16 @@ class ChatGenerationProfileSelectorTest {
                 selector.select("สรุปผลให้หน่อย", null, true, 2_048));
         assertEquals(new ChatGenerationProfileSelector.Selection("work", 1_536),
                 selector.select("ช่วยจัดงานนี้", CompanionMode.WORK, false, 2_048));
+    }
+
+    @Test
+    void givesSearchAndResearchTheirOwnEvidenceSizedBudgets() {
+        assertEquals(new ChatGenerationProfileSelector.Selection("search", 3_072),
+                selector.select("ช่วยค้นหาข้อมูลนักวาด", null,
+                        new ChatGenerationProfileSelector.GenerationSignals(false, true, false, false), 4_096));
+        assertEquals(new ChatGenerationProfileSelector.Selection("research", 4_096),
+                selector.select("ช่วยค้นคว้าหลายแหล่ง", null,
+                        new ChatGenerationProfileSelector.GenerationSignals(false, true, true, false), 4_096));
     }
 
     @Test

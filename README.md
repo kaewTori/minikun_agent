@@ -314,9 +314,11 @@ TinyGrad อย่างน้อยระดับ `MEDIUM` เสมอ แม
 | `MINIKUN_TOKEN_BUDGET_RESERVED_OUTPUT_TOKENS` | `256` | output reserve ก่อนคำนวณ dynamic max-tokens |
 | `MINIKUN_MODEL_GENERATION_MAX_TOKENS` | `4096` | เพดาน output รวมของแอป |
 | `MINIKUN_GENERATION_CREATIVE_MAX_TOKENS` | `4096` | เพดาน output สำหรับการแต่งเรื่อง เล่าเรื่อง และนิทาน |
-| `MINIKUN_CREATIVE_CONTINUATION_ENABLED` | `true` | ต่อคำตอบงานสร้างสรรค์อัตโนมัติเมื่อโมเดลจบด้วย `finish_reason=length` |
-| `MINIKUN_CREATIVE_CONTINUATION_TAIL_CHARACTERS` | `12000` | ปลายข้อความเดิมที่ใช้สร้างรอยต่ออย่างต่อเนื่อง |
-| `MINIKUN_CREATIVE_CONTINUATION_MAX_TOKENS` | `1024` | งบสำหรับปิดฉากอย่างเป็นธรรมชาติหลังคำตอบชนเพดาน |
+| `MINIKUN_GENERATION_SEARCH_MAX_TOKENS` | `3072` | เพดาน output สำหรับคำตอบที่ใช้ผลค้นเว็บหรือ Browser |
+| `MINIKUN_GENERATION_RESEARCH_MAX_TOKENS` | `4096` | เพดาน output สำหรับ deep research และการสังเคราะห์หลายแหล่ง |
+| `MINIKUN_CONTINUATION_ENABLED` | `true` | ต่อคำตอบทุกโปรไฟล์อัตโนมัติหนึ่งรอบเมื่อโมเดลจบด้วย `finish_reason=length` (รองรับชื่อตัวแปรเดิม `MINIKUN_CREATIVE_CONTINUATION_ENABLED`) |
+| `MINIKUN_CONTINUATION_TAIL_CHARACTERS` | `12000` | ปลายข้อความเดิมที่ใช้สร้างรอยต่ออย่างต่อเนื่อง (รองรับชื่อตัวแปรเดิม) |
+| `MINIKUN_CONTINUATION_MAX_TOKENS` | `1024` | งบสำหรับปิดคำตอบอย่างสมบูรณ์หลังชนเพดาน (รองรับชื่อตัวแปรเดิม) |
 | `MINIKUN_MEMORY_MANAGEMENT_TOKEN` | ว่าง | token สำหรับป้องกัน API จัดการ memory |
 | `MINIKUN_ADAPTATION_MANAGEMENT_TOKEN` | ใช้ค่า memory token ถ้ามี | token สำหรับดู ให้ feedback และ reset Adaptive Companion |
 | `MINIKUN_COMMUNICATION_MANAGEMENT_TOKEN` | ใช้ค่า memory token ถ้ามี | token สำหรับ Communication Assistant API |

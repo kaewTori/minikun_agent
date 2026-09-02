@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Set;
 import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -16,6 +17,7 @@ import org.springframework.web.server.ResponseStatusException;
 @RequestMapping("/v1/images/studio")
 public final class ImageStudioController {
     private final ImageGenerationTool imageGenerationTool;
+    private final TinyGradRuntimeStatusReader runtimeStatus;
     private final String token;
     private final int maximumPromptCharacters;
 
@@ -23,9 +25,29 @@ public final class ImageStudioController {
             ImageGenerationTool imageGenerationTool,
             String token,
             int maximumPromptCharacters) {
+        this(imageGenerationTool, () -> new TinyGradRuntimeStatusReader.RuntimeStatus(
+                false, "OFFLINE", "", 0,
+                new TinyGradRuntimeStatusReader.RuntimeMemory(-1, -1, -1), -1, -1,
+                -1, -1, false, null, null, null, 0, 0, Instant.EPOCH),
+                token, maximumPromptCharacters);
+    }
+
+    public ImageStudioController(
+            ImageGenerationTool imageGenerationTool,
+            TinyGradRuntimeStatusReader runtimeStatus,
+            String token,
+            int maximumPromptCharacters) {
         this.imageGenerationTool = imageGenerationTool;
+        this.runtimeStatus = java.util.Objects.requireNonNull(runtimeStatus, "runtime status must not be null");
         this.token = token == null ? "" : token.strip();
         this.maximumPromptCharacters = maximumPromptCharacters;
+    }
+
+    @GetMapping("/status")
+    public TinyGradRuntimeStatusReader.RuntimeStatus status(
+            @RequestHeader(value = "X-Minikun-Personal-Token", required = false) String suppliedToken) {
+        authorize(suppliedToken);
+        return runtimeStatus.read();
     }
 
     @PostMapping("/generations")

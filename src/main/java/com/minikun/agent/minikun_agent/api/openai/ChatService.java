@@ -357,14 +357,14 @@ public class ChatService {
     @Value("${minikun.context-budget.creative-characters:40000}")
     private long creativeContextBudgetCharacters = 40_000L;
 
-    @Value("${minikun.model.generation.creative-continuation.enabled:true}")
-    private boolean creativeContinuationEnabled = true;
+    @Value("${minikun.model.generation.continuation.enabled:true}")
+    private boolean continuationEnabled = true;
 
-    @Value("${minikun.model.generation.creative-continuation.tail-characters:12000}")
-    private int creativeContinuationTailCharacters = 12_000;
+    @Value("${minikun.model.generation.continuation.tail-characters:12000}")
+    private int continuationTailCharacters = 12_000;
 
-    @Value("${minikun.model.generation.creative-continuation.max-tokens:1024}")
-    private int creativeContinuationMaxTokens = 1_024;
+    @Value("${minikun.model.generation.continuation.max-tokens:1024}")
+    private int continuationMaxTokens = 1_024;
 
     public ChatCompletionResponse chatCompletion(ChatCompletionRequest request, ConversationId conversationId) {
         VisionInput visionInput = visionInput(request);
@@ -434,25 +434,17 @@ public class ChatService {
                             context.prompt(), context.conversationId(), context.ownerId(), transaction.requestId());
             ModelUsage usage = modelUsage(response);
             String content = response.getResult().getOutput().getText();
-            CreativeResponseContinuation continuation = creativeContinuation();
-            if (requestInspector.hasText(content) && continuation.shouldContinue(context.generationProfile(), response)) {
-                log.info("process=creative_continuation event=started request_id={} stream=false",
-                        transaction.requestId());
-                try {
-                    ChatResponse continued = modelGateway().chat(
-                            continuation.continuationPrompt(context.prompt(), content),
-                            "creative_continuation", transaction.requestId(), context.conversationId());
-                    content = continuation.appendWithoutRepeating(
-                            content, continued.getResult().getOutput().getText());
-                    usage = addModelUsage(usage, modelUsage(continued));
-                    log.info("process=creative_continuation event=completed request_id={} stream=false",
-                            transaction.requestId());
-                } catch (RuntimeException exception) {
-                    log.warn("process=creative_continuation event=failed request_id={} stream=false reason={}",
-                            transaction.requestId(), exception.getMessage());
-                }
+            var continued = responseContinuationCoordinator().complete(
+                    response, content, context.prompt(), context.generationProfile(), transaction.requestId(),
+                    prompt -> modelGateway().chat(prompt, "response_continuation",
+                            transaction.requestId(), context.conversationId()));
+            content = continued.content();
+            if (continued.continuationResponse() != null) {
+                usage = addModelUsage(usage, modelUsage(continued.continuationResponse()));
             }
             recordModelUsage(usage, generationStarted);
+            recordGenerationOutcome(
+                    context.generationProfile(), continued.finishReason(), continued.continuationCount());
             if (!requestInspector.hasText(content)) {
                 log.warn("process=model_response event=blank request_id={}", transaction.requestId());
                 content = "ขออภัยครับ โมเดลยังไม่ได้ส่งคำตอบที่สมบูรณ์ กรุณาลองสั่งอีกครั้งครับ";
@@ -470,7 +462,7 @@ public class ChatService {
                     context.explainability());
             ChatCompletionResponse result = responseFactory.completion(
                     transaction.requestId(), Instant.now().getEpochSecond(), model, content, usage,
-                    attachments);
+                    attachments, continued.finishReason());
             transaction.success();
             return result;
         } catch (RuntimeException exception) {
@@ -545,9 +537,7 @@ public class ChatService {
         }
         long modelStarted = System.nanoTime();
         String traceId = MDC.get("trace_id");
-        CreativeResponseContinuation continuation = creativeContinuation();
         CitationLinker.Stream citationStream = CitationLinker.stream(context.citations());
-        AtomicBoolean primaryLengthLimited = new AtomicBoolean();
         Flux<ChatResponse> primaryResponses = verifiedToolResult.isPresent()
             ? modelGateway().stream(context.prompt(), context.conversationId())
             : toolsEnabled && toolCallingRuntime != null
@@ -555,32 +545,12 @@ public class ChatService {
             ? Flux.defer(() -> Flux.just(modelGateway().reviewToolRuntimeDraft(
                     context.prompt(), context.conversationId(), context.ownerId())))
             : modelGateway().stream(context.prompt(), context.conversationId());
-        primaryResponses = primaryResponses.doOnNext(response -> {
-            captureModelUsage(modelUsage, response);
-            if (continuation.shouldContinue(context.generationProfile(), response)) {
-                primaryLengthLimited.set(true);
-            }
-        });
-        Flux<ChatResponse> modelResponses = primaryResponses.concatWith(Flux.defer(() -> {
-            if (!primaryLengthLimited.get() || assistantContent.isEmpty()) {
-                return Flux.empty();
-            }
-            log.info("process=creative_continuation event=started request_id={} stream=true", requestId);
-            ModelUsage primaryUsage = modelUsage.get();
-            Prompt continuationPrompt = continuation.continuationPrompt(
-                    context.prompt(), assistantContent.toString());
-            return continuation.bufferedDelta(
-                            modelGateway().stream(continuationPrompt, context.conversationId()),
-                            assistantContent.toString())
-                    .doOnNext(response -> modelUsage.set(addModelUsage(primaryUsage, modelUsage(response))))
-                    .doOnComplete(() -> log.info(
-                            "process=creative_continuation event=completed request_id={} stream=true", requestId))
-                    .onErrorResume(exception -> {
-                        log.warn("process=creative_continuation event=failed request_id={} stream=true reason={}",
-                                requestId, exception.getMessage());
-                        return Flux.empty();
-                    });
-        }));
+        var continued = responseContinuationCoordinator().stream(
+                primaryResponses, assistantContent, context.prompt(), context.generationProfile(), requestId,
+                prompt -> modelGateway().stream(prompt, context.conversationId()),
+                response -> captureModelUsage(modelUsage, response),
+                response -> modelUsage.set(addModelUsage(modelUsage.get(), modelUsage(response))));
+        Flux<ChatResponse> modelResponses = continued.responses();
         Flux<String> modelChunks = modelResponses
                 .doOnNext(response -> recordFirstToken(
                         response, firstTokenRecorded, requestStarted, modelStarted))
@@ -612,9 +582,12 @@ public class ChatService {
                     String usageChunk = responseFactory.usageChunk(modelUsage.get(), id, created, model);
                     return usageChunk.isEmpty() ? Flux.empty() : Flux.just(usageChunk);
                 }),
-                Flux.just(responseFactory.stopChunk(id, created, model)),
+                Flux.defer(() -> Flux.just(responseFactory.stopChunk(
+                        id, created, model, continued.finishReason().get()))),
                 Flux.just("[DONE]"))
                 .doOnComplete(() -> {
+                    recordGenerationOutcome(context.generationProfile(),
+                            continued.finishReason().get(), continued.continuationCount().get());
                     if (!assistantContent.isEmpty()) {
                         String finalizedContent = CitationLinker.normalize(
                                 assistantContent.toString(), context.citations());
@@ -772,11 +745,17 @@ public class ChatService {
                 Math.addExact(left.completionTokens(), right.completionTokens()));
     }
 
-    private CreativeResponseContinuation creativeContinuation() {
-        return new CreativeResponseContinuation(
-                creativeContinuationEnabled,
-                creativeContinuationTailCharacters,
-                creativeContinuationMaxTokens);
+    private ChatResponseContinuationCoordinator responseContinuationCoordinator() {
+        return new ChatResponseContinuationCoordinator(
+                new ResponseContinuation(
+                        continuationEnabled, continuationTailCharacters, continuationMaxTokens),
+                performanceMetrics);
+    }
+
+    private void recordGenerationOutcome(String profile, String finishReason, int continuationCount) {
+        if (performanceMetrics != null) {
+            performanceMetrics.generationOutcome(profile, finishReason, continuationCount);
+        }
     }
 
     private void captureModelUsage(AtomicReference<ModelUsage> target, ChatResponse response) {
