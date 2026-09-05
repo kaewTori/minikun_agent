@@ -144,6 +144,39 @@ class StoryIllustrationServiceTest {
                 .getFirst().appearance().getFirst());
     }
 
+    @Test
+    void usesExistingMainModelTransformerWhenTheVisualPlannerFallsBack() {
+        List<ImageGenerationRequest> requests = new ArrayList<>();
+        StoryIllustrationProvider provider = new StoryIllustrationProvider() {
+            @Override public GeneratedImage generate(String prompt) { throw new AssertionError(); }
+            @Override public GeneratedImage generate(ImageGenerationRequest request) {
+                requests.add(request);
+                return new GeneratedImage(GeneratedImageStoreTest.png(), "pony-model");
+            }
+        };
+        StoryVisualPlanGenerator fallback = new FallbackStoryVisualPlanGenerator();
+        String repaired = "score_9, score_8_up, score_7_up, 3girls, mafia women, hotel suite, tense rivalry";
+        List<String> faces = List.of("Itsuki, pink hair, red eyes", "Rena, short hair, sapphire eyes");
+        PonyPromptTransformer transformer = new PonyPromptTransformer() {
+            @Override public String transform(String brief) { return repaired; }
+
+            @Override public Result transformWithCharacters(String brief) {
+                assertTrue(brief.contains("Itsuki"));
+                assertTrue(brief.contains("Rena"));
+                return new Result(repaired, faces);
+            }
+        };
+        StoryIllustrationService service = new StoryIllustrationService(
+                tool(provider), true, 4000, java.time.Duration.ZERO, fallback,
+                new InMemoryCharacterVisualMemory(), 3, transformer);
+
+        service.illustrate("owner", "story-fallback",
+                "เล่าเรื่อง Itsuki กับ Rena", "Itsuki และ Rena เผชิญหน้ากันในห้องสวีทของโรงแรม");
+
+        assertEquals(repaired, requests.getFirst().prompt());
+        assertEquals(faces, requests.getFirst().facePrompts());
+    }
+
     private StorySceneSpec scene(String title, String action, String shot) {
         return new StorySceneSpec(title, 0, List.of(), action, "", List.of("telescope"),
                 "old observatory", "night", "", "wonder", "cinematic", "blue starlight", "navy",

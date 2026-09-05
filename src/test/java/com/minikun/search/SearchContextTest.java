@@ -1,7 +1,6 @@
 package com.minikun.search;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.minikun.pcs.SearchContext;
@@ -22,7 +21,6 @@ class SearchContextTest {
         assertEquals(query, first.userQuery());
         assertEquals(first, second);
         assertEquals(first.hashCode(), second.hashCode());
-        assertNotSame(query, first.userQuery());
     }
 
     @Test

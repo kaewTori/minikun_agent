@@ -37,6 +37,7 @@
       height: 1280,
       result: null,
       busy: false,
+      transforming: false,
       runtimeTimer: null,
       runtimeBusy: false,
       runtimeHistory: []
@@ -75,6 +76,7 @@
       value["X-Minikun-Memory-Token"] = state.token;
       value["X-Minikun-Knowledge-Token"] = state.token;
       value["X-Minikun-System-Token"] = state.token;
+      value["X-Minikun-Model-Token"] = state.token;
     }
     return value;
   }
@@ -97,6 +99,29 @@
       throw error;
     }
     return response.status === 204 ? null : response.json();
+  }
+
+  function showActiveModel(model) {
+    state.model = model;
+    localStorage.setItem("minikun.model", model);
+    const pill = $("#model-pill");
+    pill.textContent = model.length > 28 ? `${model.slice(0, 25)}…` : model;
+    pill.title = model;
+  }
+
+  async function loadRuntimeModels() {
+    const catalog = await api("/v1/models/runtime");
+    const select = $("#chat-model");
+    const available = catalog.models.includes(catalog.active)
+      ? catalog.models : [catalog.active, ...catalog.models].filter(Boolean);
+    select.replaceChildren(...available.map((model) => {
+      const option = document.createElement("option");
+      option.value = model;
+      option.textContent = model;
+      return option;
+    }));
+    select.value = catalog.active;
+    showActiveModel(catalog.active);
   }
 
   function element(tag, className, text) {
@@ -392,6 +417,7 @@
   function compactMessages(messages) {
     return messages.slice(-80).map((message) => ({
       id: message.id || uniqueId("message-"),
+      responseId: message.responseId || "",
       role: message.role,
       content: message.content,
       localOnly: Boolean(message.localOnly),
@@ -401,6 +427,7 @@
       finishReason: message.finishReason || "",
       feedback: message.feedback || "",
       feedbackReason: message.feedbackReason || "",
+      backgroundJobId: message.backgroundJobId || "",
       sources: (message.sources || []).slice(0, 12),
       createdAt: message.createdAt,
       files: (message.files || []).slice(0, 12),
@@ -442,6 +469,7 @@
       messages: (Array.isArray(value.messages) ? value.messages : []).slice(-80).map((message) => ({
         ...message,
         id: message.id || uniqueId("message-"),
+        responseId: message.responseId || message.metadata?.responseId || "",
         role: message.role || "user",
         content: String(message.content || ""),
         parentId: message.parentId || message.metadata?.parentId || "",
@@ -450,6 +478,7 @@
         finishReason: message.finishReason || message.metadata?.finishReason || "",
         feedback: message.feedback || message.metadata?.feedback || "",
         feedbackReason: message.feedbackReason || message.metadata?.feedbackReason || "",
+        backgroundJobId: message.backgroundJobId || message.metadata?.backgroundJobId || "",
         sources: Array.isArray(message.sources) ? message.sources
           : Array.isArray(message.metadata?.sources) ? message.metadata.sources : [],
         createdAt: Number(message.createdAt) || Date.parse(message.createdAt) || Date.now(),
@@ -476,11 +505,13 @@
         attachments: message.attachments,
         metadata: {
           parentId: message.parentId || "",
+          responseId: message.responseId || "",
           branchId: message.branchId || "",
           status: message.status || "complete",
           finishReason: message.finishReason || "",
           feedback: message.feedback || "",
           feedbackReason: message.feedbackReason || "",
+          backgroundJobId: message.backgroundJobId || "",
           sources: (message.sources || []).slice(0, 12)
         },
         createdAt: new Date(message.createdAt || Date.now()).toISOString()
@@ -589,6 +620,7 @@
       renderConversationList();
       renderChat();
       syncChatState();
+      resumeBackgroundChats();
     } finally {
       state.sync.refreshing = false;
     }
@@ -917,7 +949,7 @@
     updateStudioRuntimePolling(view);
   }
 
-  function switchCockpitPage(page = "today", focusId = "", keepShortcutsVisible = false) {
+  function switchCockpitPage(page = "today", focusId = "") {
     const legacyPages = {
       overview: "today", work: "today", experiments: "today",
       tools: "agent", learning: "memory", health: "system", permissions: "system"
@@ -929,21 +961,23 @@
       const pages = String(node.dataset.cockpitPage || "").split(/\s+/);
       node.classList.toggle("cockpit-page-hidden", !pages.includes(state.cockpitPage));
     });
-    document.querySelectorAll("[data-cockpit-target]").forEach((button) => {
+    const shortcutButtons = [...document.querySelectorAll("[data-cockpit-target]")];
+    shortcutButtons.forEach((button) => {
+      button.classList.remove("active");
+      button.removeAttribute("aria-current");
+    });
+    const shortcutBar = document.querySelector(".cockpit-shortcuts");
+    if (shortcutBar) void shortcutBar.offsetWidth;
+    shortcutButtons.forEach((button) => {
       const active = button.dataset.cockpitTarget === state.cockpitPage;
-      button.classList.toggle("active", active);
-      if (active) button.setAttribute("aria-current", "page");
-      else button.removeAttribute("aria-current");
+      if (active) {
+        button.classList.add("active");
+        button.setAttribute("aria-current", "page");
+      }
     });
     requestAnimationFrame(() => {
       if (focusId) document.getElementById(focusId)?.scrollIntoView({ behavior: "smooth", block: "start" });
-      else if (keepShortcutsVisible && window.matchMedia("(max-width: 720px)").matches) {
-        const shortcuts = document.querySelector(".cockpit-shortcuts");
-        if (!shortcuts) return;
-        const stickyTop = Number.parseFloat(getComputedStyle(shortcuts).top) || 0;
-        const targetTop = window.scrollY + shortcuts.getBoundingClientRect().top - stickyTop;
-        window.scrollTo({ top: Math.max(0, targetTop), behavior: "smooth" });
-      } else window.scrollTo(0, 0);
+      else window.scrollTo(0, 0);
     });
   }
 
@@ -989,6 +1023,10 @@
   }
 
   function assembledStudioPrompt() {
+    return studioValue("#studio-prompt-preview");
+  }
+
+  function assembledManualPrompt() {
     const subject = studioValue("#studio-subject");
     if (!subject) return "";
     const parts = [
@@ -1067,25 +1105,66 @@
   }
 
   function updateStudioPrompt() {
-    const preview = $("#studio-prompt-preview");
-    if (!preview) return;
-    const prompt = assembledStudioPrompt();
-    preview.textContent = prompt || "ใส่ character tags แล้ว Pony prompt จะประกอบตรงนี้ครับ";
     const { values, score } = studioReadiness();
     document.querySelectorAll("[data-studio-step]").forEach((node) => {
       node.classList.toggle("complete", Boolean(values[node.dataset.studioStep]));
     });
+    let message;
+    if (!values.subject) message = "เริ่มด้วย count + character tags เช่น 1girl, solo";
+    else if (!values.action) message = "เพิ่ม action, hands และ expression ให้ตัวละครครับ";
+    else if (!values.scene) message = "เพิ่มฉากด้วยคำที่มองเห็น เช่น room, night, rain";
+    else if (!values.finish) message = "เลือก style, light และ camera เพื่อปิด prompt ครับ";
+    else message = "Pony tags เรียงครบแล้ว กดใช้ tags ชุดนี้ได้เลยครับ";
+    $("#studio-coach-copy").textContent = message;
+    $("#studio-use-manual").disabled = score < 40;
+  }
+
+  function updateStudioOutputState(message = "") {
+    const prompt = assembledStudioPrompt();
+    const ready = Boolean(prompt);
+    const container = $(".assembled-prompt");
     const readiness = $("#studio-readiness");
-    const bar = readiness.querySelector("span");
-    const label = readiness.querySelector("small");
-    bar.style.width = `${score}%`;
-    bar.style.background = score >= 80 ? "var(--studio-mint)" : score >= 50 ? "var(--studio-silver)" : "var(--studio-coral)";
-    if (!values.subject) label.textContent = "เริ่มด้วย count + character tags เช่น 1girl, solo";
-    else if (!values.action) label.textContent = "เพิ่ม action, hands และ expression ให้ตัวละครครับ";
-    else if (!values.scene) label.textContent = "เพิ่มฉากด้วยคำที่มองเห็น เช่น room, night, rain";
-    else if (!values.finish) label.textContent = "เลือก style, light และ camera เพื่อปิด prompt ครับ";
-    else label.textContent = "Pony tags เรียงครบแล้ว พร้อมส่งให้ TinyGrad ครับ";
-    $("#studio-coach-copy").textContent = label.textContent;
+    container.dataset.state = ready ? "ready" : "empty";
+    readiness.querySelector("span").style.width = ready ? "100%" : "0";
+    readiness.querySelector("span").style.background = "var(--studio-mint)";
+    readiness.querySelector("small").textContent = message || (ready
+      ? "พร้อมสร้างภาพ — แก้ tag ในช่องนี้ต่อได้ครับ"
+      : "เล่าภาพด้านบน แล้วกดแปลงเป็น Pony prompt");
+  }
+
+  async function transformStudioPrompt() {
+    const brief = studioValue("#studio-brief");
+    if (!brief || state.studio.transforming) {
+      if (!brief) {
+        $("#studio-brief").focus();
+        toast("เล่าภาพที่อยากสร้างให้มินิคุงฟังก่อนครับ", true);
+      }
+      return;
+    }
+    state.studio.transforming = true;
+    const button = $("#studio-transform-prompt");
+    button.disabled = true;
+    button.querySelector("span").textContent = "มินิคุงกำลังเรียง tags…";
+    $("#studio-transform-status").textContent = "กำลังแปลภาพในหัวเป็นภาษาที่ Pony เข้าใจครับ";
+    try {
+      const result = await api("/v1/images/studio/prompts/pony", {
+        method: "POST", body: JSON.stringify({ brief })
+      });
+      $("#studio-prompt-preview").value = result.prompt || "";
+      updateStudioOutputState("มินิคุงเรียง Pony tags ให้แล้ว ตรวจหรือแก้ได้ก่อนสร้างภาพครับ");
+      $("#studio-transform-status").textContent = "รักษารายละเอียดจากที่พี่เล่าไว้ และจัดลำดับจากตัวละครไปถึงกล้องแล้วครับ";
+      $("#studio-prompt-preview").focus();
+    } catch (error) {
+      const message = error.status === 503
+        ? "ตอนนี้มินิคุงยังแปลง prompt ไม่ได้ ลองอีกครั้งหรือเปิด Manual Pony ครับ"
+        : error.message;
+      $("#studio-transform-status").textContent = message;
+      toast(message, true);
+    } finally {
+      state.studio.transforming = false;
+      button.disabled = false;
+      button.querySelector("span").textContent = "แปลงเป็น Pony prompt";
+    }
   }
 
   function renderStudioRuntime(status) {
@@ -1172,25 +1251,10 @@
   }
 
   function loadStudioExample() {
-    $("#studio-subject").value = "1girl, solo, short black hair, green sweater, black cat";
-    $("#studio-scene").value = "observatory workshop, wooden desk, rainy night, distant city lights";
-    $("#studio-detail").value = "holding a glowing glass jar, looking down, gentle smile, cat standing beside her";
-    $("#studio-constraints").value = "multiple views, speech bubble, crowded background";
-    const exampleOptions = {
-      style: "anime key visual, vibrant colors",
-      light: "moonlight, blue shadows, mysterious mood",
-      frame: "close-up, upper body, depth of field"
-    };
-    for (const [group, value] of Object.entries(exampleOptions)) {
-      state.studio[group] = value;
-      document.querySelectorAll(`[data-studio-option="${group}"]`).forEach((button) => {
-        button.classList.toggle("selected", button.dataset.value === value);
-      });
-    }
-    setStudioActiveStep("subject");
-    updateStudioPrompt();
-    $("#studio-subject").focus();
-    toast("ใส่ตัวอย่างให้แล้วครับ ลองเปลี่ยนรายละเอียดให้เป็นภาพของเราได้เลย");
+    $("#studio-brief").value = "หญิงสาวผมดำสั้น สวมเสื้อไหมพรมสีเขียว กำลังประคองขวดแก้วที่มีแสงดาวอยู่ข้างใน มีแมวดำนั่งมองอยู่ข้าง ๆ บนโต๊ะไม้ในหอดูดาวเก่า คืนฝนตก แสงจันทร์สีน้ำเงินตัดกับแสงอุ่นจากโคมไฟ ภาพระยะใกล้แบบ anime key visual ให้ความรู้สึกสงบและมีความหวัง";
+    $("#studio-brief").focus();
+    $("#studio-transform-status").textContent = "ตัวอย่างพร้อมแล้ว ปรับรายละเอียดได้ก่อนให้มินิคุงแปลงครับ";
+    toast("ใส่โจทย์ตัวอย่างให้แล้วครับ กดแปลงเป็น Pony prompt ได้เลย");
   }
 
   function setStudioCanvasState(canvasState) {
@@ -1209,7 +1273,7 @@
       toast("สร้างภาพสำเร็จ แต่เปิดไฟล์ภาพไม่ได้ครับ", true);
     };
     image.src = result.url;
-    image.alt = studioValue("#studio-subject") || "ภาพที่สร้างโดยมินิคุง";
+    image.alt = studioValue("#studio-brief") || studioValue("#studio-subject") || "ภาพที่สร้างโดยมินิคุง";
     const createdAt = result.created_at ? new Date(result.created_at) : new Date();
     $("#studio-result-time").textContent = new Intl.DateTimeFormat("th-TH", {
       hour: "2-digit", minute: "2-digit"
@@ -1234,7 +1298,11 @@
     const form = $("#studio-form");
     if (!form.reportValidity() || state.studio.busy) return;
     const prompt = assembledStudioPrompt();
-    if (!prompt) return;
+    if (!prompt) {
+      $("#studio-brief").focus();
+      toast("แปลงหรือวาง Pony prompt ก่อนสร้างภาพครับ", true);
+      return;
+    }
     state.studio.busy = true;
     updateStudioRuntimePolling("");
     $("#studio-generate").disabled = true;
@@ -1348,7 +1416,8 @@
     saveConversation("", state.currentConversationId, state.chatMessages);
     renderChat();
     try {
-      const query = `conversation_id=${encodeURIComponent(state.currentConversationId)}&message_id=${encodeURIComponent(message.id || "")}`;
+      const responseId = message.responseId || message.id || "";
+      const query = `conversation_id=${encodeURIComponent(state.currentConversationId)}&message_id=${encodeURIComponent(responseId)}`;
       if (!message.feedback) {
         await api(`/v1/chat/feedback?${query}`, { method: "DELETE" });
       } else {
@@ -1357,7 +1426,7 @@
           body: JSON.stringify({
             owner_id: state.ownerId,
             conversation_id: state.currentConversationId,
-            message_id: message.id,
+            message_id: responseId,
             rating: message.feedback,
             reason: message.feedbackReason || ""
           })
@@ -1742,68 +1811,6 @@
     return result;
   }
 
-  async function consumeChatStream(response, assistant, task) {
-    if (!response.body) throw new Error("Browser นี้ยังไม่รองรับ streaming response");
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-    const update = () => {
-      const node = document.querySelector(`[data-message-id="${assistant.id}"] .message-content`);
-      if (node && assistant.content) node.innerHTML = markdown(assistant.content);
-      scrollToLatest();
-    };
-    const updateVisuals = () => {
-      const row = document.querySelector(`[data-message-id="${assistant.id}"]`);
-      if (!row) return;
-      const existing = row.querySelector(".message-visual-gallery");
-      const gallery = renderVisualGallery(assistant.attachments);
-      if (existing && gallery) existing.replaceWith(gallery);
-      else if (existing) existing.remove();
-      else if (gallery) row.querySelector(".message-content")?.after(gallery);
-    };
-    while (true) {
-      const { value, done } = await reader.read();
-      buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
-      const lines = buffer.split(/\r?\n/);
-      buffer = done ? "" : lines.pop();
-      for (const rawLine of lines) {
-        const line = rawLine.replace(/^data:\s?/, "").trim();
-        if (!line || line === "[DONE]") continue;
-        try {
-          const chunk = JSON.parse(line);
-          const delta = chunk.choices?.[0]?.delta;
-          const finishReason = chunk.choices?.[0]?.finish_reason;
-          if (finishReason) assistant.finishReason = String(finishReason);
-          if (delta?.tool_calls?.length || chunk.tool_calls?.length || chunk.stage === "tool") {
-            updatePendingProgress(task, "กำลังใช้เครื่องมือช่วยหาคำตอบ…");
-          }
-          if (delta?.content) {
-            if (!assistant.timing.firstTokenMs) assistant.timing.firstTokenMs = Date.now() - assistant.timing.startedAt;
-            assistant.content += delta.content;
-            updatePendingProgress(task, "กำลังเรียบเรียงคำตอบ…");
-          }
-          if (chunk.usage) {
-            assistant.usage = {
-              promptTokens: Number(chunk.usage.prompt_tokens) || 0,
-              completionTokens: Number(chunk.usage.completion_tokens) || 0,
-              totalTokens: Number(chunk.usage.total_tokens) || 0
-            };
-          }
-          const images = [...(chunk.attachments || []), ...(delta?.images || [])]
-            .map(normalizeVisual).filter((image) => image.url);
-          if (images.length) {
-            const merged = [...(assistant.attachments || []), ...images];
-            assistant.attachments = merged.filter((image, index) => merged.findIndex(candidate =>
-              normalizeVisual(candidate).url === normalizeVisual(image).url) === index);
-            updateVisuals();
-          }
-          update();
-        } catch (_) { /* ignore keep-alive and incomplete event lines */ }
-      }
-      if (done) break;
-    }
-  }
-
   function extractSources(content) {
     const seen = new Set();
     const sources = [];
@@ -1844,20 +1851,99 @@
     return hydrated;
   }
 
-  async function runChatTurn({ conversationId, messages, userMessage, currentContent, seed }) {
+  function requiresDurableBackground(prompt) {
+    return /(deep\s*research|วิจัยเชิงลึก|ค้นคว้า(?:แบบ)?ละเอียด|(?:สร้าง|วาด|เจน|เจเนอเรต|ทำ|ออกแบบ|gen(?:erate)?|create|draw|make|design).{0,40}(?:รูป|ภาพ|images?|pictures?|illustrations?|artwork)|ทำงานเบื้องหลัง|background\s+(?:job|task))/i
+      .test(String(prompt || ""));
+  }
+
+  function updateStreamingMessage(task) {
+    if (state.currentConversationId !== task.conversationId) return;
+    const row = document.querySelector(`[data-message-id="${task.assistant.id}"]`);
+    const content = row?.querySelector(".message-content");
+    if (content) content.innerHTML = markdown(task.assistant.content);
+    scrollToLatest();
+  }
+
+  async function streamChatCompletion(task, requestBody) {
+    const owner = encodeURIComponent(state.ownerId);
+    const response = await fetch(`/v1/chat/completions?ownerId=${owner}&owner_id=${owner}`, {
+      method: "POST",
+      headers: { ...headers(true), "X-Conversation-Id": task.conversationId },
+      signal: task.controller.signal,
+      body: JSON.stringify({ ...requestBody, stream: true })
+    });
+    if (!response.ok) {
+      let message = `เชื่อมต่อไม่สำเร็จ (${response.status})`;
+      try {
+        const body = await response.json();
+        message = body.error?.message || body.message || message;
+      } catch (_) { /* keep status message */ }
+      throw new Error(message);
+    }
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error("เบราว์เซอร์นี้ยังไม่รองรับคำตอบแบบ streaming");
+    const decoder = new TextDecoder();
+    let buffer = "";
+    const consume = (line) => {
+      const data = line.startsWith("data:") ? line.slice(5).trimStart() : line.trim();
+      if (!data || data === "[DONE]" || !data.startsWith("{")) return;
+      const chunk = JSON.parse(data);
+      if (chunk.id) task.assistant.responseId = String(chunk.id);
+      const choice = chunk.choices?.[0] || {};
+      const delta = choice.delta || {};
+      if (delta.content) {
+        if (!task.assistant.timing.firstTokenMs) {
+          task.assistant.timing.firstTokenMs = Date.now() - task.assistant.timing.startedAt;
+          window.clearInterval(task.progressTimer);
+          task.progressTimer = null;
+          updatePendingProgress(task, "กำลังตอบ…");
+        }
+        task.assistant.content += delta.content;
+        updateStreamingMessage(task);
+      }
+      task.assistant.finishReason = choice.finish_reason || task.assistant.finishReason;
+      if (chunk.usage) {
+        task.assistant.usage = {
+          promptTokens: Number(chunk.usage.prompt_tokens) || 0,
+          completionTokens: Number(chunk.usage.completion_tokens) || 0,
+          totalTokens: Number(chunk.usage.total_tokens) || 0
+        };
+      }
+      const visuals = [...(chunk.attachments || []), ...(delta.images || [])]
+        .map(normalizeVisual).filter((image) => image.url);
+      for (const visual of visuals) {
+        if (!task.assistant.attachments.some((item) => item.url === visual.url)) {
+          task.assistant.attachments.push(visual);
+        }
+      }
+    };
+    while (true) {
+      const { value, done } = await reader.read();
+      buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+      const lines = buffer.split(/\r?\n/);
+      buffer = lines.pop() || "";
+      for (const line of lines) consume(line);
+      if (done) break;
+    }
+    if (buffer.trim()) consume(buffer);
+  }
+
+  async function runChatTurn({ conversationId, messages, userMessage, currentContent, seed, backgroundJobId = "" }) {
     const assistant = {
       id: uniqueId("message-"), role: "assistant", content: "", attachments: [], createdAt: Date.now(),
       parentId: userMessage.id, branchId: userMessage.branchId || conversationId, status: "generating",
       finishReason: "",
       timing: { startedAt: Date.now(), firstTokenMs: 0, totalMs: 0 }, sources: [], feedback: ""
     };
-    $("#chat-welcome").classList.add("hidden");
-    renderChat();
-    $("#messages").append(renderMessage(assistant, true));
-    scrollToLatest();
+    if (state.currentConversationId === conversationId) {
+      $("#chat-welcome").classList.add("hidden");
+      renderChat();
+      $("#messages").append(renderMessage(assistant, true));
+      scrollToLatest();
+    }
     saveConversation(seed || userMessage.content, conversationId, messages);
     const task = {
-      controller: new AbortController(), assistant, conversationId,
+      controller: new AbortController(), assistant, conversationId, jobId: backgroundJobId,
       status: "กำลังทำความเข้าใจคำถาม…", progressTimer: null
     };
     state.pendingChats.set(conversationId, task);
@@ -1865,51 +1951,85 @@
     renderConversationList();
     syncChatState();
     try {
-      const response = await fetch("/v1/chat/completions", {
-        method: "POST",
-        headers: { ...headers(true), "X-Conversation-Id": conversationId },
-        signal: task.controller.signal,
-        body: JSON.stringify({
-          model: state.model,
-          messages: await promptMessages(messages, userMessage, currentContent),
-          conversation_id: conversationId,
-          owner_id: state.ownerId,
-          stream: true
-        })
-      });
-      if (!response.ok) {
-        let message = `มินิคุงตอบไม่ได้ (${response.status})`;
-        try { const body = await response.json(); message = body.error?.message || body.message || message; } catch (_) { /* noop */ }
-        throw new Error(message);
+      const requestBody = {
+        model: state.model,
+        messages: await promptMessages(messages, userMessage, currentContent),
+        conversation_id: conversationId,
+        owner_id: state.ownerId
+      };
+      const useBackground = Boolean(task.jobId) || requiresDurableBackground(userMessage.content);
+      if (!useBackground) {
+        await streamChatCompletion(task, requestBody);
+      } else if (!task.jobId) {
+        const started = await api("/v1/chat/background", {
+          method: "POST",
+          headers: { "X-Conversation-Id": conversationId },
+          signal: task.controller.signal,
+          body: JSON.stringify({ ...requestBody, stream: false })
+        });
+        task.jobId = started.id;
+        userMessage.backgroundJobId = started.id;
+        saveConversation(seed || userMessage.content, conversationId, messages);
       }
-      await consumeChatStream(response, assistant, task);
+      if (useBackground) {
+        let result;
+        while (!task.controller.signal.aborted) {
+          result = await api(`/v1/chat/background/${encodeURIComponent(task.jobId)}`, {
+            signal: task.controller.signal
+          });
+          if (result.status !== "running") break;
+          await new Promise((resolve) => window.setTimeout(resolve, 1500));
+        }
+        if (task.controller.signal.aborted || result?.status === "cancelled") {
+          throw new DOMException("ยกเลิกคำตอบแล้ว", "AbortError");
+        }
+        if (result?.status !== "completed") throw new Error(result?.error || "มินิคุงตอบไม่สำเร็จ");
+        const completion = result.response || {};
+        assistant.responseId = String(completion.id || assistant.responseId || "");
+        const choice = completion.choices?.[0] || {};
+        assistant.content = String(choice.message?.content || "");
+        assistant.finishReason = String(choice.finish_reason || "");
+        assistant.attachments = (completion.attachments || []).map(normalizeVisual).filter((image) => image.url);
+        if (completion.usage) {
+          assistant.usage = {
+            promptTokens: Number(completion.usage.prompt_tokens) || 0,
+            completionTokens: Number(completion.usage.completion_tokens) || 0,
+            totalTokens: Number(completion.usage.total_tokens) || 0
+          };
+        }
+      }
       assistant.timing.totalMs = Date.now() - assistant.timing.startedAt;
       if (!assistant.content && !assistant.attachments.length) assistant.content = "ได้รับข้อความแล้วครับ แต่ยังไม่มีคำตอบกลับมา";
       assistant.status = isLengthFinishReason(assistant.finishReason) ? "truncated" : "complete";
       assistant.sources = extractSources(assistant.content);
+      userMessage.backgroundJobId = "";
       messages.push(assistant);
       saveConversation(seed || userMessage.content, conversationId, messages);
+      if (task.jobId) api(`/v1/chat/background/${encodeURIComponent(task.jobId)}`, { method: "DELETE" }).catch(() => {});
       if (state.currentConversationId === conversationId) {
         renderChat();
         if (state.voiceOutput && assistant.content) speak(assistant.content);
       }
     } catch (error) {
       if (error.name === "AbortError") {
+        userMessage.backgroundJobId = "";
         assistant.timing.totalMs = Date.now() - assistant.timing.startedAt;
         if (assistant.content) {
           assistant.content += "\n\n_หยุดคำตอบแล้ว_";
           assistant.status = "stopped";
           messages.push(assistant);
           saveConversation(seed || userMessage.content, conversationId, messages);
-        }
+        } else saveConversation(seed || userMessage.content, conversationId, messages);
         if (state.currentConversationId === conversationId) renderChat();
       } else {
+        userMessage.backgroundJobId = "";
         assistant.timing.totalMs = Date.now() - assistant.timing.startedAt;
         assistant.content = `ขออภัยครับ ตอนนี้เชื่อมต่อไม่สำเร็จ\n\n${error.message}`;
         assistant.localOnly = true;
         assistant.status = "failed";
         messages.push(assistant);
         saveConversation(seed || userMessage.content, conversationId, messages);
+        if (task.jobId) api(`/v1/chat/background/${encodeURIComponent(task.jobId)}`, { method: "DELETE" }).catch(() => {});
         if (state.currentConversationId === conversationId) renderChat();
         toast(error.message, true);
       }
@@ -1925,6 +2045,24 @@
       if (state.currentConversationId === conversationId && !window.matchMedia("(pointer: coarse)").matches) {
         $("#chat-composer").focus();
       }
+    }
+  }
+
+  function resumeBackgroundChats() {
+    for (const conversation of state.conversations) {
+      if (state.pendingChats.has(conversation.id)) continue;
+      const userMessage = [...(conversation.messages || [])].reverse().find((message) =>
+        message.role === "user" && message.backgroundJobId
+        && !(conversation.messages || []).some((candidate) =>
+          candidate.role === "assistant" && candidate.parentId === message.id));
+      if (!userMessage) continue;
+      runChatTurn({
+        conversationId: conversation.id,
+        messages: conversation.messages,
+        userMessage,
+        seed: conversation.title,
+        backgroundJobId: userMessage.backgroundJobId
+      });
     }
   }
 
@@ -2444,6 +2582,26 @@
         : (thread.unresolvedQuestion || thread.summary || "เรื่องที่กำลังติดตาม");
       copy.append(element("small", "", detail));
       const controls = element("div", "item-controls");
+      if (thread.lastCheckInAt) {
+        for (const [feedback, label] of [
+          ["HELPFUL", "ช่วยได้"], ["NOT_NOW", "ไว้ทีหลัง"],
+          ["WRONG_CONTEXT", "ไม่ตรงจังหวะ"], ["STOP_THIS_TOPIC", "หยุดตาม"]
+        ]) {
+          const button = element("button", thread.lastCheckInFeedback === feedback ? "selected" : "", label);
+          button.type = "button";
+          button.addEventListener("click", async () => {
+            try {
+              await api(`/v1/personal/conversation-threads/${thread.id}/feedback`, {
+                method: "POST",
+                body: JSON.stringify({ owner_id: state.ownerId, feedback })
+              });
+              toast(feedback === "NOT_NOW" ? "ไว้ถามใหม่วันหลังนะครับ" : "มินิคุงรับฟีดแบ็กแล้วครับ");
+              loadDashboard();
+            } catch (error) { toast(error.message, true); }
+          });
+          controls.append(button);
+        }
+      }
       const resolve = element("button", "", "จบเรื่องนี้");
       resolve.type = "button";
       resolve.addEventListener("click", async () => {
@@ -2592,6 +2750,41 @@
       list.append(row);
     }
     list.classList.toggle("hidden", !dependencies.length);
+    $("#health-updated").textContent = new Date().toLocaleTimeString("th-TH", {
+      hour: "2-digit", minute: "2-digit", second: "2-digit"
+    });
+  }
+
+  function renderEvalLab(baseline, quality) {
+    const baselineAvailable = Boolean(baseline && typeof baseline === "object");
+    const qualityAvailable = Boolean(quality && typeof quality === "object");
+    const score = Number(baseline?.scorePercent);
+    const badge = $("#eval-baseline-score");
+    badge.textContent = Number.isFinite(score) ? `${Math.round(score)}% ผ่าน` : "อ่านไม่ได้";
+    badge.dataset.state = !baselineAvailable ? "unknown" : score === 100 ? "up" : "warning";
+    $("#eval-baseline-passed").textContent = baselineAvailable ? `${baseline.passed}/${baseline.total}` : "—";
+    const approval = Number(quality?.approvalPercent);
+    $("#eval-approval").textContent = qualityAvailable && Number.isFinite(approval) ? `${Math.round(approval)}%` : "—";
+    $("#eval-feedback-total").textContent = qualityAvailable ? String(quality.feedbackTotal ?? 0) : "—";
+    $("#eval-trace-matched").textContent = qualityAvailable ? String(quality.traceMatched ?? 0) : "—";
+
+    const signals = Array.isArray(quality?.shadowSignals) ? quality.shadowSignals : [];
+    const list = $("#eval-shadow-list");
+    list.replaceChildren();
+    for (const signal of signals) {
+      const route = String(signal.routeAndCategory || "unknown");
+      const [intent, execution, category] = route.split(":");
+      const row = element("div", "health-dependency");
+      row.dataset.state = "down";
+      row.append(element("span", "health-dot"));
+      const copy = element("div");
+      copy.append(element("strong", "", `${intent || "unknown"} · ${execution || "unknown"}`));
+      copy.append(element("small", "", (category || "routing signal").replaceAll("_", " ")));
+      row.append(copy, element("span", "health-latency", `${signal.occurrences ?? 0} ครั้ง`));
+      list.append(row);
+    }
+    list.classList.toggle("hidden", !signals.length);
+    $("#eval-shadow-empty").classList.toggle("hidden", Boolean(signals.length));
   }
 
   function activateQuickAction(action) {
@@ -3025,10 +3218,13 @@
       api("/v1/knowledge/acquisition/topics?limit=50"),
       api("/v1/knowledge/acquisition/runs?limit=50"),
       api("/v1/knowledge/acquisition/claims?status=CANDIDATE&limit=100"),
-      api("/v1/knowledge/acquisition/claims?status=PUBLISHED&limit=100")
+      api("/v1/knowledge/acquisition/claims?status=PUBLISHED&limit=100"),
+      api("/v1/evals/turn-plans/baseline"),
+      api("/v1/evals/turn-plans/quality?limit=100")
     ]);
     const [status, actions, experiments, inbox, timeline, decisions, agentRuns, memories, knowledge, systemHealth,
-      threads, knowledgeSources, learningTopics, learningRuns, learningCandidates, learningPublished] = calls;
+      threads, knowledgeSources, learningTopics, learningRuns, learningCandidates, learningPublished,
+      evalBaseline, evalQuality] = calls;
     const learningClaims = [
       ...(learningCandidates.status === "fulfilled" ? learningCandidates.value : []),
       ...(learningPublished.status === "fulfilled" ? learningPublished.value : [])
@@ -3055,6 +3251,10 @@
       learningClaims
     );
     renderSystemHealth(systemHealth.status === "fulfilled" ? systemHealth.value : null);
+    renderEvalLab(
+      evalBaseline.status === "fulfilled" ? evalBaseline.value : null,
+      evalQuality.status === "fulfilled" ? evalQuality.value : null
+    );
     renderConversationThreads(threads.status === "fulfilled" ? threads.value : []);
     const failures = calls.filter((call) => call.status === "rejected");
     setSync(failures.length === 0, failures.length ? `${failures.length} ส่วนยังไม่พร้อม` : "พร้อมดูแล");
@@ -3219,7 +3419,7 @@
   $("#owner-id").value = state.ownerId;
   $("#personal-token").value = state.token;
   $("#chat-model").value = state.model;
-  $("#model-pill").textContent = state.model.toUpperCase();
+  showActiveModel(state.model);
   $("#voice-output").setAttribute("aria-pressed", String(state.voiceOutput));
   if (isAppleMobile()) {
     $("#composer-hint").textContent = "Enter ขึ้นบรรทัดใหม่ · แตะ ↑ เพื่อส่ง";
@@ -3235,6 +3435,8 @@
   renderConversationList();
   renderChat();
   restoreDraft();
+  resumeBackgroundChats();
+  loadRuntimeModels().catch(() => {});
 
   $("#visual-ask").addEventListener("click", () => state.activeVisual && attachVisualReference(state.activeVisual));
   $("#visual-similar").addEventListener("click", () => state.activeVisual && findSimilarVisual(state.activeVisual));
@@ -3251,6 +3453,18 @@
     await loadInspirationBoards();
   });
   $("#studio-form").addEventListener("submit", generateStudioImage);
+  $("#studio-transform-prompt").addEventListener("click", transformStudioPrompt);
+  $("#studio-brief").addEventListener("input", () => {
+    $("#studio-transform-status").textContent = "มินิคุงจะรักษาตัวละคร ฉาก สี และการกระทำที่พี่เล่าไว้";
+  });
+  document.querySelectorAll("[data-studio-brief-add]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const brief = $("#studio-brief");
+      brief.value = `${brief.value.trim()}${button.dataset.studioBriefAdd}`.trim();
+      brief.focus();
+    });
+  });
+  $("#studio-prompt-preview").addEventListener("input", () => updateStudioOutputState());
   ["#studio-subject", "#studio-scene", "#studio-detail", "#studio-constraints"].forEach((selector) => {
     $(selector).addEventListener("input", updateStudioPrompt);
   });
@@ -3287,11 +3501,22 @@
     });
   });
   $("#studio-load-example").addEventListener("click", loadStudioExample);
+  $("#studio-use-manual").addEventListener("click", () => {
+    const prompt = assembledManualPrompt();
+    if (!prompt) {
+      $("#studio-subject").focus();
+      toast("ใส่ character tags ใน Manual Pony ก่อนครับ", true);
+      return;
+    }
+    $("#studio-prompt-preview").value = prompt;
+    updateStudioOutputState("ใช้ tags จาก Manual Pony แล้ว แก้ต่อได้ก่อนสร้างภาพครับ");
+    $("#studio-prompt-preview").focus();
+  });
   $("#studio-copy-prompt").addEventListener("click", async () => {
     const prompt = assembledStudioPrompt();
     if (!prompt) {
-      $("#studio-subject").focus();
-      toast("เขียนตัวเอกของภาพก่อน แล้วมินิคุงจะประกอบ prompt ให้ครับ", true);
+      $("#studio-brief").focus();
+      toast("แปลงหรือวาง Pony prompt ก่อนคัดลอกครับ", true);
       return;
     }
     try {
@@ -3304,6 +3529,7 @@
     if (state.studio.result) saveVisualReference(state.studio.result).catch(error => toast(error.message, true));
   });
   updateStudioPrompt();
+  updateStudioOutputState();
   updateStudioCanvasMeta();
   $("#create-inspiration-board").addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -3372,7 +3598,12 @@
     event.target.value = "";
   });
   $("#record-voice").addEventListener("click", toggleRecording);
-  $("#stop-message").addEventListener("click", () => state.pendingChats.get(state.currentConversationId)?.controller.abort());
+  $("#stop-message").addEventListener("click", () => {
+    const task = state.pendingChats.get(state.currentConversationId);
+    if (!task) return;
+    task.controller.abort();
+    if (task.jobId) api(`/v1/chat/background/${encodeURIComponent(task.jobId)}`, { method: "DELETE" }).catch(() => {});
+  });
   $("#voice-output").addEventListener("click", () => {
     state.voiceOutput = !state.voiceOutput;
     localStorage.setItem("minikun.voice-output", String(state.voiceOutput));
@@ -3490,12 +3721,14 @@
     settingsDialog.showModal();
     loadPairedDevices();
     loadCompanionMode();
+    loadRuntimeModels().catch((error) => toast(error.message, true));
   });
   $("#mobile-menu-settings").addEventListener("click", () => {
     mobileMenuDialog.close();
     settingsDialog.showModal();
     loadPairedDevices();
     loadCompanionMode();
+    loadRuntimeModels().catch((error) => toast(error.message, true));
   });
   $("#create-pairing").addEventListener("click", createDevicePairing);
   $("#copy-pair-link").addEventListener("click", async () => {
@@ -3505,12 +3738,14 @@
     } catch (error) { toast(error.message, true); }
   });
   $("#refresh").addEventListener("click", loadDashboard);
+  $("#health-retry").addEventListener("click", loadDashboard);
   document.querySelectorAll("[data-quick-action]").forEach((button) => {
     button.addEventListener("click", () => activateQuickAction(button.dataset.quickAction));
   });
   document.querySelectorAll("[data-cockpit-target]").forEach((button) => {
     button.addEventListener("click", () => {
-      switchCockpitPage(button.dataset.cockpitTarget, "", true);
+      switchCockpitPage(button.dataset.cockpitTarget);
+      button.blur();
     });
   });
   $("#request-location").addEventListener("click", requestCurrentLocation);
@@ -3556,14 +3791,23 @@
     event.preventDefault();
     state.ownerId = $("#owner-id").value.trim() || "default";
     state.token = $("#personal-token").value;
-    state.model = $("#chat-model").value.trim() || "mini-kun";
     sessionStorage.setItem("minikun.owner", state.ownerId);
     sessionStorage.setItem("minikun.token", state.token);
-    localStorage.setItem("minikun.model", state.model);
-    $("#model-pill").textContent = state.model.toUpperCase();
-    try { await saveCompanionMode(); } catch (error) { toast(error.message, true); }
-    settingsDialog.close();
-    toast("บันทึกการตั้งค่าแล้วครับ");
+    try {
+      const selectedModel = $("#chat-model").value;
+      if (!selectedModel) {
+        await loadRuntimeModels();
+        toast("เลือกโมเดลแล้วกดบันทึกอีกครั้งครับ");
+        return;
+      }
+      const catalog = await api("/v1/models/runtime", {
+        method: "PUT", body: JSON.stringify({ model: selectedModel })
+      });
+      showActiveModel(catalog.active);
+      await saveCompanionMode();
+      settingsDialog.close();
+      toast("บันทึกการตั้งค่าแล้วครับ");
+    } catch (error) { toast(error.message, true); }
   });
   $("#show-all-timeline").addEventListener("click", () => {
     state.timelineLimit = Math.min(50, state.timelineLimit + 10);

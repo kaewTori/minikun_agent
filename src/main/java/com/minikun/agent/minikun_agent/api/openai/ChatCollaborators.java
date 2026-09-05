@@ -52,6 +52,7 @@ final class ChatCollaborators {
     private final ChatExplainabilitySink explainabilitySink;
     private final ConversationThreadService conversationThreadService;
     private final StoryIllustrationService storyIllustrationService;
+    private final TurnPlanner turnPlanner;
 
     ChatCollaborators(
             ObjectProvider<SpringAiToolCallingRuntime> toolCallingRuntime,
@@ -76,7 +77,8 @@ final class ChatCollaborators {
             ObjectProvider<AutonomousResearchService> autonomousResearchService,
             ObjectProvider<ChatExplainabilitySink> explainabilitySink,
             ObjectProvider<ConversationThreadService> conversationThreadService,
-            ObjectProvider<StoryIllustrationService> storyIllustrationService) {
+            ObjectProvider<StoryIllustrationService> storyIllustrationService,
+            ObjectProvider<TurnPlanner> turnPlanner) {
         this.toolCallingRuntime = toolCallingRuntime.getIfAvailable();
         this.toolRequestRouters = toolRequestRouters.orderedStream().toList();
         this.dynamicGenerationOptionsFactory = dynamicGenerationOptionsFactory.getIfAvailable();
@@ -100,6 +102,7 @@ final class ChatCollaborators {
         this.explainabilitySink = explainabilitySink.getIfAvailable();
         this.conversationThreadService = conversationThreadService.getIfAvailable();
         this.storyIllustrationService = storyIllustrationService.getIfAvailable();
+        this.turnPlanner = turnPlanner.getIfAvailable();
     }
 
     SpringAiToolCallingRuntime toolCallingRuntime() { return toolCallingRuntime; }
@@ -125,4 +128,5 @@ final class ChatCollaborators {
     ChatExplainabilitySink explainabilitySink() { return explainabilitySink; }
     ConversationThreadService conversationThreadService() { return conversationThreadService; }
     StoryIllustrationService storyIllustrationService() { return storyIllustrationService; }
+    TurnPlanner turnPlanner() { return turnPlanner; }
 }

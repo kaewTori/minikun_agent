@@ -30,6 +30,9 @@ public final class ConversationContinuityResolver {
     private static final Pattern CONTEXT_ACTION = Pattern.compile(
             "(?iu)^(?:ช่วย\\s*)?(?:ค้น(?:หา)?(?:\\s*ข้อมูล)?|หา\\s*ข้อมูล|เช็ก|เช็ค|ตรวจ(?:สอบ|ดู)?)"
                     + "(?:\\s*(?:เรื่อง)?(?:เมื่อกี้|ก่อนหน้า|นั้น|นี้))?(?:\\s*(?:ให้|หน่อย|ให้หน่อย))*[?!.。！？]*$");
+    private static final Pattern RESPONSE_REVISION = Pattern.compile(
+            "(?iu)^(?:มัน|คำตอบ|เรื่อง|เนื้อหา)?\\s*(?:สั้น|ยาว|เร็ว|ช้า|ละเอียด|เยอะ|น้อย)"
+                    + "(?:ไป|เกิน|ขึ้น|ลง|กว่านี้|อีก|หน่อย)");
     private static final List<String> FOLLOW_UP_MARKERS = List.of(
             "อีก", "แล้ว", "ล่ะ", "อันนี้", "ตัวนี้", "คนนี้", "เรื่องนี้", "แบบนี้", "สิ่งนี้",
             "เรื่องเมื่อกี้", "เมื่อกี้", "ก่อนหน้านี้", "ดังกล่าว", "ของเขา", "ของเธอ", "ต่อ", "เพิ่มเติม",
@@ -74,6 +77,7 @@ public final class ConversationContinuityResolver {
         String lower = value.toLowerCase(Locale.ROOT);
         return FOLLOW_UP_MARKERS.stream().anyMatch(lower::contains)
                 || CONTEXT_ACTION.matcher(value).matches()
+                || RESPONSE_REVISION.matcher(value).find()
                 || !EXPLICIT_SUBJECT.matcher(value).find() && TOPIC_DEPENDENT.matcher(value).find()
                 || value.length() <= 24
                         && lower.matches("^(ราคา|สเปก|รุ่น|เวอร์ชัน|ปีนี้|ตอนนี้|ปัจจุบัน|"

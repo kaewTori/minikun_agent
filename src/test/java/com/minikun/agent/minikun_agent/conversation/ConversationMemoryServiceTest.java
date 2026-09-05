@@ -2,12 +2,20 @@ package com.minikun.agent.minikun_agent.conversation;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 
 import java.util.List;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.memory.InMemoryChatMemoryRepository;
 import org.springframework.ai.chat.memory.MessageWindowChatMemory;
+import org.springframework.boot.health.contributor.Status;
 
 class ConversationMemoryServiceTest {
 
@@ -53,5 +61,26 @@ class ConversationMemoryServiceTest {
 
         assertTrue(service.load(first).isEmpty());
         assertEquals(List.of(new ChatMessage("user", "Second")), service.load(second));
+    }
+
+    @Test
+    void switchesToInMemoryAndStaysAvailableWhenPersistentMemoryFails() {
+        ChatMemory persistent = mock(ChatMemory.class);
+        doThrow(new IllegalStateException("database unavailable"))
+                .when(persistent).add(anyString(), anyList());
+        ConversationMemoryService degraded = new ConversationMemoryService(persistent, 4, true);
+        ConversationId id = new ConversationId("database-offline");
+
+        degraded.appendTurn(id, new ChatMessage("user", "ยังคุยได้ไหม"),
+                new ChatMessage("assistant", "ได้ครับ"));
+        degraded.append(id, new ChatMessage("user", "ต่อเลย"));
+
+        assertEquals(3, degraded.load(id).size());
+        assertTrue(degraded.degraded());
+        verify(persistent, times(1)).add(anyString(), anyList());
+        var health = new ConversationPersistenceHealthIndicator(degraded).health();
+        assertEquals(new Status("DEGRADED"), health.getStatus());
+        assertEquals("DEGRADED", health.getDetails().get("status"));
+        assertEquals("in_memory", health.getDetails().get("mode"));
     }
 }

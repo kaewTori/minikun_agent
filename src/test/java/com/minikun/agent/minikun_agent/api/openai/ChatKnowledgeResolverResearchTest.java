@@ -20,6 +20,7 @@ import com.minikun.search.internal.DefaultSearchContextAwarenessService;
 import com.minikun.search.internal.DefaultSearchQueryPlanningService;
 import com.minikun.search.model.SearchDecision;
 import com.minikun.search.model.SearchDecisionReason;
+import com.minikun.search.model.SearchPlanHints;
 import com.minikun.research.AutonomousResearchResult;
 import com.minikun.research.ResearchStopReason;
 import com.minikun.research.ResearchTrace;
@@ -134,6 +135,66 @@ class ChatKnowledgeResolverResearchTest {
                 .anyMatch(candidate -> candidate.source() == KnowledgeSource.BROWSER));
     }
 
+    @Test
+    void retriesLocalDiscoveryOnceWhenEvidenceIsThin() {
+        AtomicInteger searches = new AtomicInteger();
+        com.minikun.search.SearchService search = request -> {
+            int attempt = searches.incrementAndGet();
+            if (attempt == 1) {
+                return KnowledgeContext.fromCandidates(List.of(localCandidate(0, "https://one.example", "ร้านข้าว")));
+            }
+            return KnowledgeContext.fromCandidates(List.of(
+                    localCandidate(0, "https://two.example", "ร้านข้าว รีวิว 4.8 ดาว เปิดถึง 20:00"),
+                    localCandidate(1, "https://three.example", "ร้านข้าว ราคา 80 บาท ใกล้สถานี"),
+                    localCandidate(2, "https://four.example", "ร้านอาหารแถวไฟฉาย ที่อยู่และแผนที่")));
+        };
+        ObjectProvider<MemoryRecallService> memory = mock(ObjectProvider.class);
+        SearchPlanHints hints = new SearchPlanHints(
+                "local_discovery", 0.96, "ร้านข้าว MRT ไฟฉาย", List.of(),
+                List.of("opening_hours", "rating", "location", "price"), "MRT ไฟฉาย");
+        ChatKnowledgeResolver resolver = new ChatKnowledgeResolver(
+                memory, null, search,
+                query -> new SearchDecision(true, query, SearchDecisionReason.EXTERNAL_RESOURCE, hints),
+                new DefaultSearchQueryPlanningService(), new DefaultSearchContextAwarenessService(),
+                new DefaultKnowledgeSelectionService(), new DefaultKnowledgeConsolidationService(),
+                new SearchSelectionSignalMapper(), null, null, null,
+                new ChatKnowledgeResolver.Configuration(
+                        true, Duration.ofSeconds(5), true, true, 8, 5, 5, 3,
+                        Duration.ofSeconds(30)));
+
+        resolver.resolve(new ChatKnowledgeResolver.Request(
+                "ช่วยแนะนำร้านข้าวแถว MRT ไฟฉาย", "request-local", null, "default", false, ""));
+
+        assertEquals(2, searches.get());
+    }
+
+    @Test
+    void doesNotRetryLocalDiscoveryWhenEvidenceIsAlreadyUseful() {
+        AtomicInteger searches = new AtomicInteger();
+        com.minikun.search.SearchService search = request -> {
+            searches.incrementAndGet();
+            return KnowledgeContext.fromCandidates(List.of(
+                    localCandidate(0, "https://one.example", "ร้านข้าว รีวิว 4.8 ดาว เปิดถึง 20:00"),
+                    localCandidate(1, "https://two.example", "ร้านข้าว ราคา 80 บาท ใกล้สถานี"),
+                    localCandidate(2, "https://three.example", "ร้านอาหารแถวไฟฉาย ที่อยู่และแผนที่")));
+        };
+        ObjectProvider<MemoryRecallService> memory = mock(ObjectProvider.class);
+        ChatKnowledgeResolver resolver = new ChatKnowledgeResolver(
+                memory, null, search,
+                query -> new SearchDecision(true, query, SearchDecisionReason.EXTERNAL_RESOURCE),
+                new DefaultSearchQueryPlanningService(), new DefaultSearchContextAwarenessService(),
+                new DefaultKnowledgeSelectionService(), new DefaultKnowledgeConsolidationService(),
+                new SearchSelectionSignalMapper(), null, null, null,
+                new ChatKnowledgeResolver.Configuration(
+                        true, Duration.ofSeconds(5), true, true, 8, 5, 5, 3,
+                        Duration.ofSeconds(30)));
+
+        resolver.resolve(new ChatKnowledgeResolver.Request(
+                "ช่วยแนะนำร้านข้าวแถว MRT ไฟฉาย", "request-local-good", null, "default", false, ""));
+
+        assertEquals(1, searches.get());
+    }
+
     @SuppressWarnings("unchecked")
     private ChatKnowledgeResolver resolver(
             BrowserContentService browser,
@@ -162,5 +223,10 @@ class ChatKnowledgeResolverResearchTest {
         return new KnowledgeCandidate(
                 "search-" + index, KnowledgeSource.SEARCH,
                 "ระบบพลังงาน report (" + url + "): relevant supported evidence", index, url);
+    }
+
+    private KnowledgeCandidate localCandidate(int index, String url, String content) {
+        return new KnowledgeCandidate("local-" + index, KnowledgeSource.SEARCH,
+                content + " (" + url + ")", index, url);
     }
 }

@@ -18,6 +18,14 @@ class CooperationRouterTest {
     }
 
     @Test
+    void routesThaiGreetingWritingToCreativeOllamaPath() {
+        CooperationRoutingDecision decision = router.decide("ช่วยแต่งคำอวยพรวันเกิดน่ารัก ๆ");
+
+        assertEquals("creative_request", decision.reason());
+        assertTrue(!decision.needsExpert());
+    }
+
+    @Test
     void doesNotEscalateAnOrdinaryQuestionMarkToTinyGrad() {
         CooperationRoutingDecision decision = router.decide("วันนี้เป็นยังไงบ้าง?");
 

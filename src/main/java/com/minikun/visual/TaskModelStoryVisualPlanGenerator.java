@@ -17,6 +17,16 @@ import lombok.extern.slf4j.Slf4j;
 public final class TaskModelStoryVisualPlanGenerator implements StoryVisualPlanGenerator {
     private static final int MAX_INPUT_CHARACTERS = 8_000;
     private static final int MAX_CHARACTERS = 8;
+    private static final List<String> SCHEMA_PLACEHOLDERS = List.of(
+            "story name", "stable visible trait", "story-stated clothing",
+            "story-stated accessory", "identity anchor", "conflicting trait to exclude",
+            "short panel title", "exact character name", "one visible action",
+            "visible relationship action", "indispensable object", "exact visible place",
+            "visible time", "visible weather", "visible expression", "light sources",
+            "color palette", "composition", "camera angle", "shot distance",
+            "focus treatment", "story-defining visible anchor", "specific contradiction",
+            "visible detail", "location", "time", "weather", "emotion", "mood",
+            "lighting", "palette");
     private final TaskModelProvider taskModel;
     private final ObjectMapper json;
 
@@ -98,6 +108,9 @@ public final class TaskModelStoryVisualPlanGenerator implements StoryVisualPlanG
                 if (scene.subjectCount() > 0 && scene.characterNames().size() > scene.subjectCount()) {
                     throw new IllegalArgumentException("scene character references exceed subject count");
                 }
+                if (scene.characterNames().size() > 2) {
+                    throw new IllegalArgumentException("a generated scene supports at most two focal characters");
+                }
             }
             return new StoryVisualPlan(mode, characters, scenes);
         } catch (JsonProcessingException exception) {
@@ -113,6 +126,9 @@ public final class TaskModelStoryVisualPlanGenerator implements StoryVisualPlanG
             candidate = json.writeValueAsString(plan).toLowerCase(Locale.ROOT);
         } catch (JsonProcessingException exception) {
             throw new IllegalArgumentException("visual plan could not be validated", exception);
+        }
+        if (containsSchemaPlaceholder(plan)) {
+            throw new IllegalArgumentException("visual plan copied a schema placeholder");
         }
         requireAnchor(source, candidate, "แมว", "cat");
         requireAnchor(source, candidate, "หอดูดาว", "observatory");
@@ -135,6 +151,25 @@ public final class TaskModelStoryVisualPlanGenerator implements StoryVisualPlanG
 
     private boolean containsAny(String value, String... needles) {
         return java.util.Arrays.stream(needles).anyMatch(value::contains);
+    }
+
+    private boolean containsSchemaPlaceholder(StoryVisualPlan plan) {
+        java.util.stream.Stream<String> characterValues = plan.characters().stream().flatMap(character ->
+                java.util.stream.Stream.of(
+                        List.of(character.name(), character.identity()), character.appearance(),
+                        character.clothing(), character.accessories(), character.canonicalTags(),
+                        character.negativeTags()).flatMap(List::stream));
+        java.util.stream.Stream<String> sceneValues = plan.scenes().stream().flatMap(scene ->
+                java.util.stream.Stream.of(
+                        List.of(scene.title(), scene.action(), scene.interaction(), scene.setting(), scene.time(),
+                                scene.weather(), scene.emotion(), scene.atmosphere(), scene.lighting(),
+                                scene.palette(), scene.composition(), scene.cameraAngle(), scene.shotDistance(),
+                                scene.focus()),
+                        scene.characterNames(), scene.keyObjects(), scene.mustInclude(),
+                        scene.mustNotInclude(), scene.fineDetails()).flatMap(List::stream));
+        return java.util.stream.Stream.concat(characterValues, sceneValues)
+                .map(value -> value.toLowerCase(Locale.ROOT))
+                .anyMatch(SCHEMA_PLACEHOLDERS::contains);
     }
 
     private StoryVisualPlan fallback(String userMessage, String assistantStory,
@@ -177,6 +212,9 @@ public final class TaskModelStoryVisualPlanGenerator implements StoryVisualPlanG
                 visible story moment and its emotional resolution. A storyboard follows chronological beginning,
                 turning-point, and ending beats with distinct actions and camera framing.
                 All values and visual tags must be concise English. subjectCount counts people and animals.
+                Each scene may show at most two focal named characters. When the story has a larger cast, choose the
+                pair performing that scene's defining action. Order characterNames from left to right so face details
+                stay attached to the correct person. Names are internal references and must not become image tags.
                 Exact schema:
                 {"characters":[{"name":"story name","identity":"1girl or black cat",
                 "appearance":["stable visible trait"],"clothing":["story-stated clothing"],

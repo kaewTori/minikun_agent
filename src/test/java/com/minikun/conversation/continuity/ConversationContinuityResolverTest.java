@@ -70,4 +70,14 @@ class ConversationContinuityResolverTest {
         assertTrue(continuity.resolvedQuery().contains("Spring Boot"));
         assertTrue(continuity.resolvedQuery().contains("เรื่องเมื่อกี้"));
     }
+
+    @Test
+    void resolvesResponseRevisionToThePreviousCreativeRequest() {
+        ConversationContinuity continuity = resolver.resolve(
+                "มันสั้นไปหน่อย แบ่งเป็นคำตอบละบทแทน",
+                "user: มินิคุง เล่าเรื่องแฟนตาซีให้ฟังหน่อย\nassistant: กาลครั้งหนึ่ง...");
+
+        assertTrue(continuity.followUp());
+        assertTrue(continuity.resolvedQuery().contains("เล่าเรื่องแฟนตาซี"));
+    }
 }

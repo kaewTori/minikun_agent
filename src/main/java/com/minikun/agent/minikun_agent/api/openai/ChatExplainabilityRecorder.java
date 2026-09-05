@@ -16,6 +16,10 @@ final class ChatExplainabilityRecorder {
     ChatExplainabilityRecorder(ChatExplainabilitySink sink) { this.sink = sink; }
 
     Context context(ChatKnowledgeSelection knowledge, ToolEvidence tool, String generationProfile) {
+        return context(knowledge, tool, generationProfile, null);
+    }
+
+    Context context(ChatKnowledgeSelection knowledge, ToolEvidence tool, String generationProfile, TurnPlan turnPlan) {
         List<String> sources = knowledge.selection().selectedCandidates().stream()
                 .map(candidate -> {
                     String provenance = candidate.provenance().isBlank()
@@ -31,6 +35,14 @@ final class ChatExplainabilityRecorder {
         decisions.put("research_autonomous", knowledge.researchTrace().autonomous());
         decisions.put("generation_profile", generationProfile == null ? "general" : generationProfile);
         decisions.put("confirmation_required", tool != null && tool.requiresConfirmation());
+        if (turnPlan != null) {
+            decisions.put("turn_intent", turnPlan.intentTag());
+            decisions.put("turn_execution", turnPlan.executionTag());
+            decisions.put("turn_confidence", turnPlan.confidence());
+            decisions.put("turn_ambiguous", turnPlan.ambiguous());
+            decisions.put("turn_reason", turnPlan.reason());
+            decisions.put("expert_review", turnPlan.cooperation().needsExpert());
+        }
         return new Context(sources, tool == null ? List.of() : List.of(tool.toolName()), decisions);
     }
 

@@ -1,8 +1,6 @@
 package com.minikun.search.internal;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.minikun.search.AliasDictionary;
-import com.minikun.search.AcronymDictionary;
 import com.minikun.search.SearchManager;
 import com.minikun.search.SearchProvider;
 import com.minikun.search.SearchQueryExpansionService;
@@ -15,14 +13,11 @@ import com.minikun.search.SearchDecisionProvider;
 import com.minikun.search.SearchService;
 import com.minikun.model.task.OllamaTaskModelProvider;
 import com.minikun.model.task.TaskModelProvider;
-import com.minikun.search.SynonymDictionary;
-import com.minikun.search.dictionary.ImmutableAcronymDictionary;
-import com.minikun.search.dictionary.ImmutableAliasDictionary;
-import com.minikun.search.dictionary.ImmutableSynonymDictionary;
 import java.net.http.HttpClient;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -37,6 +32,13 @@ import org.slf4j.LoggerFactory;
 @Configuration(proxyBeanMethods = false)
 public class SearchConfiguration {
     private static final Logger LOGGER = LoggerFactory.getLogger(SearchConfiguration.class);
+    private static final Map<String, List<String>> QUERY_EXPANSIONS = Map.of(
+            "latest Java", List.of("current Java", "Java platform"),
+            "JDK", List.of("Java Development Kit"),
+            "CI", List.of("Continuous Integration", "CI pipeline"),
+            "postgres", List.of("postgresql"),
+            "wildfly", List.of("jboss"),
+            "flip3", List.of("galaxy z flip3"));
 
     @Bean(name = "searxngSearchProvider")
     SearchProvider searxngProvider(
@@ -162,30 +164,9 @@ public class SearchConfiguration {
     }
 
     @Bean
-    SynonymDictionary synonymDictionary() {
-        return new ImmutableSynonymDictionary();
-    }
-
-    @Bean
-    AcronymDictionary acronymDictionary() {
-        return new ImmutableAcronymDictionary();
-    }
-
-    @Bean
-    AliasDictionary aliasDictionary() {
-        return new ImmutableAliasDictionary();
-    }
-
-    @Bean
-    SearchQueryExpansionService searchQueryExpansionService(
-            SynonymDictionary synonymDictionary,
-            AcronymDictionary acronymDictionary,
-            AliasDictionary aliasDictionary) {
+    SearchQueryExpansionService searchQueryExpansionService() {
         return new RuleBasedSearchQueryExpansionService(List.of(
-            new IdentityExpansionRule(),
-            new SynonymExpansionRule(synonymDictionary),
-            new AcronymExpansionRule(acronymDictionary),
-            new AliasExpansionRule(aliasDictionary)));
+                query -> QUERY_EXPANSIONS.getOrDefault(query, List.of())));
     }
 
     @Bean

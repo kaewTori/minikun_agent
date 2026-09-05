@@ -5,5 +5,6 @@ public enum MemoryCategory {
     GOAL,
     PROFILE,
     SKILL,
-    PROJECT
+    PROJECT,
+    EPISODE
 }

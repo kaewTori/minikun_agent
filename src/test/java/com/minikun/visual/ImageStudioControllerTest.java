@@ -65,6 +65,26 @@ class ImageStudioControllerTest {
     }
 
     @Test
+    void transformsAConversationalBriefIntoAPonyPrompt() {
+        ImageStudioController controller = new ImageStudioController(
+                tool(prompt -> new GeneratedImage(GeneratedImageStoreTest.png(), "test-model"),
+                        new GeneratedImageStore(directory, 1024, Clock.systemUTC())),
+                () -> new TinyGradRuntimeStatusReader.RuntimeStatus(
+                        false, "OFFLINE", "", 0,
+                        new TinyGradRuntimeStatusReader.RuntimeMemory(-1, -1, -1), -1, -1,
+                        -1, -1, false, null, null, null, 0, 0, Instant.EPOCH),
+                brief -> "score_9, score_8_up, score_7_up, 1girl, black hair, observatory",
+                "secret", 8000);
+
+        ImageStudioController.PonyPromptResponse response = controller.transformPrompt(
+                new ImageStudioController.PonyPromptRequest("ผู้หญิงผมดำในหอดูดาว"), "secret");
+
+        assertEquals("score_9, score_8_up, score_7_up, 1girl, black hair, observatory", response.prompt());
+        assertThrows(ResponseStatusException.class, () -> controller.transformPrompt(
+                new ImageStudioController.PonyPromptRequest("scene"), "wrong"));
+    }
+
+    @Test
     void passesAdvancedStudioControlsToTheProvider() {
         AtomicReference<ImageGenerationRequest> captured = new AtomicReference<>();
         StoryIllustrationProvider provider = new StoryIllustrationProvider() {

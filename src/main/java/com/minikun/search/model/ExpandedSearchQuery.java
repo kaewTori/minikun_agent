@@ -1,6 +1,5 @@
 package com.minikun.search.model;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
@@ -21,15 +20,6 @@ public record ExpandedSearchQuery(
         if (!rewrittenQuery.equals(expandedQueries.get(0))) {
             throw new IllegalArgumentException("first expanded query must equal rewritten query");
         }
-        for (String expandedQuery : expandedQueries) {
-            Objects.requireNonNull(expandedQuery, "expanded query must not be null");
-        }
-        originalQuery = new String(originalQuery);
-        rewrittenQuery = new String(rewrittenQuery);
-        List<String> copiedQueries = new ArrayList<>(expandedQueries.size());
-        for (String expandedQuery : expandedQueries) {
-            copiedQueries.add(new String(expandedQuery));
-        }
-        expandedQueries = List.copyOf(copiedQueries);
+        expandedQueries = List.copyOf(expandedQueries);
     }
 }

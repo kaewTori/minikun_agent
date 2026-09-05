@@ -19,6 +19,5 @@ public record SearchContext(
     public SearchContext {
         Objects.requireNonNull(userQuery, "user query must not be null");
         Objects.requireNonNull(searchDecisionReason, "search decision reason must not be null");
-        userQuery = new String(userQuery);
     }
 }

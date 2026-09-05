@@ -108,7 +108,7 @@ public final class PersonalContextRuntime {
             if (requiresRecovery(budgetResult)) {
                 ContextRecoveryDecision recovery = contextRecoveryPolicy.decide(
                         contextBudgetCharacters,
-                        budgetResult.contextPressureDiagnostics().decision().level());
+                        budgetResult.pressureLevel());
                 if (recovery.required()) {
                     recoveryAttempts++;
                     recordRecovery();
@@ -203,8 +203,7 @@ public final class PersonalContextRuntime {
     }
 
     private boolean requiresRecovery(DynamicGenerationOptionsResult result) {
-        return result.contextPressureDiagnostics() != null
-                && result.contextPressureDiagnostics().decision().level() != ContextPressureLevel.NORMAL;
+        return result.pressureLevel() != ContextPressureLevel.NORMAL;
     }
 
     private PromptRequest withContextBudget(PromptRequest request, long characters) {

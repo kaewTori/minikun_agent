@@ -12,6 +12,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 
 class ChatFeedbackServiceTest {
@@ -38,6 +39,20 @@ class ChatFeedbackServiceTest {
                 "จำบริบทผิด ไม่ใช่เรื่องนี้");
 
         assertEquals(ChatFeedbackCategory.CONTEXT_WRONG, feedback.category());
+        assertEquals(0, learning.snapshot("owner").activePreferences().size());
+    }
+
+    @Test
+    void classifiesQualityFailuresAndNotifiesObserver() {
+        AtomicReference<ChatFeedback> observed = new AtomicReference<>();
+        ChatFeedbackService observedService = new ChatFeedbackService(
+                new InMemoryChatFeedbackStore(), learning, clock, java.util.List.of(observed::set));
+
+        ChatFeedback feedback = observedService.submit("owner", "conversation", "response-id", "down", null,
+                "ค้นผิดและใช้แหล่งข้อมูลผิด");
+
+        assertEquals(ChatFeedbackCategory.SEARCH_WRONG, feedback.category());
+        assertEquals(feedback, observed.get());
         assertEquals(0, learning.snapshot("owner").activePreferences().size());
     }
 }

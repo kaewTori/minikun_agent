@@ -103,12 +103,11 @@ class ChatServiceChatOrchestrationTest {
     @TempDir Path temporaryDirectory;
 
     @Test
-    void generatesAnAttachmentAfterCreativeStoryTextIsReady() throws Exception {
+    void sendsAMixedLanguageImageRequestToTheImageProvider() throws Exception {
         ChatModel chatModel = mock(ChatModel.class);
         ConversationMemoryService conversation = mock(ConversationMemoryService.class);
         when(conversation.load(any())).thenReturn(List.of());
-        when(chatModel.call(any(Prompt.class))).thenReturn(response(
-                "มะลิยืนอยู่บนหอดูดาว ขณะที่ดาวดวงแรกส่องแสงตอบกลับมาครับ"));
+        when(chatModel.call(any(Prompt.class))).thenReturn(response("ภาพแมวดำในหอดูดาวครับ"));
         ChatService service = service(chatModel, conversation);
         var imageTool = new ImageGenerationTool(prompt -> new GeneratedImage(
                 new byte[] {(byte) 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1},
@@ -119,7 +118,7 @@ class ChatServiceChatOrchestrationTest {
                 imageTool, true, 2000));
 
         ChatCompletionResponse result = service.chatCompletion(new ChatCompletionRequest(
-                "mini-kun", List.of(new Message("user", "แต่งเรื่องสั้นเกี่ยวกับเด็กที่ตามหาดวงดาว")),
+                "mini-kun", List.of(new Message("user", "ช่วย gen รูปแมวดำในหอดูดาวให้หน่อย")),
                 "story-image", false, null, null, null), new ConversationId("story-image"));
 
         assertEquals(1, result.attachments().size());
@@ -577,8 +576,9 @@ class ChatServiceChatOrchestrationTest {
     }
 
     @Test
-    void toolsEnabledTechnicalQuestionStillReceivesTinyGradReview() throws Exception {
+    void toolsEnabledTechnicalQuestionSkipsToolRuntimeBeforeQualityReview() throws Exception {
         ChatModel frontLineModel = mock(ChatModel.class);
+        when(frontLineModel.call(any(Prompt.class))).thenReturn(response("คำตอบตรงจากโมเดลหลัก"));
         ChatModelProvider frontLine = new ExistingChatModelProvider(frontLineModel);
         ChatModelProvider verifier = mock(ChatModelProvider.class);
         when(verifier.id()).thenReturn(ChatModelId.TINYGRAD);
@@ -618,7 +618,8 @@ class ChatServiceChatOrchestrationTest {
 
         assertEquals("คำตอบผ่านการตรวจ สำหรับ JDK25 Spring Boot 130 apps บน RAM 32 GB",
                 result.choices().getFirst().message().content());
-        verify(toolRuntime).call(any(Prompt.class), any(ConversationId.class), any(String.class));
+        verify(toolRuntime, never()).call(any(Prompt.class), any(ConversationId.class), any(String.class));
+        verify(frontLineModel).call(any(Prompt.class));
         verify(verifier).chat(any(Prompt.class));
     }
 
@@ -744,11 +745,12 @@ class ChatServiceChatOrchestrationTest {
     }
 
     @Test
-    void technicalStreamingRetainsToolRuntime() throws Exception {
+    void technicalStreamingUsesDirectModel() throws Exception {
         ChatModel chatModel = mock(ChatModel.class);
         ConversationMemoryService conversation = mock(ConversationMemoryService.class);
         SpringAiToolCallingRuntime toolRuntime = mock(SpringAiToolCallingRuntime.class);
         when(conversation.load(any())).thenReturn(List.of());
+        when(chatModel.stream(any(Prompt.class))).thenReturn(Flux.just(response("technical answer")));
         when(toolRuntime.call(any(Prompt.class), any(ConversationId.class), any(String.class)))
                 .thenReturn(response("technical answer"));
         ChatService service = service(chatModel, conversation);
@@ -764,8 +766,8 @@ class ChatServiceChatOrchestrationTest {
         service.chatCompletionStream(technical, new ConversationId("technical-stream"))
                 .collectList().block();
 
-        verify(toolRuntime).call(any(Prompt.class), any(ConversationId.class), any(String.class));
-        verify(chatModel, never()).stream(any(Prompt.class));
+        verify(toolRuntime, never()).call(any(Prompt.class), any(ConversationId.class), any(String.class));
+        verify(chatModel).stream(any(Prompt.class));
     }
 
     @Test

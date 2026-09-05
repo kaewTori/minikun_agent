@@ -15,8 +15,9 @@ public class ChatFeedbackConfiguration {
         return template == null ? new InMemoryChatFeedbackStore() : new JdbcChatFeedbackStore(template);
     }
     @Bean ChatFeedbackService chatFeedbackService(ChatFeedbackStore store,
-            AdaptivePreferenceLearningService learning, Clock clock) {
-        return new ChatFeedbackService(store, learning, clock);
+            AdaptivePreferenceLearningService learning, Clock clock,
+            ObjectProvider<ChatQualityFeedbackObserver> qualityObservers) {
+        return new ChatFeedbackService(store, learning, clock, qualityObservers.orderedStream().toList());
     }
     @Bean ChatFeedbackController chatFeedbackController(ChatFeedbackService service,
             @Value("${minikun.adaptation.management.token:${minikun.memory.management.token:}}") String token) {

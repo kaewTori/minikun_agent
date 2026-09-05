@@ -1,7 +1,6 @@
 package com.minikun.memory;
 
 import com.minikun.memory.model.CompletedConversation;
-import com.minikun.memory.reflection.ReflectionClient;
 import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;

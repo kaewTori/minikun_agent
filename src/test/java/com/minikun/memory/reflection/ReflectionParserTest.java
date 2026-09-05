@@ -53,7 +53,7 @@ class ReflectionParserTest {
     }
 
         @Test
-        void parsesObjectResponseFromJsonObjectMode() {
+    void parsesObjectResponseFromJsonObjectMode() {
                 var memories = parser.parse("""
                                 {"memories":[{"category":"PROFILE","content":"Uses macOS","confidence":0.9,"reason":"User stated it"}]}
                                 """, CONVERSATION);
@@ -61,6 +61,15 @@ class ReflectionParserTest {
                 assertEquals(1, memories.size());
                 assertEquals(MemoryCategory.PROFILE, memories.getFirst().category());
         }
+
+    @Test
+    void parsesCompanionEpisodeMemory() {
+        var memories = parser.parse("""
+                {"memories":[{"category":"EPISODE","content":"ผู้ใช้ดีใจที่สอบผ่านใบรับรอง Java","confidence":0.95,"reason":"ผู้ใช้บอกเหตุการณ์และความหมายโดยตรง"}]}
+                """, CONVERSATION);
+
+        assertEquals(MemoryCategory.EPISODE, memories.getFirst().category());
+    }
 
     @Test
     void preservesCardinalityAndOrder() {

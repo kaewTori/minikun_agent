@@ -9,6 +9,8 @@ import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
+import org.springframework.beans.factory.annotation.Autowired;
+import com.minikun.proactive.ProactiveAttentionBudget;
 
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -23,21 +25,41 @@ public final class NotificationDeliveryService implements NotificationDispatcher
     private final Optional<NotificationDeliveryStore> store;
     private final Clock clock;
     private final MeterRegistry meterRegistry;
+    private final ProactiveAttentionBudget attentionBudget;
+
+    @Autowired
+    public NotificationDeliveryService(
+            NotificationTransport transport,
+            Optional<NotificationDeliveryStore> store,
+            Clock clock,
+            MeterRegistry meterRegistry,
+            ProactiveAttentionBudget attentionBudget) {
+        this.transport = Objects.requireNonNull(transport, "notification transport must not be null");
+        this.store = Objects.requireNonNull(store, "notification store optional must not be null");
+        this.clock = Objects.requireNonNull(clock, "notification clock must not be null");
+        this.meterRegistry = Objects.requireNonNull(meterRegistry, "meter registry must not be null");
+        this.attentionBudget = attentionBudget;
+    }
 
     public NotificationDeliveryService(
             NotificationTransport transport,
             Optional<NotificationDeliveryStore> store,
             Clock clock,
             MeterRegistry meterRegistry) {
-        this.transport = Objects.requireNonNull(transport, "notification transport must not be null");
-        this.store = Objects.requireNonNull(store, "notification store optional must not be null");
-        this.clock = Objects.requireNonNull(clock, "notification clock must not be null");
-        this.meterRegistry = Objects.requireNonNull(meterRegistry, "meter registry must not be null");
+        this(transport, store, clock, meterRegistry, null);
     }
 
     @Override
     public void publish(NotificationRequest request) {
         Objects.requireNonNull(request, "notification request must not be null");
+        if (attentionBudget != null && !attentionBudget.tryAcquire(request)) {
+            LOGGER.info("process=notification event=skipped source_type={} reason=attention_budget",
+                    request.sourceType());
+            Counter.builder("minikun.notification.skipped")
+                    .tag("source", request.sourceType().toLowerCase(java.util.Locale.ROOT))
+                    .tag("reason", "attention_budget").register(meterRegistry).increment();
+            return;
+        }
         Instant attemptedAt = clock.instant();
         try {
             transport.publish(request.channel(), request.title(), request.message(), request.priority(), request.tags());

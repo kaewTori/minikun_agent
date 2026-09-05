@@ -11,6 +11,5 @@ public record KnowledgeRanking(String candidateId, double score) {
         if (!Double.isFinite(score)) {
             throw new IllegalArgumentException("ranking score must be finite");
         }
-        candidateId = new String(candidateId);
     }
 }

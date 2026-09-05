@@ -61,6 +61,7 @@ import com.minikun.planner.PlannerNotificationScheduler;
 import com.minikun.planner.PlannerService;
 import com.minikun.planner.ReminderActionController;
 import com.minikun.proactive.DailyBriefingScheduler;
+import com.minikun.proactive.ProactiveAttentionBudget;
 import com.minikun.proactive.ProactiveNotificationPolicy;
 import com.minikun.runtime.CacheFormatter;
 import com.minikun.runtime.CacheService;
@@ -147,6 +148,7 @@ import com.minikun.relationship.RelationshipConfiguration;
         MemoryManagementService.class, MemoryManagementController.class, WeatherConfiguration.class,
         ExternalCalendarConfiguration.class, ExternalCalendarController.class,
         ExternalCalendarReminderScheduler.class, ProactiveNotificationPolicy.class,
+        ProactiveAttentionBudget.class,
         SystemHealthConfiguration.class, SystemHealthController.class,
         LocalHttpsConfiguration.class, LocalCertificateController.class,
         SyncConfiguration.class,

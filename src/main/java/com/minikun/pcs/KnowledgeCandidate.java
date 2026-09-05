@@ -25,7 +25,5 @@ public record KnowledgeCandidate(
             throw new IllegalArgumentException("source position must not be negative");
         }
         provenance = provenance == null ? "" : provenance;
-        candidateId = new String(candidateId);
-        content = new String(content);
     }
 }

@@ -81,11 +81,19 @@ CREATE TABLE IF NOT EXISTS minikun_conversation_thread (
     check_in_at TIMESTAMP WITH TIME ZONE,
     check_in_consent BOOLEAN NOT NULL DEFAULT FALSE,
     last_check_in_at TIMESTAMP WITH TIME ZONE,
+    last_check_in_feedback VARCHAR(24),
+    check_in_count INTEGER NOT NULL DEFAULT 0,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT chk_minikun_thread_check_in_consent
         CHECK (check_in_at IS NULL OR check_in_consent = TRUE)
 );
+
+ALTER TABLE minikun_conversation_thread
+    ADD COLUMN IF NOT EXISTS last_check_in_feedback VARCHAR(24);
+
+ALTER TABLE minikun_conversation_thread
+    ADD COLUMN IF NOT EXISTS check_in_count INTEGER NOT NULL DEFAULT 0;
 
 CREATE INDEX IF NOT EXISTS idx_minikun_conversation_thread_owner
     ON minikun_conversation_thread (owner_id, status, updated_at DESC);

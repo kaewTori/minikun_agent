@@ -100,7 +100,8 @@ public final class SpringAiToolCallback implements ToolCallback {
                 result = executor.execute(
                         new ToolCallContext(new ConversationId(conversationValue), toolCallId, ownerValue),
                         new ToolCall(toolCallId, tool.definition().name(), arguments));
-                boolean retry = step != null && executionTracker.shouldRetry(result, step.attempts());
+                boolean retry = step != null && !tool.requiresExplicitConfirmation(arguments)
+                        && executionTracker.shouldRetry(result, step.attempts());
                 if (runId.isPresent()) executionTracker.finishStep(runId.get(), toolCallId, result, retry);
                 if (!retry) break;
                 step = executionTracker.beginStep(runId.get(), toolCallId, tool.definition().name(), arguments);

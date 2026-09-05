@@ -17,9 +17,16 @@
 - Adaptive Companion ที่เรียนรู้ภาษา ความยาว รูปแบบ ระดับเทคนิค และโทนการตอบแบบ owner-scoped
 - Natural Conversation Advisor ที่ใช้เจตนา บริบทต่อเนื่อง และสัญญาณอารมณ์เพื่อปรับคำตอบโดยไม่เก็บข้อความเพิ่ม
 - Conversation Policy Engine ที่แยกการรับฟัง ชวนคิด ตัดสินใจ อธิบาย สร้างงาน และลงมือทำ พร้อม question/initiative/challenge contract ราย turn
+- Unified Turn Planner ที่สรุป intent, memory/search/tool, background execution และ expert review เป็นแผนเดียวก่อนเริ่มตอบ ลดการตัดสินใจซ้ำและรักษาความต่อเนื่องข้าม turn
+- Ambiguity Resolver สำหรับข้อความสั้นที่ตีความได้หลายทาง โดยใช้ task model แบบมี timeout และ fallback เป็นกฎที่คาดเดาได้
+- Graceful Recovery สำหรับ summary, memory, search, reviewer และ tool runtime โดยลดระดับความสามารถอย่างปลอดภัย และไม่ retry คำสั่งที่อาจทำซ้ำ
+- Safe Action Guard ไม่ retry tool ที่เปลี่ยน state โดยอัตโนมัติ และใช้ confirmation policy เดิมเป็นด่านอนุมัติ
+- Provider Health Circuit พัก TinyGrad verifier ชั่วคราวเมื่อผิดพลาดต่อเนื่อง แล้ว fallback ไปยัง draft ที่ปลอดภัย
 - Companion Mode แบบ conversation-scoped สำหรับสลับพฤติกรรมระหว่าง `companion`, `work` และ `focus`
 - Relationship Thread Memory สำหรับจำเรื่องที่ยังคุยไม่จบ และ consent-based check-in ที่เคารพ quiet hours
 - Feedback learning จาก 👍/👎 และเหตุผลแบบ closed category เพื่อปรับความยาว น้ำเสียง จำนวนคำถาม initiative และระดับการทักท้วง
+- Quality Loop ที่เชื่อม feedback กลับไปยัง intent/execution/profile ของคำตอบผ่าน response ID เพื่อวัดคุณภาพโดยไม่เก็บ prompt หรือคำตอบใน metric
+- Minikun Eval Lab สำหรับรัน baseline/custom Turn Plan suite และดู approval rate กับ shadow routing signals จาก feedback โดยไม่เรียก tool หรือเก็บข้อความเพิ่ม
 - Communication Assistant สำหรับ draft, rewrite, reply และ summarize โดยใช้โมเดลหลักแบบ draft-only
 - Agent Planner + Execution Loop สำหรับคำสั่งหลายขั้น พร้อม state, retry, confirmation stop และ resume จาก PostgreSQL
 - Investment Copilot แบบ owner-scoped สำหรับ policy, transaction ledger, average-cost portfolio,
@@ -28,10 +35,11 @@
 - สกัด long-term memory จาก PostgreSQL และเรียกคืนเชิงความหมายด้วย embedding พร้อม lexical fallback
 - ประกอบ prompt ผ่าน Provider Composition System (PCS)
 - ค้นเว็บผ่าน SearXNG พร้อม cache บน Valkey
-- เลือกว่าจะค้นเว็บหรือไม่ผ่าน rule/LLM decision mode
+- ตัดสินใจค้นเว็บและวาง semantic query plan ใน model call เดียว พร้อม bounded rule fallback
 - รวมผล search, explicit URL, image intent และ local context เป็น external-context action ก่อนเรียก Browser/Search
-- วางแผน query แบบ deterministic สำหรับตัด conversational wrapper และสร้าง core query ภาษาไทย/อังกฤษ
-- ส่ง language/category/time-range/safe-search options ไปยัง SearXNG พร้อม ranking และ URL deduplication
+- วางแผน primary/alternate query, location และ evidence needs แบบ dynamic โดยมี deterministic fallback
+- ตรวจคุณภาพคำแนะนำสถานที่และ retry ได้สูงสุดหนึ่งครั้งเมื่อแหล่งข้อมูลหรือรายละเอียดสำคัญบางเกินไป
+- ส่ง language/category/time-range/safe-search options ไปยัง search provider พร้อม multi-query ranking และ URL deduplication
 - Actuator health และ metrics
 - คำสั่ง runtime และ diagnostics ที่จัดการในระดับ application
 - Native function tools: `time.get_current_time`, `weather.get_forecast`, `web.search`, `web.open_url`, `image.generate`, `calculator.add`, `planner.manage`, `calendar.manage`, `task.manage`, `investment.manage`, `investment.analyze`, `homelab.guardian`, `computer.local`, `knowledge.personal`, `communication.assist` และ `personal.loop`
@@ -41,8 +49,9 @@
 - มี proactive safety policy สำหรับ quiet hours และ daily briefing ที่รวมอากาศ นัดหมาย งาน และสิ่งค้างเวลา 08:00 (`Asia/Bangkok`)
 - Closed-loop Personal Agent สำหรับ weekly review, outcome learning, universal inbox,
   safe automation recipes, incident correlation, explainability และ personal timeline
-- Minikun Web แบบ mobile-first และ dark theme สำหรับ streaming chat, vision, ไฟล์ข้อความ,
+- Minikun Web แบบ mobile-first และ dark theme สำหรับ background chat, vision, ไฟล์ข้อความ,
   voice input/output, ประวัติหลายบทสนทนา รวมถึง Cockpit, inbox และ Personal Experiment ที่ `/cockpit`
+- Background chat แบบ durable ที่ resume งานค้างหลัง restart จาก PostgreSQL และสั่ง retry งานที่ล้มเหลวผ่าน API ได้
 - Chat productivity ใน Cockpit: ค้นหา/ปักหมุด/เก็บถาวร/เปลี่ยนชื่อ/ทำสำเนา/ลบ/ส่งออกบทสนทนา,
   edit-to-branch, regenerate/retry, feedback, source cards, per-chat draft และไฟล์แนบต่อเนื่องข้าม turn
 - Personal Context Runtime สำหรับ context budget, dynamic max-tokens และ bounded recovery
@@ -147,8 +156,13 @@ Actuator ที่เปิดให้เข้าถึงคือ `/actuator
 | `SPRING_DATASOURCE_PASSWORD` | ว่าง | PostgreSQL password |
 | `OLLAMA_BASE_URL` | `http://127.0.0.1:11434` | Ollama endpoint |
 | `SPRING_AI_OLLAMA_CHAT_OPTIONS_MODEL` | gemma model ใน properties | chat model หลัก |
+| `MINIKUN_MODEL_MANAGEMENT_TOKEN` | ใช้ค่า memory token | token สำหรับดูและสลับ chat model ระหว่าง runtime |
+| `MINIKUN_EVAL_MANAGEMENT_TOKEN` | ใช้ค่า memory token | token สำหรับเรียก Eval Lab baseline/custom suite และ quality report |
+| `MINIKUN_TURN_PLANNING_AMBIGUITY_ENABLED` | `true` | เปิด task-model resolver เฉพาะ turn สั้นที่มีความกำกวม |
+| `MINIKUN_TURN_PLANNING_AMBIGUITY_TIMEOUT` | `PT1S` | เวลาสูงสุดของ ambiguity resolver ก่อนใช้ deterministic fallback |
 | `EMBEDDING_MODEL` | `qwen3-embedding:0.6b` | multilingual embedding model |
 | `OLLAMA_NUM_CTX` | `16384` | context window ของ Ollama |
+| `OLLAMA_KEEP_ALIVE` | `30m` | เก็บโมเดลหลักไว้ใน memory เพื่อลด cold start; ลดค่านี้ถ้า RAM/VRAM ไม่พอให้ main และ task model อยู่พร้อมกัน |
 | `MINIKUN_MODEL_COOPERATION_ENABLED` | `true` | เปิด Ollama → TinyGrad precision pass |
 | `MINIKUN_MODEL_COOPERATION_MODE` | `hybrid` | `hybrid` แสดง Ollama ก่อนแล้วตรวจเบื้องหลัง, `blocking` รอตรวจให้เสร็จก่อนตอบ |
 | `MINIKUN_MODEL_COOPERATION_TIMEOUT` | `PT300S` | timeout เฉพาะ TinyGrad verification; timeout แล้ว fallback ตาม mode |
@@ -168,6 +182,8 @@ Actuator ที่เปิดให้เข้าถึงคือ `/actuator
 | `MINIKUN_SEARCH_FAILOVER_COOLDOWN` | `PT120S` | ระยะพัก primary หลัง circuit เปิด |
 | `MINIKUN_SEARCH_FAILOVER_FAILURE_THRESHOLD` | `3` | จำนวน failure ก่อนเปิด circuit |
 | `MINIKUN_SEARCH_ENABLED` | `true` | เปิด/ปิด web search |
+| `MINIKUN_SEARCH_DECISION_MODE` | `llm` | ใช้ task model ตัดสินใจและวาง query plan; fast path ใช้เฉพาะ intent ที่ชัด และ local discovery ผ่าน model |
+| `MINIKUN_SEARCH_DECISION_TIMEOUT` | `PT2S` | เวลาสูงสุดของ LLM classifier ก่อน fallback อย่างปลอดภัย |
 | `MINIKUN_VISUAL_GENERATION_ENABLED` | `true` | เปิดการสร้างภาพจากเรื่องและ Image Studio |
 | `MINIKUN_VISUAL_TINYGRAD_BASE_URL` | `http://127.0.0.1:8002` | TinyGrad SDXL service ที่มี `/generate` และ `/health` |
 | `MINIKUN_VISUAL_TINYGRAD_TOKEN` | ว่าง | Bearer token หากตั้ง `SDXL_SERVER_TOKEN` ฝั่ง TinyGrad |
@@ -213,6 +229,7 @@ Actuator ที่เปิดให้เข้าถึงคือ `/actuator
 | `MINIKUN_PROACTIVE_ZONE` | `Asia/Bangkok` | timezone ที่ใช้คำนวณ quiet hours |
 | `MINIKUN_PROACTIVE_QUIET_HOURS_START` | `22:00` | เวลาเริ่มช่วงห้ามรบกวน |
 | `MINIKUN_PROACTIVE_QUIET_HOURS_END` | `07:00` | เวลาสิ้นสุดช่วงห้ามรบกวน |
+| `MINIKUN_PROACTIVE_ATTENTION_DAILY_MAXIMUM` | `3` | จำนวน briefing/goal review/conversation check-in ที่รบกวนได้ต่อวัน; priority สูงยังผ่านได้ |
 | `MINIKUN_PROACTIVE_BRIEFING_ENABLED` | `true` | เปิด daily briefing ที่รวมอากาศ นัดหมาย งาน และสิ่งค้าง |
 | `MINIKUN_PROACTIVE_BRIEFING_OWNER_ID` | `default` | owner ที่ใช้สร้าง daily briefing ใน deployment แบบ single-user |
 | `MINIKUN_PROACTIVE_BRIEFING_TIME` | `08:00` | เวลาท้องถิ่นที่ส่ง daily briefing |
@@ -277,16 +294,16 @@ TinyGrad อย่างน้อยระดับ `MEDIUM` เสมอ แม
 | `MINIKUN_SEARCH_PARALLEL_QUERIES_ENABLED` | `true` | ทำ expanded search queries แบบ parallel |
 | `MINIKUN_SEARCH_PARALLEL_QUERIES_MAX_CONCURRENCY` | `3` | จำนวน search query สูงสุดที่ทำพร้อมกัน |
 | `MINIKUN_SEARCH_DECISION_OLLAMA_BASE_URL` | `http://127.0.0.1:11434` | Ollama endpoint เฉพาะ search classifier |
-| `MINIKUN_SEARCH_DECISION_OLLAMA_MODEL` | `hf.co/mradermacher/llama3.2-typhoon2-3b-GGUF:Q4_K_M` | โมเดล fallback หลัง rule และ continuity guardrail |
-| `MINIKUN_SEARCH_DECISION_TIMEOUT` | `PT15S` | timeout เฉพาะ search classifier |
-| `MINIKUN_BROWSER_ENABLED` | `true` | เปิด/ปิดการอ่าน URL ผ่าน minikun-browser-worker |
-| `MINIKUN_BROWSER_WORKER_URL` | `http://127.0.0.1:3000` | endpoint ของ browser worker |
-| `MINIKUN_BROWSER_WORKER_TOKEN` | ว่าง | Bearer token ที่ตรงกับ `BROWSER_WORKER_TOKEN` ของ worker |
+| `MINIKUN_SEARCH_DECISION_OLLAMA_MODEL` | `hf.co/mradermacher/llama3.2-typhoon2-3b-GGUF:Q4_K_M` | โมเดลตัดสิน intent ที่ไม่เข้า fast path แบบชัดเจน |
+| `MINIKUN_SEARCH_DECISION_TIMEOUT` | `PT2S` | timeout เฉพาะ search classifier ก่อนใช้ rule fallback |
+| `MINIKUN_BROWSER_ENABLED` | `true` | เปิด/ปิดการอ่าน URL ผ่าน Crawl4AI |
+| `MINIKUN_CRAWL4AI_BASE_URL` | `http://127.0.0.1:11235` | endpoint ของ Crawl4AI |
+| `MINIKUN_CRAWL4AI_TOKEN` | ใช้ค่า `CRAWL4AI_API_TOKEN` | Bearer token สำหรับ Crawl4AI |
 | `MINIKUN_BROWSER_TIMEOUT` | `20s` | timeout ของการ render แต่ละ URL |
 | `MINIKUN_BROWSER_MAX_URLS` | `5` | จำนวน URL สูงสุดต่อข้อความ |
-| `MINIKUN_BROWSER_BLOCK_PRIVATE_ADDRESSES` | `true` | ป้องกัน browser worker เข้าถึง localhost/private network |
+| `MINIKUN_BROWSER_BLOCK_PRIVATE_ADDRESSES` | `true` | ป้องกัน Crawl4AI เข้าถึง localhost/private network |
 | `MINIKUN_BROWSER_MAX_CONTENT_CHARACTERS` | `12000` | ขนาดเนื้อหาสูงสุดต่อ URL ก่อนใส่เข้า Knowledge context |
-| `MINIKUN_BROWSER_MAX_CONCURRENCY` | `3` | จำนวน URL ที่ browser worker อ่านพร้อมกัน |
+| `MINIKUN_BROWSER_MAX_CONCURRENCY` | `3` | จำนวน URL ที่ Crawl4AI อ่านพร้อมกัน |
 | `MINIKUN_RESEARCH_SOURCE_READ_LIMIT` | `3` | จำนวนแหล่งต้นฉบับจากผลค้นหาที่เปิดอ่านใน deep-research path (`0` เพื่อปิด stage นี้) |
 | `MINIKUN_RESEARCH_AUTONOMOUS_ENABLED` | `true` | เปิด plan-search-read-evaluate loop สำหรับ explicit deep research |
 | `MINIKUN_RESEARCH_AUTONOMOUS_MAX_ITERATIONS` | `3` | จำนวนรอบประเมินและค้นซ้ำสูงสุด (`1-5`) |
@@ -417,8 +434,8 @@ curl -N -X POST http://127.0.0.1:8080/v1/chat/completions \
 
 ### อ่านและสรุปลิงก์
 
-เมื่อข้อความล่าสุดมี HTTP/HTTPS URL ระบบจะเรียก `minikun-browser-worker` แบบ synchronous
-แล้วให้โมเดลตอบโดยอ้างอิงจากเนื้อหาที่ render ได้:
+เมื่อข้อความล่าสุดมี HTTP/HTTPS URL ระบบจะเรียก Crawl4AI `/md` เพื่อรับ Fit Markdown
+แล้วให้โมเดลตอบโดยอ้างอิงจากเนื้อหาที่อ่านได้:
 
 ```sh
 curl -X POST http://127.0.0.1:8080/v1/chat/completions \
@@ -429,8 +446,8 @@ curl -X POST http://127.0.0.1:8080/v1/chat/completions \
   }'
 ```
 
-ตั้ง `MINIKUN_BROWSER_WORKER_URL` ให้ agent มองเห็น worker และกำหนด
-`MINIKUN_BROWSER_WORKER_TOKEN` เมื่อ worker เปิดใช้ `BROWSER_WORKER_TOKEN`.
+ตั้ง `MINIKUN_CRAWL4AI_BASE_URL` ให้ agent มองเห็น Crawl4AI และกำหนด
+`CRAWL4AI_API_TOKEN` ใน `/Volumes/minikun/homelab/.env`.
 
 ระบบจะส่ง `X-Conversation-Id` กลับมาใน response หาก request ไม่ได้ระบุ conversation ID ระบบจะสร้าง UUID ใหม่ให้โดยอัตโนมัติ ลำดับการเลือก ID คือ:
 
@@ -443,6 +460,15 @@ curl -X POST http://127.0.0.1:8080/v1/chat/completions \
 
 ```sh
 curl http://127.0.0.1:8080/v1/models
+```
+
+ดูโมเดลที่ติดตั้งใน Ollama และสลับโมเดลหลักได้ทันทีโดยไม่ restart server (ค่าจะกลับเป็นค่า config เมื่อ restart):
+
+```sh
+curl http://127.0.0.1:8080/v1/models/runtime
+curl -X PUT http://127.0.0.1:8080/v1/models/runtime \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"qwen3:8b"}'
 ```
 
 ### Agent Planner + Execution Loop
@@ -705,7 +731,16 @@ curl -X POST http://127.0.0.1:8080/v1/communication/assist \
 
 Short-term history ถูกผูกกับ `ConversationId` และเก็บทั้งข้อความฝั่ง user กับ assistant ผ่าน Spring AI JDBC Chat Memory ใน PostgreSQL เมื่อบทสนทนายาวขึ้น ระบบจะสรุปช่วงเก่าแบบ rolling summary ลง `minikun_conversation_summary` แยกตาม `owner_id` และ `conversation_id` แล้วใช้ร่วมกับข้อความล่าสุด ส่วน long-term memory ถูกเก็บในตาราง `minikun_memory` ตาม schema ใน [`memory-schema.sql`](src/main/resources/memory-schema.sql)
 
-ใน request chat ระบบจะโหลด history เดิม, เรียกคืน knowledge ที่เกี่ยวข้อง, สร้าง prompt ผ่าน PCS แล้วจึงเรียก chat model โดยส่ง recent turns เป็นข้อความ `USER`/`ASSISTANT` ตาม role จริง ส่วน rolling summary และ omission note อยู่ใน system context หลังตอบสำเร็จจึงบันทึก user และ assistant พร้อมกันเป็น completed turn เดียว จึงไม่ทิ้ง user message ค้างเมื่อ model ล้มเหลวหรือ stream ถูกยกเลิก
+Long-term memory รองรับ `EPISODE` สำหรับเหตุการณ์ที่มีความหมายต่อเจ้าของ เช่น ความสำเร็จ
+ช่วงยาก หรือจังหวะสำคัญของความสัมพันธ์ โดย reflection จะไม่เก็บอารมณ์ชั่วคราวเป็น episode
+ส่วน emotional continuity เก็บเพียงสัญญาณอารมณ์แบบชั่วคราวใน process ไม่เก็บข้อความดิบ และหมดอายุใน 24 ชั่วโมง
+
+Conversation check-in เก็บจำนวนครั้งและ feedback `HELPFUL`, `NOT_NOW`, `WRONG_CONTEXT`,
+`STOP_THIS_TOPIC` เพื่อให้เลื่อนหรือหยุดตามเรื่องได้จาก Cockpit หรือ
+`POST /v1/personal/conversation-threads/{id}/feedback` การเพิ่มคอลัมน์สำหรับฐานข้อมูลเดิมอยู่ใน
+[`V20260905_01__companion_care_feedback.sql`](deploy/migrations/V20260905_01__companion_care_feedback.sql)
+
+ใน request chat ระบบจะโหลด history, summary, companion mode, personal knowledge, memory และ LLM search decision แบบขนานก่อนสร้าง prompt ผ่าน PCS โดยส่ง recent turns เป็นข้อความ `USER`/`ASSISTANT` ตาม role จริง ส่วน rolling summary และ omission note อยู่ใน system context หลังตอบสำเร็จจึงบันทึก user และ assistant พร้อมกันเป็น completed turn เดียว จึงไม่ทิ้ง user message ค้างเมื่อ model ล้มเหลวหรือ stream ถูกยกเลิก Cockpit ใช้ token streaming สำหรับคำตอบทั่วไปทันที และเก็บ durable background job ไว้เฉพาะงานยาวอย่าง deep research หรือการสร้างภาพ
 
 เมื่อมี tool result ที่ยืนยันแล้ว ระบบจะใส่ผลลัพธ์นั้นไว้ใน context ของ prompt และให้โมเดลสร้างคำตอบสุดท้ายเองตาม MCS แทนการส่งข้อความสำเร็จรูปจาก tool โดยตรง
 
@@ -822,9 +857,14 @@ https://mini-kun:8443/cockpit/
 `http://<LAN-IP>:8080/v1/system/https/ca` หากใช้ iPhone ให้ติดตั้ง profile ที่ดาวน์โหลด
 จากนั้นเปิด full trust ที่ Settings > General > About > Certificate Trust Settings ก่อนเปิด HTTPS
 
-หน้า Chat เรียก `/v1/chat/completions` แบบ streaming จึงใช้ model, memory, search, vision,
-native tools และ confirmation policy ชุดเดียวกับ API หลัก รองรับการแนบ JPEG/PNG/WebP,
-ไฟล์ข้อความ, การถอดเสียงผ่าน `/v1/audio/transcriptions` และอ่านคำตอบผ่าน `/v1/audio/speech`
+หน้า Chat ส่งงานไปที่ `/v1/chat/background` แล้วให้ server ทำต่อแม้สลับไปใช้แอปอื่น โดยยังใช้
+model, memory, search, vision, native tools และ confirmation policy ชุดเดียวกับ API หลัก
+เมื่อเสร็จจะส่งผ่าน ntfy และหน้า Chat จะรับผลกลับอัตโนมัติเมื่อเปิดค้างไว้หรือกลับมาอีกครั้ง
+สถานะและ payload ของงานเก็บใน PostgreSQL เป็นเวลา 24 ชั่วโมง งานที่ค้างระหว่าง restart จะทำต่ออัตโนมัติ
+และงานที่ failed/cancelled เริ่มใหม่ได้ด้วย `POST /v1/chat/background/{jobId}/resume`
+ให้ติดตั้งแอป ntfy บนมือถือและ subscribe topic จาก `MINIKUN_NTFY_REMINDER_TOPIC` เพื่อรับแจ้งเตือน
+รองรับการแนบ JPEG/PNG/WebP, ไฟล์ข้อความ, การถอดเสียงผ่าน `/v1/audio/transcriptions`
+และอ่านคำตอบผ่าน `/v1/audio/speech`
 
 หน้าเว็บไม่ฝัง token ลง bundle และเก็บ token ที่กรอกไว้เฉพาะ `sessionStorage` ของแท็บปัจจุบัน
 ส่วนรายการบทสนทนาและข้อความสำหรับแสดงผล sync ผ่าน PostgreSQL โดยใช้ device session แบบ
@@ -839,6 +879,19 @@ Settings → Device Sync → เชื่อมอุปกรณ์ใหม่
 สามารถดู last seen และถอนสิทธิ์อุปกรณ์อื่นแยกรายเครื่องได้จากหน้าเดียวกัน เมื่ออุปกรณ์เครื่องสุดท้าย
 ถูกตัดการเชื่อมต่อ Mac เครื่องหลักจะ bootstrap ใหม่ได้อีกครั้ง ประวัติเดิมจาก `localStorage`
 จะถูก import ครั้งแรกโดยอัตโนมัติ
+
+Eval Lab อยู่ในแท็บ “ระบบ” ของ Cockpit และเรียกตรงผ่าน API ได้โดยไม่สร้างคำตอบหรือเรียก tool:
+
+```sh
+curl -H "X-Minikun-Personal-Token: $MINIKUN_EVAL_MANAGEMENT_TOKEN" \
+  'http://127.0.0.1:8080/v1/evals/turn-plans/baseline'
+
+curl -H "X-Minikun-Personal-Token: $MINIKUN_EVAL_MANAGEMENT_TOKEN" \
+  'http://127.0.0.1:8080/v1/evals/turn-plans/quality?owner_id=default&limit=100'
+```
+
+quality report แสดง approval rate แยกตาม intent/execution และ shadow signals จาก feedback เชิงลบ
+เพื่อเสนอสิ่งที่ควรทดลองปรับเท่านั้น ระบบจะไม่เปลี่ยน routing policy เอง
 
 ตัวอย่างสร้างและเริ่ม Personal Experiment:
 
@@ -931,4 +984,4 @@ cd /Volumes/minikun/homelab/java
 - deployment จะรัน [`deploy/migrate-database.sh`](deploy/migrate-database.sh) ก่อน restart เพื่อใช้ migration ที่มี version; `spring.sql.init.mode=always` ยังคงไว้สำหรับ local bootstrap จนกว่า legacy schema ทั้งหมดจะย้ายเข้าระบบ migration
 - อย่า commit secret เช่น database password หรือ API key ลง repository ควรส่งผ่าน environment variables
 - ตรวจสอบ model name ให้ตรงกับ model ที่ติดตั้งใน Ollama/compatible backend
-- การเปิด `MINIKUN_MEMORY_REFLECTION_ENABLED` และ search decision mode แบบ LLM จะเพิ่ม latency และการเรียก model ต่อ request
+- search decision ยังคงใช้ mode `llm` โดยจำผล query/context เดิม 5 นาทีและ fallback ภายใน 2 วินาที จึงไม่ต้องขยาย keyword dictionary; การเปิด `MINIKUN_MEMORY_REFLECTION_ENABLED` ยังเพิ่มการเรียก task model หลังจบบทสนทนา

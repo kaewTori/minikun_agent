@@ -45,6 +45,7 @@ import com.minikun.vision.VisionInput;
 import com.minikun.relationship.ConversationThreadService;
 import com.minikun.research.ResearchIntentDetector;
 import java.util.ArrayList;
+import java.util.concurrent.CompletableFuture;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -113,12 +114,21 @@ final class ChatPromptFactory {
     Result prepare(Request input) {
         ChatCompletionRequest request = input.request();
         ChatMessage userMessage = input.userMessage();
-        boolean creativeRequest = isCreativeConversation(input);
-        boolean searchRequested = input.knowledgeSelection() != null
-                && input.knowledgeSelection().searchSignals().searchRequested();
-        boolean deepResearch = input.knowledgeSelection() != null
-                && (input.knowledgeSelection().researchTrace().autonomous()
-                        || new ResearchIntentDetector().detect(userMessage.content()).deepResearch());
+        CompletableFuture<PersonalUserModel> userModelFuture = CompletableFuture.supplyAsync(
+                () -> userModelService == null ? PersonalUserModel.EMPTY : safeUserModel(input.ownerId()));
+        CompletableFuture<String> relationshipFuture = CompletableFuture.supplyAsync(
+                () -> relationshipContext(input));
+        boolean creativeRequest = input.turnPlan() == null
+                ? isCreativeConversation(input) : input.turnPlan().creative();
+        boolean searchRequested = input.turnPlan() == null
+                ? input.knowledgeSelection() != null
+                        && input.knowledgeSelection().searchSignals().searchRequested()
+                : input.turnPlan().needsWeb();
+        boolean deepResearch = input.turnPlan() == null
+                ? input.knowledgeSelection() != null
+                        && (input.knowledgeSelection().researchTrace().autonomous()
+                                || new ResearchIntentDetector().detect(userMessage.content()).deepResearch())
+                : input.turnPlan().deepResearch();
         ChatGenerationOptionsResolver.Result generation = generationOptionsResolver.resolve(
                 request,
                 userMessage.content(),
@@ -128,6 +138,7 @@ final class ChatPromptFactory {
                 searchRequested,
                 deepResearch,
                 creativeRequest,
+                input.turnPlan(),
                 configuration.generationMaxTokens(),
                 configuration.generationTemperature(),
                 generationProfileSelector,
@@ -182,15 +193,14 @@ final class ChatPromptFactory {
                 ? KnowledgeContext.empty() : input.knowledgeSelection().selection().knowledgeContext();
         var conversationStyle = conversationStyleAdvisor.advise(
                 userMessage.content(), conversationWindow.messages());
+        PersonalUserModel userModel = userModelFuture.join();
         var personaSignals = adaptivePersonaService == null
                 ? com.minikun.personality.signal.PersonaSelectionSignals.EMPTY
                 : adaptivePersonaService.evaluate(
                         input.ownerId(), userMessage.content(), promptSearchSignals.searchRequested(),
                         configuration.nativeToolsAvailable() || input.verifiedToolResult() != null,
-                        false, conversationStyle.mood()).signals();
-        PersonalUserModel userModel = userModelService == null
-                ? PersonalUserModel.EMPTY
-                : safeUserModel(input.ownerId());
+                        false, conversationStyle.mood(), userModel).signals();
+        PersonalUserModel promptUserModel = leanUserModel(userModel, generation.profile());
         PromptRequest promptRequest = new PromptRequest(
                 characterSpecification,
                 new RuntimeContext(runtime),
@@ -199,7 +209,8 @@ final class ChatPromptFactory {
                         : new ConversationContext(
                                 conversationContent, conversationSystemContent, conversationMessages),
                 promptKnowledge,
-                capabilities(input, conversationStyle.instruction(), creativeRequest),
+                capabilities(input, conversationStyle.instruction(), creativeRequest,
+                        relationshipFuture.join()),
                 new com.minikun.pcs.model.UserMessage(userMessage.content()),
                 promptSearchSignals,
                 promptSearchContext,
@@ -207,7 +218,7 @@ final class ChatPromptFactory {
                 promptKnowledgeConsolidation,
                 null,
                 personaSignals,
-                userModel);
+                promptUserModel);
         PersonalContextRuntime contextRuntime = personalContextRuntime;
         if (contextRuntime == null
                 && configuration.dynamicTokenBudgetEnabled()
@@ -218,7 +229,7 @@ final class ChatPromptFactory {
             recordEffectiveGenerationLimit(generation.profile(), generation.options().maxTokens());
             return new Result(
                     adapt(promptComposer.compose(promptRequest), generation.options(), input.visionInput()),
-                    generation.profile());
+                    generation.profile(), null);
         }
         ModelCapability capability = configuration.dynamicTokenBudgetEnabled()
                 && modelCapabilityRegistry != null
@@ -243,7 +254,9 @@ final class ChatPromptFactory {
                 result.snapshot().estimatedInputTokens(),
                 result.snapshot().allocatedOutputTokens());
         recordEffectiveGenerationLimit(generation.profile(), result.generationOptions().maxTokens());
-        return new Result(adapt(result.prompt(), result.generationOptions(), input.visionInput()), generation.profile());
+        return new Result(
+                adapt(result.prompt(), result.generationOptions(), input.visionInput()),
+                generation.profile(), result.snapshot().estimatedInputTokens());
     }
 
     private void recordEffectiveGenerationLimit(String profile, Integer maxTokens) {
@@ -275,8 +288,19 @@ final class ChatPromptFactory {
         }
     }
 
+    private PersonalUserModel leanUserModel(PersonalUserModel model, String profile) {
+        if (model == null || !("companion".equals(profile)
+                || "general".equals(profile) || "focus".equals(profile))) {
+            return model == null ? PersonalUserModel.EMPTY : model;
+        }
+        // Relevant memories are already carried by the knowledge lane; avoid sending the same store twice.
+        return new PersonalUserModel(model.ownerId(), model.profile(), model.preferences(),
+                List.of(), List.of(), model.generatedAt());
+    }
+
     private List<CapabilityInstruction> capabilities(
-            Request input, String conversationStyleInstruction, boolean creativeRequest) {
+            Request input, String conversationStyleInstruction, boolean creativeRequest,
+            String relationshipContext) {
         List<CapabilityInstruction> values = new ArrayList<>(capabilityFactory.create(
                 input.userMessage().content(), input.knowledgeSelection(), input.imageAwareness(),
                 input.verifiedToolResult(), input.visionInput(), input.interactionMode(),
@@ -297,17 +321,8 @@ final class ChatPromptFactory {
             log.debug("process=conversation_continuity event=resolved confidence={} repair_reason={}",
                     continuity.confidence(), repair.reason());
         }
-        if (conversationThreadService != null) {
-            try {
-                String context = conversationThreadService.promptContext(
-                        input.ownerId(), java.util.Objects.requireNonNullElse(
-                                input.request().conversation_id(), ""), input.userMessage().content());
-                if (hasText(context)) {
-                    values.add(new CapabilityInstruction("Relationship continuity", context, true));
-                }
-            } catch (RuntimeException exception) {
-                log.warn("Conversation thread context failed; continuing without it", exception);
-            }
+        if (hasText(relationshipContext)) {
+            values.add(new CapabilityInstruction("Relationship continuity", relationshipContext, true));
         }
         if (input.illustrationPlanned()) {
             values.add(new CapabilityInstruction("Generated story illustration", """
@@ -318,6 +333,17 @@ final class ChatPromptFactory {
                     """.strip(), true));
         }
         return List.copyOf(values);
+    }
+
+    private String relationshipContext(Request input) {
+        if (conversationThreadService == null) return "";
+        try {
+            return conversationThreadService.promptContext(
+                    input.ownerId(), input.conversationId(), input.userMessage().content());
+        } catch (RuntimeException exception) {
+            log.warn("Conversation thread context failed; continuing without it", exception);
+            return "";
+        }
     }
 
     private String continuityContext(List<ChatMessage> history) {
@@ -417,12 +443,24 @@ final class ChatPromptFactory {
             ImageAwareness imageAwareness,
             ToolEvidence verifiedToolResult,
             String ownerId,
+            String conversationId,
             CompanionModeContext interactionMode,
             VisionInput visionInput,
-            boolean illustrationPlanned) {
+            boolean illustrationPlanned,
+            TurnPlan turnPlan) {
+
+        Request(ChatCompletionRequest request, ChatMessage userMessage, List<ChatMessage> history,
+                String conversationSummary, int recentMessageLimit, ChatKnowledgeSelection knowledgeSelection,
+                ImageAwareness imageAwareness, ToolEvidence verifiedToolResult, String ownerId,
+                String conversationId, CompanionModeContext interactionMode, VisionInput visionInput,
+                boolean illustrationPlanned) {
+            this(request, userMessage, history, conversationSummary, recentMessageLimit, knowledgeSelection,
+                    imageAwareness, verifiedToolResult, ownerId, conversationId, interactionMode, visionInput,
+                    illustrationPlanned, null);
+        }
     }
 
-    record Result(Prompt prompt, String generationProfile) {
+    record Result(Prompt prompt, String generationProfile, Long estimatedInputTokens) {
     }
 
     record Configuration(

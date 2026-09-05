@@ -60,8 +60,10 @@ public final class EmbeddingMemoryRelevanceRanker implements MemoryRanker {
         if (query == null || query.isBlank()) return MemoryRelevanceRanker.rank(memories, query, limit);
         try {
             float[] queryEmbedding = embeddingModel.embed(query);
+            Map<String, float[]> embeddings = embeddingsFor(memories);
             List<ScoredMemory> scored = memories.stream()
-                    .map(memory -> new ScoredMemory(memory, blendedScore(memory, queryEmbedding)))
+                    .map(memory -> new ScoredMemory(
+                            memory, blendedScore(memory, queryEmbedding, embeddings.get(key(memory)))))
                     .sorted(Comparator.comparingDouble(ScoredMemory::score).reversed()
                             .thenComparing(item -> item.memory().createdAt(), Comparator.reverseOrder()))
                     .limit(limit)
@@ -74,22 +76,47 @@ public final class EmbeddingMemoryRelevanceRanker implements MemoryRanker {
         }
     }
 
-    private double blendedScore(Memory memory, float[] queryEmbedding) {
-        String key = memory.id().value() + ":" + Integer.toHexString(memory.content().hashCode());
-        float[] memoryEmbedding;
+    private Map<String, float[]> embeddingsFor(List<Memory> memories) {
+        Map<String, float[]> result = new LinkedHashMap<>();
+        Map<String, Memory> missing = new LinkedHashMap<>();
         synchronized (memoryEmbeddings) {
-            memoryEmbedding = memoryEmbeddings.get(key);
-        }
-        if (memoryEmbedding == null) {
-            float[] created = embeddingModel.embed(memory.category().name() + ": " + memory.content());
-            synchronized (memoryEmbeddings) {
-                float[] existing = memoryEmbeddings.get(key);
-                memoryEmbedding = existing == null ? created : existing;
-                if (existing == null) memoryEmbeddings.put(key, created);
+            for (Memory memory : memories) {
+                String key = key(memory);
+                float[] cached = memoryEmbeddings.get(key);
+                if (cached == null) missing.putIfAbsent(key, memory);
+                else result.put(key, cached);
             }
         }
+        if (!missing.isEmpty()) {
+            List<float[]> created = embeddingModel.embed(missing.values().stream()
+                    .map(this::embeddingText)
+                    .toList());
+            if (created == null || created.size() != missing.size()) {
+                throw new IllegalStateException("embedding batch size must match memory batch size");
+            }
+            int index = 0;
+            for (String key : missing.keySet()) {
+                float[] embedding = created.get(index++);
+                result.put(key, embedding);
+                synchronized (memoryEmbeddings) {
+                    memoryEmbeddings.putIfAbsent(key, embedding);
+                }
+            }
+        }
+        return result;
+    }
+
+    private double blendedScore(Memory memory, float[] queryEmbedding, float[] memoryEmbedding) {
         double semantic = (cosine(queryEmbedding, memoryEmbedding) + 1.0) / 2.0;
         return semantic * semanticWeight + memory.confidence() * (1.0 - semanticWeight);
+    }
+
+    private String key(Memory memory) {
+        return memory.id().value() + ":" + Integer.toHexString(memory.content().hashCode());
+    }
+
+    private String embeddingText(Memory memory) {
+        return memory.category().name() + ": " + memory.content();
     }
 
     private double cosine(float[] left, float[] right) {

@@ -8,8 +8,8 @@ import java.util.regex.Pattern;
 /** Deterministically detects image creation without confusing it with image search. */
 public final class StoryIllustrationIntentDetector {
     private static final Pattern DIRECT_IMAGE = Pattern.compile(
-            "(?:สร้าง|วาด|เจน|ทำ|ออกแบบ).{0,40}(?:ภาพ|รูป|อิลลัส(?:เตรชัน)?|ภาพประกอบ)|"
-                    + "(?:generate|create|draw|make|design).{0,40}(?:images?|pictures?|illustrations?|artwork)",
+            "(?:สร้าง|วาด|เจน|เจเนอเรต|ทำ|ออกแบบ|gen(?:erate)?|create|draw|make|design)"
+                    + ".{0,40}(?:ภาพ|รูป|อิลลัส(?:เตรชัน)?|ภาพประกอบ|images?|pictures?|illustrations?|artwork)",
             Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
     private static final Pattern VISUAL_COMPANION = Pattern.compile(
             "(?:พร้อม|มี|ใส่|แทรก|แนบ|ประกอบ|เพิ่ม).{0,30}(?:ภาพ|รูป|อิลลัส(?:เตรชัน)?|ภาพประกอบ)|"

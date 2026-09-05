@@ -2,7 +2,7 @@ package com.minikun.browser;
 
 import java.util.Objects;
 
-/** Rendered browser content returned by minikun-browser-worker. */
+/** Rendered browser content returned by Crawl4AI. */
 public record BrowserContent(String url, String content, String contentType, boolean truncated) {
     public BrowserContent {
         Objects.requireNonNull(url, "url must not be null");

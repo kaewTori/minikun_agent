@@ -27,7 +27,10 @@ public final class ReflectionPromptBuilder {
                     Extract only durable, user-confirmed memories from the conversation snapshot below.
                     Return exactly one JSON object with a `memories` array and no surrounding text.
                     Each array element must contain exactly `category`, `content`, `confidence`, and `reason`.
-                    `category` must be one of `PREFERENCE`, `GOAL`, `PROFILE`, `SKILL`, or `PROJECT`.
+                    `category` must be one of `PREFERENCE`, `GOAL`, `PROFILE`, `SKILL`, `PROJECT`, or `EPISODE`.
+                    Use `EPISODE` only for a concrete event the user explicitly says was personally meaningful,
+                    celebratory, difficult, or relationship-relevant and likely useful in a later conversation.
+                    Include the event and why it mattered, but do not preserve a transient mood by itself.
                     `confidence` must be a finite number from 0.0 to 1.0.
                     Use only facts explicitly stated or confirmed by the user messages in this snapshot.
                     Do not use the assistant messages as evidence and do not extract facts about the assistant.

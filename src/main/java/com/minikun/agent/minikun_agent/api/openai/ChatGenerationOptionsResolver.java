@@ -17,6 +17,7 @@ final class ChatGenerationOptionsResolver {
             boolean searchRequested,
             boolean deepResearch,
             boolean creativeConversation,
+            TurnPlan turnPlan,
             int configuredMaxTokens,
             double configuredTemperature,
             ChatGenerationProfileSelector profileSelector,
@@ -32,10 +33,9 @@ final class ChatGenerationOptionsResolver {
                 profile = "default";
             } else {
                 ChatGenerationProfileSelector.Selection selection = profileSelector.select(
-                        userText, mode,
-                        new ChatGenerationProfileSelector.GenerationSignals(
+                        userText, mode, new ChatGenerationProfileSelector.GenerationSignals(
                                 toolOrVisionRequest, searchRequested, deepResearch, creativeConversation),
-                        configuredMaxTokens);
+                        turnPlan, configuredMaxTokens);
                 maxTokens = selection.maxTokens();
                 profile = selection.profile();
             }
@@ -51,5 +51,15 @@ final class ChatGenerationOptionsResolver {
     }
 
     record Result(GenerationOptions options, String profile) {
+    }
+
+    Result resolve(
+            ChatCompletionRequest request, String userText, CompanionMode mode,
+            boolean toolOrVisionRequest, boolean searchRequested, boolean deepResearch,
+            boolean creativeConversation, int configuredMaxTokens, double configuredTemperature,
+            ChatGenerationProfileSelector profileSelector, ChatPerformanceMetrics performanceMetrics) {
+        return resolve(request, userText, mode, toolOrVisionRequest, searchRequested, deepResearch,
+                creativeConversation, null, configuredMaxTokens, configuredTemperature,
+                profileSelector, performanceMetrics);
     }
 }

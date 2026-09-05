@@ -5,19 +5,30 @@ import com.minikun.pcs.KnowledgeSelection;
 import com.minikun.pcs.SearchContext;
 import com.minikun.pcs.SearchSelectionSignals;
 import com.minikun.research.ResearchTrace;
+import com.minikun.search.model.SearchDecision;
 
 record ChatKnowledgeSelection(
         KnowledgeSelection selection,
         KnowledgeConsolidation consolidation,
         SearchSelectionSignals searchSignals,
         SearchContext searchContext,
-        ResearchTrace researchTrace) {
+        ResearchTrace researchTrace,
+        SearchDecision searchDecision) {
     ChatKnowledgeSelection(
             KnowledgeSelection selection,
             KnowledgeConsolidation consolidation,
             SearchSelectionSignals searchSignals,
             SearchContext searchContext) {
-        this(selection, consolidation, searchSignals, searchContext, ResearchTrace.EMPTY);
+        this(selection, consolidation, searchSignals, searchContext, ResearchTrace.EMPTY, null);
+    }
+
+    ChatKnowledgeSelection(
+            KnowledgeSelection selection,
+            KnowledgeConsolidation consolidation,
+            SearchSelectionSignals searchSignals,
+            SearchContext searchContext,
+            ResearchTrace researchTrace) {
+        this(selection, consolidation, searchSignals, searchContext, researchTrace, null);
     }
 
     ChatKnowledgeSelection {

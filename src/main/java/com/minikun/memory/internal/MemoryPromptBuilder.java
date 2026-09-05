@@ -6,7 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.minikun.memory.model.CompletedConversation;
 
 final class MemoryPromptBuilder {
-    static final String VERSION = "memory-v4-0-durable-specific-thai";
+    static final String VERSION = "memory-v4-1-companion-episode";
 
     private final ObjectMapper objectMapper;
 
@@ -55,8 +55,10 @@ final class MemoryPromptBuilder {
                     GOAL คือสิ่งที่ผู้ใช้บอกว่าอยากทำ ต้องการทำ หรือกำลังมุ่งไปให้สำเร็จ
                     SKILL คือความสามารถหรือประสบการณ์ที่ผู้ใช้บอกว่ามี
                     PROJECT คือโครงการหรืองานที่ผู้ใช้กำลังทำหรือมีส่วนร่วม
+                    EPISODE คือเหตุการณ์เฉพาะที่ผู้ใช้ยืนยันว่าให้ความหมาย ดีใจ ภูมิใจ ยากลำบาก หรือควรจำไว้คุยต่อภายหลัง
                     GOAL ใช้เฉพาะเป้าหมายระยะยาวหรือเป้าหมายส่วนตัวที่ยังมีความหมายข้ามบทสนทนา ไม่ใช่สิ่งที่อยากได้ในคำขอปัจจุบัน
                     PROJECT ต้องมีชื่อ รายละเอียด ขอบเขต หรือหลักฐานการมีส่วนร่วมที่ชัดเจนพอ ไม่ใช่เพียงหัวข้อกว้าง ๆ
+                    EPISODE ต้องบอกทั้งเหตุการณ์และความหมายที่ผู้ใช้กล่าวไว้ ห้ามเก็บเพียงอารมณ์ชั่วคราวหรืออนุมานความรู้สึกเอง
                     หากข้อความมีหลายความหมาย ให้เก็บเฉพาะความหมายที่มีหลักฐานชัดที่สุด และอย่าฝืนสร้างหลาย memory
                     confidence ต้องสะท้อนความแข็งแรงของหลักฐานจริง ไม่ใช่ค่าคงที่: การยืนยันตรงและมีบริบทใช้ค่าสูงได้ ส่วนข้อความกำกวมให้ค่าต่ำหรือไม่เก็บ
                     reason ต้องอธิบายทั้งหลักฐานและเหตุผลที่ข้อมูลนี้คงอยู่ระยะยาว เช่น "ผู้ใช้บอกว่าตนเองใช้ mac เป็นเครื่องหลัก"
@@ -64,7 +66,7 @@ final class MemoryPromptBuilder {
 
                     ให้ส่งคืน JSON object เพียงหนึ่ง object เท่านั้น และห้ามมีข้อความอื่นใด
                     JSON object ต้องมีโครงสร้างระดับบนสุดตรงตามนี้ทุกประการ:
-                    {"memories":[{"category":"PREFERENCE|GOAL|PROFILE|SKILL|PROJECT","content":"...","confidence":0.0,"reason":"..."}]}
+                    {"memories":[{"category":"PREFERENCE|GOAL|PROFILE|SKILL|PROJECT|EPISODE","content":"...","confidence":0.0,"reason":"..."}]}
                     memory ทุก object ต้องมี field category, content, confidence และ reason ครบถ้วน
                     confidence ต้องเป็นตัวเลขตั้งแต่ 0.0 ถึง 1.0
                     content และ reason ต้องเป็นข้อความสั้นกระชับ ไม่เกินหนึ่งประโยค และต้อง escape เครื่องหมาย double quote ตาม JSON

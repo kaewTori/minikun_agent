@@ -3,6 +3,8 @@ package com.minikun.visual;
 import java.time.Instant;
 import java.util.List;
 import java.util.Set;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -16,8 +18,11 @@ import org.springframework.web.server.ResponseStatusException;
 @RestController
 @RequestMapping("/v1/images/studio")
 public final class ImageStudioController {
+    private static final Logger LOG = LoggerFactory.getLogger(ImageStudioController.class);
+
     private final ImageGenerationTool imageGenerationTool;
     private final TinyGradRuntimeStatusReader runtimeStatus;
+    private final PonyPromptTransformer promptTransformer;
     private final String token;
     private final int maximumPromptCharacters;
 
@@ -29,6 +34,7 @@ public final class ImageStudioController {
                 false, "OFFLINE", "", 0,
                 new TinyGradRuntimeStatusReader.RuntimeMemory(-1, -1, -1), -1, -1,
                 -1, -1, false, null, null, null, 0, 0, Instant.EPOCH),
+                brief -> { throw new IllegalStateException("prompt transformer is unavailable"); },
                 token, maximumPromptCharacters);
     }
 
@@ -37,10 +43,52 @@ public final class ImageStudioController {
             TinyGradRuntimeStatusReader runtimeStatus,
             String token,
             int maximumPromptCharacters) {
+        this(imageGenerationTool, runtimeStatus,
+                brief -> { throw new IllegalStateException("prompt transformer is unavailable"); },
+                token, maximumPromptCharacters);
+    }
+
+    public ImageStudioController(
+            ImageGenerationTool imageGenerationTool,
+            TinyGradRuntimeStatusReader runtimeStatus,
+            PonyPromptTransformer promptTransformer,
+            String token,
+            int maximumPromptCharacters) {
         this.imageGenerationTool = imageGenerationTool;
         this.runtimeStatus = java.util.Objects.requireNonNull(runtimeStatus, "runtime status must not be null");
+        this.promptTransformer = java.util.Objects.requireNonNull(
+                promptTransformer, "prompt transformer must not be null");
         this.token = token == null ? "" : token.strip();
         this.maximumPromptCharacters = maximumPromptCharacters;
+    }
+
+    @PostMapping("/prompts/pony")
+    public PonyPromptResponse transformPrompt(
+            @RequestBody PonyPromptRequest request,
+            @RequestHeader(value = "X-Minikun-Personal-Token", required = false) String suppliedToken) {
+        authorize(suppliedToken);
+        String brief = request == null ? "" : optional(request.brief());
+        if (brief.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "image brief is required");
+        }
+        if (brief.length() > maximumPromptCharacters) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "image brief exceeds " + maximumPromptCharacters + " characters");
+        }
+        try {
+            String prompt = promptTransformer.transform(brief);
+            if (prompt.isBlank() || prompt.length() > maximumPromptCharacters) {
+                throw new IllegalStateException("prompt transformer returned an invalid prompt");
+            }
+            return new PonyPromptResponse(prompt);
+        } catch (IllegalArgumentException exception) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, exception.getMessage(), exception);
+        } catch (RuntimeException exception) {
+            LOG.warn("process=image_studio event=prompt_transform_failed reason={}",
+                    exception.getMessage(), exception);
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                    "Mini-kun could not transform this prompt right now", exception);
+        }
     }
 
     @GetMapping("/status")
@@ -172,4 +220,8 @@ public final class ImageStudioController {
             String generation_id,
             String provider,
             Instant created_at) { }
+
+    public record PonyPromptRequest(String brief) { }
+
+    public record PonyPromptResponse(String prompt) { }
 }

@@ -145,13 +145,28 @@ final class ChatKnowledgeResolver {
 
     private ChatKnowledgeSelection resolveScoped(Request request) {
         String query = request.query();
+        boolean deepResearch = request.turnPlan() == null
+                ? researchIntentDetector.detect(query).deepResearch() : request.turnPlan().deepResearch();
         log.info("process=knowledge_pipeline event=start");
         long memoryStarted = System.nanoTime();
+        CompletableFuture<KnowledgeContext> memoryFuture =
+                request.turnPlan() != null && !request.turnPlan().needsMemory()
+                        ? CompletableFuture.completedFuture(KnowledgeContext.empty())
+                        : CompletableFuture.supplyAsync(() -> recallMemory(
+                                query, request.conversationId(), request.ownerId()));
+        CompletableFuture<KnowledgeContext> personalFuture =
+                request.turnPlan() != null && !request.turnPlan().needsPersonalKnowledge()
+                        ? CompletableFuture.completedFuture(KnowledgeContext.empty())
+                        : CompletableFuture.supplyAsync(() -> recallPersonal(query, request.ownerId()));
+        CompletableFuture<SearchDecision> decisionFuture = configuration.searchEnabled()
+                && !isInternalTitleRequest(query)
+                ? CompletableFuture.supplyAsync(() -> decideSearch(query, request.classifierContext()))
+                : null;
         KnowledgeContext memoryKnowledge;
         KnowledgeContext personalKnowledge;
         try {
-            memoryKnowledge = recallMemory(query, request.conversationId(), request.ownerId());
-            personalKnowledge = recallPersonal(query, request.ownerId());
+            memoryKnowledge = joinKnowledge(memoryFuture, "memory");
+            personalKnowledge = joinKnowledge(personalFuture, "personal");
         } finally {
             recordStage("memory", memoryStarted, "success");
         }
@@ -168,13 +183,9 @@ final class ChatKnowledgeResolver {
                     browserCandidates, SearchSelectionSignals.EMPTY);
         }
 
-        SearchDecision decision = searchDecisionService.decide(query, request.classifierContext());
-        if (decision == null) {
-            decision = searchDecisionService.decide(query);
-        }
-        if (decision == null) {
-            decision = new SearchDecision(false, query);
-        }
+        SearchDecision decision = decisionFuture == null
+                ? new SearchDecision(false, query)
+                : joinSearchDecision(decisionFuture, query);
         log.info("process=search_decision event=completed should_search={} reason={}",
                 decision.shouldSearch(), decision.reason());
 
@@ -198,12 +209,16 @@ final class ChatKnowledgeResolver {
                         decision.shouldSearch(), query, decision.shouldSearch() ? decision.query() : "",
                         List.of(), List.of(), "all", "general", "", 1.0, "query_planning_disabled");
         SearchDecision plannedDecision = plan.shouldSearch()
-                ? new SearchDecision(true, plan.primaryQuery(), decision.reason())
+                ? new SearchDecision(true, plan.primaryQuery(), decision.reason(),
+                        new com.minikun.search.model.SearchPlanHints(
+                                plan.intent(), plan.confidence(), plan.primaryQuery(), plan.alternateQueries(),
+                                plan.evidenceNeeds(), plan.location()))
                 : decision;
         log.info("process=search_query_plan event=completed should_search={} primary_query={} alternates={} "
-                        + "core_terms={} language={} intent={} time_range={} confidence={} reason={}",
+                        + "core_terms={} language={} intent={} time_range={} confidence={} reason={} evidence={} location={}",
                 plan.shouldSearch(), plan.primaryQuery(), plan.alternateQueries(), plan.coreTerms(),
-                plan.language(), plan.intent(), plan.timeRange(), plan.confidence(), plan.reason());
+                plan.language(), plan.intent(), plan.timeRange(), plan.confidence(), plan.reason(),
+                plan.evidenceNeeds(), plan.location());
         SearchSelectionSignals searchSignals = searchSelectionSignalMapper.map(decision);
         if (!plan.shouldSearch()) {
             fastPath("no_search");
@@ -215,7 +230,7 @@ final class ChatKnowledgeResolver {
                     browserCandidates, searchSignals);
         }
 
-        if (researchIntentDetector.detect(query).deepResearch() && autonomousResearchService != null) {
+        if (deepResearch && autonomousResearchService != null) {
             try {
                 AutonomousResearchResult research = autonomousResearchService.research(
                         new AutonomousResearchRequest(
@@ -271,7 +286,8 @@ final class ChatKnowledgeResolver {
             KnowledgeContext searchKnowledge = imageRequest
                     ? combine(joinKnowledge(searchFuture, "image"), joinKnowledge(evidenceFuture, "image_evidence"))
                     : searchFuture.join();
-            if (researchIntentDetector.detect(query).deepResearch()) {
+            searchKnowledge = ensureRecommendationEvidence(plan, searchKnowledge);
+            if (deepResearch) {
                 browserCandidates = mergeBrowserCandidates(
                         browserCandidates, readResearchSourceCandidates(searchKnowledge));
             }
@@ -287,6 +303,23 @@ final class ChatKnowledgeResolver {
             return selection(
                     request, memoryKnowledge, personalKnowledge, plannedDecision, true, null,
                     browserCandidates, searchSignals);
+        }
+    }
+
+    private SearchDecision decideSearch(String query, String classifierContext) {
+        SearchDecision decision = searchDecisionService.decide(query, classifierContext);
+        if (decision == null) decision = searchDecisionService.decide(query);
+        return decision == null ? new SearchDecision(false, query) : decision;
+    }
+
+    private SearchDecision joinSearchDecision(
+            CompletableFuture<SearchDecision> future, String query) {
+        try {
+            SearchDecision decision = future.join();
+            return decision == null ? new SearchDecision(false, query) : decision;
+        } catch (RuntimeException exception) {
+            log.warn("Search decision failed; using no-search fallback", exception);
+            return new SearchDecision(false, query);
         }
     }
 
@@ -375,7 +408,8 @@ final class ChatKnowledgeResolver {
                         request.query(), request.conversationContextAvailable(),
                         combine(memoryKnowledge, personalKnowledge), decision,
                         searchAttempted, searchKnowledge),
-                researchTrace);
+                researchTrace,
+                decision == null ? new SearchDecision(false, request.query()) : decision);
     }
 
     private KnowledgeConsolidation consolidate(KnowledgeSelection selection) {
@@ -468,6 +502,104 @@ final class ChatKnowledgeResolver {
         return List.copyOf(merged);
     }
 
+    private KnowledgeContext ensureRecommendationEvidence(
+            SearchQueryPlan plan, KnowledgeContext firstAttempt) {
+        if (!"recommendation".equals(plan.intent()) || recommendationEvidenceIsEnough(plan, firstAttempt)) {
+            return firstAttempt;
+        }
+        String retryQuery = evidenceRetryQuery(plan);
+        log.info("process=search_quality event=retry intent={} sources={} query={}",
+                plan.intent(), usableSourceCount(firstAttempt), retryQuery);
+        try {
+            KnowledgeContext retry = searchService.search(new SearchRequest(
+                    UUID.randomUUID(), retryQuery,
+                    Math.max(1, Math.min(100, configuration.searchResultLimit())),
+                    Instant.now().plus(configuration.searchTimeout()),
+                    new SearchOptions(plan.language(), "", plan.timeRange(), configuration.safeSearch()),
+                    List.of()));
+            return mergeSearchKnowledge(firstAttempt, retry, configuration.searchResultLimit());
+        } catch (RuntimeException exception) {
+            log.warn("Recommendation evidence retry failed; keeping first search results", exception);
+            return firstAttempt;
+        }
+    }
+
+    private boolean recommendationEvidenceIsEnough(SearchQueryPlan plan, KnowledgeContext knowledge) {
+        if (usableSourceCount(knowledge) < Math.min(3, configuration.searchResultLimit())) return false;
+        if (plan.evidenceNeeds().isEmpty()) return true;
+        String content = knowledge == null ? "" : knowledge.content().toLowerCase(java.util.Locale.ROOT);
+        long covered = plan.evidenceNeeds().stream().filter(need -> evidencePresent(need, content, plan.location())).count();
+        return covered >= Math.min(2, plan.evidenceNeeds().size());
+    }
+
+    private long usableSourceCount(KnowledgeContext knowledge) {
+        if (knowledge == null) return 0;
+        return knowledge.candidates().stream()
+                .map(KnowledgeCandidate::provenance)
+                .filter(this::isWebUrl)
+                .distinct()
+                .count();
+    }
+
+    private boolean evidencePresent(String need, String content, String location) {
+        return switch (need) {
+            case "opening_hours" -> containsAny(content, "เวลาเปิด", "เปิดถึง", "ปิด", "opening hours", "open until");
+            case "rating" -> containsAny(content, "รีวิว", "คะแนน", "ดาว", "rating", "review");
+            case "location" -> containsAny(content, "ที่อยู่", "ถนน", "สถานี", "แผนที่", "address", "map")
+                    || !location.isBlank() && content.contains(location.toLowerCase(java.util.Locale.ROOT));
+            case "price" -> containsAny(content, "ราคา", "บาท", "฿", "price");
+            case "availability" -> containsAny(content, "ว่าง", "พร้อม", "available", "availability");
+            case "transit_access" -> containsAny(content, "เดิน", "รถ", "mrt", "bts", "สถานี", "transit");
+            case "official_source" -> containsAny(content, "เว็บไซต์ทางการ", "official");
+            case "freshness" -> containsAny(content, "ล่าสุด", "วันนี้", "updated", "latest");
+            default -> false;
+        };
+    }
+
+    private String evidenceRetryQuery(SearchQueryPlan plan) {
+        boolean thai = "th".equals(plan.language()) || "all".equals(plan.language());
+        String suffix = plan.evidenceNeeds().stream().map(need -> switch (need) {
+            case "opening_hours" -> thai ? "เวลาเปิดปิด" : "opening hours";
+            case "rating" -> thai ? "รีวิวคะแนน" : "reviews rating";
+            case "location" -> thai ? "ที่อยู่แผนที่" : "address map";
+            case "price" -> thai ? "ราคา" : "price";
+            case "availability" -> thai ? "เปิดให้บริการ" : "availability";
+            case "transit_access" -> thai ? "การเดินทางจากสถานี" : "transit access from station";
+            case "official_source" -> thai ? "เว็บไซต์ทางการ" : "official website";
+            case "freshness" -> thai ? "ข้อมูลล่าสุด" : "latest information";
+            default -> "";
+        }).filter(value -> !value.isBlank()).distinct().collect(java.util.stream.Collectors.joining(" "));
+        return (plan.primaryQuery() + " " + suffix).trim();
+    }
+
+    private KnowledgeContext mergeSearchKnowledge(
+            KnowledgeContext first, KnowledgeContext second, int resultLimit) {
+        java.util.LinkedHashMap<String, KnowledgeCandidate> distinct = new java.util.LinkedHashMap<>();
+        java.util.stream.Stream.of(first, second)
+                .filter(java.util.Objects::nonNull)
+                .flatMap(context -> context.candidates().stream())
+                .forEach(candidate -> distinct.putIfAbsent(
+                        candidate.provenance().isBlank() ? candidate.content() : candidate.provenance(), candidate));
+        List<KnowledgeCandidate> candidates = new java.util.ArrayList<>();
+        for (KnowledgeCandidate candidate : distinct.values()) {
+            int index = candidates.size();
+            candidates.add(new KnowledgeCandidate(
+                    "search-quality-" + index, KnowledgeSource.SEARCH, candidate.content(), index,
+                    candidate.provenance()));
+            if (candidates.size() == Math.max(1, resultLimit)) break;
+        }
+        return KnowledgeContext.fromCandidates(candidates);
+    }
+
+    private boolean containsAny(String content, String... values) {
+        for (String value : values) if (content.contains(value)) return true;
+        return false;
+    }
+
+    private boolean isWebUrl(String value) {
+        return value != null && (value.startsWith("https://") || value.startsWith("http://"));
+    }
+
     private String categoryFor(SearchDecision decision, String intent) {
         if (decision.reason() == SearchDecisionReason.IMAGE_REQUEST || "images".equals(intent)) {
             return SearchOptions.IMAGE_CATEGORY;
@@ -528,7 +660,13 @@ final class ChatKnowledgeResolver {
             ConversationId conversationId,
             String ownerId,
             boolean conversationContextAvailable,
-            String classifierContext) {
+            String classifierContext,
+            TurnPlan turnPlan) {
+
+        Request(String query, String requestId, ConversationId conversationId, String ownerId,
+                boolean conversationContextAvailable, String classifierContext) {
+            this(query, requestId, conversationId, ownerId, conversationContextAvailable, classifierContext, null);
+        }
     }
 
     record Configuration(

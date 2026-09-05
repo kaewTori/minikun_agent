@@ -42,21 +42,21 @@ public final class DefaultSearchService implements SearchService {
     public DefaultSearchService(
             SearchManager manager, SearchCache cache, boolean searchEnabled, boolean cacheEnabled) {
         this(manager, cache, searchEnabled, cacheEnabled, new DefaultSearchQueryRewriteService(),
-                new RuleBasedSearchQueryExpansionService(List.of(new IdentityExpansionRule())), null, "v1");
+                new RuleBasedSearchQueryExpansionService(List.of()), null, "v1");
     }
 
     public DefaultSearchService(
             SearchManager manager, SearchCache cache, boolean searchEnabled, boolean cacheEnabled,
             MeterRegistry meterRegistry) {
         this(manager, cache, searchEnabled, cacheEnabled, new DefaultSearchQueryRewriteService(),
-                new RuleBasedSearchQueryExpansionService(List.of(new IdentityExpansionRule())), meterRegistry, "v1");
+                new RuleBasedSearchQueryExpansionService(List.of()), meterRegistry, "v1");
         }
 
         public DefaultSearchService(
             SearchManager manager, SearchCache cache, boolean searchEnabled, boolean cacheEnabled,
             SearchQueryRewriteService queryRewriteService, MeterRegistry meterRegistry) {
         this(manager, cache, searchEnabled, cacheEnabled, queryRewriteService,
-                new RuleBasedSearchQueryExpansionService(List.of(new IdentityExpansionRule())), meterRegistry, "v1");
+                new RuleBasedSearchQueryExpansionService(List.of()), meterRegistry, "v1");
     }
 
     public DefaultSearchService(

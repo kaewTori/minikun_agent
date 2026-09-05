@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.when;
 
 import java.time.Duration;
@@ -198,6 +199,25 @@ class CooperativeChatModelServiceTest {
                 .blockFirst(Duration.ofSeconds(2));
         assertEquals("REJECTED", review.status());
         assertTrue(review.error().contains("missing_or_changed_version:java=25"));
+    }
+
+    @Test
+    void opensVerifierCircuitAfterRepeatedFailures() {
+        ChatModelProvider frontLine = provider(ChatModelId.EXISTING, "unused");
+        ChatModelProvider verifier = mock(ChatModelProvider.class);
+        when(verifier.id()).thenReturn(ChatModelId.TINYGRAD);
+        when(verifier.chat(any(Prompt.class))).thenThrow(new IllegalStateException("offline"));
+        CooperativeChatModelService service = new CooperativeChatModelService(
+                new DefaultChatModelProviderRegistry(List.of(frontLine, verifier)),
+                new CooperativeReviewStore(), new CooperationRouter(), qualityGate(), true,
+                "blocking", Duration.ofSeconds(2), 12_000);
+        Prompt prompt = new Prompt("ช่วย debug Java code นี้");
+
+        for (int attempt = 0; attempt < 4; attempt++) {
+            service.reviewDraft(frontLine, prompt, response("draft"), "circuit");
+        }
+
+        verify(verifier, times(3)).chat(any(Prompt.class));
     }
 
     private ChatModelProvider provider(ChatModelId id, String answer) {

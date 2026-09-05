@@ -13,7 +13,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 public final class JdbcConversationThreadStore implements ConversationThreadStore {
     private static final String COLUMNS = """
             id, owner_id, source_conversation_id, topic, summary, last_decision, unresolved_question,
-            status, check_in_at, check_in_consent, last_check_in_at, created_at, updated_at
+            status, check_in_at, check_in_consent, last_check_in_at, last_check_in_feedback, check_in_count,
+            created_at, updated_at
             """;
     private final JdbcTemplate jdbc;
 
@@ -26,18 +27,22 @@ public final class JdbcConversationThreadStore implements ConversationThreadStor
         jdbc.update("""
                 INSERT INTO minikun_conversation_thread
                     (id, owner_id, source_conversation_id, topic, topic_fingerprint, summary, last_decision,
-                     unresolved_question, status, check_in_at, check_in_consent, last_check_in_at, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     unresolved_question, status, check_in_at, check_in_consent, last_check_in_at,
+                     last_check_in_feedback, check_in_count, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT (id) DO UPDATE SET
                     topic = EXCLUDED.topic, topic_fingerprint = EXCLUDED.topic_fingerprint,
                     summary = EXCLUDED.summary, last_decision = EXCLUDED.last_decision,
                     unresolved_question = EXCLUDED.unresolved_question, status = EXCLUDED.status,
                     check_in_at = EXCLUDED.check_in_at, check_in_consent = EXCLUDED.check_in_consent,
-                    last_check_in_at = EXCLUDED.last_check_in_at, updated_at = EXCLUDED.updated_at
+                    last_check_in_at = EXCLUDED.last_check_in_at,
+                    last_check_in_feedback = EXCLUDED.last_check_in_feedback,
+                    check_in_count = EXCLUDED.check_in_count, updated_at = EXCLUDED.updated_at
                 """, value.id(), value.ownerId(), value.sourceConversationId(), value.topic(),
                 ConversationThreadService.fingerprint(value.topic()), value.summary(), value.lastDecision(),
                 value.unresolvedQuestion(), value.status().name(), ts(value.checkInAt()), value.checkInConsent(),
-                ts(value.lastCheckInAt()), ts(value.createdAt()), ts(value.updatedAt()));
+                ts(value.lastCheckInAt()), value.lastCheckInFeedback() == null ? null : value.lastCheckInFeedback().name(),
+                value.checkInCount(), ts(value.createdAt()), ts(value.updatedAt()));
         return value;
     }
 
@@ -79,6 +84,7 @@ public final class JdbcConversationThreadStore implements ConversationThreadStor
                 rs.getString("last_decision"), rs.getString("unresolved_question"),
                 ConversationThreadStatus.valueOf(rs.getString("status")), instant(rs, "check_in_at"),
                 rs.getBoolean("check_in_consent"), instant(rs, "last_check_in_at"),
+                feedback(rs.getString("last_check_in_feedback")), rs.getInt("check_in_count"),
                 instant(rs, "created_at"), instant(rs, "updated_at"));
     }
 
@@ -93,4 +99,8 @@ public final class JdbcConversationThreadStore implements ConversationThreadStor
     }
 
     private Timestamp ts(Instant value) { return value == null ? null : Timestamp.from(value); }
+
+    private ConversationCheckInFeedback feedback(String value) {
+        return value == null || value.isBlank() ? null : ConversationCheckInFeedback.valueOf(value);
+    }
 }

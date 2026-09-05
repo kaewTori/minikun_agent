@@ -8,30 +8,12 @@ import com.minikun.model.capability.ModelRole;
 import com.minikun.tokenbudget.config.TokenBudgetProperties;
 import com.minikun.tokenbudget.counter.ApproximateTokenCounter;
 import com.minikun.tokenbudget.counter.TokenCounter;
-import com.minikun.tokenbudget.diagnostics.DefaultTokenBudgetSafetyPolicy;
-import com.minikun.tokenbudget.diagnostics.TokenBudgetDecisionMapper;
-import com.minikun.tokenbudget.diagnostics.TokenBudgetSafetyPolicy;
 import com.minikun.tokenbudget.integration.DefaultGenerationOptionsResolver;
 import com.minikun.tokenbudget.integration.GenerationOptionsResolver;
 import com.minikun.tokenbudget.planner.DefaultDynamicTokenPlanner;
 import com.minikun.tokenbudget.planner.DynamicTokenPlanner;
 import com.minikun.tokenbudget.policy.DefaultTokenBudgetPolicy;
 import com.minikun.tokenbudget.policy.TokenBudgetPolicy;
-import com.minikun.tokenbudget.pressure.ContextPressureAnalyzer;
-import com.minikun.tokenbudget.pressure.ContextPressureRecoveryPolicy;
-import com.minikun.tokenbudget.pressure.DefaultContextPressureAnalyzer;
-import com.minikun.tokenbudget.pressure.DefaultContextPressureRecoveryPolicy;
-import com.minikun.tokenbudget.recovery.ContextRecoveryPlanner;
-import com.minikun.tokenbudget.recovery.DefaultContextRecoveryPlanner;
-import com.minikun.tokenbudget.recovery.ContextRecoveryPriorityPolicy;
-import com.minikun.tokenbudget.recovery.DefaultContextRecoveryPriorityPolicy;
-import com.minikun.tokenbudget.recovery.NoOpRecoveryExecutor;
-import com.minikun.tokenbudget.recovery.RecoveryExecutor;
-import com.minikun.tokenbudget.recovery.DefaultRecoveryStrategyRegistry;
-import com.minikun.tokenbudget.recovery.NoOpRecoveryStrategyHandler;
-import com.minikun.tokenbudget.recovery.RecoveryStep;
-import com.minikun.tokenbudget.recovery.RecoveryStrategyHandler;
-import com.minikun.tokenbudget.recovery.RecoveryStrategyRegistry;
 
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -63,65 +45,10 @@ public class TokenBudgetRuntimeConfiguration {
     }
 
     @Bean
-    TokenBudgetDecisionMapper tokenBudgetDecisionMapper() {
-        return new TokenBudgetDecisionMapper();
-    }
-
-    @Bean
-    TokenBudgetSafetyPolicy tokenBudgetSafetyPolicy() {
-        return new DefaultTokenBudgetSafetyPolicy();
-    }
-
-    @Bean
-    ContextPressureAnalyzer contextPressureAnalyzer() {
-        return new DefaultContextPressureAnalyzer();
-    }
-
-    @Bean
-    ContextPressureRecoveryPolicy contextPressureRecoveryPolicy() {
-        return new DefaultContextPressureRecoveryPolicy();
-    }
-
-    @Bean
-    ContextRecoveryPlanner contextRecoveryPlanner() {
-        return new DefaultContextRecoveryPlanner();
-    }
-
-    @Bean
-    ContextRecoveryPriorityPolicy contextRecoveryPriorityPolicy() {
-        return new DefaultContextRecoveryPriorityPolicy();
-    }
-
-    @Bean
-    RecoveryExecutor recoveryExecutor() {
-        return new NoOpRecoveryExecutor();
-    }
-
-    @Bean
-    RecoveryStrategyRegistry recoveryStrategyRegistry() {
-        RecoveryStrategyHandler noOpHandler = new NoOpRecoveryStrategyHandler();
-        return new DefaultRecoveryStrategyRegistry(Map.of(
-                RecoveryStep.REDUCE_KNOWLEDGE, noOpHandler,
-                RecoveryStep.REDUCE_MEMORY, noOpHandler,
-                RecoveryStep.REDUCE_CONVERSATION_HISTORY, noOpHandler,
-                RecoveryStep.REQUEST_FALLBACK, noOpHandler));
-    }
-
-    @Bean
     DynamicGenerationOptionsFactory dynamicGenerationOptionsFactory(
             DynamicTokenPlanner dynamicTokenPlanner,
-            GenerationOptionsResolver generationOptionsResolver,
-            TokenBudgetDecisionMapper tokenBudgetDecisionMapper,
-            TokenBudgetSafetyPolicy tokenBudgetSafetyPolicy,
-            ContextPressureAnalyzer contextPressureAnalyzer,
-            ContextPressureRecoveryPolicy contextPressureRecoveryPolicy,
-            ContextRecoveryPlanner contextRecoveryPlanner,
-            ContextRecoveryPriorityPolicy contextRecoveryPriorityPolicy,
-            RecoveryExecutor recoveryExecutor) {
-        return new DynamicGenerationOptionsFactory(dynamicTokenPlanner, generationOptionsResolver,
-                tokenBudgetDecisionMapper, tokenBudgetSafetyPolicy, contextPressureAnalyzer,
-                contextPressureRecoveryPolicy, contextRecoveryPlanner, contextRecoveryPriorityPolicy,
-                recoveryExecutor);
+            GenerationOptionsResolver generationOptionsResolver) {
+        return new DynamicGenerationOptionsFactory(dynamicTokenPlanner, generationOptionsResolver);
     }
 
     @Bean

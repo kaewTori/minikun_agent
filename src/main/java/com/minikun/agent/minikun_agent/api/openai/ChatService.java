@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -85,8 +86,6 @@ import org.slf4j.MDC;
 @Slf4j
 public class ChatService {
     private static final String DEFAULT_CHAT_MODEL = "hf.co/llmfan46/gemma-4-E4B-it-ultra-uncensored-heretic-GGUF:Q5_K_M";
-
-
     private final ActiveChatModelProvider activeChatModelProvider;
     private final EmbeddingModel embeddingModel;
     private final ChatTransactionLogger transactionLogger;
@@ -119,15 +118,10 @@ public class ChatService {
     private final ChatCapabilityFactory capabilityFactory = new ChatCapabilityFactory();
     private final ChatGenerationOptionsResolver generationOptionsResolver = new ChatGenerationOptionsResolver();
     private final ChatRequestInspector requestInspector = new ChatRequestInspector();
-
     private SpringAiToolCallingRuntime toolCallingRuntime;
-
     private List<ToolRequestRouter> toolRequestRouters = List.of();
-
     private DynamicGenerationOptionsFactory dynamicGenerationOptionsFactory;
-
     private ModelCapabilityRegistry modelCapabilityRegistry;
-
     private TokenBudgetProperties tokenBudgetProperties;
 
     private PersonalContextRuntime personalContextRuntime;
@@ -166,6 +160,9 @@ public class ChatService {
 
     private ChatExplainabilityRecorder explainabilityRecorder = new ChatExplainabilityRecorder(null);
 
+    private TurnPlanner turnPlanner = new TurnPlanner(
+            new com.minikun.model.CooperationRouter(), (TurnAmbiguityResolver) null);
+
     @Autowired
     void configureCollaborators(ChatCollaborators collaborators) {
         toolCallingRuntime = collaborators.toolCallingRuntime();
@@ -190,6 +187,7 @@ public class ChatService {
         conversationThreadService = collaborators.conversationThreadService();
         autonomousResearchService = collaborators.autonomousResearchService();
         storyIllustrationService = collaborators.storyIllustrationService();
+        if (collaborators.turnPlanner() != null) turnPlanner = collaborators.turnPlanner();
         explainabilityRecorder = new ChatExplainabilityRecorder(collaborators.explainabilitySink());
     }
 
@@ -427,12 +425,16 @@ public class ChatService {
             // The weather route has already executed the tool. Generate the final
             // answer from the MCS/PCS prompt, without invoking that tool twice.
             long generationStarted = System.nanoTime();
-            var response = verifiedToolResult.isPresent()
+            boolean toolRuntimeRequired = verifiedToolResult.isEmpty() && context.turnPlan().needsTools();
+            var response = verifiedToolResult.isPresent() || !toolRuntimeRequired
                     ? modelGateway().chat(
-                            context.prompt(), "chat_model", transaction.requestId(), context.conversationId())
+                            context.prompt(), "chat_model", transaction.requestId(), context.conversationId(),
+                            context.turnPlan().cooperation())
                     : modelGateway().chatWithTools(
-                            context.prompt(), context.conversationId(), context.ownerId(), transaction.requestId());
+                            context.prompt(), context.conversationId(), context.ownerId(), transaction.requestId(),
+                            context.turnPlan().cooperation());
             ModelUsage usage = modelUsage(response);
+            recordPromptTokenEstimate(context.estimatedInputTokens(), usage.promptTokens());
             String content = response.getResult().getOutput().getText();
             var continued = responseContinuationCoordinator().complete(
                     response, content, context.prompt(), context.generationProfile(), transaction.requestId(),
@@ -494,6 +496,7 @@ public class ChatService {
         StringBuilder assistantContent = new StringBuilder();
         AtomicReference<ModelUsage> modelUsage = new AtomicReference<>(ModelUsage.empty());
         AtomicBoolean firstTokenRecorded = new AtomicBoolean();
+        AtomicBoolean promptEstimateRecorded = new AtomicBoolean();
 
         Optional<ToolEvidence> verifiedToolResult = routeTool(
                 userMessage, conversationId, memoryOwnerId(request, conversationId));
@@ -538,13 +541,13 @@ public class ChatService {
         long modelStarted = System.nanoTime();
         String traceId = MDC.get("trace_id");
         CitationLinker.Stream citationStream = CitationLinker.stream(context.citations());
+        boolean toolRuntimeRequired = verifiedToolResult.isEmpty() && context.turnPlan().needsTools();
         Flux<ChatResponse> primaryResponses = verifiedToolResult.isPresent()
-            ? modelGateway().stream(context.prompt(), context.conversationId())
-            : toolsEnabled && toolCallingRuntime != null
-                    && !directStreamingProfile(context.generationProfile())
+            ? modelGateway().stream(context.prompt(), context.conversationId(), context.turnPlan().cooperation())
+            : toolsEnabled && toolCallingRuntime != null && toolRuntimeRequired
             ? Flux.defer(() -> Flux.just(modelGateway().reviewToolRuntimeDraft(
-                    context.prompt(), context.conversationId(), context.ownerId())))
-            : modelGateway().stream(context.prompt(), context.conversationId());
+                    context.prompt(), context.conversationId(), context.ownerId(), context.turnPlan().cooperation())))
+            : modelGateway().stream(context.prompt(), context.conversationId(), context.turnPlan().cooperation());
         var continued = responseContinuationCoordinator().stream(
                 primaryResponses, assistantContent, context.prompt(), context.generationProfile(), requestId,
                 prompt -> modelGateway().stream(prompt, context.conversationId()),
@@ -552,6 +555,8 @@ public class ChatService {
                 response -> modelUsage.set(addModelUsage(modelUsage.get(), modelUsage(response))));
         Flux<ChatResponse> modelResponses = continued.responses();
         Flux<String> modelChunks = modelResponses
+                .doOnNext(response -> recordPromptTokenEstimate(
+                        context.estimatedInputTokens(), modelUsage(response).promptTokens(), promptEstimateRecorded))
                 .doOnNext(response -> recordFirstToken(
                         response, firstTokenRecorded, requestStarted, modelStarted))
                 .doOnNext(response -> appendAssistantText(assistantContent, response))
@@ -614,6 +619,10 @@ public class ChatService {
             VisionInput visionInput) {
         boolean persistConversation = requestInspector.shouldPersist(request);
         String ownerId = memoryOwnerId(request, conversationId);
+        CompletableFuture<CompanionModeContext> interactionModeFuture = CompletableFuture.supplyAsync(
+                () -> companionModeFor(ownerId, conversationId, userMessage.content()));
+        CompletableFuture<String> summaryFuture = CompletableFuture.supplyAsync(
+                () -> conversationSummary(ownerId, conversationId));
         long conversationStarted = System.nanoTime();
         List<ChatMessage> history;
         String conversationResult = "success";
@@ -629,14 +638,20 @@ public class ChatService {
         } finally {
             recordStage("conversation", conversationStarted, conversationResult);
         }
-        CompanionModeContext interactionMode = companionModeFor(ownerId, conversationId, userMessage.content());
-        String conversationSummary = conversationSummary(ownerId, conversationId);
+        CompanionModeContext interactionMode = interactionModeFuture.join();
+        String conversationSummary = summaryFuture.join();
+        String classifierContext = classifierContext(history);
+        TurnPlan turnPlan = turnPlanner.plan(userMessage.content(), classifierContext, interactionMode,
+                visionInput != null && visionInput.hasImages(), verifiedToolResult,
+                toolsEnabled && toolCallingRuntime != null);
         int recentMessageLimit = conversationSummary.isBlank() || conversationSummaryService == null
                 ? Integer.MAX_VALUE : conversationSummaryService.recentMessageLimit();
         ChatKnowledgeSelection knowledgeSelection = knowledgeResolver().resolve(
                 new ChatKnowledgeResolver.Request(
                         userMessage.content(), transaction.requestId(), conversationId, ownerId,
-                        hasConversationContext(history, request), classifierContext(history)));
+                        hasConversationContext(history, request), classifierContext, turnPlan));
+        turnPlan = turnPlan.refine(knowledgeSelection);
+        if (performanceMetrics != null) performanceMetrics.turnPlan(turnPlan);
         ChatImagePreparer.Result preparedImages = ChatImagePreparer.prepare(knowledgeSelection);
         long promptStarted = System.nanoTime();
         ChatPromptFactory.Result preparedPrompt;
@@ -652,9 +667,11 @@ public class ChatService {
                     preparedImages.awareness(),
                     verifiedToolResult,
                     ownerId,
+                    conversationId.value(),
                     interactionMode,
                     visionInput,
-                    shouldIllustrate(userMessage.content())));
+                    shouldIllustrate(userMessage.content()),
+                    turnPlan));
         } catch (RuntimeException exception) {
             promptResult = "error";
             throw exception;
@@ -665,7 +682,10 @@ public class ChatService {
         return new ChatExecutionContext(
                 preparedPrompt.prompt(), conversationId, persistConversation, ownerId,
                 preparedImages.attachments(), preparedPrompt.generationProfile(),
-                explainabilityRecorder.context(knowledgeSelection, verifiedToolResult, preparedPrompt.generationProfile()),
+                preparedPrompt.estimatedInputTokens(),
+                explainabilityRecorder.context(
+                        knowledgeSelection, verifiedToolResult, preparedPrompt.generationProfile(), turnPlan),
+                turnPlan,
                 CitationLinker.from(knowledgeSelection.selection()));
     }
 
@@ -857,36 +877,31 @@ public class ChatService {
                         effectiveConfiguredChatModel()));
     }
 
-    private CompanionModeContext companionModeFor(
-            String ownerId, ConversationId conversationId, String latestUserMessage) {
-        if (companionModeService == null || conversationId == null) {
+    private CompanionModeContext companionModeFor(String ownerId, ConversationId conversationId, String message) {
+        if (companionModeService == null || conversationId == null) return null;
+        try {
+            return companionModeService.evaluate(ownerId, conversationId.value(), message).orElse(null);
+        } catch (RuntimeException exception) {
+            log.warn("Companion mode lookup failed; continuing in balanced mode", exception);
             return null;
         }
-        return companionModeService.evaluate(ownerId, conversationId.value(), latestUserMessage).orElse(null);
     }
-
     private String conversationSummary(String ownerId, ConversationId conversationId) {
-        if (conversationSummaryService == null) {
+        if (conversationSummaryService == null) return "";
+        try {
+            return conversationSummaryService.summary(ownerId, conversationId).orElse("");
+        } catch (RuntimeException exception) {
+            log.warn("Conversation summary lookup failed; continuing with recent turns", exception);
             return "";
         }
-        return conversationSummaryService.summary(ownerId, conversationId).orElse("");
     }
-
     private void recordExplainability(String ownerId, ConversationId conversationId, String responseId,
             ChatExplainabilityRecorder.Context context) {
         explainabilityRecorder.record(ownerId, conversationId, responseId, context);
     }
-
-    private record ChatExecutionContext(
-            Prompt prompt,
-            ConversationId conversationId,
-            boolean persistConversation,
-            String ownerId,
-            List<ChatAttachment> attachments,
-            String generationProfile,
-            ChatExplainabilityRecorder.Context explainability,
-            CitationLinker.Context citations) {
-    }
+    private record ChatExecutionContext(Prompt prompt, ConversationId conversationId, boolean persistConversation,
+            String ownerId, List<ChatAttachment> attachments, String generationProfile, Long estimatedInputTokens,
+            ChatExplainabilityRecorder.Context explainability, TurnPlan turnPlan, CitationLinker.Context citations) { }
 
     private boolean hasConversationContext(
             List<ChatMessage> history, ChatCompletionRequest request) {
@@ -1009,6 +1024,19 @@ public class ChatService {
         }
     }
 
+    private void recordPromptTokenEstimate(Long estimatedTokens, int actualTokens) {
+        if (performanceMetrics != null && estimatedTokens != null) {
+            performanceMetrics.promptTokenEstimate(estimatedTokens, actualTokens);
+        }
+    }
+
+    private void recordPromptTokenEstimate(
+            Long estimatedTokens, int actualTokens, AtomicBoolean recorded) {
+        if (actualTokens > 0 && recorded.compareAndSet(false, true)) {
+            recordPromptTokenEstimate(estimatedTokens, actualTokens);
+        }
+    }
+
     private String signalResult(reactor.core.publisher.SignalType signal) {
         if (signal == reactor.core.publisher.SignalType.ON_COMPLETE) {
             return "success";
@@ -1018,12 +1046,4 @@ public class ChatService {
         }
         return "error";
     }
-
-    private boolean directStreamingProfile(String profile) {
-        return "companion".equals(profile)
-                || "general".equals(profile)
-                || "focus".equals(profile)
-                || "creative".equals(profile);
-    }
-
 }

@@ -60,9 +60,9 @@ mv "$staged_jar" "$local_app/target/minikun_agent-1.0.0.jar"
 trap - EXIT HUP INT TERM
 source_launcher="$workspace_root/java/script/minikun-agent.sh"
 # The legacy shared launcher contains an environment-file loader. Deploy only
-# its stable bootstrap and explicit runtime configuration sections so Mini-kun
-# never reads an environment file. Preserve Tavily's explicit key export even
-# though it appears immediately before the MCS_ROOT section.
+# its stable bootstrap, explicit runtime configuration, and the narrow
+# Crawl4AI token loader. Preserve Tavily's explicit key export even though it
+# appears immediately before the MCS_ROOT section.
 staged_launcher="$local_script/.minikun-agent.sh.$$"
 trap 'rm -f "$staged_launcher"' EXIT HUP INT TERM
 {

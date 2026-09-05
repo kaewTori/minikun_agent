@@ -23,7 +23,7 @@ import com.minikun.memory.model.CompletedConversation;
 import com.minikun.memory.model.AcceptedMemory;
 import com.minikun.memory.model.MemoryCategory;
 import com.minikun.memory.model.MemorySource;
-import com.minikun.memory.reflection.ReflectionClient;
+import com.minikun.memory.reflection.ReflectionProvider;
 import com.minikun.memory.reflection.ReflectionParser;
 import com.minikun.memory.reflection.ReflectionPrompt;
 import com.minikun.memory.reflection.ReflectionPromptBuilder;
@@ -37,7 +37,7 @@ class ReflectionServiceTest {
     @Test
     void buildsPromptAndInvokesClientExactlyOnce() {
         ReflectionPromptBuilder builder = mock(ReflectionPromptBuilder.class);
-        ReflectionClient client = mock(ReflectionClient.class);
+        ReflectionProvider client = mock(ReflectionProvider.class);
         ReflectionParser parser = mock(ReflectionParser.class);
         ReflectionDecisionService decisionService = mock(ReflectionDecisionService.class);
         MemoryRepository repository = mock(MemoryRepository.class);
@@ -58,7 +58,7 @@ class ReflectionServiceTest {
     @Test
     void discardsRawClientOutputWithoutInterpretation() {
         ReflectionPromptBuilder builder = mock(ReflectionPromptBuilder.class);
-        ReflectionClient client = mock(ReflectionClient.class);
+        ReflectionProvider client = mock(ReflectionProvider.class);
         ReflectionParser parser = mock(ReflectionParser.class);
         ReflectionDecisionService decisionService = mock(ReflectionDecisionService.class);
         MemoryRepository repository = mock(MemoryRepository.class);
@@ -78,7 +78,7 @@ class ReflectionServiceTest {
     @Test
     void doesNotPropagateClientFailure() {
         ReflectionPromptBuilder builder = mock(ReflectionPromptBuilder.class);
-        ReflectionClient client = mock(ReflectionClient.class);
+        ReflectionProvider client = mock(ReflectionProvider.class);
         ReflectionParser parser = mock(ReflectionParser.class);
         ReflectionDecisionService decisionService = mock(ReflectionDecisionService.class);
         MemoryRepository repository = mock(MemoryRepository.class);
@@ -96,7 +96,7 @@ class ReflectionServiceTest {
     @Test
     void doesNotInvokeClientWhenPromptConstructionFails() {
         ReflectionPromptBuilder builder = mock(ReflectionPromptBuilder.class);
-        ReflectionClient client = mock(ReflectionClient.class);
+        ReflectionProvider client = mock(ReflectionProvider.class);
         ReflectionParser parser = mock(ReflectionParser.class);
         ReflectionDecisionService decisionService = mock(ReflectionDecisionService.class);
         MemoryRepository repository = mock(MemoryRepository.class);
@@ -112,7 +112,7 @@ class ReflectionServiceTest {
         @Test
         void persistsAcceptedInstancesInOrderAndWithoutReplacement() {
         ReflectionPromptBuilder builder = mock(ReflectionPromptBuilder.class);
-        ReflectionClient client = mock(ReflectionClient.class);
+        ReflectionProvider client = mock(ReflectionProvider.class);
         ReflectionParser parser = mock(ReflectionParser.class);
         ReflectionDecisionService decisionService = mock(ReflectionDecisionService.class);
         MemoryRepository repository = mock(MemoryRepository.class);
@@ -140,7 +140,7 @@ class ReflectionServiceTest {
         @Test
         void repositoryFailureDoesNotPreventLaterPersistenceAttempts() {
         ReflectionPromptBuilder builder = mock(ReflectionPromptBuilder.class);
-        ReflectionClient client = mock(ReflectionClient.class);
+        ReflectionProvider client = mock(ReflectionProvider.class);
         ReflectionParser parser = mock(ReflectionParser.class);
         ReflectionDecisionService decisionService = mock(ReflectionDecisionService.class);
         MemoryRepository repository = mock(MemoryRepository.class);
@@ -164,7 +164,7 @@ class ReflectionServiceTest {
         @Test
         void repositoryFailureIsStickyAndTimerStopsOnce() {
         ReflectionPromptBuilder builder = mock(ReflectionPromptBuilder.class);
-        ReflectionClient client = mock(ReflectionClient.class);
+        ReflectionProvider client = mock(ReflectionProvider.class);
         ReflectionParser parser = mock(ReflectionParser.class);
         ReflectionDecisionService decisionService = mock(ReflectionDecisionService.class);
         MemoryRepository repository = mock(MemoryRepository.class);

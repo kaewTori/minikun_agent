@@ -74,6 +74,24 @@ class FastPathSearchDecisionServiceTest {
     }
 
     @Test
+    void localRestaurantRecommendationAlwaysSearches() {
+        java.util.concurrent.atomic.AtomicBoolean delegated = new java.util.concurrent.atomic.AtomicBoolean();
+        SearchDecisionService service = new FastPathSearchDecisionService(
+                query -> {
+                    delegated.set(true);
+                    return new com.minikun.search.model.SearchDecision(false, query);
+                },
+                new RuleBasedSearchDecisionService(null));
+
+        var decision = service.decide(
+                "ช่วยแนะนำร้านข้าวย่านบางขุนนนท์ ที่เราจะไปลงตรง MRT สถานีไฟฉายหน่อยสิ");
+
+        assertTrue(decision.shouldSearch());
+        assertTrue(delegated.get());
+        assertEquals(SearchDecisionReason.EXTERNAL_RESOURCE, decision.reason());
+    }
+
+    @Test
     void sendsHighRiskConversationToTheConfiguredDecisionProvider() {
         java.util.concurrent.atomic.AtomicBoolean delegated = new java.util.concurrent.atomic.AtomicBoolean();
         SearchDecisionService service = new FastPathSearchDecisionService(
@@ -100,6 +118,34 @@ class FastPathSearchDecisionServiceTest {
 
         assertFalse(decision.shouldSearch());
         assertEquals(SearchDecisionReason.GENERAL_KNOWLEDGE, decision.reason());
+    }
+
+    @Test
+    void bypassesModelForThaiStoryRequest() {
+        SearchDecisionService delegate = query -> {
+            throw new AssertionError("model should not be called");
+        };
+        SearchDecisionService service = new FastPathSearchDecisionService(
+                delegate, new RuleBasedSearchDecisionService(null));
+
+        var decision = service.decide("มินิคุง เล่าเรื่องแฟนตาซีให้ฟังหน่อย");
+
+        assertFalse(decision.shouldSearch());
+    }
+
+    @Test
+    void keepsCreativeFollowUpOutOfSearch() {
+        SearchDecisionService delegate = query -> {
+            throw new AssertionError("model should not be called");
+        };
+        SearchDecisionService service = new FastPathSearchDecisionService(
+                delegate, new RuleBasedSearchDecisionService(null));
+
+        var decision = service.decide(
+                "มันสั้นไปหน่อย แบ่งเป็นคำตอบละบทแทน",
+                "user: มินิคุง เล่าเรื่องแฟนตาซีให้ฟังหน่อย\nassistant: กาลครั้งหนึ่ง...");
+
+        assertFalse(decision.shouldSearch());
     }
 
     @Test

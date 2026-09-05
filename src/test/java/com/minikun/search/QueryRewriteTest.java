@@ -18,9 +18,6 @@ class QueryRewriteTest {
 
         assertEquals(input, result.originalQuery());
         assertEquals("Latest News", result.rewrittenQuery());
-        assertNotSame(input, result.originalQuery());
-        assertNotSame(input, result.rewrittenQuery());
-        assertNotSame(result.originalQuery(), result.rewrittenQuery());
     }
 
     @Test
@@ -91,7 +88,7 @@ class QueryRewriteTest {
     }
 
     @Test
-    void normalizationIsIdempotentAndCreatesFreshValues() {
+    void normalizationIsIdempotent() {
         DefaultSearchQueryRewriteService service = new DefaultSearchQueryRewriteService();
 
         SearchQuery first = service.rewrite("  same\tquery  ");
@@ -99,7 +96,6 @@ class QueryRewriteTest {
 
         assertEquals(first.rewrittenQuery(), second.rewrittenQuery());
         assertNotSame(first, second);
-        assertNotSame(first.rewrittenQuery(), second.rewrittenQuery());
         assertEquals("same query", first.rewrittenQuery());
         assertEquals(
                 Arrays.stream(SearchQuery.class.getRecordComponents())

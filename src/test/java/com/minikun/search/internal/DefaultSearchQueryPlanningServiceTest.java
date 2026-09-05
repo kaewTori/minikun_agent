@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.minikun.search.model.SearchDecision;
 import com.minikun.search.model.SearchDecisionReason;
 import com.minikun.search.model.SearchQueryPlan;
+import com.minikun.search.model.SearchPlanHints;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -26,6 +27,39 @@ class DefaultSearchQueryPlanningServiceTest {
         assertEquals("current_information", plan.intent());
         assertTrue(plan.coreTerms().contains("ร้านกาแฟ"));
         assertTrue(plan.coreTerms().contains("เชียงใหม่"));
+    }
+
+    @Test
+    void plansLocalRestaurantDiscoveryWithFreshnessEvidence() {
+        String query = "ช่วยแนะนำร้านข้าวย่านบางขุนนนท์ ที่เราจะไปลงตรง MRT สถานีไฟฉายหน่อยสิ";
+
+        SearchQueryPlan plan = planner.plan(
+                query, new SearchDecision(true, query, SearchDecisionReason.EXTERNAL_RESOURCE));
+
+        assertTrue(plan.shouldSearch());
+        assertEquals("recommendation", plan.intent());
+        assertFalse(plan.primaryQuery().startsWith("ช่วยแนะนำ"));
+        assertTrue(plan.alternateQueries().stream().anyMatch(value -> value.contains("เวลาเปิด")));
+        assertEquals(List.of("opening_hours", "rating", "location", "price", "transit_access"),
+                plan.evidenceNeeds());
+    }
+
+    @Test
+    void prefersBoundedSemanticPlanOverConversationalText() {
+        String query = "ช่วยแนะนำร้านข้าวย่านบางขุนนนท์ ที่เราจะลง MRT ไฟฉายหน่อยสิ";
+        SearchPlanHints hints = new SearchPlanHints(
+                "local_discovery", 0.97, "ร้านข้าว บางขุนนนท์ MRT ไฟฉาย",
+                List.of("ร้านอาหารใกล้ MRT ไฟฉาย รีวิว เวลาเปิด"),
+                List.of("opening_hours", "rating", "location"), "บางขุนนนท์ MRT ไฟฉาย");
+
+        SearchQueryPlan plan = planner.plan(query,
+                new SearchDecision(true, query, SearchDecisionReason.EXTERNAL_RESOURCE, hints));
+
+        assertEquals("ร้านข้าว บางขุนนนท์ MRT ไฟฉาย", plan.primaryQuery());
+        assertEquals("recommendation", plan.intent());
+        assertEquals("semantic_plan", plan.reason());
+        assertEquals(0.97, plan.confidence());
+        assertEquals("บางขุนนนท์ MRT ไฟฉาย", plan.location());
     }
 
     @Test

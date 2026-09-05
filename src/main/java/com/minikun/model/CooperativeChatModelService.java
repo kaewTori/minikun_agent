@@ -6,6 +6,8 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.time.Duration;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
@@ -24,6 +26,8 @@ import reactor.core.publisher.Flux;
 @Service
 @Slf4j
 public final class CooperativeChatModelService {
+    private static final int VERIFIER_FAILURE_THRESHOLD = 3;
+    private static final long VERIFIER_COOLDOWN_NANOS = TimeUnit.SECONDS.toNanos(30);
     private final ChatModelProviderRegistry registry;
     private final CooperativeReviewStore reviewStore;
     private final CooperationRouter router;
@@ -32,6 +36,8 @@ public final class CooperativeChatModelService {
     private final String mode;
     private final Duration verificationTimeout;
     private final int maxDraftCharacters;
+    private final AtomicInteger verifierFailures = new AtomicInteger();
+    private final AtomicLong verifierOpenUntil = new AtomicLong();
 
     @Autowired(required = false)
     private ModelPerformanceMetrics performanceMetrics;
@@ -66,6 +72,12 @@ public final class CooperativeChatModelService {
         return reviewDraft(frontLine, prompt, draft, conversationId);
     }
 
+    public ChatResponse chat(ChatModelProvider frontLine, Prompt prompt, String conversationId,
+            CooperationRoutingDecision plannedDecision) {
+        ChatResponse draft = frontLine.chat(prompt);
+        return reviewDraft(frontLine, prompt, draft, conversationId, plannedDecision);
+    }
+
     /**
      * Applies the cooperation policy to a draft produced by another front-line runtime.
      * This keeps native tool execution on the capable Ollama provider while still allowing
@@ -73,68 +85,70 @@ public final class CooperativeChatModelService {
      */
     public ChatResponse reviewDraft(
             ChatModelProvider frontLine, Prompt prompt, ChatResponse draft, String conversationId) {
+        return reviewDraft(frontLine, prompt, draft, conversationId, null);
+    }
+
+    public ChatResponse reviewDraft(ChatModelProvider frontLine, Prompt prompt, ChatResponse draft,
+            String conversationId, CooperationRoutingDecision plannedDecision) {
         if (draft == null) {
             return null;
         }
-        CooperationRoutingDecision decision = decision(frontLine, prompt);
+        CooperationRoutingDecision decision = decision(frontLine, prompt, plannedDecision);
         if ("hybrid".equals(mode) && decision.needsExpert() && decision.risk() != CooperationRisk.HIGH) {
             CooperativeQualityGate.Decision draftQuality = qualityGate.evaluate(
                     prompt, text(draft), text(draft));
             if (draftQuality.accepted()) {
-                submitReview(prompt, draft, conversationId);
+                submitReview(prompt, draft, conversationId, decision);
                 return draft;
             }
             log.warn("process=model_cooperation event=draft_quality_rejected conversation_id={} reasons={} action=blocking_review",
                     conversationId, draftQuality.summary());
-            return verifyOrFallback(prompt, draft);
+            return verifyOrFallback(prompt, draft, decision);
         }
-        return decision.needsExpert() ? verifyOrFallback(prompt, draft) : draft;
+        return decision.needsExpert() ? verifyOrFallback(prompt, draft, decision) : draft;
     }
 
     /** Buffer only precision-sensitive streams so an unverified draft is never emitted before its rewrite. */
     public Flux<ChatResponse> stream(ChatModelProvider frontLine, Prompt prompt) {
-        CooperationRoutingDecision decision = decision(frontLine, prompt);
-        if (!decision.needsExpert()) {
-            return frontLine.stream(prompt);
-        }
-        if ("hybrid".equals(mode) && decision.risk() != CooperationRisk.HIGH
-                && !qualityGate.hasDeterministicConstraints(prompt)) {
-            return streamAndReview(frontLine, prompt, "unknown");
-        }
-        return frontLine.stream(prompt).collectList().flatMapMany(chunks -> {
-            ChatResponse draft = merge(chunks);
-            return draft == null ? Flux.empty() : Flux.just(verifyOrFallback(prompt, draft));
-        });
+        return stream(frontLine, prompt, "unknown", null);
     }
 
     public Flux<ChatResponse> stream(ChatModelProvider frontLine, Prompt prompt, String conversationId) {
-        CooperationRoutingDecision decision = decision(frontLine, prompt);
+        return stream(frontLine, prompt, conversationId, null);
+    }
+
+    public Flux<ChatResponse> stream(ChatModelProvider frontLine, Prompt prompt, String conversationId,
+            CooperationRoutingDecision plannedDecision) {
+        CooperationRoutingDecision decision = decision(frontLine, prompt, plannedDecision);
         if (!decision.needsExpert()) {
             return frontLine.stream(prompt);
         }
         if ("hybrid".equals(mode) && decision.risk() != CooperationRisk.HIGH
                 && !qualityGate.hasDeterministicConstraints(prompt)) {
-            return streamAndReview(frontLine, prompt, conversationId);
+            return streamAndReview(frontLine, prompt, conversationId, decision);
         }
         return frontLine.stream(prompt).collectList().flatMapMany(chunks -> {
             ChatResponse draft = merge(chunks);
-            return draft == null ? Flux.empty() : Flux.just(verifyOrFallback(prompt, draft));
+            return draft == null ? Flux.empty() : Flux.just(verifyOrFallback(prompt, draft, decision));
         });
     }
 
     private Flux<ChatResponse> streamAndReview(
-            ChatModelProvider frontLine, Prompt prompt, String conversationId) {
+            ChatModelProvider frontLine, Prompt prompt, String conversationId,
+            CooperationRoutingDecision decision) {
         StringBuilder draftText = new StringBuilder();
         return frontLine.stream(prompt)
                 .doOnNext(response -> append(draftText, response))
-                .doOnComplete(() -> submitReviewText(prompt, draftText.toString(), conversationId));
+                .doOnComplete(() -> submitReviewText(prompt, draftText.toString(), conversationId, decision));
     }
 
-    private void submitReview(Prompt prompt, ChatResponse draft, String conversationId) {
-        submitReviewText(prompt, draft.getResult().getOutput().getText(), conversationId);
+    private void submitReview(Prompt prompt, ChatResponse draft, String conversationId,
+            CooperationRoutingDecision decision) {
+        submitReviewText(prompt, draft.getResult().getOutput().getText(), conversationId, decision);
     }
 
-    private void submitReviewText(Prompt prompt, String draftText, String conversationId) {
+    private void submitReviewText(Prompt prompt, String draftText, String conversationId,
+            CooperationRoutingDecision decision) {
         if (draftText == null || draftText.isBlank()) {
             return;
         }
@@ -142,7 +156,7 @@ public final class CooperativeChatModelService {
         log.info("process=model_cooperation event=review_submitted conversation_id={}", conversationId);
         CompletableFuture.runAsync(() -> {
             try {
-                ChatResponse revised = verifyOrFallbackWithoutFallback(prompt, draftText);
+                ChatResponse revised = verifyOrFallbackWithoutFallback(prompt, draftText, decision);
                 String revisedText = revised.getResult().getOutput().getText();
                 CooperativeQualityGate.Decision quality = qualityGate.evaluate(prompt, draftText, revisedText);
                 if (quality.accepted()) {
@@ -160,10 +174,11 @@ public final class CooperativeChatModelService {
         });
     }
 
-    private ChatResponse verifyOrFallbackWithoutFallback(Prompt prompt, String draftText) {
+    private ChatResponse verifyOrFallbackWithoutFallback(Prompt prompt, String draftText,
+            CooperationRoutingDecision decision) {
         ChatModelProvider verifier = registry.get(ChatModelId.TINYGRAD);
         return callWithTimeout(verifier, verificationPrompt(prompt,
-                new ChatResponse(List.of(new Generation(new AssistantMessage(draftText))))));
+                new ChatResponse(List.of(new Generation(new AssistantMessage(draftText)))), decision));
     }
 
     private void append(StringBuilder target, ChatResponse response) {
@@ -173,10 +188,11 @@ public final class CooperativeChatModelService {
         }
     }
 
-    private ChatResponse verifyOrFallback(Prompt prompt, ChatResponse draft) {
+    private ChatResponse verifyOrFallback(Prompt prompt, ChatResponse draft,
+            CooperationRoutingDecision decision) {
         try {
             ChatModelProvider verifier = registry.get(ChatModelId.TINYGRAD);
-            ChatResponse revised = callWithTimeout(verifier, verificationPrompt(prompt, draft));
+            ChatResponse revised = callWithTimeout(verifier, verificationPrompt(prompt, draft, decision));
             String draftText = draft.getResult().getOutput().getText();
             String revisedText = revised.getResult().getOutput().getText();
             CooperativeQualityGate.Decision quality = qualityGate.evaluate(prompt, draftText, revisedText);
@@ -211,18 +227,26 @@ public final class CooperativeChatModelService {
     }
 
     private ChatResponse callWithTimeout(ChatModelProvider verifier, Prompt prompt) {
+        if (System.nanoTime() < verifierOpenUntil.get()) {
+            throw new IllegalStateException("TinyGrad verification circuit is open");
+        }
         long started = System.nanoTime();
         String result = "success";
         try {
-            return CompletableFuture.supplyAsync(() -> verifier.chat(prompt))
+            ChatResponse response = CompletableFuture.supplyAsync(() -> verifier.chat(prompt))
                     .orTimeout(verificationTimeout.toMillis(), TimeUnit.MILLISECONDS)
                     .join();
+            verifierFailures.set(0);
+            verifierOpenUntil.set(0);
+            return response;
         } catch (CompletionException exception) {
             result = "error";
+            recordVerifierFailure();
             Throwable cause = exception.getCause() == null ? exception : exception.getCause();
             throw new IllegalStateException("TinyGrad verification timed out or failed", cause);
         } catch (RuntimeException exception) {
             result = "error";
+            recordVerifierFailure();
             throw exception;
         } finally {
             if (performanceMetrics != null) {
@@ -231,7 +255,15 @@ public final class CooperativeChatModelService {
         }
     }
 
-    private CooperationRoutingDecision decision(ChatModelProvider frontLine, Prompt prompt) {
+    private void recordVerifierFailure() {
+        if (verifierFailures.incrementAndGet() >= VERIFIER_FAILURE_THRESHOLD) {
+            verifierOpenUntil.set(System.nanoTime() + VERIFIER_COOLDOWN_NANOS);
+            log.warn("process=model_cooperation event=circuit_open provider=tinygrad cooldown_seconds=30");
+        }
+    }
+
+    private CooperationRoutingDecision decision(ChatModelProvider frontLine, Prompt prompt,
+            CooperationRoutingDecision plannedDecision) {
         if (!enabled || frontLine.id() != ChatModelId.EXISTING) {
             return CooperationRoutingDecision.low();
         }
@@ -240,7 +272,7 @@ public final class CooperativeChatModelService {
                 .map(Message::getText)
                 .reduce((left, right) -> right)
                 .orElse("");
-        CooperationRoutingDecision result = router.decide(userText);
+        CooperationRoutingDecision result = plannedDecision == null ? router.decide(userText) : plannedDecision;
         if (result.needsExpert()) {
             log.info("process=model_cooperation event=routed risk={} reason={}",
                     result.risk(), result.reason());
@@ -251,7 +283,8 @@ public final class CooperativeChatModelService {
         return result;
     }
 
-    private Prompt verificationPrompt(Prompt original, ChatResponse draft) {
+    private Prompt verificationPrompt(Prompt original, ChatResponse draft,
+            CooperationRoutingDecision decision) {
         String draftText = draft.getResult().getOutput().getText();
         if (draftText == null) {
             draftText = "";
@@ -273,11 +306,14 @@ public final class CooperativeChatModelService {
 
                 [คำตอบร่างจาก Ollama]
                 %s
-                """.formatted(routeHint(original), qualityGate.constraints(original), draftText)));
+                """.formatted(routeHint(original, decision), qualityGate.constraints(original), draftText)));
         return new Prompt(messages, original.getOptions());
     }
 
-    private String routeHint(Prompt prompt) {
+    private String routeHint(Prompt prompt, CooperationRoutingDecision plannedDecision) {
+        if (plannedDecision != null) {
+            return plannedDecision.risk() + " / " + plannedDecision.reason();
+        }
         String userText = prompt.getInstructions().stream()
                 .filter(message -> "user".equalsIgnoreCase(message.getMessageType().getValue()))
                 .map(Message::getText)

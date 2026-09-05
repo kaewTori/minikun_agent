@@ -42,7 +42,10 @@ public final class CooperationRouter {
                     + "bug|debug|exception|stack.?trace|unit.?test|integration.?test)\\b)",
             Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
     private static final Pattern CREATIVE_REQUEST = Pattern.compile(
-            "(แต่งเรื่อง|แต่งนิยาย|เขียนนิยาย|เล่าเรื่อง|เล่านิทาน|เรื่องสั้น|นิทาน|นิยาย|ฟิค|บทละคร|"
+            "(แต่ง(?:เรื่อง|นิยาย|คำอวยพร|เรื่องสั้น|ฟิค|บทกวี|กลอน)|"
+                    + "เขียน(?:นิยาย|เรื่อง|ฟิค|บทกวี|กลอน|แคปชัน)|"
+                    + "คิด(?:ตัวละคร|พล็อต|แคปชัน)|สร้าง(?:เรื่อง|ตัวละคร|พล็อต)|"
+                    + "เล่าเรื่อง|เล่านิทาน|เรื่องสั้น|นิทาน|นิยาย|ฟิค|บทละคร|"
                     + "บทกวี|กลอน|กวี|สวมบทบาท|โลกสมมติ|creative writing|write a story|write fiction|"
                     + "tell (?:me )?a story|short story|novel|fanfic|roleplay|poem|poetry|screenplay|"
                     + "fictional|storytelling|worldbuilding)",

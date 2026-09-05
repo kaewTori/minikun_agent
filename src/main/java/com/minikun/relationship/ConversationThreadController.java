@@ -66,6 +66,14 @@ public final class ConversationThreadController {
         return service.resolve(ownerId, id);
     }
 
+    @PostMapping("/{id}/feedback")
+    public ConversationThread feedback(@PathVariable UUID id, @RequestBody CheckInFeedbackRequest request,
+            @RequestHeader(value = "X-Minikun-Personal-Token", required = false) String supplied) {
+        authorize(supplied);
+        if (request == null) throw new IllegalArgumentException("feedback request is required");
+        return service.feedback(request.owner_id(), id, request.feedback(), request.snooze_until());
+    }
+
     private void authorize(String supplied) {
         if (!token.isBlank() && !token.equals(supplied)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "personal token is invalid");
@@ -75,4 +83,7 @@ public final class ConversationThreadController {
     public record ThreadRequest(String owner_id, String conversation_id, String topic, String summary,
             String last_decision, String unresolved_question, ConversationThreadStatus status,
             Instant check_in_at, Boolean check_in_consent) {}
+
+    public record CheckInFeedbackRequest(
+            String owner_id, ConversationCheckInFeedback feedback, Instant snooze_until) {}
 }

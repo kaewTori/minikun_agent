@@ -13,7 +13,7 @@ import java.util.UUID;
 public final class ChatSyncService {
     private static final Set<String> ROLES = Set.of("user", "assistant", "system");
     private static final Set<String> METADATA_KEYS = Set.of(
-            "parentId", "branchId", "status", "feedback", "feedbackReason", "sources");
+            "parentId", "branchId", "status", "feedback", "feedbackReason", "backgroundJobId", "sources");
     private final ChatSyncRepository repository;
     private final SyncEventBroker events;
     private final Clock clock;

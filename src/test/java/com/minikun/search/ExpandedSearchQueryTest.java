@@ -1,12 +1,8 @@
 package com.minikun.search;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotSame;
-import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-import com.minikun.search.internal.IdentityExpansionRule;
-import com.minikun.search.internal.DefaultSearchQueryExpansionService;
 import com.minikun.search.internal.RuleBasedSearchQueryExpansionService;
 import com.minikun.search.model.ExpandedSearchQuery;
 import com.minikun.search.model.SearchQuery;
@@ -40,27 +36,15 @@ class ExpandedSearchQueryTest {
     }
 
     @Test
-    void identityExpansionReturnsOneFreshQueryPerInvocation() {
-        DefaultSearchQueryExpansionService service = new DefaultSearchQueryExpansionService();
+    void noRulesPreserveTheCanonicalQuery() {
+        RuleBasedSearchQueryExpansionService service =
+                new RuleBasedSearchQueryExpansionService(List.of());
         SearchQuery input = new SearchQuery("original", "canonical");
 
         ExpandedSearchQuery first = service.expand(input);
-        ExpandedSearchQuery second = service.expand(input);
 
         assertEquals(new ExpandedSearchQuery("original", "canonical", List.of("canonical")), first);
         assertEquals(List.of("canonical"), first.expandedQueries());
-        assertNotSame(first, second);
-        assertNotSame(first.expandedQueries(), second.expandedQueries());
-        assertNotSame(first.originalQuery(), second.originalQuery());
-        assertNotSame(first.rewrittenQuery(), second.rewrittenQuery());
-        assertNotSame(first.expandedQueries().get(0), second.expandedQueries().get(0));
-    }
-
-    @Test
-    void identityRuleReturnsNoAdditionalQueries() {
-        assertEquals(List.of(), new IdentityExpansionRule().expand("canonical"));
-        assertThrows(UnsupportedOperationException.class,
-                () -> new IdentityExpansionRule().expand("canonical").add("alternate"));
     }
 
     @Test
@@ -90,8 +74,8 @@ class ExpandedSearchQueryTest {
         assertEquals(List.of(canonical, canonical), observedInputs);
         assertEquals(1, firstRuleCalls.get());
         assertEquals(1, secondRuleCalls.get());
-        assertSame(canonical, observedInputs.get(0));
-        assertSame(canonical, observedInputs.get(1));
+        assertEquals(canonical, observedInputs.get(0));
+        assertEquals(canonical, observedInputs.get(1));
     }
 
     @Test

@@ -14,8 +14,8 @@ public class BrowserConfiguration {
     @Bean
     BrowserContentService browserContentService(
             @Value("${minikun.browser.enabled:true}") boolean enabled,
-            @Value("${minikun.browser.worker-url:http://127.0.0.1:3001}") String workerUrl,
-            @Value("${minikun.browser.worker-token:}") String token,
+            @Value("${minikun.browser.crawl4ai.base-url:http://127.0.0.1:11235}") String baseUrl,
+            @Value("${minikun.browser.crawl4ai.token:}") String token,
             @Value("${minikun.browser.timeout:20s}") Duration timeout,
             @Value("${minikun.browser.max-urls:5}") int maxUrls,
             @Value("${minikun.browser.block-private-addresses:true}") boolean blockPrivateAddresses,
@@ -34,9 +34,9 @@ public class BrowserConfiguration {
         HttpClient httpClient = HttpClient.newBuilder().connectTimeout(timeout).build();
         JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(httpClient);
         requestFactory.setReadTimeout(timeout);
-        RestClient restClient = RestClient.builder().baseUrl(workerUrl).requestFactory(requestFactory).build();
+        RestClient restClient = RestClient.builder().baseUrl(baseUrl).requestFactory(requestFactory).build();
         return new BrowserContentService(
-                new HttpBrowserContentClient(restClient, token), enabled, maxUrls, meterRegistry,
+                new Crawl4AiBrowserContentClient(restClient, token), enabled, maxUrls, meterRegistry,
                 new BrowserUrlPolicy(blockPrivateAddresses), maxContentCharacters, maxConcurrency);
     }
 }

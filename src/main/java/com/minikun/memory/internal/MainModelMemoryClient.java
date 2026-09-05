@@ -31,7 +31,7 @@ final class MainModelMemoryClient implements MemoryExtractionClient {
                     "type", "object",
                     "properties", Map.of(
                         "category", Map.of("type", "string", "enum",
-                            List.of("PREFERENCE", "GOAL", "PROFILE", "SKILL", "PROJECT")),
+                            List.of("PREFERENCE", "GOAL", "PROFILE", "SKILL", "PROJECT", "EPISODE")),
                         "content", Map.of("type", "string", "maxLength", 500),
                         "confidence", Map.of("type", "number", "minimum", 0.0, "maximum", 1.0),
                         "reason", Map.of("type", "string", "maxLength", 240)),

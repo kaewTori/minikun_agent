@@ -26,6 +26,11 @@ class SearchDecisionPromptBuilderTest {
         assertTrue(first.instructions().contains(
             "GENERAL_KNOWLEDGE always requires shouldSearch=false"));
         assertTrue(first.instructions().contains("แล้วตอนนี้ล่ะ"));
+        assertTrue(first.instructions().contains("real-world businesses"));
+        assertTrue(first.instructions().contains("transit station"));
+        assertTrue(first.instructions().contains("local_discovery"));
+        assertTrue(first.instructions().contains("evidenceNeeds"));
+        assertTrue(first.instructions().contains("at most 2 alternateQueries"));
         assertTrue(first.instructions().contains("Never output RULE_FALLBACK"));
         assertFalse(first.instructions().contains("system prompt"));
         assertFalse(first.instructions().contains("chat messages"));

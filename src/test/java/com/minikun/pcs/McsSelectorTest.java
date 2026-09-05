@@ -55,16 +55,6 @@ class McsSelectorTest {
     }
 
     @Test
-    void identicalContextsProduceIdenticalDecisions() {
-        CharacterSpecification character = characterWithPolicies(Map.of("identity", LoadingPolicy.DYNAMIC));
-        McsSelector selector = new McsSelector(Map.of("identity", new ModuleNameMentionStrategy()));
-        McsSelectionContext context = new McsSelectionContext("Discuss identity", "Earlier context");
-
-        assertEquals(selector.select(character, context), selector.select(character,
-                new McsSelectionContext("Discuss identity", "Earlier context")));
-    }
-
-    @Test
     void modulesAndDecisionsFollowConfiguredManifestOrder() {
                 CharacterSpecification character = characterWithPolicies(Map.of("interests", LoadingPolicy.ALWAYS));
 

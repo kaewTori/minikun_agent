@@ -23,7 +23,8 @@ class OpenAIControllerTest {
         when(chatService.chatCompletion(any(), any())).thenReturn(new ChatCompletionResponse(
                 "chatcmpl-id", "chat.completion", 1L, "mini-kun", List.of(),
                 new ChatCompletionResponse.Usage(0, 0, 0)));
-        OpenAIController controller = new OpenAIController(chatService, new ConversationIdResolver());
+        OpenAIController controller = new OpenAIController(chatService, mock(BackgroundChatService.class),
+                new ConversationIdResolver());
         MockHttpServletRequest http = new MockHttpServletRequest();
         http.addHeader("X-Conversation-Id", "conversation-1");
 

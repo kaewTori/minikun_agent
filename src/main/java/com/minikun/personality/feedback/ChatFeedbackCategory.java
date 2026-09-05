@@ -8,6 +8,9 @@ public enum ChatFeedbackCategory {
     TOO_MANY_QUESTIONS,
     ADVICE_TOO_SOON,
     CONTEXT_WRONG,
+    FACT_WRONG,
+    SEARCH_WRONG,
+    TOOL_WRONG,
     TOO_AGREEABLE,
     SHOULD_HAVE_ACTED,
     OTHER

@@ -18,18 +18,33 @@ import java.util.Set;
 /** Lightweight lexical/freshness ranking that is deterministic and provider-neutral. */
 public final class SearchRanker {
     public SearchResponse rank(SearchResponse response, String query, SearchOptions options) {
+        return rank(response, List.of(query), options);
+    }
+
+    public SearchResponse rank(SearchResponse response, List<String> queries, SearchOptions options) {
         if (response == null || response.results().size() < 2) {
             return response;
         }
-        List<String> terms = terms(query);
+        List<String> usableQueries = queries == null ? List.of() : queries.stream()
+                .filter(query -> query != null && !query.isBlank()).toList();
+        if (usableQueries.isEmpty()) usableQueries = List.of("");
         Map<SearchResult, Double> scores = new HashMap<>();
         for (SearchResult result : response.results()) {
-            scores.put(result, score(result, query, terms, options));
+            scores.put(result, score(result, usableQueries, options));
         }
         List<SearchResult> ranked = new ArrayList<>(response.results());
         ranked.sort(Comparator.comparingDouble((SearchResult result) -> scores.get(result)).reversed()
                 .thenComparing(result -> result.sourcePosition() == null ? Integer.MAX_VALUE : result.sourcePosition()));
         return new SearchResponse(response.requestId(), response.status(), diversify(ranked, scores), response.metadata());
+    }
+
+    private double score(SearchResult result, List<String> queries, SearchOptions options) {
+        java.util.DoubleSummaryStatistics scores = queries.stream()
+                .mapToDouble(query -> score(result, query, terms(query), options))
+                .summaryStatistics();
+        return scores.getCount() == 0
+                ? result.providerScore() * 0.45
+                : scores.getMax() + scores.getAverage() * 0.2;
     }
 
     private List<SearchResult> diversify(List<SearchResult> ranked, Map<SearchResult, Double> scores) {

@@ -134,7 +134,8 @@ public final class DefaultSearchManager implements SearchManager {
             SearchResponse response = new SearchResponse(
                 request.requestId(), status, providerResponse.results(), metadata);
             SearchResponse deduplicated = deduplicator.deduplicate(response);
-            SearchResponse ranked = new SearchRanker().rank(deduplicated, request.query(), request.options());
+            SearchResponse ranked = new SearchRanker().rank(
+                    deduplicated, expandedQuery.expandedQueries(), request.options());
             SearchResponse qualityFiltered = formatter.filterQuality(ranked);
             KnowledgeContext result = formatter.format(budgeter.budget(qualityFiltered), request.query());
             recordQuality(result);

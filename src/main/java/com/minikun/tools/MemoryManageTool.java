@@ -28,7 +28,7 @@ public final class MemoryManageTool implements Tool {
                     "content", new ToolParameter("content", ToolParameterType.STRING, false,
                             "The fact or preference to remember."),
                     "category", new ToolParameter("category", ToolParameterType.STRING, false,
-                            "PREFERENCE, GOAL, PROFILE, SKILL, or PROJECT. Defaults to PROFILE."),
+                            "PREFERENCE, GOAL, PROFILE, SKILL, PROJECT, or EPISODE. Defaults to PROFILE."),
                     "memory_id", new ToolParameter("memory_id", ToolParameterType.STRING, false,
                             "Existing memory UUID for forget."),
                     "limit", new ToolParameter("limit", ToolParameterType.INTEGER, false,
@@ -135,8 +135,9 @@ public final class MemoryManageTool implements Tool {
             case "profile", "ข้อมูลส่วนตัว" -> MemoryCategory.PROFILE;
             case "skill", "ทักษะ" -> MemoryCategory.SKILL;
             case "project", "โปรเจกต์", "โครงการ" -> MemoryCategory.PROJECT;
+            case "episode", "เหตุการณ์", "เรื่องสำคัญ" -> MemoryCategory.EPISODE;
             default -> throw new IllegalArgumentException(
-                    "category must be PREFERENCE, GOAL, PROFILE, SKILL, or PROJECT");
+                    "category must be PREFERENCE, GOAL, PROFILE, SKILL, PROJECT, or EPISODE");
         };
     }
 

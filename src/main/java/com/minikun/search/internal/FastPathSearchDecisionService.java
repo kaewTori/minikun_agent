@@ -2,6 +2,7 @@ package com.minikun.search.internal;
 
 import com.minikun.conversation.continuity.ConversationContinuity;
 import com.minikun.conversation.continuity.ConversationContinuityResolver;
+import com.minikun.model.CooperationRouter;
 import com.minikun.search.SearchDecisionService;
 import com.minikun.search.model.SearchDecision;
 import com.minikun.search.model.SearchDecisionReason;
@@ -34,15 +35,15 @@ public final class FastPathSearchDecisionService implements SearchDecisionServic
             "^(?:(?:อธิบาย|ช่วยอธิบาย|คืออะไร|ทำไม|อย่างไร|แปล|สรุป).*|"
                     + "(?:explain|what is|how does|why does|translate|summarize)\\b.*)$",
             Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
-    private static final Pattern CREATIVE_CONTENT = Pattern.compile(
-            "^(?:(?:ช่วย\\s*)?(?:แต่ง|เขียน|คิด|สร้าง)(?:คำอวยพร|นิยาย|เรื่องสั้น|ฟิค|บทกวี|กลอน|"
-                    + "เรื่อง|ตัวละคร|พล็อต|แคปชัน|ข้อความ).*|"
-                    + "(?:write|create|compose|brainstorm)\\b.*)$",
+    private static final Pattern LOCAL_DISCOVERY = Pattern.compile(
+            "(?s)(?=.*(?:ร้าน|คาเฟ่|ที่พัก|โรงแรม|restaurant|cafe|hotel|shop|venue))"
+                    + "(?=.*(?:แนะนำ|ช่วยหา|หาร้าน|ใกล้|แถว|ย่าน|เปิด|ปิด|เวลา|รีวิว|"
+                    + "recommend|suggest|near|open|hours|review)).*",
             Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
-
     private final SearchDecisionService delegate;
     private final SearchDecisionService rules;
     private final ConversationContinuityResolver continuityResolver;
+    private final CooperationRouter cooperationRouter;
     private final MeterRegistry meterRegistry;
     private final boolean enabled;
 
@@ -61,18 +62,25 @@ public final class FastPathSearchDecisionService implements SearchDecisionServic
         this.delegate = Objects.requireNonNull(delegate, "delegate must not be null");
         this.rules = Objects.requireNonNull(rules, "rules must not be null");
         this.continuityResolver = new ConversationContinuityResolver();
+        this.cooperationRouter = new CooperationRouter();
         this.meterRegistry = meterRegistry;
         this.enabled = enabled;
     }
 
     @Override
     public SearchDecision decide(String query) {
+        if (dynamicLocalDiscovery(query)) {
+            return requireLocalSearch(query, delegate.decide(query));
+        }
         SearchDecision fast = fastDecision(query);
         return fast == null ? delegate.decide(query) : fast;
     }
 
     @Override
     public SearchDecision decide(String query, String conversationContext) {
+        if (dynamicLocalDiscovery(query)) {
+            return requireLocalSearch(query, delegate.decide(query, conversationContext));
+        }
         SearchDecision fast = fastDecision(query);
         if (fast != null) {
             return fast;
@@ -106,7 +114,7 @@ public final class FastPathSearchDecisionService implements SearchDecisionServic
             return fastNoSearch(query, "general_knowledge");
         }
         if (!LIVE_INFORMATION.matcher(value).find()
-                && CREATIVE_CONTENT.matcher(value).matches()) {
+                && "creative_request".equals(cooperationRouter.decide(value).reason())) {
             return fastNoSearch(query, "creative_content");
         }
         SearchDecision ruleDecision = rules.decide(query);
@@ -114,6 +122,16 @@ public final class FastPathSearchDecisionService implements SearchDecisionServic
             return ruleDecision;
         }
         return null;
+    }
+
+    private boolean dynamicLocalDiscovery(String query) {
+        return enabled && query != null && LOCAL_DISCOVERY.matcher(query).find();
+    }
+
+    private SearchDecision requireLocalSearch(String query, SearchDecision decision) {
+        if (decision != null && decision.shouldSearch()) return decision;
+        return new SearchDecision(true, query, SearchDecisionReason.EXTERNAL_RESOURCE,
+                decision == null ? null : decision.planHints());
     }
 
     private SearchDecision fastNoSearch(String query, String reason) {

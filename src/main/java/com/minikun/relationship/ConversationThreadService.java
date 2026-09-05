@@ -20,8 +20,12 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import com.minikun.personality.conversation.ConversationPolicyEngine;
+import com.minikun.personality.model.Mood;
 
 /** Owns durable conversational open loops and explicit-consent check-ins. */
 public final class ConversationThreadService {
@@ -30,6 +34,8 @@ public final class ConversationThreadService {
     private final ConversationThreadStore store;
     private final Clock clock;
     private final ZoneId zone;
+    private final ConversationPolicyEngine conversationPolicy = new ConversationPolicyEngine();
+    private final Map<String, EmotionalContext> emotionalContexts = new ConcurrentHashMap<>();
 
     public ConversationThreadService(ConversationThreadStore store, Clock clock, ZoneId zone) {
         this.store = Objects.requireNonNull(store);
@@ -48,10 +54,11 @@ public final class ConversationThreadService {
                 conversation, normalizedTopic, prefer(summary, current.summary()),
                 prefer(lastDecision, current.lastDecision()), prefer(unresolvedQuestion, current.unresolvedQuestion()),
                 ConversationThreadStatus.OPEN, checkInAt != null ? checkInAt : current.checkInAt(),
-                checkInConsent || current.checkInConsent(), current.lastCheckInAt(), current.createdAt(), now))
+                checkInConsent || current.checkInConsent(), current.lastCheckInAt(), current.lastCheckInFeedback(),
+                current.checkInCount(), current.createdAt(), now))
                 .orElseGet(() -> new ConversationThread(UUID.randomUUID(), owner, conversation, normalizedTopic,
                         summary, lastDecision, unresolvedQuestion, ConversationThreadStatus.OPEN,
-                        checkInAt, checkInConsent, null, now, now));
+                        checkInAt, checkInConsent, null, null, 0, now, now));
         return store.save(value);
     }
 
@@ -59,18 +66,24 @@ public final class ConversationThreadService {
     public Optional<ConversationThread> observeTurn(
             String ownerId, String conversationId, String userMessage, String assistantMessage) {
         String text = normalize(userMessage);
+        observeEmotion(ownerId, userMessage);
         boolean explicitCheckIn = contains(text, "ถามอีกที", "ตามเรื่องนี้", "กลับมาถาม", "เช็กอีกที",
                 "เช็คอีกที", "follow up", "check in")
                 || contains(text, "ถาม", "เช็ก", "เช็ค") && contains(text, "อีกที", "อีกครั้ง");
         boolean unresolved = contains(text, "ยังไม่รู้", "ยังตัดสินใจไม่ได้", "ลังเล", "ไว้ค่อย", "ค่อยคิด",
                 "ขอคิดก่อน", "ยังไม่จบ", "ยังไม่ได้", "not sure yet", "haven't decided", "think about it");
-        if (!explicitCheckIn && !unresolved) return Optional.empty();
+        boolean workingMemory = contains(text, "จำไว้ว่า", "จำเรื่องนี้ไว้", "สำหรับงานนี้", "สำหรับโปรเจกต์นี้",
+                "งานที่กำลังทำ", "ตอนนี้เรากำลังทำ", "remember that", "for this project", "we are working on");
+        boolean explicitDecision = contains(text, "ตัดสินใจว่า", "ตกลงใช้", "เลือกใช้", "ข้อจำกัดคือ",
+                "decision is", "we decided", "constraint is", "must use");
+        if (!explicitCheckIn && !unresolved && !workingMemory && !explicitDecision) return Optional.empty();
 
         String topic = topic(userMessage);
         String question = unresolved ? bounded(userMessage, 800) : "";
         Instant checkInAt = explicitCheckIn ? parseCheckIn(text).orElse(null) : null;
         return Optional.of(create(ownerId, conversationId, topic, bounded(userMessage, 1200),
-                decision(assistantMessage), question, checkInAt, explicitCheckIn));
+                explicitDecision ? bounded(userMessage, 800) : decision(assistantMessage),
+                question, checkInAt, explicitCheckIn));
     }
 
     public ConversationThread update(String ownerId, UUID id, String topic, String summary, String lastDecision,
@@ -85,7 +98,7 @@ public final class ConversationThreadService {
                 prefer(topic, current.topic()), prefer(summary, current.summary()),
                 prefer(lastDecision, current.lastDecision()), prefer(unresolvedQuestion, current.unresolvedQuestion()),
                 status == null ? current.status() : status, effectiveCheckIn, consent, current.lastCheckInAt(),
-                current.createdAt(), clock.instant()));
+                current.lastCheckInFeedback(), current.checkInCount(), current.createdAt(), clock.instant()));
     }
 
     public ConversationThread resolve(String ownerId, UUID id) {
@@ -97,6 +110,29 @@ public final class ConversationThreadService {
         return store.save(new ConversationThread(current.id(), current.ownerId(), current.sourceConversationId(),
                 current.topic(), current.summary(), current.lastDecision(), current.unresolvedQuestion(),
                 current.status(), current.checkInAt(), current.checkInConsent(), now,
+                current.lastCheckInFeedback(), current.checkInCount() + 1, current.createdAt(), now));
+    }
+
+    public ConversationThread feedback(String ownerId, UUID id, ConversationCheckInFeedback feedback,
+            Instant snoozeUntil) {
+        ConversationThread current = find(ownerId, id);
+        ConversationCheckInFeedback value = Objects.requireNonNull(feedback, "feedback");
+        Instant now = clock.instant();
+        ConversationThreadStatus status = current.status();
+        Instant nextCheckIn = null;
+        boolean consent = false;
+        if (value == ConversationCheckInFeedback.NOT_NOW) {
+            nextCheckIn = snoozeUntil == null ? now.plus(java.time.Duration.ofDays(1)) : snoozeUntil;
+            if (!nextCheckIn.isAfter(now)) throw new IllegalArgumentException("snooze time must be in the future");
+            status = ConversationThreadStatus.OPEN;
+            consent = true;
+        } else if (value == ConversationCheckInFeedback.WRONG_CONTEXT
+                || value == ConversationCheckInFeedback.STOP_THIS_TOPIC) {
+            status = ConversationThreadStatus.RESOLVED;
+        }
+        return store.save(new ConversationThread(current.id(), current.ownerId(), current.sourceConversationId(),
+                current.topic(), current.summary(), current.lastDecision(), current.unresolvedQuestion(), status,
+                nextCheckIn, consent, current.lastCheckInAt(), value, current.checkInCount(),
                 current.createdAt(), now));
     }
 
@@ -115,29 +151,63 @@ public final class ConversationThreadService {
 
     /** Returns at most three relevant open loops as prompt-safe background. */
     public String promptContext(String ownerId, String conversationId, String latestMessage) {
-        List<ConversationThread> open = store.list(required(ownerId, "owner id"), ConversationThreadStatus.OPEN, 50);
-        if (open.isEmpty()) return "";
+        String owner = required(ownerId, "owner id");
+        List<ConversationThread> open = store.list(owner, ConversationThreadStatus.OPEN, 50);
         Set<String> query = terms(latestMessage);
         List<ConversationThread> selected = open.stream()
                 .sorted((left, right) -> Integer.compare(score(right, query, conversationId),
                         score(left, query, conversationId)))
                 .filter(value -> score(value, query, conversationId) > 0 || query.isEmpty())
                 .limit(3).toList();
-        if (selected.isEmpty()) return "";
-        StringBuilder result = new StringBuilder("Open conversational threads:\n");
-        for (ConversationThread value : selected) {
-            result.append("- ").append(value.topic());
-            if (!value.lastDecision().isBlank()) result.append("; last decision: ").append(value.lastDecision());
-            if (!value.unresolvedQuestion().isBlank()) result.append("; unresolved: ").append(value.unresolvedQuestion());
-            if (value.checkInConsent() && value.checkInAt() != null) {
-                result.append("; consented check-in: ").append(value.checkInAt());
+        EmotionalContext emotional = activeEmotion(owner).orElse(null);
+        if (selected.isEmpty() && emotional == null) return "";
+        StringBuilder result = new StringBuilder();
+        if (!selected.isEmpty()) {
+            result.append("Open conversational threads:\n");
+            for (ConversationThread value : selected) {
+                result.append("- ").append(value.topic());
+                if (!value.lastDecision().isBlank()) result.append("; last decision: ").append(value.lastDecision());
+                if (!value.unresolvedQuestion().isBlank()) result.append("; unresolved: ").append(value.unresolvedQuestion());
+                if (value.checkInConsent() && value.checkInAt() != null) {
+                    result.append("; consented check-in: ").append(value.checkInAt());
+                }
+                result.append('\n');
             }
-            result.append('\n');
+        }
+        if (emotional != null) {
+            result.append("Recent emotional context: ").append(emotional.mood())
+                    .append(" observed at ").append(emotional.observedAt()).append(". ")
+                    .append("Treat this as tentative and time-limited; do not assume the user still feels this way.\n");
         }
         result.append("Use these only when relevant. Do not pretend the user mentioned them in the current turn. "
                 + "Do not schedule or send a check-in without explicit consent.");
         return result.toString();
     }
+
+    private void observeEmotion(String ownerId, String message) {
+        String owner = required(ownerId, "owner id");
+        String text = normalize(message);
+        if (contains(text, "ดีขึ้นแล้ว", "โอเคแล้ว", "สบายใจขึ้น", "หายเครียดแล้ว", "feel better now")) {
+            emotionalContexts.remove(owner);
+            return;
+        }
+        var mood = conversationPolicy.evaluate(message, List.of()).mood();
+        if (!mood.active() || mood.mood() == Mood.FOCUSED || mood.mood() == Mood.PLAYFUL) return;
+        // ponytail: emotional continuity is deliberately ephemeral; persist it only if longitudinal care is requested.
+        emotionalContexts.put(owner, new EmotionalContext(mood.mood(), clock.instant()));
+    }
+
+    private Optional<EmotionalContext> activeEmotion(String ownerId) {
+        EmotionalContext value = emotionalContexts.get(ownerId);
+        if (value == null) return Optional.empty();
+        if (value.observedAt().plus(java.time.Duration.ofHours(24)).isBefore(clock.instant())) {
+            emotionalContexts.remove(ownerId, value);
+            return Optional.empty();
+        }
+        return Optional.of(value);
+    }
+
+    private record EmotionalContext(Mood mood, Instant observedAt) { }
 
     Optional<Instant> parseCheckIn(String text) {
         Instant now = clock.instant();

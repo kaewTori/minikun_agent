@@ -7,13 +7,28 @@ final class SearchDecisionPromptBuilder {
     private static final String INSTRUCTIONS = """
             Classify whether the user request needs external web search.
             Do not explain your reasoning. Do not output thinking, markdown, or any text outside the JSON object.
-            Output exactly one object in this format:
-            {"shouldSearch":true,"reason":"CURRENT_INFORMATION"}
+            Decide and plan in one pass. Output exactly one object with these fields:
+            {"shouldSearch":true,"reason":"EXTERNAL_RESOURCE","intent":"local_discovery",
+            "confidence":0.95,"searchQuery":"ร้านอาหาร บางขุนนนท์ MRT ไฟฉาย",
+            "alternateQueries":["ร้านอาหารใกล้ MRT ไฟฉาย รีวิว เวลาเปิด"],
+            "evidenceNeeds":["opening_hours","rating","location","price","transit_access"],
+            "location":"บางขุนนนท์ MRT ไฟฉาย"}
             Use exactly these reason values: CURRENT_INFORMATION, FACT_LOOKUP, EXTERNAL_RESOURCE, GENERAL_KNOWLEDGE.
+            Use one intent value: local_discovery, current_information, fact_lookup, research, comparison, general.
+            Use only these evidenceNeeds values: opening_hours, rating, location, price, availability,
+            transit_access, official_source, freshness. Use at most 2 alternateQueries. Use [] when none and ""
+            when no location. Request transit_access when the user names a station or asks how to get there.
+            searchQuery must be concise and preserve named people, products, neighborhoods, landmarks, and transit
+            stations verbatim. Do not invent a budget, distance, rating threshold, dietary need, or other constraint.
+            For shouldSearch=false, use intent=general, searchQuery="", alternateQueries=[], evidenceNeeds=[], location="".
             CURRENT_INFORMATION, FACT_LOOKUP, and EXTERNAL_RESOURCE always require shouldSearch=true.
             GENERAL_KNOWLEDGE always requires shouldSearch=false.
             Thai requests containing explicit freshness or lookup intent such as ล่าสุด, ตอนนี้, ปัจจุบัน,
             ค้นหา, ค้นข้อมูล, เช็กข้อมูล, or ตรวจสอบข้อเท็จจริง require search.
+            Recommendations for real-world businesses, restaurants, shops, venues, or services near a named
+            neighborhood, landmark, or transit station require search and use EXTERNAL_RESOURCE, even when the
+            user says "recommend" rather than "search". Use intent=local_discovery and request relevant evidence
+            such as opening_hours, rating, location, and price because these facts can change.
             Resolve short Thai follow-ups such as เรื่องเมื่อกี้, แล้วตอนนี้ล่ะ, and ช่วยเช็กให้หน่อย
             against the supplied prior conversation context.
             Never output RULE_FALLBACK.

@@ -15,6 +15,5 @@ public record KnowledgeRelevance(
         if (!Double.isFinite(score) || score < 0.0d || score > 1.0d) {
             throw new IllegalArgumentException("relevance score must be finite and within 0.0..1.0");
         }
-        candidateId = new String(candidateId);
     }
 }

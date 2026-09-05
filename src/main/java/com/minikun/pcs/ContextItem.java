@@ -13,7 +13,6 @@ public record ContextItem(
         if (priority < 0) {
             throw new IllegalArgumentException("priority must not be negative");
         }
-        content = new String(content);
     }
 
     public int size() {

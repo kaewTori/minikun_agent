@@ -19,9 +19,11 @@ public final class ChatPerformanceMetrics implements ModelPerformanceMetrics {
     static final String GENERATION_PROFILES = "minikun.chat.generation.profile.requests";
     static final String TOKENS = "minikun.chat.generation.tokens";
     static final String TOKENS_PER_SECOND = "minikun.chat.generation.tokens.per.second";
+    static final String PROMPT_TOKEN_ESTIMATE_RATIO = "minikun.chat.prompt.token.estimate.ratio";
     static final String FINISH_REASONS = "minikun.chat.generation.finish.requests";
     static final String TRUNCATED = "minikun.chat.generation.truncated";
     static final String CONTINUATIONS = "minikun.chat.generation.continuation.requests";
+    static final String TURN_PLANS = "minikun.chat.turn.plan.requests";
 
     private final MeterRegistry meterRegistry;
 
@@ -122,6 +124,22 @@ public final class ChatPerformanceMetrics implements ModelPerformanceMetrics {
         }
     }
 
+    public void promptTokenEstimate(long estimatedTokens, int actualTokens) {
+        if (estimatedTokens < 0 || actualTokens < 1) {
+            return;
+        }
+        try {
+            DistributionSummary.builder(PROMPT_TOKEN_ESTIMATE_RATIO)
+                    .description("Estimated prompt tokens divided by model-reported prompt tokens")
+                    .baseUnit("ratio")
+                    .publishPercentiles(0.5, 0.95, 0.99)
+                    .register(meterRegistry)
+                    .record((double) estimatedTokens / actualTokens);
+        } catch (RuntimeException ignored) {
+            // Token estimation diagnostics must never affect a response.
+        }
+    }
+
     public void continuation(String profile, String result) {
         try {
             Counter.builder(CONTINUATIONS)
@@ -155,6 +173,21 @@ public final class ChatPerformanceMetrics implements ModelPerformanceMetrics {
             }
         } catch (RuntimeException ignored) {
             // Metrics must never affect response delivery.
+        }
+    }
+
+    public void turnPlan(TurnPlan plan) {
+        if (plan == null) return;
+        try {
+            Counter.builder(TURN_PLANS)
+                    .description("Resolved chat turn routes")
+                    .tag("intent", plan.intentTag())
+                    .tag("execution", plan.executionTag())
+                    .tag("ambiguous", Boolean.toString(plan.ambiguous()))
+                    .tag("review", Boolean.toString(plan.cooperation().needsExpert()))
+                    .register(meterRegistry).increment();
+        } catch (RuntimeException ignored) {
+            // Planning observability must never affect a response.
         }
     }
 

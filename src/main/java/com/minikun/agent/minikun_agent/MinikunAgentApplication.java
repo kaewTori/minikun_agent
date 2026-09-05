@@ -9,7 +9,9 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 public class MinikunAgentApplication {
 
 	public static void main(String[] args) {
-		SpringApplication.run(MinikunAgentApplication.class, args);
+		SpringApplication application = new SpringApplication(MinikunAgentApplication.class);
+		DatabaseStartup.enableOfflineProfileWhenUnavailable(application, args);
+		application.run(args);
 	}
 
 }

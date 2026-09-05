@@ -18,6 +18,8 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.core.JdbcTemplate;
+import io.micrometer.core.instrument.MeterRegistry;
+import com.minikun.personality.feedback.ChatQualityFeedbackObserver;
 
 @Configuration(proxyBeanMethods = false)
 @ConditionalOnProperty(name = "minikun.personal-loop.enabled", havingValue = "true", matchIfMissing = true)
@@ -42,6 +44,9 @@ public class PersonalLoopConfiguration {
                 planner.getIfAvailable(), knowledge.getIfAvailable(), investment.getIfAvailable(), clock);
     }
     @Bean ExplainabilityService explainabilityService(PersonalLoopStore store, PersonalTimelineRecorder timeline, Clock clock) { return new ExplainabilityService(store, timeline, clock); }
+    @Bean ChatQualityFeedbackObserver chatQualityFeedbackObserver(PersonalLoopStore store, MeterRegistry metrics) {
+        return new TurnQualityFeedbackMetrics(store, metrics);
+    }
     @Bean IncidentCommanderService incidentCommanderService(HomelabGuardianService guardian, PersonalLoopStore store, PersonalTimelineRecorder timeline, Clock clock) { return new IncidentCommanderService(guardian, store, timeline, clock); }
     @Bean SafeAutomationService safeAutomationService(PersonalLoopStore store, PersonalTimelineRecorder timeline,
             WeeklyReviewService reviews, ObjectProvider<TaskService> tasks, ObjectProvider<GoalService> goals,

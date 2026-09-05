@@ -13,11 +13,18 @@ public final class ChatFeedbackService {
     private final ChatFeedbackStore store;
     private final AdaptivePreferenceLearningService learning;
     private final Clock clock;
+    private final List<ChatQualityFeedbackObserver> qualityObservers;
 
     public ChatFeedbackService(ChatFeedbackStore store, AdaptivePreferenceLearningService learning, Clock clock) {
+        this(store, learning, clock, List.of());
+    }
+
+    public ChatFeedbackService(ChatFeedbackStore store, AdaptivePreferenceLearningService learning, Clock clock,
+            List<ChatQualityFeedbackObserver> qualityObservers) {
         this.store = Objects.requireNonNull(store);
         this.learning = Objects.requireNonNull(learning);
         this.clock = Objects.requireNonNull(clock);
+        this.qualityObservers = qualityObservers == null ? List.of() : List.copyOf(qualityObservers);
     }
 
     public ChatFeedback submit(String ownerId, String conversationId, String messageId,
@@ -27,6 +34,9 @@ public final class ChatFeedbackService {
         ChatFeedback feedback = store.save(new ChatFeedback(UUID.randomUUID(), ownerId, conversationId, messageId,
                 rating, category, reason, clock.instant()));
         if ("DOWN".equals(feedback.rating())) apply(ownerId, category);
+        qualityObservers.forEach(observer -> {
+            try { observer.observe(feedback); } catch (RuntimeException ignored) { }
+        });
         return feedback;
     }
 
@@ -51,6 +61,15 @@ public final class ChatFeedbackService {
         if (contains(text, "จำผิด", "บริบทผิด", "ไม่ใช่เรื่องนี้", "wrong context", "forgot")) {
             return ChatFeedbackCategory.CONTEXT_WRONG;
         }
+        if (contains(text, "ค้นผิด", "ผลค้นหา", "แหล่งข้อมูลผิด", "wrong search", "bad source")) {
+            return ChatFeedbackCategory.SEARCH_WRONG;
+        }
+        if (contains(text, "ใช้เครื่องมือผิด", "เรียก tool ผิด", "tool ผิด", "wrong tool")) {
+            return ChatFeedbackCategory.TOOL_WRONG;
+        }
+        if (contains(text, "ข้อมูลผิด", "ข้อเท็จจริงผิด", "ตอบผิด", "fact wrong", "incorrect fact")) {
+            return ChatFeedbackCategory.FACT_WRONG;
+        }
         if (contains(text, "ตามใจ", "เห็นด้วยหมด", "ไม่ทักท้วง", "too agreeable", "challenge")) {
             return ChatFeedbackCategory.TOO_AGREEABLE;
         }
@@ -71,7 +90,9 @@ public final class ChatFeedbackService {
                 case ADVICE_TOO_SOON -> learning.feedback(ownerId, AdaptationDimensions.INITIATIVE, "low", true);
                 case TOO_AGREEABLE -> learning.feedback(ownerId, AdaptationDimensions.CHALLENGE, "direct", true);
                 case SHOULD_HAVE_ACTED -> learning.feedback(ownerId, AdaptationDimensions.INITIATIVE, "high", true);
-                case CONTEXT_WRONG, OTHER -> { /* recorded for evaluation; no unsafe preference inference */ }
+                case CONTEXT_WRONG, FACT_WRONG, SEARCH_WRONG, TOOL_WRONG, OTHER -> {
+                    /* recorded for routing evaluation; no unsafe preference inference */
+                }
             }
         } catch (RuntimeException ignored) {
             // Feedback persistence is authoritative; optional learning must not fail the request.

@@ -5,13 +5,13 @@ import java.util.List;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.minikun.memory.MemoryException;
-import com.minikun.memory.reflection.ReflectionClient;
+import com.minikun.memory.reflection.ReflectionProvider;
 import com.minikun.memory.reflection.ReflectionPrompt;
 import com.minikun.model.task.TaskModelMessage;
 import com.minikun.model.task.TaskModelProvider;
 import com.minikun.model.task.TaskModelRequest;
 
-final class TaskModelReflectionProvider implements ReflectionClient {
+final class TaskModelReflectionProvider implements ReflectionProvider {
     private final TaskModelProvider taskModelProvider;
     private final ObjectMapper objectMapper;
 

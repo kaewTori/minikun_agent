@@ -32,8 +32,8 @@ public final class RuleBasedSearchQueryExpansionService implements SearchQueryEx
             }
         }
         return new ExpandedSearchQuery(
-                new String(query.originalQuery()),
-                new String(rewrittenQuery),
+                query.originalQuery(),
+                rewrittenQuery,
                 new ArrayList<>(expandedQueries));
     }
 }

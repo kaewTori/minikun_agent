@@ -6,6 +6,7 @@ import com.minikun.search.SearchQueryPlanningService;
 import com.minikun.search.model.SearchDecision;
 import com.minikun.search.model.SearchDecisionReason;
 import com.minikun.search.model.SearchQueryPlan;
+import com.minikun.search.model.SearchPlanHints;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.util.ArrayList;
@@ -23,11 +24,12 @@ public final class DefaultSearchQueryPlanningService implements SearchQueryPlann
             Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
     private static final List<String> THAI_PREFIXES = List.of(
             "ช่วยค้นคว้าเรื่อง", "ช่วยค้นคว้า", "ค้นคว้าเรื่อง", "วิจัยเรื่อง", "เจาะลึกเรื่อง",
-            "ช่วยค้นหา", "ช่วยหา", "ค้นหาให้หน่อย", "อยากรู้ว่า", "ช่วยบอกหน่อยว่า", "ขอข้อมูล");
+            "ช่วยค้นหา", "ช่วยแนะนำ", "ช่วยหา", "ค้นหาให้หน่อย", "อยากรู้ว่า", "ช่วยบอกหน่อยว่า", "ขอข้อมูล");
     private static final List<String> ENGLISH_PREFIXES = List.of(
             "please do deep research on", "deep research on", "research", "investigate",
             "please search for", "search for", "find out", "look up", "can you tell me", "i want to know");
-    private static final List<String> THAI_STOPWORDS = List.of("หน่อย", "ให้หน่อย", "ครับ", "ค่ะ", "นะ", "ที");
+    private static final List<String> THAI_STOPWORDS = List.of(
+            "หน่อยสิ", "หน่อย", "ให้หน่อย", "ครับ", "ค่ะ", "นะ", "ที");
     private static final List<String> ENGLISH_STOPWORDS = List.of(
             "please", "could", "you", "tell", "me", "about", "what", "is", "the", "a", "an", "for");
     private final MeterRegistry meterRegistry;
@@ -66,11 +68,13 @@ public final class DefaultSearchQueryPlanningService implements SearchQueryPlann
             return new SearchQueryPlan(false, original.isBlank() ? " " : original, "", List.of(), List.of(),
                     detectLanguage(original), "general", "", 1.0, "search_not_requested");
         }
+        SearchPlanHints hints = decision.planHints();
         boolean researchIntent = isResearchIntent(original);
-        String primary = stripConversationalPrefix(original);
+        boolean semanticPlan = hints.available() && !hints.primaryQuery().isBlank();
+        String primary = semanticPlan ? normalize(hints.primaryQuery()) : stripConversationalPrefix(original);
         ConversationContinuity continuity = continuityResolver.resolve(original, conversationContext);
         boolean contextual = continuity.followUp();
-        if (contextual) {
+        if (contextual && !semanticPlan) {
             if (decision.reason() == SearchDecisionReason.IMAGE_REQUEST
                     && continuity.visualFollowUp()
                     && !continuity.searchAnchor().isBlank()
@@ -89,15 +93,26 @@ public final class DefaultSearchQueryPlanningService implements SearchQueryPlann
         }
         String language = detectLanguage(primary);
         List<String> terms = coreTerms(primary);
-        if ("th".equals(language) && terms.size() > 1) {
+        if (!semanticPlan && "th".equals(language) && terms.size() > 1) {
             primary = String.join(" ", terms);
         }
-        String timeRange = detectTimeRange(primary);
-        String intent = detectIntent(primary, timeRange, decision, researchIntent);
-        String reason = contextual ? "contextual_query" : "deterministic_core_query";
-        return new SearchQueryPlan(true, original, primary, alternateQueries(primary, terms, language, intent).stream()
-                .limit(maxAlternates).toList(), terms,
-                language, intent, timeRange, contextual ? 0.88 : 0.92, reason);
+        String timeRange = detectTimeRange(original + " " + primary);
+        String intent = semanticIntent(hints.intent(), primary, timeRange, decision, researchIntent);
+        String reason = semanticPlan ? "semantic_plan" : contextual ? "contextual_query" : "deterministic_core_query";
+        String plannedPrimary = primary;
+        List<String> alternates = java.util.stream.Stream.concat(
+                        hints.alternateQueries().stream(),
+                        alternateQueries(primary, terms, language, intent).stream())
+                .filter(value -> !value.equalsIgnoreCase(plannedPrimary))
+                .distinct()
+                .limit(maxAlternates)
+                .toList();
+        List<String> evidenceNeeds = hints.evidenceNeeds().isEmpty() && "recommendation".equals(intent)
+                ? defaultRecommendationEvidence(original)
+                : hints.evidenceNeeds();
+        double confidence = hints.confidence() > 0.0 ? hints.confidence() : contextual ? 0.88 : 0.92;
+        return new SearchQueryPlan(true, original, primary, alternates, terms,
+                language, intent, timeRange, confidence, reason, evidenceNeeds, hints.location());
     }
 
     private void increment(String name) {
@@ -160,6 +175,10 @@ public final class DefaultSearchQueryPlanningService implements SearchQueryPlann
                 alternates.add(primary + " primary source report");
             }
         }
+        if ("recommendation".equals(intent)) {
+            boolean thai = primary.codePoints().anyMatch(codePoint -> codePoint >= 0x0E00 && codePoint <= 0x0E7F);
+            alternates.add(primary + (thai ? " รีวิว เวลาเปิด แผนที่" : " reviews opening hours map"));
+        }
         String compact = String.join(" ", terms).trim();
         if (terms.size() >= 2 && !primary.equals(compact) && !compact.equalsIgnoreCase(primary)) {
             alternates.add(compact);
@@ -192,7 +211,8 @@ public final class DefaultSearchQueryPlanningService implements SearchQueryPlann
 
     private String detectTimeRange(String value) {
         String lower = value.toLowerCase(Locale.ROOT);
-        if (lower.contains("วันนี้") || lower.contains("ล่าสุด") || lower.contains("today")
+        if (lower.contains("วันนี้") || lower.contains("ตอนนี้") || lower.contains("ล่าสุด")
+                || lower.contains("today") || lower.contains("now") || lower.contains("current")
                 || lower.contains("latest") || lower.contains("ข่าว")) {
             return "day";
         }
@@ -227,6 +247,18 @@ public final class DefaultSearchQueryPlanningService implements SearchQueryPlann
         return "fact_lookup";
     }
 
+    private String semanticIntent(
+            String hintedIntent,
+            String value,
+            String timeRange,
+            SearchDecision decision,
+            boolean researchIntent) {
+        if (decision.reason() == SearchDecisionReason.IMAGE_REQUEST) return "images";
+        if ("local_discovery".equals(hintedIntent)) return "recommendation";
+        if (!hintedIntent.isBlank() && !"general".equals(hintedIntent)) return hintedIntent;
+        return detectIntent(value, timeRange, decision, researchIntent);
+    }
+
     private boolean isResearchIntent(String value) {
         String lower = value.toLowerCase(Locale.ROOT);
         return lower.contains("ค้นคว้า") || lower.contains("วิจัย") || lower.contains("เจาะลึก")
@@ -234,6 +266,17 @@ public final class DefaultSearchQueryPlanningService implements SearchQueryPlann
                 || lower.contains("research") || lower.contains("investigate")
                 || lower.contains("fact-check") || lower.contains("fact check")
                 || lower.contains("deep dive");
+    }
+
+    private List<String> defaultRecommendationEvidence(String query) {
+        List<String> evidence = new ArrayList<>(
+                List.of("opening_hours", "rating", "location", "price"));
+        String lower = query.toLowerCase(Locale.ROOT);
+        if (lower.contains("mrt") || lower.contains("bts") || lower.contains("สถานี")
+                || lower.contains("เดินทาง") || lower.contains("transit")) {
+            evidence.add("transit_access");
+        }
+        return List.copyOf(evidence);
     }
 
     private String normalize(String value) {

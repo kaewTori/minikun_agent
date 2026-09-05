@@ -5,6 +5,8 @@ import java.net.http.HttpClient;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Duration;
+import com.minikun.model.ChatModelId;
+import com.minikun.model.ChatModelProviderRegistry;
 import com.minikun.model.task.TaskModelProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.beans.factory.ObjectProvider;
@@ -85,6 +87,20 @@ public class StoryIllustrationConfiguration {
     }
 
     @Bean
+    PonyPromptTransformer ponyPromptTransformer(
+            ObjectProvider<ChatModelProviderRegistry> chatModels,
+            ObjectMapper objectMapper,
+            @Value("${spring.ai.ollama.chat.options.model:}") String mainModelName,
+            @Value("${spring.ai.ollama.chat.options.num-ctx:16384}") int contextSize) {
+        ChatModelProviderRegistry registry = chatModels.getIfAvailable();
+        if (registry == null) {
+            return brief -> { throw new IllegalStateException("main model is unavailable"); };
+        }
+        return new MainModelPonyPromptTransformer(
+                registry.get(ChatModelId.EXISTING), objectMapper, mainModelName, contextSize);
+    }
+
+    @Bean
     CharacterVisualMemory characterVisualMemory(
             ObjectProvider<JdbcTemplate> jdbcTemplate,
             ObjectMapper objectMapper,
@@ -99,13 +115,14 @@ public class StoryIllustrationConfiguration {
             ImageGenerationTool imageGenerationTool,
             StoryVisualPlanGenerator visualPlanGenerator,
             CharacterVisualMemory characterVisualMemory,
+            PonyPromptTransformer promptTransformer,
             @Value("${minikun.visual.generation.auto-illustrate-stories:true}") boolean autoIllustrateStories,
             @Value("${minikun.visual.generation.max-prompt-characters:8000}") int maximumPromptCharacters,
             @Value("${minikun.visual.generation.recovery-timeout:PT15M}") Duration recoveryTimeout,
             @Value("${minikun.visual.generation.storyboard.max-scenes:3}") int maximumStoryboardScenes) {
         return new StoryIllustrationService(
                 imageGenerationTool, autoIllustrateStories, maximumPromptCharacters, recoveryTimeout,
-                visualPlanGenerator, characterVisualMemory, maximumStoryboardScenes);
+                visualPlanGenerator, characterVisualMemory, maximumStoryboardScenes, promptTransformer);
     }
 
     @Bean
@@ -117,9 +134,11 @@ public class StoryIllustrationConfiguration {
     ImageStudioController imageStudioController(
             ImageGenerationTool imageGenerationTool,
             TinyGradRuntimeStatusReader runtimeStatus,
+            PonyPromptTransformer promptTransformer,
             @Value("${minikun.visual.management.token:${minikun.memory.management.token:}}") String token,
             @Value("${minikun.visual.generation.max-prompt-characters:8000}") int maximumPromptCharacters) {
-        return new ImageStudioController(imageGenerationTool, runtimeStatus, token, maximumPromptCharacters);
+        return new ImageStudioController(
+                imageGenerationTool, runtimeStatus, promptTransformer, token, maximumPromptCharacters);
     }
 
     @Bean

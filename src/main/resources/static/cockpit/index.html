@@ -7,10 +7,10 @@
   <meta name="description" content="Minikun — ผู้ช่วยส่วนตัวที่คุย คิด ค้นหา และลงมือทำร่วมกับคุณ">
   <title>Minikun</title>
   <link rel="icon" href="/cockpit/minikun-avatar.jpg">
-  <link rel="stylesheet" href="/cockpit/cockpit.css?v=20260902-tinygrad-runtime2">
+  <link rel="stylesheet" href="/cockpit/cockpit.css?v=20260905-cockpit-shortcut6">
 </head>
 <body>
-  <a class="skip-link" href="#chat-composer">ข้ามไปยังช่องพิมพ์ข้อความ</a>
+  <a class="skip-link" href="#main-content">ข้ามไปยังเนื้อหาหลัก</a>
   <div class="app-shell">
     <aside class="rail" aria-label="เมนูหลัก">
       <a class="brand" href="/cockpit/" aria-label="Minikun หน้าหลัก">
@@ -36,7 +36,7 @@
       </div>
     </aside>
 
-    <main class="workspace" id="main-content">
+    <main class="workspace" id="main-content" tabindex="-1">
       <section class="chat-view" id="chat-view" data-view="chat" aria-label="แชตกับมินิคุง">
         <header class="chat-topbar">
           <div class="chat-identity">
@@ -113,53 +113,55 @@
 
         <div class="studio-workbench">
           <form class="prompt-lab" id="studio-form">
-            <div class="prompt-lab-intro">
-              <div class="minikun-coach-avatar"><img src="/cockpit/minikun-avatar.jpg" alt="มินิคุง"><i></i></div>
-              <div><strong>Pony ชอบ tag ชัด ๆ เรียงจากภาพรวมไปหารายละเอียด</strong><p id="studio-coach-copy">เริ่มด้วยจำนวนและตัวละครเป็น English tags สั้น ๆ เช่น 1girl, solo, black bob hair ครับ</p></div>
-            </div>
+            <section class="studio-conversation" aria-labelledby="studio-conversation-title">
+              <header>
+                <div class="minikun-coach-avatar"><img src="/cockpit/minikun-avatar.jpg" alt="มินิคุง"><i></i></div>
+                <div><p class="eyebrow">คุยเป็นภาพกับมินิคุง</p><h2 id="studio-conversation-title">เล่ามาได้ตามธรรมชาติ เดี๋ยวมินิคุงจัดภาษา Pony ให้ครับ</h2><p>พิมพ์ภาษาไทยหรืออังกฤษเหมือนกำลังคุยกัน—ตัวละครกำลังทำอะไร อยู่ที่ไหน แสงและอารมณ์แบบไหน</p></div>
+              </header>
+              <label class="studio-brief-field" for="studio-brief"><span class="sr-only">เล่าภาพที่อยากสร้าง</span><textarea id="studio-brief" rows="6" maxlength="8000" placeholder="เช่น ผู้หญิงผมดำในเสื้อไหมพรมสีเขียว กำลังอุ้มแมวดำอยู่ในหอดูดาวเก่า คืนฝนตก แสงดาวสีฟ้าส่องเข้ามา ให้ความรู้สึกอบอุ่นและมีความหวัง"></textarea></label>
+              <div class="studio-brief-suggestions" aria-label="ตัวอย่างรายละเอียดที่เล่าเพิ่มได้"><span>ลองบอกเพิ่ม</span><button type="button" data-studio-brief-add=" มุมกล้องใกล้ เห็นสีหน้าชัด">มุมกล้อง</button><button type="button" data-studio-brief-add=" แสงนุ่มจากหน้าต่าง บรรยากาศสงบ">แสงและอารมณ์</button><button type="button" data-studio-brief-add=" รายละเอียดฉากชัด มีระยะลึก">รายละเอียดฉาก</button></div>
+              <div class="studio-transform-row"><p id="studio-transform-status" aria-live="polite">มินิคุงจะรักษาตัวละคร ฉาก สี และการกระทำที่พี่เล่าไว้</p><button class="studio-transform-button" id="studio-transform-prompt" type="button"><span>แปลงเป็น Pony prompt</span><i aria-hidden="true">✦</i></button></div>
+            </section>
 
-            <ol class="prompt-ribbon" aria-label="ลำดับ tag สำหรับ Pony">
-              <li class="active complete" data-studio-step="quality"><button type="button"><span>1</span><b>คุณภาพ</b><small>Score</small></button></li>
-              <li data-studio-step="subject"><button type="button"><span>2</span><b>ตัวละคร</b><small>Character</small></button></li>
-              <li data-studio-step="action"><button type="button"><span>3</span><b>ท่าทาง</b><small>Action</small></button></li>
-              <li data-studio-step="scene"><button type="button"><span>4</span><b>ฉาก</b><small>Scene</small></button></li>
-              <li data-studio-step="finish"><button type="button"><span>5</span><b>ภาพจบ</b><small>Finish</small></button></li>
-            </ol>
+            <section class="assembled-prompt" aria-labelledby="assembled-prompt-title" data-state="empty">
+              <header><div><p class="eyebrow">PONY PROMPT · แก้ต่อได้</p><h2 id="assembled-prompt-title">Prompt ที่พร้อมส่งให้โมเดล</h2></div><button id="studio-copy-prompt" type="button">คัดลอก</button></header>
+              <textarea id="studio-prompt-preview" rows="6" maxlength="8000" placeholder="Pony tags ที่มินิคุงแปลงให้จะอยู่ตรงนี้ หรือวาง prompt ของเราเองได้เลย"></textarea>
+              <div class="prompt-readiness" id="studio-readiness"><span></span><small>เล่าภาพด้านบน แล้วกดแปลงเป็น Pony prompt</small></div>
+            </section>
 
-            <div class="pony-quality-seed" data-studio-field="quality" tabindex="-1">
-              <span>ใส่ให้อัตโนมัติ</span><code>score_9</code><code>score_8_up</code><code>score_7_up</code>
-            </div>
+            <details class="manual-pony-settings">
+              <summary><span><b>Manual Pony</b><small>ประกอบ tags ทีละส่วนด้วยตัวเอง</small></span><i>ฟังก์ชันเสริม</i></summary>
+              <div class="manual-pony-body">
+                <div class="prompt-lab-intro">
+                  <div class="minikun-coach-avatar"><img src="/cockpit/minikun-avatar.jpg" alt=""><i></i></div>
+                  <div><strong>Pony ชอบ tag ชัด ๆ เรียงจากภาพรวมไปหารายละเอียด</strong><p id="studio-coach-copy">เริ่มด้วยจำนวนและตัวละครเป็น English tags สั้น ๆ เช่น 1girl, solo, black bob hair ครับ</p></div>
+                </div>
+                <ol class="prompt-ribbon" aria-label="ลำดับ tag สำหรับ Pony">
+                  <li class="active complete" data-studio-step="quality"><button type="button"><span>1</span><b>คุณภาพ</b><small>Score</small></button></li>
+                  <li data-studio-step="subject"><button type="button"><span>2</span><b>ตัวละคร</b><small>Character</small></button></li>
+                  <li data-studio-step="action"><button type="button"><span>3</span><b>ท่าทาง</b><small>Action</small></button></li>
+                  <li data-studio-step="scene"><button type="button"><span>4</span><b>ฉาก</b><small>Scene</small></button></li>
+                  <li data-studio-step="finish"><button type="button"><span>5</span><b>ภาพจบ</b><small>Finish</small></button></li>
+                </ol>
+                <div class="pony-quality-seed" data-studio-field="quality" tabindex="-1"><span>ใส่ให้อัตโนมัติ</span><code>score_9</code><code>score_8_up</code><code>score_7_up</code></div>
+                <div class="studio-field-grid">
+                  <label class="studio-field studio-field-wide" data-studio-field="subject"><span><b>จำนวน + ตัวละคร</b><small>ใช้ English tags คั่นด้วย comma</small></span><textarea id="studio-subject" rows="3" maxlength="1200" placeholder="1girl, solo, short black hair, green sweater, cat ears"></textarea></label>
+                  <label class="studio-field" data-studio-field="action"><span><b>ท่าทาง + สีหน้า</b><small>บอกกริยา มือ สายตา และอารมณ์</small></span><input id="studio-detail" maxlength="500" placeholder="holding a glass jar, looking down, gentle smile"></label>
+                  <label class="studio-field" data-studio-field="scene"><span><b>ฉาก + สิ่งแวดล้อม</b><small>สถานที่ เวลา และวัตถุรอบตัว</small></span><input id="studio-scene" maxlength="500" placeholder="observatory workshop, rainy night, wooden desk"></label>
+                </div>
+                <fieldset class="studio-choice" data-studio-field="finish"><legend><b>ลายเส้นของภาพ</b><small>เลือก tag ที่เข้ากับ Pony Anime</small></legend><div>
+                  <button type="button" data-studio-option="style" data-value="anime screencap, clean lineart">Anime screencap</button><button type="button" data-studio-option="style" data-value="anime key visual, vibrant colors">Anime key visual</button><button type="button" data-studio-option="style" data-value="soft painterly anime illustration">Painterly anime</button><button type="button" data-studio-option="style" data-value="visual novel cg, detailed background">Visual novel CG</button><button type="button" data-studio-option="style" data-value="retro anime, cel shading">Retro cel</button>
+                </div></fieldset>
+                <div class="studio-choice-row">
+                  <fieldset class="studio-choice" data-studio-field="finish"><legend><b>แสง + อารมณ์</b><small>ใช้คำสั้นและเป็นภาพ</small></legend><div><button type="button" data-studio-option="light" data-value="soft window light, calm mood">นุ่มและสงบ</button><button type="button" data-studio-option="light" data-value="golden hour, warm light, hopeful mood">อุ่นมีความหวัง</button><button type="button" data-studio-option="light" data-value="moonlight, blue shadows, mysterious mood">แสงจันทร์ลึกลับ</button></div></fieldset>
+                  <fieldset class="studio-choice" data-studio-field="finish"><legend><b>ระยะภาพ + กล้อง</b><small>กำหนดสิ่งที่อยู่ในเฟรม</small></legend><div><button type="button" data-studio-option="frame" data-value="close-up, upper body, depth of field">Close-up</button><button type="button" data-studio-option="frame" data-value="medium shot, centered composition">Medium shot</button><button type="button" data-studio-option="frame" data-value="wide shot, dynamic composition, detailed background">Wide shot</button></div></fieldset>
+                </div>
+                <label class="studio-field studio-constraint"><span><b>Negative tags เพิ่มเติม</b><small>จะถูกรวมกับ negative prompt ด้านล่าง ไม่ปนใน positive prompt</small></span><input id="studio-constraints" maxlength="500" placeholder="multiple views, speech bubble, crowded background"></label>
+                <button class="manual-pony-apply" id="studio-use-manual" type="button">ใช้ tags จาก Manual Pony</button>
+              </div>
+            </details>
 
-            <div class="studio-field-grid">
-              <label class="studio-field studio-field-wide" data-studio-field="subject"><span><b>จำนวน + ตัวละคร</b><small>ใช้ English tags คั่นด้วย comma</small></span><textarea id="studio-subject" rows="3" maxlength="1200" required placeholder="1girl, solo, short black hair, green sweater, cat ears"></textarea></label>
-              <label class="studio-field" data-studio-field="action"><span><b>ท่าทาง + สีหน้า</b><small>บอกกริยา มือ สายตา และอารมณ์</small></span><input id="studio-detail" maxlength="500" placeholder="holding a glass jar, looking down, gentle smile"></label>
-              <label class="studio-field" data-studio-field="scene"><span><b>ฉาก + สิ่งแวดล้อม</b><small>สถานที่ เวลา และวัตถุรอบตัว</small></span><input id="studio-scene" maxlength="500" placeholder="observatory workshop, rainy night, wooden desk"></label>
-            </div>
-
-            <fieldset class="studio-choice" data-studio-field="finish"><legend><b>ลายเส้นของภาพ</b><small>เลือก tag ที่เข้ากับ Pony Anime</small></legend><div>
-              <button type="button" data-studio-option="style" data-value="anime screencap, clean lineart">Anime screencap</button>
-              <button type="button" data-studio-option="style" data-value="anime key visual, vibrant colors">Anime key visual</button>
-              <button type="button" data-studio-option="style" data-value="soft painterly anime illustration">Painterly anime</button>
-              <button type="button" data-studio-option="style" data-value="visual novel cg, detailed background">Visual novel CG</button>
-              <button type="button" data-studio-option="style" data-value="retro anime, cel shading">Retro cel</button>
-            </div></fieldset>
-
-            <div class="studio-choice-row">
-              <fieldset class="studio-choice" data-studio-field="finish"><legend><b>แสง + อารมณ์</b><small>ใช้คำสั้นและเป็นภาพ</small></legend><div>
-                <button type="button" data-studio-option="light" data-value="soft window light, calm mood">นุ่มและสงบ</button>
-                <button type="button" data-studio-option="light" data-value="golden hour, warm light, hopeful mood">อุ่นมีความหวัง</button>
-                <button type="button" data-studio-option="light" data-value="moonlight, blue shadows, mysterious mood">แสงจันทร์ลึกลับ</button>
-              </div></fieldset>
-              <fieldset class="studio-choice" data-studio-field="finish"><legend><b>ระยะภาพ + กล้อง</b><small>กำหนดสิ่งที่อยู่ในเฟรม</small></legend><div>
-                <button type="button" data-studio-option="frame" data-value="close-up, upper body, depth of field">Close-up</button>
-                <button type="button" data-studio-option="frame" data-value="medium shot, centered composition">Medium shot</button>
-                <button type="button" data-studio-option="frame" data-value="wide shot, dynamic composition, detailed background">Wide shot</button>
-              </div></fieldset>
-            </div>
-
-            <label class="studio-field studio-constraint"><span><b>Negative tags เพิ่มเติม</b><small>จะถูกรวมกับ negative prompt ด้านล่าง ไม่ปนใน positive prompt</small></span><input id="studio-constraints" maxlength="500" placeholder="multiple views, speech bubble, crowded background"></label>
-
-            <details class="studio-generation-settings" open>
+            <details class="studio-generation-settings">
               <summary><span><b>ค่ากล้องของ TinyGrad</b><small>Mala Anime Mix · SDXL</small></span><i>ปรับแต่ง</i></summary>
               <div class="studio-settings-body">
                 <fieldset class="studio-size-choice"><legend>สัดส่วนภาพ</legend><div>
@@ -181,20 +183,14 @@
               </div>
             </details>
 
-            <section class="assembled-prompt" aria-labelledby="assembled-prompt-title">
-              <header><div><p class="eyebrow">PROMPT ที่ประกอบแล้ว</p><h2 id="assembled-prompt-title">มินิคุงจะส่งคำอธิบายนี้ให้โมเดล</h2></div><button id="studio-copy-prompt" type="button">คัดลอก</button></header>
-              <p id="studio-prompt-preview">ใส่ character tags แล้ว Pony prompt จะประกอบตรงนี้ครับ</p>
-              <div class="prompt-readiness" id="studio-readiness"><span></span><small>เริ่มด้วย count + character tags</small></div>
-            </section>
-
-            <div class="studio-form-actions"><button class="text-button" id="studio-load-example" type="button">ลองดู prompt ตัวอย่าง</button><button class="generate-button" id="studio-generate" type="submit"><span>สร้างภาพนี้</span><small>มินิคุงจะใช้ prompt ที่ประกอบแล้ว</small><i aria-hidden="true">↗</i></button></div>
+            <div class="studio-form-actions"><button class="text-button" id="studio-load-example" type="button">ลองโจทย์ตัวอย่าง</button><button class="generate-button" id="studio-generate" type="submit"><span>สร้างภาพนี้</span><small>ส่ง Pony prompt ให้ TinyGrad</small><i aria-hidden="true">↗</i></button></div>
           </form>
 
           <aside class="studio-canvas" aria-live="polite">
             <div class="canvas-toolbar"><span><i></i> TINYGRAD GENERATION CANVAS</span><small id="studio-canvas-meta">768 × 1280 · 40 steps</small></div>
             <div class="canvas-stage" id="studio-canvas-stage" data-state="empty">
               <div class="canvas-grid" aria-hidden="true"></div>
-              <div class="canvas-empty" id="studio-canvas-empty"><span class="focus-frame"><i></i><i></i><i></i><i></i></span><strong>ภาพจะเกิดขึ้นตรงนี้</strong><p>เรียง character, action, scene และ camera tags ให้ครบ แล้ว TinyGrad จะส่งทั้งหมดเข้า SDXL ครับ</p></div>
+              <div class="canvas-empty" id="studio-canvas-empty"><span class="focus-frame"><i></i><i></i><i></i><i></i></span><strong>ภาพจะเกิดขึ้นตรงนี้</strong><p>เล่าภาพให้มินิคุงฟัง แปลงเป็น Pony prompt แล้ว TinyGrad จะค่อย ๆ ล้างภาพออกมาครับ</p></div>
               <div class="canvas-generating hidden" id="studio-canvas-generating"><div class="developing-image"><span></span></div><strong>กำลังล้างภาพจากคำบรรยาย…</strong><p>ภาพคุณภาพสูงอาจใช้เวลาสักครู่ครับ</p></div>
               <figure class="canvas-result hidden" id="studio-canvas-result"><img id="studio-result-image" alt="ภาพที่สร้างโดยมินิคุง"><figcaption><span>CREATED WITH MINIKUN</span><time id="studio-result-time"></time></figcaption></figure>
             </div>
@@ -202,8 +198,8 @@
           </aside>
         </div>
 
-        <section class="prompt-field-guide" aria-labelledby="prompt-guide-title">
-          <header><div><p class="eyebrow">PONY PROMPT FIELD GUIDE</p><h2 id="prompt-guide-title">Pony ไม่อ่านเหมือนแชต—เรียง tag จากคุณภาพไปถึงกล้อง</h2></div><p>ใช้ English tags คั่นด้วย comma วางสิ่งสำคัญก่อน และใช้ weight เฉพาะจุดที่ต้องการย้ำจริง ๆ</p></header>
+        <details class="prompt-field-guide" aria-labelledby="prompt-guide-title">
+          <summary><div><p class="eyebrow">PONY PROMPT FIELD GUIDE</p><h2 id="prompt-guide-title">อยากเขียน Pony เอง? เปิดคู่มือฉบับย่อ</h2></div><span>คู่มือเสริม</span></summary>
           <div class="prompt-method-grid">
             <article><span>01 · QUALITY</span><h3>เริ่มด้วย score tags</h3><p><code>score_9, score_8_up, score_7_up</code> วางไว้ต้น prompt เพื่อกำหนดฐานคุณภาพของ Pony โดยไม่บังคับ source</p></article>
             <article><span>02 · COUNT / CHARACTER</span><h3>นับก่อน แล้วค่อยบอกตัวละคร</h3><p><code>1girl, solo, short black hair, green sweater</code> ช่วยลดตัวละครซ้ำและแยกคุณลักษณะได้ชัดกว่าประโยคยาว</p></article>
@@ -213,7 +209,7 @@
           </div>
           <div class="prompt-before-after"><div><span>ประโยคแบบแชต</span><p>ผู้หญิงผมดำกำลังถือดาวในหอดูดาว ภาพสวย ๆ</p></div><i aria-hidden="true">→</i><div><span>PONY TAG ORDER</span><p>score_9, score_8_up, score_7_up, 1girl, solo, short black hair, green sweater, holding a glowing glass jar, looking down, gentle smile, observatory workshop, rainy night, moonlight, anime key visual, close-up, depth of field, (detailed eyes:1.15)</p></div></div>
           <div class="pony-negative-guide"><span>NEGATIVE แยกอีกช่อง</span><p>score_4, score_3, score_2, score_1, worst quality, bad anatomy, bad hands, extra fingers, text, watermark</p><small>ใส่สิ่งที่ไม่ต้องการเป็น tag ตรง ๆ ไม่ต้องเขียน “no …” และอย่านำ negative tags ไปปนกับ positive prompt</small></div>
-        </section>
+        </details>
       </section>
 
       <section class="cockpit-view hidden" id="cockpit-view" data-view="cockpit" aria-label="Cockpit ส่วนตัว">
@@ -241,7 +237,7 @@
             <p class="empty-state hidden" id="tool-step-empty">ยังไม่มีการเรียกใช้เครื่องมือครับ</p>
           </article>
           <article class="panel system-health-panel" id="system-health" data-cockpit-page="system" aria-labelledby="system-health-title">
-            <div class="panel-heading"><div><p class="eyebrow">สุขภาพระบบ</p><h2 id="system-health-title">ระบบที่มินิคุงพึ่งพา</h2></div><span class="health-overall" id="health-overall">กำลังตรวจ</span></div>
+            <div class="panel-heading"><div><p class="eyebrow">สุขภาพระบบ</p><h2 id="system-health-title">ระบบที่มินิคุงพึ่งพา</h2></div><div class="health-heading-actions"><span class="health-overall" id="health-overall">กำลังตรวจ</span><button class="health-retry" id="health-retry" type="button">ตรวจอีกครั้ง</button></div></div>
             <div class="health-resource-grid" aria-label="ทรัพยากรเครื่อง">
               <div><span>CPU</span><strong id="health-cpu">—</strong><i><b id="health-cpu-bar"></b></i></div>
               <div><span>Memory</span><strong id="health-memory">—</strong><i><b id="health-memory-bar"></b></i></div>
@@ -255,6 +251,18 @@
             </div>
             <div class="health-dependency-list" id="health-dependency-list" aria-live="polite"><div class="loading-line wide"></div></div>
             <p class="empty-state hidden" id="health-empty">ยังอ่านสถานะระบบไม่ได้ครับ</p>
+            <p class="health-updated">ตรวจล่าสุด <time id="health-updated" aria-live="polite">ยังไม่ได้ตรวจ</time></p>
+          </article>
+          <article class="panel eval-lab-panel" id="eval-lab" data-cockpit-page="system" aria-labelledby="eval-lab-title">
+            <div class="panel-heading"><div><p class="eyebrow">คุณภาพการตัดสินใจ</p><h2 id="eval-lab-title">Eval Lab และ Shadow Learning</h2></div><span class="health-overall" id="eval-baseline-score">กำลังทดสอบ</span></div>
+            <div class="health-resource-grid" aria-label="สรุปคุณภาพการทำงาน">
+              <div><span>Baseline</span><strong id="eval-baseline-passed">—</strong><small>ชุดทดสอบ routing</small></div>
+              <div><span>Approval</span><strong id="eval-approval">—</strong><small>จาก feedback ล่าสุด</small></div>
+              <div><span>Feedback</span><strong id="eval-feedback-total">—</strong><small>รายการที่นำมาวิเคราะห์</small></div>
+              <div><span>Trace matched</span><strong id="eval-trace-matched">—</strong><small>เชื่อมกับแผนการตอบได้</small></div>
+            </div>
+            <div class="health-dependency-list" id="eval-shadow-list" aria-live="polite"><div class="loading-line wide"></div></div>
+            <p class="empty-state hidden" id="eval-shadow-empty">ยังไม่พบสัญญาณ routing ที่ควรทดลองปรับครับ</p>
           </article>
           <article class="panel learning-overview-panel" id="self-learning" data-cockpit-page="memory" aria-labelledby="learning-title">
             <div class="panel-heading"><div><p class="eyebrow">การเรียนรู้</p><h2 id="learning-title">สิ่งที่มินิคุงกำลังเรียนรู้</h2></div><button class="primary-button" id="new-learning-topic" type="button">+ เพิ่มหัวข้อ</button></div>
@@ -363,7 +371,7 @@
       <footer class="mobile-menu-footer"><div class="privacy-note"><span class="status-dot"></span><span>LOCAL FIRST<small>ข้อมูลอยู่กับเรา</small></span></div><button id="mobile-menu-settings" type="button"><span aria-hidden="true">⚙</span> ตั้งค่า</button></footer>
     </section>
   </dialog>
-  <dialog id="settings-dialog"><form method="dialog" class="dialog-card settings-card" id="settings-form"><div class="dialog-heading"><div><p class="eyebrow">DEVICE SYNC</p><h2>อุปกรณ์และการเชื่อมต่อ</h2></div><button class="close-button" type="button" data-close-dialog aria-label="ปิด">×</button></div><section class="device-sync-panel" aria-labelledby="device-sync-title"><div class="device-sync-heading"><div><strong id="device-sync-title">ซิงก์บทสนทนา</strong><small id="device-sync-copy">กำลังตรวจอุปกรณ์นี้…</small></div><span class="device-sync-state" id="device-sync-state">กำลังตรวจ</span></div><div class="pairing-actions"><button class="primary-button" id="create-pairing" type="button" disabled>เชื่อมต่ออุปกรณ์ใหม่</button></div><div class="pairing-card hidden" id="pairing-card"><img id="pairing-qr" alt="QR สำหรับจับคู่อุปกรณ์"><div><small>สแกนด้วยอุปกรณ์ใหม่</small><strong id="pairing-code">—</strong><button class="text-button" id="copy-pair-link" type="button">คัดลอกลิงก์</button><span id="pairing-expiry"></span></div></div><div class="paired-device-list" id="paired-device-list" aria-live="polite"></div></section><label>รูปแบบการคุยในบทสนทนานี้<select id="companion-mode"><option value="BALANCED">ปรับตามบริบทอัตโนมัติ</option><option value="COMPANION">คู่หู — ฟังและคุยอย่างอบอุ่น</option><option value="WORK">ทำงาน — เน้นผลลัพธ์และลงมือ</option><option value="FOCUS">โฟกัส — สั้นและทีละก้าว</option></select></label><details class="advanced-settings"><summary>การตั้งค่าขั้นสูง</summary><label>Owner ID<input id="owner-id" name="ownerId" value="default" autocomplete="off"></label><label>Personal token<input id="personal-token" name="token" type="password" autocomplete="off" placeholder="ไม่ต้องกรอก หากไม่ได้ตั้ง token"></label><label>Model<input id="chat-model" name="model" value="mini-kun" autocomplete="off"></label></details><div class="dialog-actions"><button class="secondary-button" type="button" data-close-dialog>ปิด</button><button class="primary-button" value="default" id="save-settings">บันทึก</button></div></form></dialog>
+  <dialog id="settings-dialog"><form method="dialog" class="dialog-card settings-card" id="settings-form"><div class="dialog-heading"><div><p class="eyebrow">DEVICE SYNC</p><h2>อุปกรณ์และการเชื่อมต่อ</h2></div><button class="close-button" type="button" data-close-dialog aria-label="ปิด">×</button></div><section class="device-sync-panel" aria-labelledby="device-sync-title"><div class="device-sync-heading"><div><strong id="device-sync-title">ซิงก์บทสนทนา</strong><small id="device-sync-copy">กำลังตรวจอุปกรณ์นี้…</small></div><span class="device-sync-state" id="device-sync-state">กำลังตรวจ</span></div><div class="pairing-actions"><button class="primary-button" id="create-pairing" type="button" disabled>เชื่อมต่ออุปกรณ์ใหม่</button></div><div class="pairing-card hidden" id="pairing-card"><img id="pairing-qr" alt="QR สำหรับจับคู่อุปกรณ์"><div><small>สแกนด้วยอุปกรณ์ใหม่</small><strong id="pairing-code">—</strong><button class="text-button" id="copy-pair-link" type="button">คัดลอกลิงก์</button><span id="pairing-expiry"></span></div></div><div class="paired-device-list" id="paired-device-list" aria-live="polite"></div></section><label>รูปแบบการคุยในบทสนทนานี้<select id="companion-mode"><option value="BALANCED">ปรับตามบริบทอัตโนมัติ</option><option value="COMPANION">คู่หู — ฟังและคุยอย่างอบอุ่น</option><option value="WORK">ทำงาน — เน้นผลลัพธ์และลงมือ</option><option value="FOCUS">โฟกัส — สั้นและทีละก้าว</option></select></label><details class="advanced-settings"><summary>การตั้งค่าขั้นสูง</summary><label>Owner ID<input id="owner-id" name="ownerId" value="default" autocomplete="off"></label><label>Personal token<input id="personal-token" name="token" type="password" autocomplete="off" placeholder="ไม่ต้องกรอก หากไม่ได้ตั้ง token"></label><label>โมเดลหลักจาก Ollama<select id="chat-model" name="model"><option value="">กำลังโหลด…</option></select></label></details><div class="dialog-actions"><button class="secondary-button" type="button" data-close-dialog>ปิด</button><button class="primary-button" value="default" id="save-settings">บันทึก</button></div></form></dialog>
   <dialog id="visual-lightbox-dialog" class="visual-lightbox-dialog"><section class="dialog-card visual-lightbox-card"><div class="dialog-heading"><div><p class="eyebrow" id="visual-origin-label">ภาพจากเว็บ</p><h2 id="visual-lightbox-title">Visual reference</h2></div><button class="close-button" type="button" data-close-dialog aria-label="ปิด">×</button></div><img id="visual-lightbox-image" alt=""><p id="visual-lightbox-description" class="dialog-copy visual-lightbox-description"></p><a id="visual-lightbox-source" class="visual-source-link" target="_blank" rel="noopener noreferrer">เปิดหน้าต้นทาง ↗</a><div class="visual-action-grid"><button class="primary-button" id="visual-ask" type="button">ถามต่อจากรูปนี้</button><button class="secondary-button" id="visual-similar" type="button">หารูปคล้ายกัน</button><button class="secondary-button" id="visual-save" type="button">เก็บเป็น reference</button><button class="secondary-button" id="visual-create" type="button">สร้างต่อจาก reference</button></div></section></dialog>
   <dialog id="inspiration-boards-dialog"><section class="dialog-card inspiration-dialog-card"><div class="dialog-heading"><div><p class="eyebrow">VISUAL MEMORY</p><h2>บอร์ดแรงบันดาลใจ</h2></div><button class="close-button" type="button" data-close-dialog aria-label="ปิด">×</button></div><form id="create-inspiration-board" class="board-create-form"><label class="sr-only" for="new-board-title">ชื่อบอร์ด</label><input id="new-board-title" maxlength="120" placeholder="ชื่อบอร์ดใหม่"><button class="primary-button" type="submit">สร้างบอร์ด</button></form><div id="inspiration-board-list" class="inspiration-board-list" aria-live="polite"></div></section></dialog>
   <dialog id="experiment-dialog"><form method="dialog" class="dialog-card experiment-form" id="experiment-form"><div class="dialog-heading"><div><p class="eyebrow coral">NEW EXPERIMENT</p><h2>ลองเรื่องเล็ก ๆ อย่างตั้งใจ</h2></div><button class="close-button" type="button" data-close-dialog aria-label="ปิด">×</button></div><label>ชื่อการทดลอง<input name="title" required maxlength="120" placeholder="เช่น โฟกัสก่อนเปิดแชต"></label><label>สมมติฐาน<textarea name="hypothesis" required rows="2" placeholder="ถ้าฉันทำ… แล้วน่าจะเกิด…"></textarea></label><label>วิธีที่เราจะลอง<textarea name="protocol" required rows="2" placeholder="กติกาเล็ก ๆ ที่ทำซ้ำได้"></textarea></label><div class="form-grid three"><label>ตัวชี้วัด<input name="metricName" required placeholder="นาทีโฟกัส"></label><label>หน่วย<input name="metricUnit" required placeholder="นาที"></label><label>ทิศทาง<select name="direction"><option value="INCREASE">เพิ่มขึ้น</option><option value="DECREASE">ลดลง</option></select></label></div><div class="form-grid three"><label>ค่าตั้งต้น<input name="baselineValue" required type="number" step="any" value="0"></label><label>เป้าหมาย<input name="targetValue" required type="number" step="any" value="1"></label><label>ระยะเวลา (วัน)<input name="durationDays" required type="number" min="1" max="365" value="7"></label></div><div class="dialog-actions"><button class="secondary-button" type="button" data-close-dialog>ไว้ก่อน</button><button class="primary-button" value="default">สร้างเป็นฉบับร่าง</button></div></form></dialog>
@@ -373,6 +381,6 @@
   <dialog id="conversation-actions-dialog"><form method="dialog" class="dialog-card"><div class="dialog-heading"><div><p class="eyebrow">CONVERSATION</p><h2>จัดการบทสนทนา</h2></div><button class="close-button" type="button" data-close-dialog aria-label="ปิด">×</button></div><label>ชื่อบทสนทนา<input id="conversation-title-input" maxlength="160" autocomplete="off"></label><div class="conversation-action-grid"><button class="secondary-button" id="rename-conversation" type="button">เปลี่ยนชื่อ</button><button class="secondary-button" id="pin-conversation" type="button">ปักหมุด</button><button class="secondary-button" id="archive-conversation" type="button">เก็บเข้าคลัง</button><button class="secondary-button" id="duplicate-conversation" type="button">ทำสำเนา</button><button class="secondary-button" id="export-conversation" type="button">Export Markdown</button><button class="secondary-button" id="export-conversation-json" type="button">Export JSON</button><button class="danger-button" id="delete-conversation" type="button">ลบบทสนทนา</button></div></form></dialog>
   <script src="/cockpit/cockpit-chat-assets.js?v=20260828-storage1" defer></script>
   <script src="/cockpit/cockpit-markdown.js?v=20260829-markdown1" defer></script>
-  <script src="/cockpit/cockpit.js?v=20260902-tinygrad-runtime2" defer></script>
+  <script src="/cockpit/cockpit.js?v=20260905-model-switch1" defer></script>
 </body>
 </html>

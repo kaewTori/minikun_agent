@@ -17,6 +17,8 @@ public record ConversationThread(
         Instant checkInAt,
         boolean checkInConsent,
         Instant lastCheckInAt,
+        ConversationCheckInFeedback lastCheckInFeedback,
+        int checkInCount,
         Instant createdAt,
         Instant updatedAt) {
 
@@ -34,6 +36,7 @@ public record ConversationThread(
         if (checkInAt != null && !checkInConsent) {
             throw new IllegalArgumentException("a scheduled check-in requires explicit consent");
         }
+        if (checkInCount < 0) throw new IllegalArgumentException("check-in count must not be negative");
     }
 
     public boolean dueAt(Instant now) {

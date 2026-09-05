@@ -54,12 +54,23 @@ public final class ChatGenerationProfileSelector {
             CompanionMode mode,
             GenerationSignals signals,
             int configuredMaximum) {
+        return select(userText, mode, signals, null, configuredMaximum);
+    }
+
+    Selection select(
+            String userText,
+            CompanionMode mode,
+            GenerationSignals signals,
+            TurnPlan turnPlan,
+            int configuredMaximum) {
         int applicationMaximum = positive(configuredMaximum, "configured generation max tokens");
         if (!enabled) {
             return new Selection("default", applicationMaximum);
         }
-        CooperationRoutingDecision route = cooperationRouter.decide(userText);
-        if (signals.creativeConversation() || "creative_request".equals(route.reason())) {
+        CooperationRoutingDecision route = turnPlan == null
+                ? cooperationRouter.decide(userText) : turnPlan.cooperation();
+        if (signals.creativeConversation() || turnPlan != null && turnPlan.creative()
+                || "creative_request".equals(route.reason())) {
             return selection("creative", creativeMaxTokens, applicationMaximum);
         }
         if (signals.deepResearch()) {

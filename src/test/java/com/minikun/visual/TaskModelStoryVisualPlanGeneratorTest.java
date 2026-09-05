@@ -46,6 +46,12 @@ class TaskModelStoryVisualPlanGeneratorTest {
         assertEquals(TaskModelRequest.ResponseFormat.JSON_OBJECT, requests.getFirst().responseFormat());
         assertTrue(requests.getFirst().messages().getLast().content().contains("LOCKED CHARACTER VISUAL MEMORY"));
         assertTrue(requests.getFirst().messages().getLast().content().contains("long pink hair"));
+        PonyStoryPromptCompiler.CompiledPrompt prompt = new PonyStoryPromptCompiler().compile(
+                plan.mode(), plan.scenes().getFirst(), plan.characters());
+        assertEquals(1, prompt.facePrompts().size());
+        assertFalse(prompt.facePrompts().getFirst().contains("Mali"));
+        assertTrue(prompt.facePrompts().getFirst().contains("long pink hair"));
+        assertTrue(prompt.facePrompts().getFirst().contains("dark red eyes"));
     }
 
     @Test
@@ -87,5 +93,54 @@ class TaskModelStoryVisualPlanGeneratorTest {
 
         assertFalse(prompt.contains("source_anime"));
         assertTrue(prompt.contains("pink hair"));
+    }
+
+    @Test
+    void compilerKeepsOnlyTheTwoCharactersInTheDefiningActionAndOmitsNames() {
+        List<CharacterVisualProfile> characters = List.of(
+                new CharacterVisualProfile("Itsuki Neko", "1girl", List.of("pink hair", "red eyes"),
+                        List.of("white shirt"), List.of("round glasses"), List.of(), List.of()),
+                new CharacterVisualProfile("Rena Raziel", "1girl", List.of("short black hair"),
+                        List.of("black jacket"), List.of("round glasses"), List.of(), List.of()),
+                new CharacterVisualProfile("Natawada Rin", "1girl", List.of("brown-green hair", "cyan eyes"),
+                        List.of("blue shirt"), List.of("round glasses"), List.of(), List.of()));
+        StorySceneSpec scene = new StorySceneSpec(
+                "Promise", 3, List.of("Itsuki Neko", "Rena Raziel", "Natawada Rin"),
+                "Itsuki Neko holds Rin's hand", "Itsuki looks at Rin", List.of(), "living room", "night", "",
+                "tender", "quiet", "warm lamp", "", "two-shot", "eye level", "medium shot", "sharp",
+                List.of(), List.of(), List.of());
+
+        PonyStoryPromptCompiler.CompiledPrompt prompt = new PonyStoryPromptCompiler().compile(
+                StoryIllustrationMode.DECISIVE_SCENE, scene, characters);
+
+        assertTrue(prompt.positive().contains("2girls"));
+        assertTrue(prompt.positive().contains("pink hair"));
+        assertTrue(prompt.positive().contains("brown-green hair"));
+        assertFalse(prompt.positive().contains("short black hair"));
+        assertFalse(prompt.positive().contains("Itsuki"));
+        assertFalse(prompt.positive().contains("Rin"));
+        assertTrue(prompt.positive().contains("left girl holds right girl's hand"));
+        assertEquals(2, prompt.facePrompts().size());
+    }
+
+    @Test
+    void rejectsSchemaExampleValuesInsteadOfGeneratingThem() {
+        var generator = new TaskModelStoryVisualPlanGenerator(request -> """
+                {"characters":[],"scenes":[{"title":"short panel title","subjectCount":1,
+                "characterNames":["exact character name"],"action":"one visible action",
+                "interaction":"visible relationship action","keyObjects":["indispensable object"],
+                "setting":"location","time":"time","weather":"weather","emotion":"emotion",
+                "atmosphere":"mood","lighting":"lighting","palette":"palette",
+                "composition":"composition","cameraAngle":"camera angle",
+                "shotDistance":"shot distance","focus":"focus treatment",
+                "mustInclude":[],"mustNotInclude":[],"fineDetails":[]}]}
+                """, new ObjectMapper());
+
+        StoryVisualPlan plan = generator.generate(
+                "แต่งเรื่องของ Itsuki ในโรงแรม", "Itsuki เจรจากับคู่แข่งในโรงแรม",
+                StoryIllustrationMode.DECISIVE_SCENE, List.of(), 3);
+
+        assertEquals("DECISIVE_SCENE", plan.scenes().getFirst().title());
+        assertFalse(plan.scenes().getFirst().action().contains("one visible action"));
     }
 }

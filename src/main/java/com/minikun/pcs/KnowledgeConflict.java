@@ -16,6 +16,5 @@ public record KnowledgeConflict(
         if (evidence.isBlank()) {
             throw new IllegalArgumentException("evidence must not be blank");
         }
-        evidence = new String(evidence);
     }
 }

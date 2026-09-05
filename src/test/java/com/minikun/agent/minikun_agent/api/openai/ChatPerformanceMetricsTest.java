@@ -17,6 +17,7 @@ class ChatPerformanceMetricsTest {
         metrics.generationProfile("companion", 384);
         metrics.effectiveGenerationLimit("companion", 320);
         metrics.modelUsage(120, 30, 2_000_000_000L);
+        metrics.promptTokenEstimate(90, 120);
         metrics.continuation("search", "completed");
         metrics.generationOutcome("search", "length", 1);
 
@@ -32,6 +33,8 @@ class ChatPerformanceMetricsTest {
         assertEquals(320.0, registry.get(ChatPerformanceMetrics.TOKENS)
                 .tags("type", "effective_maximum", "profile", "companion").summary().max());
         assertEquals(15.0, registry.get(ChatPerformanceMetrics.TOKENS_PER_SECOND)
+                .summary().mean());
+        assertEquals(0.75, registry.get(ChatPerformanceMetrics.PROMPT_TOKEN_ESTIMATE_RATIO)
                 .summary().mean());
         assertEquals(1.0, registry.get(ChatPerformanceMetrics.CONTINUATIONS)
                 .tags("profile", "search", "result", "completed").counter().count());

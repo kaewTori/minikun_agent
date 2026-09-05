@@ -8,16 +8,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.minikun.search.AcronymDictionary;
-import com.minikun.search.AliasDictionary;
 import com.minikun.search.SearchDecisionService;
 import com.minikun.search.SearchContextAwarenessService;
 import com.minikun.search.SearchQueryExpansionService;
 import com.minikun.search.SearchQueryRewriteService;
-import com.minikun.search.SynonymDictionary;
-import com.minikun.search.dictionary.ImmutableSynonymDictionary;
-import com.minikun.search.dictionary.ImmutableAcronymDictionary;
-import com.minikun.search.dictionary.ImmutableAliasDictionary;
 import com.minikun.search.internal.RuleBasedSearchQueryExpansionService;
 import com.minikun.search.model.ExpandedSearchQuery;
 import com.minikun.search.model.SearchQuery;
@@ -29,23 +23,14 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
-import org.springframework.context.annotation.Import;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.http.MediaType;
+import org.springframework.test.context.ActiveProfiles;
 
-@SpringBootTest(properties = {
-	"spring.autoconfigure.exclude=org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration,org.springframework.ai.model.chat.memory.repository.jdbc.autoconfigure.JdbcChatMemoryRepositoryAutoConfiguration",
-	"minikun.memory.persistence.enabled=false",
-	"minikun.goal.enabled=false",
-	"minikun.planner.enabled=false",
-	"minikun.task.enabled=false",
-	"minikun.investment.enabled=false",
-	"minikun.agent.execution.enabled=false",
-	"minikun.personal-knowledge.enabled=false"
-})
+@SpringBootTest
+@ActiveProfiles("database-offline")
 @AutoConfigureMockMvc
-@Import(TestChatMemoryConfiguration.class)
 class MinikunAgentApplicationTests {
 
 	private static final String DECISION_METRIC = "minikun.search.decision.duration";
@@ -74,19 +59,16 @@ class MinikunAgentApplicationTests {
 	private SearchQueryExpansionService searchQueryExpansionService;
 
 	@Autowired
-	private SynonymDictionary synonymDictionary;
-
-	@Autowired
-	private AcronymDictionary acronymDictionary;
-
-	@Autowired
-	private AliasDictionary aliasDictionary;
-
-	@Autowired
 	private ToolRegistry toolRegistry;
 
 	@Test
 	void contextLoads() {
+		org.junit.jupiter.api.Assertions.assertTrue(
+				applicationContext.getBeansOfType(javax.sql.DataSource.class).isEmpty());
+		var persistenceHealth = applicationContext.getBean(
+				com.minikun.agent.minikun_agent.conversation.ConversationPersistenceHealthIndicator.class).health();
+		org.junit.jupiter.api.Assertions.assertEquals(
+				"DEGRADED", persistenceHealth.getDetails().get("status"));
 		org.junit.jupiter.api.Assertions.assertNotNull(
 				applicationContext.getBean(com.minikun.personality.companion.CompanionModeService.class));
 		org.junit.jupiter.api.Assertions.assertNotNull(
@@ -100,10 +82,31 @@ class MinikunAgentApplicationTests {
 	}
 
 	@Test
+	void healthEndpointExposesDatabaseOfflineMode() throws Exception {
+		mockMvc.perform(get("/actuator/health/conversationPersistence"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.status").value("DEGRADED"));
+	}
+
+	@Test
 	void contextWiresKnowledgeAcquisitionManagementApi() throws Exception {
 		mockMvc.perform(get("/v1/knowledge/acquisition/topics").param("owner_id", "test-owner"))
 				.andExpect(status().isOk())
 				.andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content().json("[]"));
+	}
+
+	@Test
+	void contextWiresEvalLabWithoutExecutingAChatTurn() throws Exception {
+		mockMvc.perform(get("/v1/evals/turn-plans/baseline"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.total").value(6))
+				.andExpect(jsonPath("$.passed").value(6))
+				.andExpect(jsonPath("$.scorePercent").value(100.0));
+
+		mockMvc.perform(get("/v1/evals/turn-plans/quality").param("owner_id", "eval-http-test"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.feedbackTotal").value(0))
+				.andExpect(jsonPath("$.shadowSignals").isArray());
 	}
 
 	@Test
@@ -134,8 +137,12 @@ class MinikunAgentApplicationTests {
 							.string(org.hamcrest.Matchers.allOf(
 									org.hamcrest.Matchers.containsString("YOUR PERSONAL AGENT"),
 									org.hamcrest.Matchers.containsString("MINIKUN PULSE"),
+									org.hamcrest.Matchers.containsString("href=\"#main-content\""),
 									org.hamcrest.Matchers.containsString("data-cockpit-target=\"today\""),
-									org.hamcrest.Matchers.containsString("data-cockpit-target=\"memory\""))));
+									org.hamcrest.Matchers.containsString("data-cockpit-target=\"memory\""),
+									org.hamcrest.Matchers.containsString("id=\"health-retry\""),
+									org.hamcrest.Matchers.containsString("id=\"eval-lab\""),
+									org.hamcrest.Matchers.containsString("id=\"health-updated\""))));
 
 		mockMvc.perform(get("/cockpit/minikun-avatar.jpg"))
 				.andExpect(status().isOk())
@@ -351,11 +358,9 @@ class MinikunAgentApplicationTests {
 	}
 
 	@Test
-	void contextWiresImmutableOrderedSynonymExpansionPipeline() {
+	void contextWiresQueryExpansionPipeline() {
 		org.junit.jupiter.api.Assertions.assertInstanceOf(
 				RuleBasedSearchQueryExpansionService.class, searchQueryExpansionService);
-		org.junit.jupiter.api.Assertions.assertInstanceOf(
-				ImmutableSynonymDictionary.class, synonymDictionary);
 
 		ExpandedSearchQuery result =
 				searchQueryExpansionService.expand(new SearchQuery("original", "latest Java"));
@@ -366,10 +371,7 @@ class MinikunAgentApplicationTests {
 	}
 
 	@Test
-	void contextWiresAcronymDictionaryAfterSynonymRule() {
-		org.junit.jupiter.api.Assertions.assertInstanceOf(
-				ImmutableAcronymDictionary.class, acronymDictionary);
-
+	void expandsAcronyms() {
 		ExpandedSearchQuery result =
 				searchQueryExpansionService.expand(new SearchQuery("original", "CI"));
 
@@ -379,10 +381,7 @@ class MinikunAgentApplicationTests {
 	}
 
 	@Test
-	void contextWiresAliasDictionaryAfterAcronymRule() {
-		org.junit.jupiter.api.Assertions.assertInstanceOf(
-				ImmutableAliasDictionary.class, aliasDictionary);
-
+	void expandsAliases() {
 		ExpandedSearchQuery result =
 				searchQueryExpansionService.expand(new SearchQuery("original", "postgres"));
 

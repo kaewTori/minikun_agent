@@ -45,6 +45,21 @@ class SearchRankerTest {
         assertEquals("tavily", ranked.results().get(0).source().name());
     }
 
+    @Test
+    void usesSemanticAlternateQueriesToRankEvidenceRichLocalResults() {
+        Instant now = Instant.now();
+        SearchResult generic = result("ร้านข้าวไฟฉาย", "https://one.test/a", "ร้านอาหารทั่วไป", now, 1);
+        SearchResult useful = result("ร้านข้าวไฟฉาย", "https://two.test/a",
+                "รีวิว 4.8 ดาว เปิดถึง 20:00 ราคา 100 บาท", now, 2);
+        SearchResponse response = new SearchResponse(UUID.randomUUID(), SearchStatus.SUCCESS,
+                List.of(generic, useful), new SearchMetadata(Duration.ZERO, false, false, 0));
+
+        SearchResponse ranked = new SearchRanker().rank(response,
+                List.of("ร้านข้าวไฟฉาย", "ร้านข้าวไฟฉาย รีวิว เวลาเปิด ราคา"), SearchOptions.defaults());
+
+        assertEquals("https://two.test/a", ranked.results().get(0).canonicalUri());
+    }
+
     private SearchResult result(String title, String url, String content, Instant retrievedAt, int position) {
         return new SearchResult(title, url, content, new SearchSource("test", url, retrievedAt), position);
     }

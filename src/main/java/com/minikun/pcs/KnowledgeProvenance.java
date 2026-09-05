@@ -19,7 +19,6 @@ public record KnowledgeProvenance(
         if (originalCandidateOrder < 0) {
             throw new IllegalArgumentException("original candidate order must not be negative");
         }
-        candidateId = new String(candidateId);
     }
 
     public static KnowledgeProvenance from(KnowledgeCandidate candidate, int order) {

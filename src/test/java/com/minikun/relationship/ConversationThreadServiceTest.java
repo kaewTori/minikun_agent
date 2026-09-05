@@ -27,6 +27,17 @@ class ConversationThreadServiceTest {
     }
 
     @Test
+    void keepsExplicitWorkingDecisionAcrossConversations() {
+        ConversationThread thread = service.observeTurn("owner", "conversation",
+                "จำไว้ว่า สำหรับโปรเจกต์มินิคุงเราตกลงใช้ PostgreSQL", "รับทราบครับ")
+                .orElseThrow();
+
+        assertTrue(thread.lastDecision().contains("PostgreSQL"));
+        assertTrue(service.promptContext("owner", "another", "โปรเจกต์มินิคุง")
+                .contains("PostgreSQL"));
+    }
+
+    @Test
     void schedulesOnlyWhenUserExplicitlyRequestsCheckIn() {
         ConversationThread thread = service.observeTurn("owner", "conversation",
                 "ถามเรื่องออกกำลังกายอีกทีพรุ่งนี้ตอนเช้านะ", "ได้ครับ")
@@ -46,5 +57,39 @@ class ConversationThreadServiceTest {
             rejected = true;
         }
         assertTrue(rejected);
+    }
+
+    @Test
+    void keepsRecentEmotionalContextWithoutPersistingTheRawMessage() {
+        service.observeTurn("owner", "conversation", "วันนี้เหนื่อยและเครียดมาก", "พักก่อนก็ได้ครับ");
+
+        String context = service.promptContext("owner", "another", "คุยกันหน่อย");
+
+        assertTrue(context.contains("Recent emotional context: SUPPORTIVE"));
+        assertFalse(context.contains("วันนี้เหนื่อยและเครียดมาก"));
+    }
+
+    @Test
+    void clearsEmotionalContextWhenUserExplicitlyFeelsBetter() {
+        service.observeTurn("owner", "conversation", "วันนี้เหนื่อยและเครียดมาก", "พักก่อนก็ได้ครับ");
+        service.observeTurn("owner", "conversation", "ตอนนี้ดีขึ้นแล้วนะ", "ดีใจด้วยครับ");
+
+        assertTrue(service.promptContext("owner", "another", "คุยกันหน่อย").isBlank());
+    }
+
+    @Test
+    void careFeedbackCanSnoozeOrStopAConsentedCheckIn() {
+        ConversationThread thread = service.observeTurn("owner", "conversation",
+                "ถามเรื่องออกกำลังกายอีกทีพรุ่งนี้ตอนเช้านะ", "ได้ครับ").orElseThrow();
+
+        ConversationThread snoozed = service.feedback("owner", thread.id(),
+                ConversationCheckInFeedback.NOT_NOW, NOW.plusSeconds(7200));
+        assertEquals(ConversationCheckInFeedback.NOT_NOW, snoozed.lastCheckInFeedback());
+        assertTrue(snoozed.checkInConsent());
+
+        ConversationThread stopped = service.feedback("owner", thread.id(),
+                ConversationCheckInFeedback.STOP_THIS_TOPIC, null);
+        assertEquals(ConversationThreadStatus.RESOLVED, stopped.status());
+        assertFalse(stopped.checkInConsent());
     }
 }

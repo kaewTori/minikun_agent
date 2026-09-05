@@ -52,7 +52,8 @@ class ChatSyncServiceTest {
         ChatSyncConversation input = new ChatSyncConversation("chat", "หัวข้อ", null, List.of(
                 new ChatSyncConversation.Message("message", "assistant", "คำตอบ", List.of(), List.of(),
                         null, null, Instant.now(), Map.of(
-                                "status", "complete", "feedback", "up", "branchId", "branch-1"))),
+                                "status", "complete", "feedback", "up", "branchId", "branch-1",
+                                "backgroundJobId", "job-1"))),
                 true, true);
 
         ChatSyncConversation saved = service.save(session, "chat", input);
@@ -60,6 +61,7 @@ class ChatSyncServiceTest {
         assertTrue(saved.pinned());
         assertTrue(saved.archived());
         assertEquals("up", saved.messages().getFirst().metadata().get("feedback"));
+        assertEquals("job-1", saved.messages().getFirst().metadata().get("backgroundJobId"));
     }
 
     @Test

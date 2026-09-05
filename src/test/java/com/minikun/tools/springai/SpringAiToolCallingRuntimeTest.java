@@ -306,6 +306,37 @@ class SpringAiToolCallingRuntimeTest {
         verify(tracker).finishStep(runId, "call-1", success, false);
     }
 
+    @Test
+    void callbackNeverRetriesAMutatingTool() throws Exception {
+        Tool mutatingTool = new Tool() {
+            @Override public ToolDefinition definition() {
+                return new ToolDefinition("native.write", "mutating operation", Map.of());
+            }
+            @Override public ToolResult execute(com.minikun.tools.ToolCallContext context,
+                    Map<String, Object> arguments) { return ToolResult.failure(ToolErrorCode.EXECUTION_FAILED, "uncertain"); }
+        };
+        ToolExecutor executor = mock(ToolExecutor.class);
+        AgentExecutionTracker tracker = mock(AgentExecutionTracker.class);
+        UUID runId = UUID.randomUUID();
+        Instant now = Instant.parse("2026-08-21T08:00:00Z");
+        AgentExecutionStep step = new AgentExecutionStep(UUID.randomUUID(), runId, 1, "call-1",
+                "native.write", "{}", AgentStepStatus.RUNNING, 1, "", "", "", now, now, null);
+        ToolResult failure = ToolResult.failure(ToolErrorCode.EXECUTION_FAILED, "uncertain");
+        when(tracker.beginStep(any(), any(), any(), any())).thenReturn(step);
+        when(tracker.shouldRetry(failure, 1)).thenReturn(true);
+        when(executor.execute(any(), any())).thenReturn(failure);
+        SpringAiToolCallback callback = new SpringAiToolCallback(mutatingTool, executor, new ObjectMapper(), tracker);
+        callback.setCurrentCallId("call-1");
+
+        var result = new ObjectMapper().readTree(callback.call("{}", new ToolContext(Map.of(
+                "agentRunId", runId.toString(), "conversationId", "conversation", "ownerId", "owner"))));
+
+        assertEquals(false, result.path("success").asBoolean());
+        verify(executor, times(1)).execute(any(), any());
+        verify(tracker).finishStep(runId, "call-1", failure, false);
+        verify(tracker, never()).shouldRetry(any(), any(Integer.class));
+    }
+
         @Test
         void rejectsToolCallingWhenActiveProviderDoesNotSupportIt() {
                 ChatModelProvider tinyGradProvider = new ChatModelProvider() {

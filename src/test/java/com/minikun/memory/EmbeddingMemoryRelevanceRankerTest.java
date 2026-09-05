@@ -27,8 +27,8 @@ class EmbeddingMemoryRelevanceRankerTest {
         Memory travel = memory("00000000-0000-0000-0000-000000000001", "ชอบเดินทางด้วยรถไฟ", 0.8);
         Memory food = memory("00000000-0000-0000-0000-000000000002", "แพ้อาหารทะเล", 0.9);
         when(model.embed("การคมนาคมที่พี่ชอบ")).thenReturn(new float[] {1, 0});
-        when(model.embed("PREFERENCE: ชอบเดินทางด้วยรถไฟ")).thenReturn(new float[] {0.99f, 0.01f});
-        when(model.embed("PREFERENCE: แพ้อาหารทะเล")).thenReturn(new float[] {0, 1});
+        when(model.embed(List.of("PREFERENCE: แพ้อาหารทะเล", "PREFERENCE: ชอบเดินทางด้วยรถไฟ")))
+                .thenReturn(List.of(new float[] {0, 1}, new float[] {0.99f, 0.01f}));
         EmbeddingMemoryRelevanceRanker ranker = new EmbeddingMemoryRelevanceRanker(
                 model, 0.9, new SimpleMeterRegistry());
 
@@ -57,8 +57,8 @@ class EmbeddingMemoryRelevanceRankerTest {
         when(model.embed("q1")).thenReturn(new float[] {1, 0});
         when(model.embed("q2")).thenReturn(new float[] {1, 0});
         when(model.embed("q3")).thenReturn(new float[] {1, 0});
-        when(model.embed("PREFERENCE: first")).thenReturn(new float[] {1, 0});
-        when(model.embed("PREFERENCE: second")).thenReturn(new float[] {1, 0});
+        when(model.embed(List.of("PREFERENCE: first"))).thenReturn(List.of(new float[] {1, 0}));
+        when(model.embed(List.of("PREFERENCE: second"))).thenReturn(List.of(new float[] {1, 0}));
         EmbeddingMemoryRelevanceRanker ranker = new EmbeddingMemoryRelevanceRanker(
                 model, 0.9, new SimpleMeterRegistry(), 1);
 
@@ -66,7 +66,7 @@ class EmbeddingMemoryRelevanceRankerTest {
         ranker.rank(List.of(second), "q2", 1);
         ranker.rank(List.of(first), "q3", 1);
 
-        verify(model, times(2)).embed("PREFERENCE: first");
+        verify(model, times(2)).embed(List.of("PREFERENCE: first"));
     }
 
     private Memory memory(String id, String content, double confidence) {
