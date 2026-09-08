@@ -50,23 +50,9 @@ public record StorySceneSpec(
         if (subjectCount < 0 || subjectCount > 8) {
             throw new IllegalArgumentException("scene subject count must be between 0 and 8");
         }
-        if (setting.isBlank() && mustInclude.isEmpty()) {
-            throw new IllegalArgumentException("scene setting or required visual anchor is required");
+        if (setting.isBlank() && mustInclude.isEmpty() && action.isBlank() && keyObjects.isEmpty()) {
+            throw new IllegalArgumentException("scene requires a visible action, object, setting, or anchor");
         }
-    }
-
-    public static StorySceneSpec fallback(String visualPrompt, String title, String action,
-            String composition, String shotDistance) {
-        return new StorySceneSpec(title, 0, List.of(), action, "", List.of(), "", "", "",
-                "", "cinematic story atmosphere", "warm cinematic lighting", "", composition,
-                "eye level", shotDistance, "clear subject", splitTags(visualPrompt), List.of(),
-                List.of("detailed background"));
-    }
-
-    private static List<String> splitTags(String value) {
-        if (value == null) return List.of();
-        return java.util.Arrays.stream(value.split(",")).map(String::strip)
-                .filter(tag -> !tag.isBlank()).toList();
     }
 
     private static List<String> tags(List<String> values) {

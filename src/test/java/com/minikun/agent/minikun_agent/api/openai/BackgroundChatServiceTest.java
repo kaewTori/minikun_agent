@@ -11,6 +11,7 @@ import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import java.time.Duration;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import org.junit.jupiter.api.Test;
@@ -105,5 +106,40 @@ class BackgroundChatServiceTest {
 
         assertTrue(interrupted.await(2, TimeUnit.SECONDS));
         assertEquals("RUNNING", store.find(id).orElseThrow().status());
+    }
+
+    @Test
+    void failsAStuckJobInsteadOfLeavingTheBrowserPollingForever() throws Exception {
+        ChatService chat = mock(ChatService.class);
+        CountDownLatch started = new CountDownLatch(1);
+        CountDownLatch interrupted = new CountDownLatch(1);
+        when(chat.chatCompletion(any(), any())).thenAnswer(ignored -> {
+            started.countDown();
+            try {
+                new CountDownLatch(1).await();
+            } catch (InterruptedException exception) {
+                interrupted.countDown();
+                Thread.currentThread().interrupt();
+            }
+            return null;
+        });
+
+        try (BackgroundChatService service = new BackgroundChatService(
+                chat, ignored -> { }, (BackgroundChatStore) null, Duration.ofMillis(100))) {
+            UUID id = service.submit(new ChatCompletionRequest("mini-kun",
+                    List.of(new Message("user", "ค้นข้อมูล")), "conversation-timeout",
+                    false, null, null, null), new ConversationId("conversation-timeout"));
+
+            assertTrue(started.await(2, TimeUnit.SECONDS));
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
+            while ("running".equals(service.find(id).orElseThrow().status())
+                    && System.nanoTime() < deadline) {
+                Thread.onSpinWait();
+            }
+            var result = service.find(id).orElseThrow();
+            assertEquals("failed", result.status());
+            assertTrue(result.error().contains("เวลานานเกินไป"));
+            assertTrue(interrupted.await(2, TimeUnit.SECONDS));
+        }
     }
 }

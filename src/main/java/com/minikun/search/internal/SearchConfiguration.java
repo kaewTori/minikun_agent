@@ -135,7 +135,7 @@ public class SearchConfiguration {
             @Value("${minikun.search.enabled:true}") boolean searchEnabled,
             @Value("${minikun.search.cache.enabled:true}") boolean cacheEnabled,
             MeterRegistry meterRegistry,
-            @Value("${minikun.search.cache.provider-version:v1}") String providerVersion) {
+            @Value("${minikun.search.cache.provider-version:v3}") String providerVersion) {
         return new DefaultSearchService(
             manager, cache, searchEnabled, cacheEnabled,
             queryRewriteService, queryExpansionService, meterRegistry, providerVersion);
@@ -235,7 +235,7 @@ public class SearchConfiguration {
     }
 
     @Bean
-    SearchFormatter searchFormatter() {
-        return new SearchFormatter();
+    SearchFormatter searchFormatter(MeterRegistry meterRegistry) {
+        return new SearchFormatter(meterRegistry);
     }
 }

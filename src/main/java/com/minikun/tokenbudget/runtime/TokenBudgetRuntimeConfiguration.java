@@ -56,17 +56,10 @@ public class TokenBudgetRuntimeConfiguration {
             @org.springframework.beans.factory.annotation.Value("${minikun.model.capability.existing.context-window:16384}")
             long existingContextWindow,
             @org.springframework.beans.factory.annotation.Value("${minikun.model.capability.existing.max-output:4096}")
-            long existingMaxOutput,
-            @org.springframework.beans.factory.annotation.Value("${minikun.model.capability.tinygrad.context-window:16384}")
-            long tinygradContextWindow,
-            @org.springframework.beans.factory.annotation.Value("${minikun.model.capability.tinygrad.max-output:4096}")
-            long tinygradMaxOutput) {
+            long existingMaxOutput) {
         return new DefaultModelCapabilityRegistry(Map.of(
                 ChatModelId.EXISTING,
                 new ModelCapability(ChatModelId.EXISTING, ModelRole.CHAT,
-                        existingContextWindow, existingMaxOutput),
-                ChatModelId.TINYGRAD,
-                new ModelCapability(ChatModelId.TINYGRAD, ModelRole.CHAT,
-                        tinygradContextWindow, tinygradMaxOutput)));
+                        existingContextWindow, existingMaxOutput)));
     }
 }

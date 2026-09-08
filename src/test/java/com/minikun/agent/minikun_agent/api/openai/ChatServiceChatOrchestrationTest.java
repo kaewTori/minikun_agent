@@ -16,6 +16,7 @@ import java.time.Duration;
 import java.time.Clock;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -47,8 +48,6 @@ import com.minikun.model.ActiveModelConfiguration;
 import com.minikun.model.ChatModelId;
 import com.minikun.model.ChatModelProvider;
 import com.minikun.model.CooperationRouter;
-import com.minikun.model.CooperativeChatModelService;
-import com.minikun.model.CooperativeReviewStore;
 import com.minikun.model.DefaultChatModelProviderRegistry;
 import com.minikun.model.DefaultActiveChatModelProvider;
 import com.minikun.model.ModelCapabilities;
@@ -94,9 +93,14 @@ import com.minikun.vision.VisionInputService;
 import com.minikun.visual.GeneratedImage;
 import com.minikun.visual.GeneratedImageStore;
 import com.minikun.visual.ImageGenerationTool;
+import com.minikun.visual.InMemoryCharacterVisualMemory;
 import com.minikun.visual.StoryIllustrationService;
+import com.minikun.visual.StorySceneSpec;
+import com.minikun.visual.StoryVisualPlan;
+import com.minikun.visual.StoryVisualPlanGenerator;
 
 import reactor.core.publisher.Flux;
+import reactor.core.scheduler.Schedulers;
 
 class ChatServiceChatOrchestrationTest {
     private static final Path MCS_ROOT = Path.of("../../config/minikun-agent/mcs");
@@ -115,7 +119,8 @@ class ChatServiceChatOrchestrationTest {
                 new GeneratedImageStore(temporaryDirectory, 1024, Clock.systemUTC()),
                 8000, 4_194_304L);
         setField(service, "storyIllustrationService", new StoryIllustrationService(
-                imageTool, true, 2000));
+                imageTool, true, 2000, visualPlan(),
+                new InMemoryCharacterVisualMemory(), 3));
 
         ChatCompletionResponse result = service.chatCompletion(new ChatCompletionRequest(
                 "mini-kun", List.of(new Message("user", "ช่วย gen รูปแมวดำในหอดูดาวให้หน่อย")),
@@ -127,6 +132,36 @@ class ChatServiceChatOrchestrationTest {
         ArgumentCaptor<Prompt> prompt = ArgumentCaptor.forClass(Prompt.class);
         verify(chatModel).call(prompt.capture());
         assertTrue(promptText(prompt.getValue()).contains("Generated story illustration"));
+    }
+
+    @Test
+    void streamingBlankImageResponseStillPreparesIllustrationOffTheReactorThread() throws Exception {
+        ChatModel chatModel = mock(ChatModel.class);
+        ConversationMemoryService conversation = mock(ConversationMemoryService.class);
+        when(conversation.load(any())).thenReturn(List.of());
+        when(chatModel.stream(any(Prompt.class))).thenReturn(Flux.just(response("")));
+        ChatService service = service(chatModel, conversation);
+        AtomicBoolean transformedOffReactor = new AtomicBoolean();
+        var imageTool = new ImageGenerationTool(prompt -> new GeneratedImage(
+                new byte[] {(byte) 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1},
+                "test-image-model"),
+                new GeneratedImageStore(temporaryDirectory, 1024, Clock.systemUTC()),
+                8000, 4_194_304L);
+        StoryVisualPlanGenerator planner = (user, story, mode, memory, maximum) -> {
+            transformedOffReactor.set(!Schedulers.isInNonBlockingThread());
+            return visualPlan().generate(user, story, mode, memory, maximum);
+        };
+        setField(service, "storyIllustrationService", new StoryIllustrationService(
+                imageTool, true, 2000, planner,
+                new InMemoryCharacterVisualMemory(), 3));
+
+        List<String> chunks = service.chatCompletionStream(new ChatCompletionRequest(
+                "mini-kun", List.of(new Message("user", "ช่วย gen รูปแมวดำในหอดูดาวให้หน่อย")),
+                "stream-image", true, null, null, null), new ConversationId("stream-image"))
+                .subscribeOn(Schedulers.parallel()).collectList().block();
+
+        assertTrue(transformedOffReactor.get());
+        assertTrue(chunks.stream().anyMatch(chunk -> chunk.contains("โมเดลยังไม่ได้ส่งคำตอบ")));
     }
 
     @Test
@@ -240,6 +275,42 @@ class ChatServiceChatOrchestrationTest {
         assertEquals("อธิบายภาพนี้", persistedUser.getValue().content());
         assertFalse(persistedUser.getValue().content().contains("iVBORw0KGgo"));
         assertFalse(persistedAssistant.getValue().content().contains("iVBORw0KGgo"));
+    }
+
+    @Test
+    void includesVisualHandoffWhenGeneratingFromAReferenceImage() throws Exception {
+        ChatModel chatModel = mock(ChatModel.class);
+        ConversationMemoryService conversation = mock(ConversationMemoryService.class);
+        when(conversation.load(any())).thenReturn(List.of());
+        when(chatModel.call(any(Prompt.class))).thenReturn(response("ผมจะออกแบบภาพใหม่จาก reference ให้ต่างจากต้นฉบับ"));
+        ChatService service = service(chatModel, conversation);
+        var imageTool = new ImageGenerationTool(prompt -> new GeneratedImage(
+                new byte[] {(byte) 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1},
+                "test-image-model"),
+                new GeneratedImageStore(temporaryDirectory, 1024, Clock.systemUTC()),
+                8000, 4_194_304L);
+        setField(service, "storyIllustrationService", new StoryIllustrationService(
+                imageTool, true, 2000, visualPlan(),
+                new InMemoryCharacterVisualMemory(), 3));
+        setField(service, "visionInputService", new VisionInputService(
+                true, 3, 1024, true, false, Duration.ofSeconds(1), Duration.ofSeconds(1)));
+
+        ChatCompletionRequest request = new ObjectMapper().readValue("""
+                {"model":"mini-kun","conversation_id":"reference-image","stream":false,"messages":[
+                  {"role":"user","content":[
+                    {"type":"text","text":"ใช้ภาพ reference ที่แนบมานี้เป็นทิศทาง แล้วช่วยออกแบบภาพใหม่ให้ต่างจากต้นฉบับอย่างชัดเจน"},
+                    {"type":"image_url","image_url":{"url":"data:image/png;base64,iVBORw0KGgo="}}
+                  ]}
+                ]}
+                """, ChatCompletionRequest.class);
+
+        service.chatCompletion(request, new ConversationId("reference-image"));
+
+        ArgumentCaptor<Prompt> prompt = ArgumentCaptor.forClass(Prompt.class);
+        verify(chatModel).call(prompt.capture());
+        String promptText = promptText(prompt.getValue());
+        assertTrue(promptText.contains("Visual generation handoff"));
+        assertTrue(promptText.contains("composition, pose, setting, palette"));
     }
 
     @Test
@@ -558,71 +629,6 @@ class ChatServiceChatOrchestrationTest {
         verify(conversation).appendTurn(any(), any(), any());
     }
 
-    @Test
-    void blockingUsesConfiguredTinyGradProvider() {
-        ChatModelProvider tinyGradProvider = mock(ChatModelProvider.class);
-        ConversationMemoryService conversation = mock(ConversationMemoryService.class);
-        when(tinyGradProvider.id()).thenReturn(ChatModelId.TINYGRAD);
-        when(tinyGradProvider.capabilities()).thenReturn(new ModelCapabilities(true, false, false));
-        when(tinyGradProvider.chat(any(Prompt.class))).thenReturn(response("tinygrad answer"));
-        when(conversation.load(any())).thenReturn(List.of());
-
-        ChatService service = service(tinyGradProvider, conversation);
-
-        var result = service.chatCompletion(request(), new ConversationId("tinygrad"));
-
-        assertEquals("tinygrad answer", result.choices().get(0).message().content());
-        verify(tinyGradProvider).chat(any(Prompt.class));
-    }
-
-    @Test
-    void toolsEnabledTechnicalQuestionSkipsToolRuntimeBeforeQualityReview() throws Exception {
-        ChatModel frontLineModel = mock(ChatModel.class);
-        when(frontLineModel.call(any(Prompt.class))).thenReturn(response("คำตอบตรงจากโมเดลหลัก"));
-        ChatModelProvider frontLine = new ExistingChatModelProvider(frontLineModel);
-        ChatModelProvider verifier = mock(ChatModelProvider.class);
-        when(verifier.id()).thenReturn(ChatModelId.TINYGRAD);
-        when(verifier.capabilities()).thenReturn(new ModelCapabilities(true, false, false));
-        when(verifier.chat(any(Prompt.class))).thenReturn(
-                response("คำตอบผ่านการตรวจ สำหรับ JDK25 Spring Boot 130 apps บน RAM 32 GB"));
-        ConversationMemoryService conversation = mock(ConversationMemoryService.class);
-        when(conversation.load(any())).thenReturn(List.of());
-        ChatService service = service(frontLine, conversation);
-        SpringAiToolCallingRuntime toolRuntime = mock(SpringAiToolCallingRuntime.class);
-        when(toolRuntime.call(any(Prompt.class), any(ConversationId.class), any(String.class)))
-                .thenReturn(response("ollama tool-runtime draft"));
-        CooperativeChatModelService cooperation = new CooperativeChatModelService(
-                new DefaultChatModelProviderRegistry(List.of(frontLine, verifier)),
-                new CooperativeReviewStore(),
-                new CooperationRouter(),
-                new com.minikun.model.CooperativeQualityGate(true, 0.85, 0.08),
-                true,
-                "blocking",
-                Duration.ofSeconds(2),
-                12_000);
-        setField(service, "toolsEnabled", true);
-        setField(service, "toolCallingRuntime", toolRuntime);
-        setField(service, "cooperativeChatModelService", cooperation);
-        String question = "เรามี JDK25 Spring Boot 130 apps บน RAM 32 GB ต้อง config Java ยังไง";
-        ChatCompletionRequest request = new ChatCompletionRequest(
-                "test-model",
-                List.of(new Message("user", question)),
-                "technical-tools",
-                false,
-                null,
-                null,
-                null);
-
-        ChatCompletionResponse result = service.chatCompletion(
-                request, new ConversationId("technical-tools"));
-
-        assertEquals("คำตอบผ่านการตรวจ สำหรับ JDK25 Spring Boot 130 apps บน RAM 32 GB",
-                result.choices().getFirst().message().content());
-        verify(toolRuntime, never()).call(any(Prompt.class), any(ConversationId.class), any(String.class));
-        verify(frontLineModel).call(any(Prompt.class));
-        verify(verifier).chat(any(Prompt.class));
-    }
-
         @Test
         void propagatesGenerationOptionsAndMapsModelUsage() {
         ChatModel chatModel = mock(ChatModel.class);
@@ -654,6 +660,7 @@ class ChatServiceChatOrchestrationTest {
         assertEquals(200, prompt.getValue().getOptions().getMaxTokens());
         assertEquals(List.of("END"), prompt.getValue().getOptions().getStopSequences());
         assertEquals(16_384, ((OllamaChatOptions) prompt.getValue().getOptions()).getNumCtx());
+        assertEquals(false, ((OllamaChatOptions) prompt.getValue().getOptions()).getThinkOption().toJsonValue());
         assertEquals(new ChatCompletionResponse.Usage(12, 5, 17), response.usage());
         }
 
@@ -775,7 +782,7 @@ class ChatServiceChatOrchestrationTest {
         ChatModelProvider activeProvider = mock(ChatModelProvider.class);
         ConversationMemoryService conversation = mock(ConversationMemoryService.class);
         TitleGenerationService titleService = mock(TitleGenerationService.class);
-        when(activeProvider.id()).thenReturn(ChatModelId.TINYGRAD);
+        when(activeProvider.id()).thenReturn(ChatModelId.EXISTING);
         when(activeProvider.capabilities()).thenReturn(new ModelCapabilities(true, false, false));
         when(titleService.generateTitle(anyList())).thenReturn("Postgres Setup");
 
@@ -798,7 +805,7 @@ class ChatServiceChatOrchestrationTest {
         TitleGenerationProvider failingProvider = messages -> {
             throw new IllegalStateException("Ollama timeout");
         };
-        when(activeProvider.id()).thenReturn(ChatModelId.TINYGRAD);
+        when(activeProvider.id()).thenReturn(ChatModelId.EXISTING);
         when(activeProvider.capabilities()).thenReturn(new ModelCapabilities(true, false, false));
         when(activeProvider.chat(any(Prompt.class))).thenReturn(response("normal answer"));
         when(conversation.load(any())).thenReturn(List.of());
@@ -1082,6 +1089,15 @@ class ChatServiceChatOrchestrationTest {
         var field = ChatService.class.getDeclaredField(fieldName);
         field.setAccessible(true);
         field.set(service, value);
+    }
+
+    private StoryVisualPlanGenerator visualPlan() {
+        return (user, story, mode, memory, maximum) -> new StoryVisualPlan(
+                mode, List.of(), List.of(new StorySceneSpec(
+                        "Star cat", 1, List.of(), "black cat watching the stars", "", List.of(),
+                        "old observatory", "night", "", "calm", "quiet", "starlight", "navy",
+                        "cinematic composition", "eye level", "medium shot", "sharp focus",
+                        List.of("black cat"), List.of(), List.of())));
     }
 
     private ChatResponse response(String text) {

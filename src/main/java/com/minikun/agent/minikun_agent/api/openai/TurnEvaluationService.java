@@ -121,7 +121,7 @@ public final class TurnEvaluationService {
         compare(values, "execution", normalized(expected.execution()), actual.execution());
         if (expected.tools() != null && expected.tools() != actual.tools()) values.add("tools");
         if (expected.expertReview() != null && expected.expertReview() != actual.expertReview()) {
-            values.add("expert_review");
+            values.add("technical_route");
         }
         return List.copyOf(values);
     }

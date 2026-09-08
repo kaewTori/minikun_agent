@@ -1,5 +1,6 @@
 package com.minikun.agent.minikun_agent.api.openai;
 
+import java.time.Duration;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -8,6 +9,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -16,6 +18,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 
@@ -31,28 +34,45 @@ import com.minikun.notification.NotificationRequest;
 public final class BackgroundChatService implements AutoCloseable {
     private static final Logger LOGGER = LoggerFactory.getLogger(BackgroundChatService.class);
     private static final long RESULT_TTL_HOURS = 24;
+    private static final Duration DEFAULT_JOB_TIMEOUT = Duration.ofSeconds(180);
 
     private final ChatService chatService;
     private final NotificationDispatcher notifications;
     private final BackgroundChatStore store;
+    private final Duration jobTimeout;
     private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
+    private final ScheduledExecutorService timeoutExecutor = Executors.newSingleThreadScheduledExecutor(r -> {
+        Thread thread = new Thread(r, "minikun-background-timeout");
+        thread.setDaemon(true);
+        return thread;
+    });
     private final Map<UUID, Job> jobs = new ConcurrentHashMap<>();
     private volatile boolean shuttingDown;
 
     public BackgroundChatService(ChatService chatService, NotificationDispatcher notifications) {
-        this(chatService, notifications, (BackgroundChatStore) null);
+        this(chatService, notifications, (BackgroundChatStore) null, DEFAULT_JOB_TIMEOUT);
     }
 
     @Autowired
     BackgroundChatService(ChatService chatService, NotificationDispatcher notifications,
-            ObjectProvider<BackgroundChatStore> store) {
-        this(chatService, notifications, store == null ? null : store.getIfAvailable());
+            ObjectProvider<BackgroundChatStore> store,
+            @Value("${minikun.chat.background.timeout:180s}") Duration jobTimeout) {
+        this(chatService, notifications, store == null ? null : store.getIfAvailable(), jobTimeout);
     }
 
     BackgroundChatService(ChatService chatService, NotificationDispatcher notifications, BackgroundChatStore store) {
+        this(chatService, notifications, store, DEFAULT_JOB_TIMEOUT);
+    }
+
+    BackgroundChatService(ChatService chatService, NotificationDispatcher notifications,
+            BackgroundChatStore store, Duration jobTimeout) {
         this.chatService = Objects.requireNonNull(chatService, "chat service must not be null");
         this.notifications = Objects.requireNonNull(notifications, "notification dispatcher must not be null");
         this.store = store;
+        if (jobTimeout == null || jobTimeout.isZero() || jobTimeout.isNegative()) {
+            throw new IllegalArgumentException("background chat timeout must be positive");
+        }
+        this.jobTimeout = jobTimeout;
     }
 
     public UUID submit(ChatCompletionRequest request, ConversationId conversationId) {
@@ -61,6 +81,7 @@ public final class BackgroundChatService implements AutoCloseable {
         jobs.put(id, job);
         if (store != null) store.create(id, request, conversationId.value());
         job.runner = executor.submit(() -> run(id, job, request, conversationId));
+        timeoutAfter(id, job);
         return id;
     }
 
@@ -74,7 +95,7 @@ public final class BackgroundChatService implements AutoCloseable {
         Job job = jobs.get(id);
         if (job == null) return false;
         if (job.state.compareAndSet(State.RUNNING, State.CANCELLED)) {
-            job.runner.cancel(true);
+            if (job.runner != null) job.runner.cancel(true);
             if (store != null) store.update(id, "CANCELLED", null, "cancelled by user");
             expire(id, job);
             return true;
@@ -94,8 +115,9 @@ public final class BackgroundChatService implements AutoCloseable {
                 LOGGER.info("process=background_chat event=paused_for_restart job_id={}", id);
                 return;
             }
-            job.error = Objects.requireNonNullElse(exception.getMessage(), "ตอบคำถามไม่สำเร็จ");
+            String error = Objects.requireNonNullElse(exception.getMessage(), "ตอบคำถามไม่สำเร็จ");
             if (job.state.compareAndSet(State.RUNNING, State.FAILED)) {
+                job.error = error;
                 if (store != null) store.update(id, "FAILED", null, job.error);
                 notify(id, "ตอบคำถามไม่สำเร็จครับ กลับมาที่มินิคุงเพื่อลองอีกครั้ง");
             }
@@ -122,6 +144,7 @@ public final class BackgroundChatService implements AutoCloseable {
         jobs.put(saved.id(), job);
         store.create(saved.id(), saved.request(), saved.conversationId());
         job.runner = executor.submit(() -> run(saved.id(), job, saved.request(), new ConversationId(saved.conversationId())));
+        timeoutAfter(saved.id(), job);
     }
 
     private View view(BackgroundChatStore.SavedJob saved) {
@@ -144,9 +167,22 @@ public final class BackgroundChatService implements AutoCloseable {
                 .execute(() -> jobs.remove(id, job));
     }
 
+    private void timeoutAfter(UUID id, Job job) {
+        timeoutExecutor.schedule(() -> {
+            if (!job.state.compareAndSet(State.RUNNING, State.FAILED)) return;
+            job.error = "ตอบคำถามใช้เวลานานเกินไป กรุณาลองใหม่อีกครั้ง";
+            if (job.runner != null) job.runner.cancel(true);
+            if (store != null) store.update(id, "FAILED", null, job.error);
+            LOGGER.warn("process=background_chat event=timeout job_id={} timeout_ms={}",
+                    id, jobTimeout.toMillis());
+            notify(id, "ตอบคำถามใช้เวลานานเกินไปครับ กลับมาที่มินิคุงเพื่อลองใหม่อีกครั้ง");
+        }, Math.max(1L, jobTimeout.toMillis()), TimeUnit.MILLISECONDS);
+    }
+
     @Override
     public void close() {
         shuttingDown = true;
+        timeoutExecutor.shutdownNow();
         executor.shutdownNow();
     }
 

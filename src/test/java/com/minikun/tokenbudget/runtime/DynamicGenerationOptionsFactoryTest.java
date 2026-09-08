@@ -22,7 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class DynamicGenerationOptionsFactoryTest {
     private static final ModelCapability CAPABILITY =
-            new ModelCapability(ChatModelId.TINYGRAD, ModelRole.CHAT, 16_384, 4_096);
+            new ModelCapability(ChatModelId.EXISTING, ModelRole.CHAT, 16_384, 4_096);
     private static final TokenBudget BUDGET = new TokenBudget(16_384, 0, 2_048);
 
     @Test

@@ -36,6 +36,7 @@ public final class DefaultSearchManager implements SearchManager {
     private static final String FAILURE_COUNTER = "minikun.search.failures";
     private static final String TIMEOUT_COUNTER = "minikun.search.timeouts";
     private static final String QUALITY_COUNTER = "minikun.search.quality.search.results";
+    private static final String IMAGE_FALLBACK_COUNTER = "minikun.search.images.fallback";
 
     private final SearchProvider provider;
     private final Clock clock;
@@ -122,6 +123,22 @@ public final class DefaultSearchManager implements SearchManager {
             if (isImageSearch(request)) {
                 KnowledgeContext result = formatter.formatImages(
                         providerImageResults, request.resultLimit(), request.query());
+                if (result.images().isEmpty()) {
+                    SearchRequest fallbackRequest = imageFallbackRequest(request);
+                    if (fallbackRequest != null && clock.instant().isBefore(request.deadline())) {
+                        recordImageFallback("attempted");
+                        try {
+                            Execution fallback = execute(fallbackRequest);
+                            providerImageResults.addAll(fallback.response().images());
+                            result = formatter.formatImages(
+                                    fallback.response().images(), request.resultLimit(), request.query());
+                            recordImageFallback(result.images().isEmpty() ? "empty" : "accepted");
+                        } catch (RuntimeException exception) {
+                            recordImageFallback("failed");
+                            LOGGER.debug("Image fallback query failed; keeping the empty result", exception);
+                        }
+                    }
+                }
                 recordQuality(result);
                 return result;
             }
@@ -149,7 +166,8 @@ public final class DefaultSearchManager implements SearchManager {
             throw exception;
         } finally {
             recordTimer(sample);
-            logExecution(request, failure, providerResults.size(), Duration.between(started, clock.instant()));
+            logExecution(request, failure, providerResults.size() + providerImageResults.size(),
+                    Duration.between(started, clock.instant()));
         }
     }
 
@@ -194,7 +212,9 @@ public final class DefaultSearchManager implements SearchManager {
     private void recordQuality(KnowledgeContext result) {
         try {
             Counter.builder(QUALITY_COUNTER)
-                    .tag("outcome", result == null || result.content().isBlank() ? "empty" : "non_empty")
+                    .tag("outcome", result == null || (result.content().isBlank()
+                            && result.candidates().isEmpty() && result.images().isEmpty())
+                            ? "empty" : "non_empty")
                     .register(meterRegistry)
                     .increment();
         } catch (RuntimeException ignored) {
@@ -220,6 +240,31 @@ public final class DefaultSearchManager implements SearchManager {
 
     private String providerName() {
         return provider.getClass().getSimpleName();
+    }
+
+    private SearchRequest imageFallbackRequest(SearchRequest request) {
+        String focused = DefaultSearchQueryPlanningService.focusImageQuery(request.query()).trim();
+        if (focused.isBlank() || focused.contains("\"")) {
+            return null;
+        }
+        String quoted = "\"" + focused.replace("\"", "") + "\"";
+        return new SearchRequest(request.requestId(), quoted, request.resultLimit(), request.deadline(),
+                request.options(), List.of());
+    }
+
+    private void recordImageFallback(String outcome) {
+        if (meterRegistry == null) {
+            return;
+        }
+        try {
+            Counter.builder(IMAGE_FALLBACK_COUNTER)
+                    .tag("provider", providerName())
+                    .tag("outcome", outcome)
+                    .register(meterRegistry)
+                    .increment();
+        } catch (RuntimeException ignored) {
+            // Observability must not affect image search.
+        }
     }
 
     private boolean isImageSearch(SearchRequest request) {

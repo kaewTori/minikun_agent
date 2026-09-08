@@ -6,7 +6,7 @@ import java.util.regex.Pattern;
 /** Detects explicit image requests and visual-artist lookups without external calls. */
 public final class ImageIntentDetector {
     private static final Pattern THAI_IMAGE_REQUEST = Pattern.compile(
-            "(?:หารูป|ขอรูป|ขอภาพ|แสดงรูป|แสดงภาพ|อยากดูรูป|อยากดูภาพ|ดูรูป|ดูภาพ)(?!แบบ|รวม)");
+            "(?:หารูป|ขอรูป|ขอภาพ|แสดงรูป|แสดงภาพ|อยาก(?:ดู|ได้|เห็น)(?:รูป|ภาพ)|ดูรูป|ดูภาพ|ต้องการ(?:รูป|ภาพ))(?!แบบ|รวม)");
     private static final Pattern THAI_IMAGE_OF_REQUEST = Pattern.compile("(?:รูป|ภาพ)(?!แบบ|รวม)ของ");
     private static final Pattern THAI_IMAGE_RECOMMENDATION = Pattern.compile(
             "(?:มี(?:รูป|ภาพ)(?!แบบ|รวม).*(?:แนะนำ|ไหม|มั้ย|หรือเปล่า)|"
@@ -30,12 +30,6 @@ public final class ImageIntentDetector {
             "(?:นักวาด|ศิลปิน(?:วาดภาพ)?|นักวาดภาพประกอบ|ภาพวาด|งานวาด|วาดรูป|อิลลัสเตรเตอร์|"
                     + "\\b(?:visual artist|illustrator|illustration|artwork|digital art|pixiv)\\b)",
             Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
-    private static final Pattern THAI_VISUAL_ARTIST_LOOKUP = Pattern.compile(
-            "(?:(?:ช่วย)?(?:ค้นหา|หาข้อมูล|เสิร์ช|ตามหา)|(?:ขอ|อยากรู้)(?:ข้อมูล|ประวัติ)|คือใคร|รู้จัก)"
-                    + ".{0,80}(?:นักวาด|ศิลปินวาดภาพ|นักวาดภาพประกอบ|อิลลัสเตรเตอร์)");
-    private static final Pattern ENGLISH_VISUAL_ARTIST_LOOKUP = Pattern.compile(
-            "\\b(?:find|search|look up|tell me about|information (?:about|on)|who is)\\b"
-                    + ".{0,100}\\b(?:visual artist|digital artist|illustrator)\\b");
     private static final Pattern VISUAL_LOOK_REQUEST = Pattern.compile(
             "\\bwhat\\s+does\\s+.+\\s+look\\s+like\\b");
     private static final Pattern STRUCTURAL_IMAGE_TERM = Pattern.compile(
@@ -55,8 +49,6 @@ public final class ImageIntentDetector {
                 || ENGLISH_IMAGE_REQUEST.matcher(normalized).find()
                 || ENGLISH_IMAGE_OF_REQUEST.matcher(normalized).find()
                 || ENGLISH_IMAGE_RECOMMENDATION.matcher(normalized).find()
-                || THAI_VISUAL_ARTIST_LOOKUP.matcher(normalized).find()
-                || ENGLISH_VISUAL_ARTIST_LOOKUP.matcher(normalized).find()
                 || VISUAL_LOOK_REQUEST.matcher(normalized).find();
     }
 

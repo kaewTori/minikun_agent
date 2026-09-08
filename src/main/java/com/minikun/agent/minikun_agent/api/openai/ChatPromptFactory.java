@@ -331,6 +331,16 @@ final class ChatPromptFactory {
                     user to an image search, and do not claim that image creation is impossible. Do not promise that
                     generation will succeed; the application handles the image separately after the text is ready.
                     """.strip(), true));
+            if (input.visionInput() != null && input.visionInput().hasImages()) {
+                values.add(new CapabilityInstruction("Visual generation handoff", """
+                        Inspect the attached reference image before answering. The image generator receives your
+                        answer as text and cannot inspect the reference directly. Include a compact section labelled
+                        VISUAL HANDOFF containing only concrete visible facts and concrete changes: subjects and
+                        count, appearance, clothing, composition, pose, setting, palette, lighting, style, and
+                        objects. Do not merely acknowledge the reference. Do not use meta wording such as reference,
+                        original, different, redesign, use, create, or generate; state the visual facts directly.
+                        """.strip(), true));
+            }
         }
         return List.copyOf(values);
     }

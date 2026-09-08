@@ -15,29 +15,24 @@ class ActiveChatModelProviderTest {
     }
 
     @Test
-    void parsesTinyGrad() {
-        assertEquals(ChatModelId.TINYGRAD, ActiveModelConfiguration.parse("tinygrad").active());
-    }
-
-    @Test
-    void rejectsUnknownModel() {
+    void rejectsRemovedTinyGradModel() {
         IllegalArgumentException exception = assertThrows(
                 IllegalArgumentException.class,
-                () -> ActiveModelConfiguration.parse("unknown"));
+                () -> ActiveModelConfiguration.parse("tinygrad"));
 
-        assertEquals(true, exception.getMessage().contains("minikun.model.active"));
+        assertEquals(true, exception.getMessage().contains("expected existing"));
     }
 
     @Test
     void resolvesConfiguredProviderThroughRegistry() {
         ChatModelProvider provider = mock(ChatModelProvider.class);
-        org.mockito.Mockito.when(provider.id()).thenReturn(ChatModelId.TINYGRAD);
+        org.mockito.Mockito.when(provider.id()).thenReturn(ChatModelId.EXISTING);
         ChatModelProviderRegistry registry = new DefaultChatModelProviderRegistry(List.of(provider));
 
         ActiveChatModelProvider activeProvider = new DefaultActiveChatModelProvider(
-                ActiveModelConfiguration.parse("tinygrad"), registry);
+                ActiveModelConfiguration.parse("existing"), registry);
 
-        assertEquals(ChatModelId.TINYGRAD, activeProvider.get().id());
+        assertEquals(ChatModelId.EXISTING, activeProvider.get().id());
     }
 
     @Test
@@ -47,8 +42,8 @@ class ActiveChatModelProviderTest {
         IllegalStateException exception = assertThrows(
                 IllegalStateException.class,
                 () -> new DefaultActiveChatModelProvider(
-                        ActiveModelConfiguration.parse("tinygrad"), registry));
+                        ActiveModelConfiguration.parse("existing"), registry));
 
-        assertEquals(true, exception.getMessage().contains("TINYGRAD"));
+        assertEquals(true, exception.getMessage().contains("EXISTING"));
     }
 }

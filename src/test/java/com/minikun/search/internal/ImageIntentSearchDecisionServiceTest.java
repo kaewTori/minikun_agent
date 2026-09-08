@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.minikun.search.SearchDecisionService;
 import com.minikun.search.model.SearchDecision;
 import com.minikun.search.model.SearchDecisionReason;
+import com.minikun.search.model.SearchPlanHints;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -30,7 +31,8 @@ class ImageIntentSearchDecisionServiceTest {
                 new SearchDecision(true, "show me a photo from GitHub", SearchDecisionReason.EXTERNAL_RESOURCE),
                 new SearchDecision(true, "pictures of Java", SearchDecisionReason.FACT_LOOKUP),
                 new SearchDecision(false, "หารูปแมว", SearchDecisionReason.RULE_FALLBACK),
-                new SearchDecision(true, "หารูปแมว", SearchDecisionReason.GENERAL_KNOWLEDGE));
+                new SearchDecision(true, "หารูปแมว", SearchDecisionReason.GENERAL_KNOWLEDGE),
+                new SearchDecision(false, "อยากได้รูปแมว", SearchDecisionReason.GENERAL_KNOWLEDGE));
 
         for (SearchDecision original : decisions) {
             SearchDecision decision = serviceReturning(original).decide(original.query());
@@ -53,16 +55,14 @@ class ImageIntentSearchDecisionServiceTest {
     }
 
     @Test
-    void promotesVisualArtistLookupSoSearchReturnsImagesWithProfileEvidence() {
+    void preservesVisualArtistLookupAsTextSearch() {
         String query = "ช่วยค้นหาข้อมูลของนักวาดที่ชื่อ RenaRaziel หน่อย";
         SearchDecision original = new SearchDecision(
                 true, query, SearchDecisionReason.FACT_LOOKUP);
 
         SearchDecision decision = serviceReturning(original).decide(query);
 
-        assertTrue(decision.shouldSearch());
-        assertEquals(SearchDecisionReason.IMAGE_REQUEST, decision.reason());
-        assertEquals(query, decision.query());
+        assertSame(original, decision);
     }
 
     @Test
@@ -97,6 +97,17 @@ class ImageIntentSearchDecisionServiceTest {
     @Test
     void preservesAnExistingImageDecision() {
         SearchDecision original = new SearchDecision(true, "หารูปแมว", SearchDecisionReason.IMAGE_REQUEST);
+
+        assertSame(original, serviceReturning(original).decide(original.query()));
+    }
+
+    @Test
+    void preservesSemanticImageDecisionWithoutARecognizedPhrase() {
+        SearchDecision original = new SearchDecision(
+                true,
+                "I would love a visual reference for a tortoise",
+                SearchDecisionReason.IMAGE_REQUEST,
+                new SearchPlanHints("images", 0.98, "tortoise", List.of(), List.of(), ""));
 
         assertSame(original, serviceReturning(original).decide(original.query()));
     }

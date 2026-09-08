@@ -12,11 +12,11 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 class ModelCapabilityRegistryTest {
     @Test
     void looksUpExistingModelCapability() {
-        ModelCapability capability = capability(ChatModelId.TINYGRAD);
+        ModelCapability capability = capability(ChatModelId.EXISTING);
         ModelCapabilityRegistry registry = new DefaultModelCapabilityRegistry(
-                Map.of(ChatModelId.TINYGRAD, capability));
+                Map.of(ChatModelId.EXISTING, capability));
 
-        assertEquals(capability, registry.get(ChatModelId.TINYGRAD));
+        assertEquals(capability, registry.get(ChatModelId.EXISTING));
     }
 
     @Test
@@ -29,23 +29,20 @@ class ModelCapabilityRegistryTest {
 
     @Test
     void snapshotsInputMap() {
-        ModelCapability capability = capability(ChatModelId.TINYGRAD);
+        ModelCapability capability = capability(ChatModelId.EXISTING);
         Map<ChatModelId, ModelCapability> source = new HashMap<>();
-        source.put(ChatModelId.TINYGRAD, capability);
+        source.put(ChatModelId.EXISTING, capability);
         ModelCapabilityRegistry registry = new DefaultModelCapabilityRegistry(source);
 
         source.clear();
 
-        assertEquals(capability, registry.get(ChatModelId.TINYGRAD));
+        assertEquals(capability, registry.get(ChatModelId.EXISTING));
     }
 
     @Test
-    void rejectsNullEntriesAndMismatchedModelIds() {
+    void rejectsNullEntries() {
         assertThrows(NullPointerException.class,
-                () -> new DefaultModelCapabilityRegistry(Map.of(ChatModelId.TINYGRAD, null)));
-        assertThrows(IllegalArgumentException.class,
-                () -> new DefaultModelCapabilityRegistry(Map.of(
-                        ChatModelId.TINYGRAD, capability(ChatModelId.EXISTING))));
+                () -> new DefaultModelCapabilityRegistry(Map.of(ChatModelId.EXISTING, null)));
     }
 
     private ModelCapability capability(ChatModelId modelId) {

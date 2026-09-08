@@ -21,7 +21,6 @@
 - Ambiguity Resolver สำหรับข้อความสั้นที่ตีความได้หลายทาง โดยใช้ task model แบบมี timeout และ fallback เป็นกฎที่คาดเดาได้
 - Graceful Recovery สำหรับ summary, memory, search, reviewer และ tool runtime โดยลดระดับความสามารถอย่างปลอดภัย และไม่ retry คำสั่งที่อาจทำซ้ำ
 - Safe Action Guard ไม่ retry tool ที่เปลี่ยน state โดยอัตโนมัติ และใช้ confirmation policy เดิมเป็นด่านอนุมัติ
-- Provider Health Circuit พัก TinyGrad verifier ชั่วคราวเมื่อผิดพลาดต่อเนื่อง แล้ว fallback ไปยัง draft ที่ปลอดภัย
 - Companion Mode แบบ conversation-scoped สำหรับสลับพฤติกรรมระหว่าง `companion`, `work` และ `focus`
 - Relationship Thread Memory สำหรับจำเรื่องที่ยังคุยไม่จบ และ consent-based check-in ที่เคารพ quiet hours
 - Feedback learning จาก 👍/👎 และเหตุผลแบบ closed category เพื่อปรับความยาว น้ำเสียง จำนวนคำถาม initiative และระดับการทักท้วง
@@ -64,7 +63,6 @@
 - Spring AI 2.0.0
 - Maven Wrapper (`./mvnw`)
 - Ollama-compatible chat และ embedding model
-- cooperative model flow: Ollama รับคำถามก่อน และ TinyGrad ช่วยตรวจ/ปรับคำตอบในคำถามที่ต้องการความแม่นยำ
 - PostgreSQL สำหรับ conversation memory และ long-term memory
 - Valkey/Redis สำหรับ search cache
 - SearXNG สำหรับ web search
@@ -163,14 +161,6 @@ Actuator ที่เปิดให้เข้าถึงคือ `/actuator
 | `EMBEDDING_MODEL` | `qwen3-embedding:0.6b` | multilingual embedding model |
 | `OLLAMA_NUM_CTX` | `16384` | context window ของ Ollama |
 | `OLLAMA_KEEP_ALIVE` | `30m` | เก็บโมเดลหลักไว้ใน memory เพื่อลด cold start; ลดค่านี้ถ้า RAM/VRAM ไม่พอให้ main และ task model อยู่พร้อมกัน |
-| `MINIKUN_MODEL_COOPERATION_ENABLED` | `true` | เปิด Ollama → TinyGrad precision pass |
-| `MINIKUN_MODEL_COOPERATION_MODE` | `hybrid` | `hybrid` แสดง Ollama ก่อนแล้วตรวจเบื้องหลัง, `blocking` รอตรวจให้เสร็จก่อนตอบ |
-| `MINIKUN_MODEL_COOPERATION_TIMEOUT` | `PT300S` | timeout เฉพาะ TinyGrad verification; timeout แล้ว fallback ตาม mode |
-| `MINIKUN_MODEL_COOPERATION_QUALITY_GATE_ENABLED` | `true` | ตรวจ revised answer หลัง TinyGrad ก่อนนำไปใช้ |
-| `MINIKUN_MODEL_COOPERATION_QUALITY_GATE_MAX_MEMORY_UTILIZATION` | `0.85` | สัดส่วน RAM สูงสุดที่ข้อเสนอ JVM fleet ใช้ได้ก่อนถูก reject |
-| `MINIKUN_MODEL_COOPERATION_QUALITY_GATE_ARITHMETIC_TOLERANCE` | `0.08` | tolerance สำหรับตรวจสมการ memory ที่ reviewer แสดง |
-| `MINIKUN_TINYGRAD_MODEL` | `Qwen3.6` | model ที่ TinyGrad ใช้ตรวจ/เสริมคำตอบ |
-| `MINIKUN_TINYGRAD_BASE_URL` | `http://localhost:8001/v1` | TinyGrad OpenAI-compatible endpoint |
 | `VALKEY_URL` | `redis://127.0.0.1:6379` | Valkey/Redis endpoint |
 | `MINIKUN_SEARCH_SEARXNG_URL` | `http://127.0.0.1:8888` | SearXNG endpoint |
 | `MINIKUN_SEARCH_TAVILY_ENABLED` | `true` | เปิด/ปิด Tavily provider |
@@ -251,46 +241,13 @@ Voice Companion กำหนดค่าผ่าน `minikun.voice.*` ใน `a
 Whisper Large V3 Turbo Q4 ผ่าน MLX สำหรับถอดเสียงและเสียง `Kanya` ของ macOS สำหรับพูดภาษาไทย
 ไฟล์เสียงถูกจำกัดขนาด 10 MB และมีเฉพาะใน memory/temporary file ระหว่าง request เท่านั้น
 
-ในโหมด `hybrid` สามารถตรวจผล TinyGrad ตาม `conversation_id` ได้ที่
-`GET /v1/cooperation/reviews/{conversation_id}` โดยสถานะจะเป็น `PENDING`,
-`COMPLETED`, `REJECTED` หรือ `FAILED` โดย `REJECTED` หมายถึง TinyGrad ตอบสำเร็จแต่
-deterministic quality gate พบว่าเปลี่ยนข้อเท็จจริง คำนวณไม่สอดคล้อง หรือเสนอ memory budget
-เกินทรัพยากรรวม ระบบจึงไม่ใช้ revised answer นั้น ผลตรวจนี้ถูกเก็บแยกจาก conversation memory และเป็น in-memory
-จึงเหมาะกับ feedback แบบทันทีระหว่าง runtime; หากต้องการ persistence ควรย้าย store ไป PostgreSQL/Valkey ภายหลัง
-สำหรับ UI ที่ต้องการรับผลทันทีโดยไม่ polling ให้เปิด SSE ที่
-`GET /v1/cooperation/reviews/{conversation_id}/events` โดย stream จะจบเมื่อสถานะเป็น
-`COMPLETED` หรือ `FAILED` ตัวอย่าง JavaScript:
-
-```javascript
-const events = new EventSource(`/v1/cooperation/reviews/${conversationId}/events`);
-events.addEventListener("cooperative-review", event => {
-  const review = JSON.parse(event.data);
-  if (review.status === "COMPLETED") showRevisedAnswer(review.revised);
-  if (review.status === "REJECTED") showReviewFailure(review.error);
-  if (review.status === "FAILED") showReviewFailure(review.error);
-  if (review.status !== "PENDING") events.close();
-});
-```
-
-การ route ปัจจุบันใช้กฎแบบเร็ว 3 ระดับ: `LOW` ให้ Ollama ตอบทันที,
-`MEDIUM` ให้ Ollama ตอบก่อนแล้ว TinyGrad ตรวจเบื้องหลัง และ `HIGH` รอ TinyGrad
-ก่อนส่งคำตอบ เช่น สุขภาพ การเงิน กฎหมาย ความปลอดภัย และข้อมูล credential
-คำถามที่มีการคำนวณ, sizing/capacity planning หรือการวิเคราะห์งานด้านโค้ดและระบบ
-เช่น Java/JVM, Spring, API, database, architecture, memory และ performance จะถูกส่งเข้า
-TinyGrad อย่างน้อยระดับ `MEDIUM` เสมอ แม้เปิด native tool calling อยู่ก็ตาม
-คำขอเชิงสร้างสรรค์ เช่น แต่งนิยาย เรื่องสั้น ฟิค roleplay บทกวี และ worldbuilding
-จะถูกจัดเป็น `creative_request` และส่งให้ Ollama โดยตรง ไม่ส่งเข้า TinyGrad
-
-ก่อนปล่อยคำตอบในโหมด `hybrid` ระบบจะ preflight ข้อเท็จจริงและ capacity constraints ที่ตรวจได้
-แบบ deterministic หาก draft ไม่ผ่าน ระบบจะเปลี่ยนเป็น blocking review อัตโนมัติ และถ้าทั้ง draft
-กับ revised answer ไม่ผ่าน จะตอบด้วย safe capacity bound แทนการส่ง JVM flags ที่ขัดกับทรัพยากรรวม
 | `MINIKUN_SEARCH_CACHE_ENABLED` | `true` | เปิด/ปิด search cache |
 | `MINIKUN_SEARCH_CACHE_TTL` | `PT5M` | อายุ search cache |
 | `MINIKUN_SEARCH_SAFESEARCH` | `true` | ส่ง safe-search option ให้ SearXNG |
 | `MINIKUN_SEARCH_RESULT_LIMIT` | `8` | จำนวนผลลัพธ์ search ต่อ query |
 | `MINIKUN_SEARCH_QUERY_PLANNING_ENABLED` | `true` | เปิด query planning และ core keyword extraction |
 | `MINIKUN_SEARCH_QUERY_PLANNING_MAX_ALTERNATES` | `2` | จำนวน alternate queries สูงสุด |
-| `MINIKUN_SEARCH_CACHE_PROVIDER_VERSION` | `v2` | version ของ provider ที่รวมใน cache key |
+| `MINIKUN_SEARCH_CACHE_PROVIDER_VERSION` | `v3` | version ของ provider ที่รวมใน cache key |
 | `MINIKUN_SEARCH_PARALLEL_QUERIES_ENABLED` | `true` | ทำ expanded search queries แบบ parallel |
 | `MINIKUN_SEARCH_PARALLEL_QUERIES_MAX_CONCURRENCY` | `3` | จำนวน search query สูงสุดที่ทำพร้อมกัน |
 | `MINIKUN_SEARCH_DECISION_OLLAMA_BASE_URL` | `http://127.0.0.1:11434` | Ollama endpoint เฉพาะ search classifier |
@@ -740,7 +697,7 @@ Conversation check-in เก็บจำนวนครั้งและ feedba
 `POST /v1/personal/conversation-threads/{id}/feedback` การเพิ่มคอลัมน์สำหรับฐานข้อมูลเดิมอยู่ใน
 [`V20260905_01__companion_care_feedback.sql`](deploy/migrations/V20260905_01__companion_care_feedback.sql)
 
-ใน request chat ระบบจะโหลด history, summary, companion mode, personal knowledge, memory และ LLM search decision แบบขนานก่อนสร้าง prompt ผ่าน PCS โดยส่ง recent turns เป็นข้อความ `USER`/`ASSISTANT` ตาม role จริง ส่วน rolling summary และ omission note อยู่ใน system context หลังตอบสำเร็จจึงบันทึก user และ assistant พร้อมกันเป็น completed turn เดียว จึงไม่ทิ้ง user message ค้างเมื่อ model ล้มเหลวหรือ stream ถูกยกเลิก Cockpit ใช้ token streaming สำหรับคำตอบทั่วไปทันที และเก็บ durable background job ไว้เฉพาะงานยาวอย่าง deep research หรือการสร้างภาพ
+ใน request chat ระบบจะโหลด history, summary, companion mode, personal knowledge, memory และ LLM search decision แบบขนานก่อนสร้าง prompt ผ่าน PCS โดยส่ง recent turns เป็นข้อความ `USER`/`ASSISTANT` ตาม role จริง ส่วน rolling summary และ omission note อยู่ใน system context หลังตอบสำเร็จจึงบันทึก user และ assistant พร้อมกันเป็น completed turn เดียว จึงไม่ทิ้ง user message ค้างเมื่อ model ล้มเหลวหรือ stream ถูกยกเลิก Cockpit ส่งทุกคำถามเข้า durable background job เพื่อให้ทำงานต่อได้แม้สลับแอปบนมือถือ ส่วน API หลักยังรองรับ token streaming สำหรับ client ที่ต้องการผลทันที
 
 เมื่อมี tool result ที่ยืนยันแล้ว ระบบจะใส่ผลลัพธ์นั้นไว้ใน context ของ prompt และให้โมเดลสร้างคำตอบสุดท้ายเองตาม MCS แทนการส่งข้อความสำเร็จรูปจาก tool โดยตรง
 

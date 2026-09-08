@@ -115,7 +115,37 @@ class DefaultSearchQueryPlanningServiceTest {
                 new SearchDecision(true, "หารูปแมว", SearchDecisionReason.FACT_LOOKUP));
 
         assertEquals("images", imagePlan.intent());
+        assertEquals("แมว", imagePlan.primaryQuery());
         assertEquals("fact_lookup", unrelatedPlan.intent());
+    }
+
+    @Test
+    void removesImageRequestWrapperBeforeSearching() {
+        SearchQueryPlan plan = planner.plan(
+                "show me a photo of Tesla Model 3",
+                new SearchDecision(true, "show me a photo of Tesla Model 3",
+                        SearchDecisionReason.IMAGE_REQUEST));
+
+        assertEquals("Tesla Model 3", plan.primaryQuery());
+    }
+
+    @Test
+    void removesThaiDesireWrapperBeforeSearching() {
+        SearchQueryPlan plan = planner.plan(
+                "อยากได้รูปแมว",
+                new SearchDecision(true, "อยากได้รูปแมว", SearchDecisionReason.IMAGE_REQUEST));
+
+        assertEquals("แมว", plan.primaryQuery());
+    }
+
+    @Test
+    void focusesVisualLookupsOnTheNamedSubject() {
+        SearchQueryPlan plan = planner.plan(
+                "what does Tesla Model 3 look like?",
+                new SearchDecision(true, "what does Tesla Model 3 look like?",
+                        SearchDecisionReason.IMAGE_REQUEST));
+
+        assertEquals("Tesla Model 3", plan.primaryQuery());
     }
 
     @Test

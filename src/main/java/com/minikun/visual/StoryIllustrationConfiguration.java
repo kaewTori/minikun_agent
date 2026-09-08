@@ -1,13 +1,12 @@
 package com.minikun.visual;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.minikun.model.task.OllamaTaskModelProvider;
+import com.minikun.model.task.TaskModelProvider;
 import java.net.http.HttpClient;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Duration;
-import com.minikun.model.ChatModelId;
-import com.minikun.model.ChatModelProviderRegistry;
-import com.minikun.model.task.TaskModelProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -79,25 +78,26 @@ public class StoryIllustrationConfiguration {
 
     @Bean
     StoryVisualPlanGenerator storyVisualPlanGenerator(
-            ObjectProvider<TaskModelProvider> taskModelProvider,
-            ObjectMapper objectMapper) {
-        TaskModelProvider provider = taskModelProvider.getIfAvailable();
-        return provider == null ? new FallbackStoryVisualPlanGenerator()
-                : new TaskModelStoryVisualPlanGenerator(provider, objectMapper);
+            ObjectMapper objectMapper,
+            @Value("${minikun.visual.generation.pony-prompt.ollama.base-url:http://127.0.0.1:11434}")
+                    String baseUrl,
+            @Value("${minikun.visual.generation.pony-prompt.ollama.model:hf.co/llmfan46/gemma-4-E2B-it-ultra-uncensored-heretic-GGUF:Q4_K_M}")
+                    String model,
+            @Value("${minikun.visual.generation.pony-prompt.ollama.timeout:PT120S}") Duration timeout) {
+        return new TaskModelStoryVisualPlanGenerator(
+                visualPonyTaskModelProvider(objectMapper, baseUrl, model, timeout), objectMapper);
     }
 
     @Bean
     PonyPromptTransformer ponyPromptTransformer(
-            ObjectProvider<ChatModelProviderRegistry> chatModels,
             ObjectMapper objectMapper,
-            @Value("${spring.ai.ollama.chat.options.model:}") String mainModelName,
-            @Value("${spring.ai.ollama.chat.options.num-ctx:16384}") int contextSize) {
-        ChatModelProviderRegistry registry = chatModels.getIfAvailable();
-        if (registry == null) {
-            return brief -> { throw new IllegalStateException("main model is unavailable"); };
-        }
+            @Value("${minikun.visual.generation.pony-prompt.ollama.base-url:http://127.0.0.1:11434}")
+                    String baseUrl,
+            @Value("${minikun.visual.generation.pony-prompt.ollama.model:hf.co/llmfan46/gemma-4-E2B-it-ultra-uncensored-heretic-GGUF:Q4_K_M}")
+                    String model,
+            @Value("${minikun.visual.generation.pony-prompt.ollama.timeout:PT120S}") Duration timeout) {
         return new MainModelPonyPromptTransformer(
-                registry.get(ChatModelId.EXISTING), objectMapper, mainModelName, contextSize);
+                visualPonyTaskModelProvider(objectMapper, baseUrl, model, timeout), objectMapper);
     }
 
     @Bean
@@ -118,10 +118,9 @@ public class StoryIllustrationConfiguration {
             PonyPromptTransformer promptTransformer,
             @Value("${minikun.visual.generation.auto-illustrate-stories:true}") boolean autoIllustrateStories,
             @Value("${minikun.visual.generation.max-prompt-characters:8000}") int maximumPromptCharacters,
-            @Value("${minikun.visual.generation.recovery-timeout:PT15M}") Duration recoveryTimeout,
             @Value("${minikun.visual.generation.storyboard.max-scenes:3}") int maximumStoryboardScenes) {
         return new StoryIllustrationService(
-                imageGenerationTool, autoIllustrateStories, maximumPromptCharacters, recoveryTimeout,
+                imageGenerationTool, autoIllustrateStories, maximumPromptCharacters,
                 visualPlanGenerator, characterVisualMemory, maximumStoryboardScenes, promptTransformer);
     }
 
@@ -168,5 +167,17 @@ public class StoryIllustrationConfiguration {
             result = result.substring(0, result.length() - 1);
         }
         return result;
+    }
+
+    private TaskModelProvider visualPonyTaskModelProvider(
+            ObjectMapper objectMapper, String baseUrl, String model, Duration timeout) {
+        HttpClient httpClient = HttpClient.newBuilder().connectTimeout(timeout).build();
+        JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(httpClient);
+        requestFactory.setReadTimeout(timeout);
+        RestClient restClient = RestClient.builder()
+                .baseUrl(stripTrailingSlash(baseUrl) + "/api/chat")
+                .requestFactory(requestFactory)
+                .build();
+        return new OllamaTaskModelProvider(restClient, objectMapper, model, timeout, true);
     }
 }

@@ -339,10 +339,10 @@ class SpringAiToolCallingRuntimeTest {
 
         @Test
         void rejectsToolCallingWhenActiveProviderDoesNotSupportIt() {
-                ChatModelProvider tinyGradProvider = new ChatModelProvider() {
+                ChatModelProvider provider = new ChatModelProvider() {
                         @Override
                         public ChatModelId id() {
-                                return ChatModelId.TINYGRAD;
+                                return ChatModelId.EXISTING;
                         }
 
                         @Override
@@ -352,18 +352,18 @@ class SpringAiToolCallingRuntimeTest {
 
                         @Override
                         public ChatResponse chat(Prompt prompt) {
-                                throw new AssertionError("TinyGrad must not be invoked for unsupported tools");
+                                throw new AssertionError("Provider must not be invoked for unsupported tools");
                         }
 
                         @Override
                         public reactor.core.publisher.Flux<ChatResponse> stream(Prompt prompt) {
-                                throw new AssertionError("TinyGrad must not stream tool calls");
+                                throw new AssertionError("Provider must not stream tool calls");
                         }
                 };
                 SpringAiToolCallingRuntime runtime = new SpringAiToolCallingRuntime(
                                 new DefaultActiveChatModelProvider(
-                                                ActiveModelConfiguration.parse("tinygrad"),
-                                                new DefaultChatModelProviderRegistry(List.of(tinyGradProvider))),
+                                                ActiveModelConfiguration.parse("existing"),
+                                                new DefaultChatModelProviderRegistry(List.of(provider))),
                                 List.of(new CalculatorAddTool()),
                                 new DefaultToolExecutor(new DefaultToolRegistry(List.of(new CalculatorAddTool()))),
                                 new ObjectMapper());
@@ -372,6 +372,6 @@ class SpringAiToolCallingRuntimeTest {
                                 IllegalStateException.class,
                                 () -> runtime.call(new Prompt("Add 2 and 3."), new ConversationId("conversation")));
 
-                assertEquals(true, exception.getMessage().contains("TINYGRAD"));
+                assertEquals(true, exception.getMessage().contains("EXISTING"));
         }
 }

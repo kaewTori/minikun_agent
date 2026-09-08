@@ -8,7 +8,6 @@ import com.minikun.tools.ToolParameter;
 import com.minikun.tools.ToolParameterType;
 import com.minikun.tools.ToolResult;
 import java.time.Instant;
-import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -22,6 +21,8 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public final class ImageGenerationTool implements Tool {
     private static final String PONY_PREFIX = "score_9, score_8_up, score_7_up, ";
+    private static final java.util.regex.Pattern ANIMAL_ONLY_TERM = java.util.regex.Pattern.compile(
+            "(?<![a-z0-9])(?:cats?|dogs?|animals?)(?![a-z0-9])");
     private static final Set<String> SCHEDULERS = Set.of("dpmpp2m", "euler");
     private static final Set<String> SCHEDULES = Set.of("legacy", "karras");
     private static final ToolDefinition DEFINITION = new ToolDefinition(
@@ -125,12 +126,16 @@ public final class ImageGenerationTool implements Tool {
     public Generation generate(ImageGenerationRequest request, ImageGenerationScope scope) {
         ImageGenerationRequest safeRequest = withSeed(validate(request));
         GeneratedImage image = provider.generate(safeRequest);
+        String effectivePrompt = image.effectivePrompt() == null
+                ? safeRequest.prompt() : image.effectivePrompt();
+        String effectiveNegativePrompt = image.effectiveNegativePrompt() == null
+                ? safeRequest.negativePrompt() : image.effectiveNegativePrompt();
         GeneratedImageStore.StoredImage stored = store.save(image.bytes());
         UUID historyId = UUID.randomUUID();
         ImageGenerationHistory history = new ImageGenerationHistory(
                 historyId, scope.ownerId(), scope.conversationId(), scope.origin(),
-                scope.illustrationMode(), scope.sceneTitle(), safeRequest.prompt(),
-                safeRequest.negativePrompt(), safeRequest.seed(), image.provider(),
+                scope.illustrationMode(), scope.sceneTitle(), effectivePrompt,
+                effectiveNegativePrompt, safeRequest.seed(), image.provider(),
                 safeRequest.width(), safeRequest.height(), safeRequest.steps(), stored.url(), stored.createdAt());
         try {
             historyStore.save(history);
@@ -140,7 +145,7 @@ public final class ImageGenerationTool implements Tool {
         }
         return new Generation(
                 stored.url(), image.provider(), stored.contentType(), stored.bytes(), stored.createdAt(),
-                safeRequest.prompt(), safeRequest.negativePrompt(), safeRequest.seed(), historyId);
+                effectivePrompt, effectiveNegativePrompt, safeRequest.seed(), historyId);
     }
 
     private ImageGenerationRequest withSeed(ImageGenerationRequest request) {
@@ -149,11 +154,6 @@ public final class ImageGenerationTool implements Tool {
                 request.prompt(), request.negativePrompt(), request.facePrompts(), request.width(),
                 request.height(), request.steps(), request.guidance(), request.scheduler(), request.schedule(),
                 ThreadLocalRandom.current().nextLong(0x1_0000_0000L));
-    }
-
-    public boolean awaitProviderRecovery(Duration timeout) {
-        return !(provider instanceof RecoverableImageGenerationProvider recoverable)
-                || recoverable.awaitAvailable(timeout);
     }
 
     private ImageGenerationRequest request(Map<String, Object> arguments) {
@@ -211,8 +211,9 @@ public final class ImageGenerationTool implements Tool {
             prompt = PONY_PREFIX + prompt;
         }
         String negativePrompt = request.negativePrompt();
-        if (animalOnly(prompt)) {
-            prompt = prompt + ", animal focus, no humans";
+        boolean excludesHumans = prompt.toLowerCase(java.util.Locale.ROOT).contains("no humans");
+        if (excludesHumans || animalOnly(prompt)) {
+            if (!excludesHumans) prompt += ", animal focus, no humans";
             negativePrompt = appendTags(negativePrompt, "human, person, woman, man, girl, boy, 1girl, 1boy");
         }
         return new ImageGenerationRequest(
@@ -222,7 +223,7 @@ public final class ImageGenerationTool implements Tool {
 
     private boolean animalOnly(String prompt) {
         String value = prompt.toLowerCase(java.util.Locale.ROOT);
-        boolean animal = value.contains("cat") || value.contains("dog") || value.contains("animal");
+        boolean animal = ANIMAL_ONLY_TERM.matcher(value).find();
         boolean person = value.contains("1girl") || value.contains("1boy") || value.contains("woman")
                 || value.contains(" man") || value.contains(" girl") || value.contains(" boy")
                 || value.contains("human") || value.contains("female") || value.contains("male");

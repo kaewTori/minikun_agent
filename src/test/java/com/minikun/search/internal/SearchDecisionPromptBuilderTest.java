@@ -22,13 +22,14 @@ class SearchDecisionPromptBuilderTest {
         assertTrue(first.instructions().contains("Do not output thinking"));
         assertTrue(first.instructions().contains("{\"shouldSearch\":true"));
         assertTrue(first.instructions().contains(
-            "CURRENT_INFORMATION, FACT_LOOKUP, EXTERNAL_RESOURCE, GENERAL_KNOWLEDGE"));
+            "CURRENT_INFORMATION, FACT_LOOKUP, EXTERNAL_RESOURCE, IMAGE_REQUEST"));
         assertTrue(first.instructions().contains(
             "GENERAL_KNOWLEDGE always requires shouldSearch=false"));
         assertTrue(first.instructions().contains("แล้วตอนนี้ล่ะ"));
         assertTrue(first.instructions().contains("real-world businesses"));
         assertTrue(first.instructions().contains("transit station"));
         assertTrue(first.instructions().contains("local_discovery"));
+        assertTrue(first.instructions().contains("intent=images"));
         assertTrue(first.instructions().contains("evidenceNeeds"));
         assertTrue(first.instructions().contains("at most 2 alternateQueries"));
         assertTrue(first.instructions().contains("Never output RULE_FALLBACK"));

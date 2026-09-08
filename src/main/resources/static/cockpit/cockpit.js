@@ -1957,7 +1957,8 @@
         conversation_id: conversationId,
         owner_id: state.ownerId
       };
-      const useBackground = Boolean(task.jobId) || requiresDurableBackground(userMessage.content);
+      // ponytail: all Cockpit turns use durable polling; reintroduce foreground streaming only with reconnect/resume.
+      const useBackground = true;
       if (!useBackground) {
         await streamChatCompletion(task, requestBody);
       } else if (!task.jobId) {
@@ -2722,16 +2723,8 @@
     $("#health-uptime").textContent = available ? formatUptime(report.jvm?.uptime_ms) : "—";
     $("#health-runtime").textContent = report?.jvm?.java_version ? `Java ${report.jvm.java_version}` : "JVM";
 
-    const nvAllocator = report?.dependencies?.tinygrad?.allocator_memory;
-    const allocatorUp = String(nvAllocator?.status || "UNKNOWN").toUpperCase() === "UP";
-    const allocatorCard = $("#health-nv-allocator");
-    allocatorCard.dataset.state = allocatorUp ? "up" : "unknown";
-    $("#health-nv-status").textContent = allocatorUp ? "TinyGrad · NV device" : "ยังอ่านไม่ได้";
-    $("#health-nv-current").textContent = allocatorUp ? formatBinaryBytes(nvAllocator.current_bytes) : "—";
-    $("#health-nv-peak").textContent = allocatorUp ? formatBinaryBytes(nvAllocator.peak_bytes) : "—";
-
     const dependencyLabels = {
-      application: "Minikun", postgres: "Database", redis: "Redis", tinygrad: "TinyGrad",
+      application: "Minikun", postgres: "Database", redis: "Redis",
       ollama: "Ollama", searxng: "Search", browser: "Browser"
     };
     const dependencies = Object.entries(report?.dependencies || {});

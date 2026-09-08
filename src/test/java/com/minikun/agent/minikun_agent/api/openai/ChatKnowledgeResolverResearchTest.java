@@ -26,11 +26,44 @@ import com.minikun.research.ResearchStopReason;
 import com.minikun.research.ResearchTrace;
 import java.time.Duration;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
 
 class ChatKnowledgeResolverResearchTest {
+    @Test
+    void continuesWhenTheSearchWorkerStopsResponding() throws Exception {
+        CountDownLatch started = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        com.minikun.search.SearchService search = request -> {
+            started.countDown();
+            try {
+                release.await();
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+            }
+            return KnowledgeContext.empty();
+        };
+        ObjectProvider<MemoryRecallService> memory = mock(ObjectProvider.class);
+        ChatKnowledgeResolver resolver = new ChatKnowledgeResolver(
+                memory, null, search,
+                query -> new SearchDecision(true, query, SearchDecisionReason.FACT_LOOKUP),
+                new DefaultSearchQueryPlanningService(), new DefaultSearchContextAwarenessService(),
+                new DefaultKnowledgeSelectionService(), new DefaultKnowledgeConsolidationService(),
+                new SearchSelectionSignalMapper(), null, null, null,
+                new ChatKnowledgeResolver.Configuration(
+                        true, Duration.ofMillis(100), true, true, 8, 5, 5, 3,
+                        Duration.ofSeconds(30)));
+
+        resolver.resolve(new ChatKnowledgeResolver.Request(
+                "ค้นข้อมูลระบบพลังงาน", "request-search-timeout", null, "default", false, ""));
+
+        release.countDown();
+        assertTrue(started.await(2, TimeUnit.SECONDS));
+    }
+
     @Test
     void recallsPublishedAcquiredKnowledgeThroughThePersonalKnowledgeLane() {
         ObjectProvider<MemoryRecallService> memory = mock(ObjectProvider.class);

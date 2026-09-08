@@ -75,4 +75,28 @@ class OllamaTaskModelProviderTest {
         assertEquals("{\"claims\":[]}", response);
         server.verify();
     }
+
+    @Test
+    void disablesThinkingForNativeOllamaJsonRequests() {
+        RestClient.Builder builder = RestClient.builder().baseUrl("http://ollama.test/api/chat");
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        OllamaTaskModelProvider provider = new OllamaTaskModelProvider(
+                builder.build(), new ObjectMapper(), "gemma-4", Duration.ofSeconds(2), true);
+
+        server.expect(requestTo("http://ollama.test/api/chat"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(content().json("""
+                        {"model":"gemma-4","messages":[{"role":"user","content":"Extract claims"}],
+                        "stream":false,"options":{"num_predict":64,"temperature":0.0},
+                        "format":"json","think":false}
+                        """, false))
+                .andRespond(withSuccess("""
+                        {"message":{"role":"assistant","content":"{\\"claims\\":[]}"}}
+                        """, MediaType.APPLICATION_JSON));
+
+        assertEquals("{\"claims\":[]}", provider.generate(new TaskModelRequest(
+                List.of(new TaskModelMessage("user", "Extract claims")), 64, 0.0,
+                TaskModelRequest.ResponseFormat.JSON_OBJECT)));
+        server.verify();
+    }
 }

@@ -44,6 +44,8 @@ export PYTHONPATH="$tinygrad_root"
 export ALLOW_TF32="${ALLOW_TF32:-1}"
 export FLOAT16="${FLOAT16:-1}"
 export DEV="${DEV:-NV}"
+# ponytail: keep JIT kernels, skip unstable NV graph replay on this host.
+export JIT="${JIT:-2}"
 export PATH="${MINIKUN_SDXL_PATH:-$HOME/.local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin}"
 
 set -- "$python_bin" examples/sdxl_use.py \

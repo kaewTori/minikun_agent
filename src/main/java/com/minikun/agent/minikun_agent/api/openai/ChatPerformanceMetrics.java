@@ -184,7 +184,7 @@ public final class ChatPerformanceMetrics implements ModelPerformanceMetrics {
                     .tag("intent", plan.intentTag())
                     .tag("execution", plan.executionTag())
                     .tag("ambiguous", Boolean.toString(plan.ambiguous()))
-                    .tag("review", Boolean.toString(plan.cooperation().needsExpert()))
+                    .tag("technical", Boolean.toString(plan.cooperation().needsExpert()))
                     .register(meterRegistry).increment();
         } catch (RuntimeException ignored) {
             // Planning observability must never affect a response.

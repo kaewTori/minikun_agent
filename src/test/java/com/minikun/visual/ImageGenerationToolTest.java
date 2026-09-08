@@ -75,6 +75,28 @@ class ImageGenerationToolTest {
 
         assertTrue(captured.get().prompt().contains("animal focus, no humans"));
         assertTrue(captured.get().negativePrompt().contains("1girl"));
+
+        tool.generate(ImageGenerationRequest.promptOnly("gothic cathedral at dawn"));
+
+        assertFalse(captured.get().prompt().contains("animal focus"));
+        assertFalse(captured.get().negativePrompt().contains("human"));
+    }
+
+    @Test
+    void mapsExplicitNoHumansTagToTheNegativePromptForAnySubject() {
+        AtomicReference<ImageGenerationRequest> captured = new AtomicReference<>();
+        ImageGenerationTool tool = tool(new StoryIllustrationProvider() {
+            @Override public GeneratedImage generate(String prompt) { throw new AssertionError(); }
+            @Override public GeneratedImage generate(ImageGenerationRequest request) {
+                captured.set(request);
+                return new GeneratedImage(GeneratedImageStoreTest.png(), "pony-local");
+            }
+        });
+
+        tool.generate(ImageGenerationRequest.promptOnly("white owl, purple necklace, no humans"));
+
+        assertTrue(captured.get().negativePrompt().contains("human, person"));
+        assertEquals(1, captured.get().prompt().split("no humans", -1).length - 1);
     }
 
     @Test
@@ -109,7 +131,8 @@ class ImageGenerationToolTest {
             @Override public GeneratedImage generate(String prompt) { throw new AssertionError(); }
             @Override public GeneratedImage generate(ImageGenerationRequest request) {
                 captured.set(request);
-                return new GeneratedImage(GeneratedImageStoreTest.png(), "pony-local");
+                return new GeneratedImage(GeneratedImageStoreTest.png(), "pony-local",
+                        "score_9, trimmed observatory", "human, watermark");
             }
         };
         ImageGenerationTool tool = new ImageGenerationTool(
@@ -122,10 +145,12 @@ class ImageGenerationToolTest {
 
         assertEquals(captured.get().seed(), generated.seed());
         assertTrue(generated.seed() >= 0L && generated.seed() <= 0xffff_ffffL);
-        assertEquals(captured.get().prompt(), generated.prompt());
+        assertEquals("score_9, trimmed observatory", generated.prompt());
+        assertEquals("human, watermark", generated.negativePrompt());
         var saved = history.find("kaew", "story-42", 10).getFirst();
         assertEquals(generated.historyId(), saved.id());
         assertEquals(generated.prompt(), saved.prompt());
+        assertEquals(generated.negativePrompt(), saved.negativePrompt());
         assertEquals(generated.seed(), saved.seed());
         assertEquals("cover", saved.illustrationMode());
         assertEquals("ดาวเหนือ", saved.sceneTitle());

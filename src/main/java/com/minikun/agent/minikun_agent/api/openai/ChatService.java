@@ -44,7 +44,6 @@ import com.minikun.knowledge.PersonalKnowledgeService;
 import com.minikun.knowledge.acquisition.AcquiredKnowledgeIndex;
 import com.minikun.model.ActiveChatModelProvider;
 import com.minikun.model.ModelUsage;
-import com.minikun.model.CooperativeChatModelService;
 import com.minikun.model.capability.ModelCapabilityRegistry;
 import com.minikun.model.task.title.TitleGenerationService;
 import com.minikun.character.model.CharacterSpecification;
@@ -75,10 +74,10 @@ import com.minikun.vision.VisionInput;
 import com.minikun.vision.VisionInputException;
 import com.minikun.vision.VisionInputService;
 import com.minikun.visual.StoryIllustrationService;
-
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
+import reactor.core.scheduler.Schedulers;
 import org.slf4j.MDC;
 
 @Service
@@ -86,6 +85,7 @@ import org.slf4j.MDC;
 @Slf4j
 public class ChatService {
     private static final String DEFAULT_CHAT_MODEL = "hf.co/llmfan46/gemma-4-E4B-it-ultra-uncensored-heretic-GGUF:Q5_K_M";
+    private static final String BLANK_MODEL_RESPONSE = "ขออภัยครับ โมเดลยังไม่ได้ส่งคำตอบที่สมบูรณ์ กรุณาลองสั่งอีกครั้งครับ";
     private final ActiveChatModelProvider activeChatModelProvider;
     private final EmbeddingModel embeddingModel;
     private final ChatTransactionLogger transactionLogger;
@@ -132,8 +132,6 @@ public class ChatService {
 
     private UserModelService userModelService;
 
-    private CooperativeChatModelService cooperativeChatModelService;
-
     private DeferredReflectionService deferredReflectionService;
 
     private ObservationPublisher observationPublisher;
@@ -174,7 +172,6 @@ public class ChatService {
         adaptivePersonaService = collaborators.adaptivePersonaService();
         companionModeService = collaborators.companionModeService();
         userModelService = collaborators.userModelService();
-        cooperativeChatModelService = collaborators.cooperativeChatModelService();
         deferredReflectionService = collaborators.deferredReflectionService();
         observationPublisher = collaborators.observationPublisher();
         performanceMetrics = collaborators.performanceMetrics();
@@ -428,11 +425,9 @@ public class ChatService {
             boolean toolRuntimeRequired = verifiedToolResult.isEmpty() && context.turnPlan().needsTools();
             var response = verifiedToolResult.isPresent() || !toolRuntimeRequired
                     ? modelGateway().chat(
-                            context.prompt(), "chat_model", transaction.requestId(), context.conversationId(),
-                            context.turnPlan().cooperation())
+                            context.prompt(), "chat_model", transaction.requestId(), context.conversationId())
                     : modelGateway().chatWithTools(
-                            context.prompt(), context.conversationId(), context.ownerId(), transaction.requestId(),
-                            context.turnPlan().cooperation());
+                            context.prompt(), context.conversationId(), context.ownerId(), transaction.requestId());
             ModelUsage usage = modelUsage(response);
             recordPromptTokenEstimate(context.estimatedInputTokens(), usage.promptTokens());
             String content = response.getResult().getOutput().getText();
@@ -449,7 +444,7 @@ public class ChatService {
                     context.generationProfile(), continued.finishReason(), continued.continuationCount());
             if (!requestInspector.hasText(content)) {
                 log.warn("process=model_response event=blank request_id={}", transaction.requestId());
-                content = "ขออภัยครับ โมเดลยังไม่ได้ส่งคำตอบที่สมบูรณ์ กรุณาลองสั่งอีกครั้งครับ";
+                content = BLANK_MODEL_RESPONSE;
             }
             content = CitationLinker.normalize(content, context.citations());
             StoryIllustrationService.IllustrationResult illustration = illustrate(
@@ -543,11 +538,11 @@ public class ChatService {
         CitationLinker.Stream citationStream = CitationLinker.stream(context.citations());
         boolean toolRuntimeRequired = verifiedToolResult.isEmpty() && context.turnPlan().needsTools();
         Flux<ChatResponse> primaryResponses = verifiedToolResult.isPresent()
-            ? modelGateway().stream(context.prompt(), context.conversationId(), context.turnPlan().cooperation())
+            ? modelGateway().stream(context.prompt(), context.conversationId())
             : toolsEnabled && toolCallingRuntime != null && toolRuntimeRequired
             ? Flux.defer(() -> Flux.just(modelGateway().reviewToolRuntimeDraft(
-                    context.prompt(), context.conversationId(), context.ownerId(), context.turnPlan().cooperation())))
-            : modelGateway().stream(context.prompt(), context.conversationId(), context.turnPlan().cooperation());
+                    context.prompt(), context.conversationId(), context.ownerId())))
+            : modelGateway().stream(context.prompt(), context.conversationId());
         var continued = responseContinuationCoordinator().stream(
                 primaryResponses, assistantContent, context.prompt(), context.generationProfile(), requestId,
                 prompt -> modelGateway().stream(prompt, context.conversationId()),
@@ -573,16 +568,20 @@ public class ChatService {
                     recordStage("model", modelStarted, signalResult(signal));
                     recordModelUsage(modelUsage.get(), modelStarted);
                 }));
-
         return Flux.concat(
                 Flux.just(responseFactory.initialChunk(id, created, model, context.attachments())),
                 chunks,
+                Flux.defer(() -> {
+                    if (requestInspector.hasText(assistantContent.toString())) return Flux.empty();
+                    assistantContent.append(BLANK_MODEL_RESPONSE);
+                    return Flux.just(responseFactory.contentChunk(BLANK_MODEL_RESPONSE, id, created, model));
+                }),
                 Flux.defer(() -> {
                     var illustration = illustrate(context, userMessage.content(), assistantContent.toString());
                     assistantContent.append(illustration.notice());
                     return Flux.fromIterable(responseFactory.illustrationChunks(
                             id, created, model, illustration));
-                }),
+                }).subscribeOn(Schedulers.boundedElastic()),
                 Flux.defer(() -> {
                     String usageChunk = responseFactory.usageChunk(modelUsage.get(), id, created, model);
                     return usageChunk.isEmpty() ? Flux.empty() : Flux.just(usageChunk);
@@ -737,7 +736,6 @@ public class ChatService {
     private ChatModelGateway modelGateway() {
         return new ChatModelGateway(
                 activeChatModelProvider,
-                cooperativeChatModelService,
                 toolCallingRuntime,
                 performanceMetrics,
                 toolsEnabled);
@@ -937,9 +935,7 @@ public class ChatService {
 
     private void appendAssistantText(StringBuilder content, ChatResponse response) {
         String text = response.getResult().getOutput().getText();
-        if (text != null) {
-            content.append(text);
-        }
+        if (text != null) content.append(text);
     }
 
     private boolean shouldIllustrate(String userMessage) {
@@ -948,9 +944,7 @@ public class ChatService {
 
     private StoryIllustrationService.IllustrationResult illustrate(
             ChatExecutionContext context, String userMessage, String assistantContent) {
-        if (storyIllustrationService == null || !requestInspector.hasText(assistantContent)) {
-            return new StoryIllustrationService.IllustrationResult(List.of(), "");
-        }
+        if (storyIllustrationService == null) return new StoryIllustrationService.IllustrationResult(List.of(), "");
         return storyIllustrationService.illustrate(context.ownerId(), context.conversationId().value(),
                 userMessage, assistantContent);
     }

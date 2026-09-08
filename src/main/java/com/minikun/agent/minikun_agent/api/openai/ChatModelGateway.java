@@ -9,48 +9,35 @@ import org.springframework.ai.chat.prompt.Prompt;
 import com.minikun.agent.minikun_agent.conversation.ConversationId;
 import com.minikun.model.ActiveChatModelProvider;
 import com.minikun.model.ChatModelProvider;
-import com.minikun.model.CooperativeChatModelService;
-import com.minikun.model.CooperationRoutingDecision;
 import com.minikun.tools.springai.SpringAiToolCallingRuntime;
 
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
 
-/** Central model boundary for provider, cooperative-review, and tool-runtime execution. */
+/** Central model boundary for provider and tool-runtime execution. */
 @Slf4j
 final class ChatModelGateway {
     private final ActiveChatModelProvider activeChatModelProvider;
-    private final CooperativeChatModelService cooperativeChatModelService;
     private final SpringAiToolCallingRuntime toolCallingRuntime;
     private final ChatPerformanceMetrics performanceMetrics;
     private final boolean toolsEnabled;
 
     ChatModelGateway(
             ActiveChatModelProvider activeChatModelProvider,
-            CooperativeChatModelService cooperativeChatModelService,
             SpringAiToolCallingRuntime toolCallingRuntime,
             ChatPerformanceMetrics performanceMetrics,
             boolean toolsEnabled) {
         this.activeChatModelProvider = activeChatModelProvider;
-        this.cooperativeChatModelService = cooperativeChatModelService;
         this.toolCallingRuntime = toolCallingRuntime;
         this.performanceMetrics = performanceMetrics;
         this.toolsEnabled = toolsEnabled;
     }
 
     ChatResponse chat(Prompt prompt, String process, String requestId, ConversationId conversationId) {
-        return chat(prompt, process, requestId, conversationId, null);
-    }
-
-    ChatResponse chat(Prompt prompt, String process, String requestId, ConversationId conversationId,
-            CooperationRoutingDecision routing) {
         long started = System.nanoTime();
         String result = "success";
         try {
-            return cooperativeChatModelService == null
-                    ? provider().chat(prompt)
-                    : cooperativeChatModelService.chat(
-                            provider(), prompt, conversationValue(conversationId), routing);
+            return provider().chat(prompt);
         } catch (RuntimeException exception) {
             result = "error";
             throw exception;
@@ -61,15 +48,7 @@ final class ChatModelGateway {
     }
 
     Flux<ChatResponse> stream(Prompt prompt, ConversationId conversationId) {
-        return stream(prompt, conversationId, null);
-    }
-
-    Flux<ChatResponse> stream(Prompt prompt, ConversationId conversationId,
-            CooperationRoutingDecision routing) {
-        return cooperativeChatModelService == null
-                ? provider().stream(prompt)
-                : cooperativeChatModelService.stream(
-                        provider(), prompt, conversationValue(conversationId), routing);
+        return provider().stream(prompt);
     }
 
     ChatResponse chatWithTools(
@@ -77,18 +56,13 @@ final class ChatModelGateway {
             ConversationId conversationId,
             String ownerId,
             String requestId) {
-        return chatWithTools(prompt, conversationId, ownerId, requestId, null);
-    }
-
-    ChatResponse chatWithTools(Prompt prompt, ConversationId conversationId, String ownerId,
-            String requestId, CooperationRoutingDecision routing) {
         if (!toolsAvailable()) {
             return chat(prompt, "chat_model", requestId, conversationId);
         }
         long started = System.nanoTime();
         String result = "success";
         try {
-            return reviewToolRuntimeDraft(prompt, conversationId, ownerId, routing);
+            return reviewToolRuntimeDraft(prompt, conversationId, ownerId);
         } catch (RuntimeException exception) {
             result = "error";
             throw exception;
@@ -106,11 +80,6 @@ final class ChatModelGateway {
             Prompt prompt,
             ConversationId conversationId,
             String ownerId) {
-        return reviewToolRuntimeDraft(prompt, conversationId, ownerId, null);
-    }
-
-    ChatResponse reviewToolRuntimeDraft(Prompt prompt, ConversationId conversationId, String ownerId,
-            CooperationRoutingDecision routing) {
         ChatResponse draft;
         long started = System.nanoTime();
         try {
@@ -124,10 +93,7 @@ final class ChatModelGateway {
                     "ขออภัยครับ การใช้เครื่องมือในรอบนี้ไม่สำเร็จ มินิคุงจึงหยุดไว้ก่อนเพื่อไม่ให้ทำรายการซ้ำครับ"))));
         }
         if (performanceMetrics != null) performanceMetrics.record("tool", started, "success");
-        return cooperativeChatModelService == null
-                ? draft
-                : cooperativeChatModelService.reviewDraft(
-                        provider(), prompt, draft, conversationValue(conversationId), routing);
+        return draft;
     }
 
     private ChatModelProvider provider() {

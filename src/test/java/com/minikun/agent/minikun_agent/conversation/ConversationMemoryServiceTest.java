@@ -1,15 +1,20 @@
 package com.minikun.agent.minikun_agent.conversation;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
+import java.time.Duration;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.memory.ChatMemory;
@@ -82,5 +87,34 @@ class ConversationMemoryServiceTest {
         assertEquals(new Status("DEGRADED"), health.getStatus());
         assertEquals("DEGRADED", health.getDetails().get("status"));
         assertEquals("in_memory", health.getDetails().get("mode"));
+    }
+
+    @Test
+    void probesPersistentMemoryAndReplaysWritesAfterItRecovers() {
+        ChatMemory persistent = spy(MessageWindowChatMemory.builder()
+                .chatMemoryRepository(new InMemoryChatMemoryRepository())
+                .maxMessages(4)
+                .build());
+        AtomicBoolean available = new AtomicBoolean(false);
+        doAnswer(invocation -> {
+            if (!available.get()) {
+                throw new IllegalStateException("database unavailable");
+            }
+            return invocation.callRealMethod();
+        }).when(persistent).add(anyString(), anyList());
+        ConversationMemoryService degraded = new ConversationMemoryService(
+                persistent, 4, true, Duration.ZERO);
+        ConversationId id = new ConversationId("database-recovers");
+
+        degraded.appendTurn(id, new ChatMessage("user", "ยังคุยได้ไหม"),
+                new ChatMessage("assistant", "ได้ครับ"));
+        degraded.append(id, new ChatMessage("user", "ต่อเลย"));
+
+        assertTrue(degraded.degraded());
+        assertEquals(3, degraded.load(id).size());
+        available.set(true);
+        assertEquals(3, degraded.load(id).size());
+        assertFalse(degraded.degraded());
+        assertEquals(new Status("UP"), new ConversationPersistenceHealthIndicator(degraded).health().getStatus());
     }
 }

@@ -16,7 +16,9 @@ class ImageIntentDetectorTest {
                 "ขอรูปแมว",
                 "ขอภาพของภูเขา",
                 "แสดงรูป Tesla Model 3",
-                "อยากดูภาพ Eiffel Tower");
+                "อยากดูภาพ Eiffel Tower",
+                "อยากได้รูปแมว",
+                "ต้องการภาพ Tesla Model 3");
 
         queries.forEach(query -> assertTrue(detector.detects(query), query));
     }
@@ -33,14 +35,14 @@ class ImageIntentDetectorTest {
     }
 
     @Test
-    void detectsVisualArtistLookupsThatShouldIncludeRepresentativeWork() {
+    void doesNotTreatVisualArtistLookupsAsImageRequests() {
         List<String> queries = List.of(
                 "ช่วยค้นหาข้อมูลของนักวาดที่ชื่อ RenaRaziel หน่อย",
                 "อยากรู้ประวัตินักวาดภาพประกอบคนนี้",
                 "who is the illustrator RenaRaziel",
                 "find information about digital artist RenaRaziel");
 
-        queries.forEach(query -> assertTrue(detector.detects(query), query));
+        queries.forEach(query -> assertFalse(detector.detects(query), query));
     }
 
     @Test

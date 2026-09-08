@@ -9,9 +9,9 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 class ModelCapabilityTest {
     @Test
     void storesCapabilityValues() {
-        ModelCapability capability = new ModelCapability(ChatModelId.TINYGRAD, ModelRole.CHAT, 8192, 2048);
+        ModelCapability capability = new ModelCapability(ChatModelId.EXISTING, ModelRole.CHAT, 8192, 2048);
 
-        assertEquals(ChatModelId.TINYGRAD, capability.modelId());
+        assertEquals(ChatModelId.EXISTING, capability.modelId());
         assertEquals(ModelRole.CHAT, capability.role());
         assertEquals(8192, capability.contextWindowTokens());
         assertEquals(2048, capability.maxOutputTokens());
@@ -30,14 +30,14 @@ class ModelCapabilityTest {
         assertThrows(NullPointerException.class,
                 () -> new ModelCapability(null, ModelRole.CHAT, 1, 1));
         assertThrows(NullPointerException.class,
-                () -> new ModelCapability(ChatModelId.TINYGRAD, null, 1, 1));
+                () -> new ModelCapability(ChatModelId.EXISTING, null, 1, 1));
     }
 
     @Test
     void rejectsNegativeTokenLimits() {
         assertThrows(IllegalArgumentException.class,
-                () -> new ModelCapability(ChatModelId.TINYGRAD, ModelRole.CHAT, -1, 1));
+                () -> new ModelCapability(ChatModelId.EXISTING, ModelRole.CHAT, -1, 1));
         assertThrows(IllegalArgumentException.class,
-                () -> new ModelCapability(ChatModelId.TINYGRAD, ModelRole.CHAT, 1, -1));
+                () -> new ModelCapability(ChatModelId.EXISTING, ModelRole.CHAT, 1, -1));
     }
 }

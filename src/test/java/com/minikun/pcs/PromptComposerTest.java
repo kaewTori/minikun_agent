@@ -48,6 +48,15 @@ class PromptComposerTest {
     }
 
     @Test
+    void includesGoalFeasibilityRulesInEverySystemPrompt() {
+        String system = new PromptComposer().compose(request()).messages().getFirst().content();
+
+        assertTrue(system.contains("complete requested end state"));
+        assertTrue(system.contains("Reject any option that cannot produce the complete end state"));
+        assertTrue(system.contains("cycling there without the car is infeasible"));
+    }
+
+    @Test
     void preservesRecentConversationRolesBetweenSystemAndCurrentUser() {
         ConversationContext conversation = new ConversationContext(
                 "user: ก่อนหน้า\n\nassistant: คำตอบเดิม",

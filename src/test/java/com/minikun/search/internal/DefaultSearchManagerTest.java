@@ -119,7 +119,7 @@ class DefaultSearchManagerTest {
                 new ImageSearchResult("https://images.example/two.jpg", "Two", "https://two.example", "")));
             DefaultSearchManager manager = manager(provider, 0);
             SearchRequest request = new SearchRequest(
-                UUID.randomUUID(), "images", 1, CLOCK.instant().plusSeconds(60),
+                UUID.randomUUID(), "one", 1, CLOCK.instant().plusSeconds(60),
                 new SearchOptions("", SearchOptions.IMAGE_CATEGORY, "", false), List.of());
 
             KnowledgeContext response = manager.search(request);
@@ -138,7 +138,7 @@ class DefaultSearchManagerTest {
                 new ImageSearchResult("https://images.example/c.jpg", "C", "source-c", "description-c")));
             DefaultSearchManager manager = manager(provider, 0);
             SearchRequest request = new SearchRequest(
-                UUID.randomUUID(), "images", 10, CLOCK.instant().plusSeconds(60),
+                UUID.randomUUID(), "description", 10, CLOCK.instant().plusSeconds(60),
                 new SearchOptions("", SearchOptions.IMAGE_CATEGORY, "", false), List.of());
 
             KnowledgeContext response = manager.search(request);
@@ -149,6 +149,62 @@ class DefaultSearchManagerTest {
             assertEquals("A", response.images().getFirst().title());
             assertEquals("source-a", response.images().getFirst().sourceUrl());
             }
+
+        @Test
+        void dropsImagesThatDoNotMatchTheImageQuery() {
+            SearchProvider provider = request -> new SearchProviderResponse(List.of(), List.of(
+                    new ImageSearchResult("https://images.example/cat.jpg", "Cat", "https://cats.example", "cat portrait"),
+                    new ImageSearchResult("https://images.example/mountain.jpg", "Mountain", "https://mountains.example", "alpine view")));
+            DefaultSearchManager manager = manager(provider, 0);
+            SearchRequest request = new SearchRequest(
+                    UUID.randomUUID(), "cat", 10, CLOCK.instant().plusSeconds(60),
+                    new SearchOptions("", SearchOptions.IMAGE_CATEGORY, "", false), List.of());
+
+            KnowledgeContext response = manager.search(request);
+
+            assertEquals(List.of("https://images.example/cat.jpg"),
+                    response.images().stream().map(ImageSource::url).toList());
+        }
+
+        @Test
+        void returnsNoImagesWhenNoCandidateMatchesTheQuery() {
+            SearchProvider provider = request -> new SearchProviderResponse(List.of(), List.of(
+                    new ImageSearchResult("https://images.example/mountain.jpg", "Mountain", "https://mountains.example", "alpine view")));
+            DefaultSearchManager manager = manager(provider, 0);
+            SearchRequest request = new SearchRequest(
+                    UUID.randomUUID(), "cat", 10, CLOCK.instant().plusSeconds(60),
+                    new SearchOptions("", SearchOptions.IMAGE_CATEGORY, "", false), List.of());
+
+            KnowledgeContext response = manager.search(request);
+
+            assertEquals(List.of(), response.images());
+        }
+
+        @Test
+        void retriesImageSearchOnceWithQuotedAnchorWhenFirstRoundHasNoRelevantImage() {
+            List<String> calls = new java.util.ArrayList<>();
+            SearchProvider provider = request -> {
+                calls.add(request.query());
+                if (calls.size() == 1) {
+                    return new SearchProviderResponse(List.of(), List.of(
+                            new ImageSearchResult("https://images.example/mountain.jpg", "Mountain",
+                                    "https://mountains.example", "alpine view")));
+                }
+                return new SearchProviderResponse(List.of(), List.of(
+                        new ImageSearchResult("https://images.example/tesla.jpg", "Tesla Model 3",
+                                "https://cars.example/tesla", "electric car")));
+            };
+            DefaultSearchManager manager = manager(provider, 0);
+            SearchRequest request = new SearchRequest(
+                    UUID.randomUUID(), "Tesla Model 3", 6, CLOCK.instant().plusSeconds(60),
+                    new SearchOptions("", SearchOptions.IMAGE_CATEGORY, "", false), List.of());
+
+            KnowledgeContext response = manager.search(request);
+
+            assertEquals(List.of("Tesla Model 3", "\"Tesla Model 3\""), calls);
+            assertEquals(List.of("https://images.example/tesla.jpg"),
+                    response.images().stream().map(ImageSource::url).toList());
+        }
 
         @Test
         void skipsNullImageResultsBeforeNormalizingUrls() {

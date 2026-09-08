@@ -7,6 +7,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.TimeUnit;
 
 import org.slf4j.MDC;
 import org.springframework.beans.factory.ObjectProvider;
@@ -273,7 +274,8 @@ final class ChatKnowledgeResolver {
                             plan.timeRange(), configuration.safeSearch()),
                     plan.alternateQueries());
             CompletableFuture<KnowledgeContext> searchFuture =
-                    CompletableFuture.supplyAsync(() -> searchService.search(searchRequest));
+                    CompletableFuture.supplyAsync(() -> searchService.search(searchRequest))
+                            .orTimeout(searchTimeoutMillis(), TimeUnit.MILLISECONDS);
             CompletableFuture<KnowledgeContext> evidenceFuture = imageRequest
                     ? CompletableFuture.supplyAsync(() -> searchService.search(new SearchRequest(
                             UUID.randomUUID(), plan.primaryQuery(),
@@ -281,6 +283,7 @@ final class ChatKnowledgeResolver {
                             Instant.now().plus(configuration.searchTimeout()),
                             new SearchOptions(plan.language(), "", plan.timeRange(), configuration.safeSearch()),
                             plan.alternateQueries())))
+                            .orTimeout(searchTimeoutMillis(), TimeUnit.MILLISECONDS)
                     : CompletableFuture.completedFuture(KnowledgeContext.empty());
             browserCandidates = joinBrowser(browserFuture);
             KnowledgeContext searchKnowledge = imageRequest
@@ -640,6 +643,10 @@ final class ChatKnowledgeResolver {
         if (performanceMetrics != null) {
             performanceMetrics.fastPath(reason);
         }
+    }
+
+    private long searchTimeoutMillis() {
+        return Math.max(1L, configuration.searchTimeout().toMillis());
     }
 
     private void restoreMdc(Map<String, String> previous) {

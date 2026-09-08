@@ -25,12 +25,13 @@ final class TaskModelSearchDecisionProvider implements SearchDecisionProvider {
             SearchDecisionReason.CURRENT_INFORMATION,
             SearchDecisionReason.FACT_LOOKUP,
             SearchDecisionReason.EXTERNAL_RESOURCE,
+            SearchDecisionReason.IMAGE_REQUEST,
             SearchDecisionReason.GENERAL_KNOWLEDGE);
     private static final Set<String> FIELDS = Set.of(
             "shouldSearch", "reason", "intent", "confidence", "searchQuery",
             "alternateQueries", "evidenceNeeds", "location");
     private static final Set<String> INTENTS = Set.of(
-            "local_discovery", "current_information", "fact_lookup", "research", "comparison", "general");
+            "local_discovery", "current_information", "fact_lookup", "research", "comparison", "images", "general");
     private static final Set<String> EVIDENCE_NEEDS = Set.of(
             "opening_hours", "rating", "location", "price", "availability", "transit_access",
             "official_source", "freshness");

@@ -21,7 +21,7 @@ class CharacterLoaderTest {
         CharacterSpecification specification = new CharacterLoader(MCS_ROOT).load();
 
         assertEquals("Minikun", specification.name());
-        assertEquals("2.2.0", specification.version());
+        assertEquals("2.3.0", specification.version());
         assertEquals("th", specification.primaryLanguage());
         assertTrue(specification.personality().statements().contains("Warm"));
         assertTrue(specification.identity().statements().contains("Personal AI Companion"));

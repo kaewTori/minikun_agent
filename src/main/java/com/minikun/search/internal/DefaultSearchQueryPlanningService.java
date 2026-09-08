@@ -18,6 +18,17 @@ import java.util.regex.Pattern;
 /** Deterministic, conservative planner. It never invents terms. */
 public final class DefaultSearchQueryPlanningService implements SearchQueryPlanningService {
     private static final Pattern SPACE = Pattern.compile("\\s+");
+    private static final Pattern THAI_IMAGE_PREFIX = Pattern.compile(
+            "^(?:(?:หา|ขอ|แสดง|ดู|อยาก(?:ดู|ได้|เห็น)|ต้องการ)\\s*)?(?:รูป|ภาพ)(?:ของ)?\\s*|"
+                    + "^มี\\s*(?:รูป|ภาพ)(?:ของ)?\\s*",
+            Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+    private static final Pattern ENGLISH_IMAGE_PREFIX = Pattern.compile(
+            "^(?:(?:find|show|get|display|search for|look for|give me|want to see)\\s+)?"
+                    + "(?:me\\s+)?(?:some\\s+|a\\s+)?(?:images?|pictures?|photos?)\\s+(?:of\\s+)?",
+            Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+    private static final Pattern ENGLISH_VISUAL_LOOK_QUERY = Pattern.compile(
+            "^what\\s+does\\s+(.+?)\\s+look\\s+like[?!.]*$",
+            Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
     private static final Pattern THAI_NAMED_ENTITY_WRAPPER = Pattern.compile(
             "^(?:ข้อมูล|ประวัติ)(?:ของ)?(?:นักวาด|ศิลปิน|นักเขียน|นักร้อง|นักแสดง|บุคคล|คน)?"
                     + "(?:ที่)?ชื่อ\\s+",
@@ -72,6 +83,9 @@ public final class DefaultSearchQueryPlanningService implements SearchQueryPlann
         boolean researchIntent = isResearchIntent(original);
         boolean semanticPlan = hints.available() && !hints.primaryQuery().isBlank();
         String primary = semanticPlan ? normalize(hints.primaryQuery()) : stripConversationalPrefix(original);
+        if (!semanticPlan && decision.reason() == SearchDecisionReason.IMAGE_REQUEST) {
+            primary = focusImageQuery(primary);
+        }
         ConversationContinuity continuity = continuityResolver.resolve(original, conversationContext);
         boolean contextual = continuity.followUp();
         if (contextual && !semanticPlan) {
@@ -143,6 +157,14 @@ public final class DefaultSearchQueryPlanningService implements SearchQueryPlann
 
     private String stripNamedEntityWrapper(String value) {
         return THAI_NAMED_ENTITY_WRAPPER.matcher(value).replaceFirst("").trim();
+    }
+
+    static String focusImageQuery(String value) {
+        String result = java.util.Objects.requireNonNullElse(value, "");
+        result = THAI_IMAGE_PREFIX.matcher(result).replaceFirst("");
+        result = ENGLISH_IMAGE_PREFIX.matcher(result).replaceFirst("");
+        result = ENGLISH_VISUAL_LOOK_QUERY.matcher(result).replaceFirst("$1");
+        return result.trim();
     }
 
     private String trimNoise(String value) {

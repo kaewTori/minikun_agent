@@ -19,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class DynamicTokenPlannerTest {
     private static final ModelCapability CAPABILITY =
-            new ModelCapability(ChatModelId.TINYGRAD, ModelRole.CHAT, 8192, 4096);
+            new ModelCapability(ChatModelId.EXISTING, ModelRole.CHAT, 8192, 4096);
     private static final TokenBudget BUDGET = new TokenBudget(4096, 512, 2048);
 
     @Test

@@ -26,7 +26,7 @@ class CooperationRouterTest {
     }
 
     @Test
-    void doesNotEscalateAnOrdinaryQuestionMarkToTinyGrad() {
+    void doesNotClassifyAnOrdinaryQuestionAsTechnical() {
         CooperationRoutingDecision decision = router.decide("วันนี้เป็นยังไงบ้าง?");
 
         assertEquals(CooperationRisk.LOW, decision.risk());
@@ -34,7 +34,7 @@ class CooperationRouterTest {
     }
 
     @Test
-    void leavesFreshnessLookupToSearchInsteadOfTinyGrad() {
+    void leavesFreshnessLookupToSearch() {
         CooperationRoutingDecision decision = router.decide("ข่าวล่าสุดวันนี้มีอะไรบ้าง?");
 
         assertEquals(CooperationRisk.LOW, decision.risk());

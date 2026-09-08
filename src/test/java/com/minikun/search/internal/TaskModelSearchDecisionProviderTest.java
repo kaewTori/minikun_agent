@@ -9,6 +9,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.minikun.model.task.TaskModelProvider;
 import com.minikun.search.SearchDecisionClientException;
 import com.minikun.search.model.SearchDecisionPrompt;
+import com.minikun.search.model.SearchDecisionReason;
 import java.time.Duration;
 import org.junit.jupiter.api.Test;
 
@@ -37,9 +38,27 @@ class TaskModelSearchDecisionProviderTest {
     }
 
     @Test
-    void rejectsReasonsReservedForOtherPipelineStages() {
+    void acceptsSemanticImageIntent() {
         TaskModelProvider model = request ->
-                "{\"shouldSearch\":true,\"reason\":\"IMAGE_REQUEST\"}";
+                """
+                {"shouldSearch":true,"reason":"IMAGE_REQUEST","intent":"images",
+                 "confidence":0.98,"searchQuery":"แมว","alternateQueries":[],"evidenceNeeds":[],"location":""}
+                """;
+        var provider = new TaskModelSearchDecisionProvider(
+                model, new ObjectMapper(), Duration.ofSeconds(1));
+
+        var decision = provider.classify(PROMPT);
+
+        assertTrue(decision.shouldSearch());
+        assertEquals(SearchDecisionReason.IMAGE_REQUEST, decision.reason());
+        assertEquals("images", decision.planHints().intent());
+        assertEquals("แมว", decision.planHints().primaryQuery());
+    }
+
+    @Test
+    void rejectsInternalFallbackReasonFromTheModel() {
+        TaskModelProvider model = request ->
+                "{\"shouldSearch\":true,\"reason\":\"RULE_FALLBACK\"}";
         var provider = new TaskModelSearchDecisionProvider(
                 model, new ObjectMapper(), Duration.ofSeconds(1));
 

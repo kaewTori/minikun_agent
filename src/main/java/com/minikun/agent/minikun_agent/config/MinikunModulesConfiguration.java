@@ -32,17 +32,12 @@ import com.minikun.memory.management.MemoryManagementController;
 import com.minikun.memory.management.MemoryManagementService;
 import com.minikun.model.ActiveModelConfigurationSetup;
 import com.minikun.model.CooperationRouter;
-import com.minikun.model.CooperativeChatModelService;
-import com.minikun.model.CooperativeQualityGate;
-import com.minikun.model.CooperativeReviewStore;
 import com.minikun.model.DefaultActiveChatModelProvider;
 import com.minikun.model.DefaultChatModelProviderRegistry;
 import com.minikun.model.existing.ExistingChatModelProvider;
 import com.minikun.model.task.TaskModelConfiguration;
 import com.minikun.model.task.title.TitleGenerationConfiguration;
 import com.minikun.model.task.title.TitleGenerationService;
-import com.minikun.model.tinygrad.TinyGradChatModelProvider;
-import com.minikun.model.tinygrad.TinyGradConfiguration;
 import com.minikun.notification.JdbcNotificationDeliveryStore;
 import com.minikun.notification.NotificationDeliveryController;
 import com.minikun.notification.NotificationDeliveryService;
@@ -133,9 +128,7 @@ import com.minikun.relationship.RelationshipConfiguration;
         ModelsService.class, ModelsFormatter.class, CacheService.class, CacheFormatter.class,
         DefaultChatModelProviderRegistry.class, ActiveModelConfigurationSetup.class,
         DefaultActiveChatModelProvider.class, ExistingChatModelProvider.class,
-        TinyGradChatModelProvider.class, TinyGradConfiguration.class, TaskModelConfiguration.class,
-        CooperativeReviewStore.class, CooperationRouter.class, CooperativeQualityGate.class,
-        CooperativeChatModelService.class, TokenBudgetRuntimeConfiguration.class,
+        TaskModelConfiguration.class, CooperationRouter.class, TokenBudgetRuntimeConfiguration.class,
         TitleGenerationConfiguration.class, TitleGenerationService.class, ContextRuntimeConfiguration.class,
         VisionInputService.class, GuardianConfiguration.class, ComputerConfiguration.class,
         VoiceConfiguration.class, VoiceController.class, VoiceExceptionHandler.class,

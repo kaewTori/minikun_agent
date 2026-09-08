@@ -21,7 +21,7 @@ class ChatModelGatewayTest {
         SpringAiToolCallingRuntime tools = mock(SpringAiToolCallingRuntime.class);
         when(tools.call(any(Prompt.class), any(ConversationId.class), any(String.class)))
                 .thenThrow(new IllegalStateException("tool failed after execution"));
-        ChatModelGateway gateway = new ChatModelGateway(active, null, tools, null, true);
+        ChatModelGateway gateway = new ChatModelGateway(active, tools, null, true);
 
         var response = gateway.reviewToolRuntimeDraft(
                 new Prompt("test"), new ConversationId("tool-recovery"), "default");

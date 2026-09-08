@@ -13,11 +13,9 @@ class DefaultChatModelProviderRegistryTest {
     @Test
     void registersAndLooksUpProviderById() {
         ChatModelProvider existing = provider(ChatModelId.EXISTING);
-        ChatModelProvider tinyGrad = provider(ChatModelId.TINYGRAD);
-        DefaultChatModelProviderRegistry registry = new DefaultChatModelProviderRegistry(List.of(existing, tinyGrad));
+        DefaultChatModelProviderRegistry registry = new DefaultChatModelProviderRegistry(List.of(existing));
 
         assertEquals(existing, registry.get(ChatModelId.EXISTING));
-        assertEquals(tinyGrad, registry.get(ChatModelId.TINYGRAD));
     }
 
     @Test

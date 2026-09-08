@@ -15,7 +15,7 @@ public record ActiveModelConfiguration(ChatModelId active) {
             return new ActiveModelConfiguration(ChatModelId.valueOf(normalized.toUpperCase(Locale.ROOT)));
         } catch (IllegalArgumentException exception) {
             throw new IllegalArgumentException(
-                    "Invalid minikun.model.active value '" + value + "'; expected existing or tinygrad",
+                    "Invalid minikun.model.active value '" + value + "'; expected existing",
                     exception);
         }
     }

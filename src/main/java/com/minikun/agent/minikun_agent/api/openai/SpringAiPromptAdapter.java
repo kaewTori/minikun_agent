@@ -62,7 +62,7 @@ final class SpringAiPromptAdapter {
             String configuredModel,
             int ollamaContextSize) {
         ChatOptions.Builder<?> builder = activeModel == ChatModelId.EXISTING
-                ? OllamaChatOptions.builder().numCtx(ollamaContextSize)
+                ? OllamaChatOptions.builder().numCtx(ollamaContextSize).disableThinking()
                 : ChatOptions.builder();
         builder
                 .model(configuredModel)

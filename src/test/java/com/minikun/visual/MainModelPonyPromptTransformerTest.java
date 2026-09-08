@@ -9,7 +9,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.minikun.model.ChatModelId;
 import com.minikun.model.ChatModelProvider;
 import com.minikun.model.ModelCapabilities;
+import com.minikun.model.task.TaskModelRequest;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.model.ChatResponse;
@@ -66,17 +68,87 @@ class MainModelPonyPromptTransformerTest {
     }
 
     @Test
+    void retriesOnlyTaskModelWhenJsonIsInvalid() {
+        AtomicInteger calls = new AtomicInteger();
+        MainModelPonyPromptTransformer transformer = new MainModelPonyPromptTransformer(request -> {
+            assertEquals(TaskModelRequest.ResponseFormat.JSON_OBJECT, request.responseFormat());
+            if (calls.getAndIncrement() == 0) {
+                throw new IllegalStateException("task model did not return a valid JSON object");
+            }
+            return """
+                    {"subjects":["black cat"],"appearance":["black fur"],"pose_action":["sitting"],
+                     "objects":["observatory"],"setting":["night sky"],"lighting":["starlight"]}
+                    """;
+        }, new ObjectMapper());
+
+        String result = transformer.transform("black cat in an observatory");
+
+        assertEquals(2, calls.get());
+        assertTrue(result.contains("black cat"));
+        assertTrue(result.contains("observatory"));
+    }
+
+    @Test
+    void acceptsNativeOllamaCharacterShapeWithoutUnsafeAnchor() {
+        MainModelPonyPromptTransformer transformer = new MainModelPonyPromptTransformer(request -> """
+                {"subject_count":0,"characters":[
+                  {"name":"Itsuki Neko","identity":"1girl","appearance":["pink hair","red eyes","glasses"],"clothing":[],"accessories":["round glasses"]},
+                  {"name":"Rena Raziel","identity":"1girl","appearance":["short hair","sapphire eyes","glasses"],"clothing":[],"accessories":["round glasses"]},
+                  {"name":"Natawada Rin","identity":"1girl","appearance":["brown-green hair","cyan eyes","glasses"],"clothing":[],"accessories":["round glasses"]}],
+                "subjects":["black-slime","latex"],"appearance":[],"clothing":[],"pose_action":["kissing"],
+                "interaction":["behind"],"objects":["room"],"setting":["private room"],"details":[]}
+                """, new ObjectMapper());
+
+        String result = transformer.transform("three women kissing in a private room");
+
+        assertTrue(result.contains("2girls"));
+        assertTrue(result.contains("private room"));
+        assertFalse(result.contains("1boy"));
+    }
+
+    @Test
+    void buildsAnAnchorWhenNativeOllamaStopsAfterCharacterProfiles() {
+        MainModelPonyPromptTransformer transformer = new MainModelPonyPromptTransformer(request -> """
+                {"subject_count":3,"characters":[
+                  {"name":"Itsuki Neko","identity":"girl","appearance":["pink hair","red eyes"],"clothing":[],"accessories":["round glasses"]},
+                  {"name":"Rena Raziel","identity":"girl","appearance":["short hair","sapphire eyes"],"clothing":[],"accessories":["round glasses"]},
+                  {"name":"Natawada Rin","identity":"girl","appearance":["brown-green hair","blue-cyan eyes"],"clothing":[],"accessories":[]}]}
+                """, new ObjectMapper());
+
+        String result = transformer.transform("three women in a room");
+
+        assertTrue(result.contains("(2girls, pink hair:1.35)"));
+        assertFalse(result.contains("1boy"));
+    }
+
+    @Test
     void acceptsOmittedOptionalEmptyGroups() {
         MainModelPonyPromptTransformer transformer = transformer(new CapturingMainModel("""
                 {"subjects":["girl","black cat"],"pose_action":["holding bottle"],
-                 "objects":["glass bottle"],"setting":["old observatory","unrelated bedroom"]}
+                 "objects":["glass bottle",null],"setting":["old observatory","unrelated bedroom"],
+                 "details":["no humans"]}
                 """));
 
         String result = transformer.transform("girl holding a glass bottle beside a black cat in an old observatory");
 
         assertTrue(result.contains("(1girl, black cat, holding bottle, glass bottle, old observatory:1.35)"));
         assertTrue(result.contains("(black cat:1.2)"));
+        assertFalse(result.contains("no humans"));
         assertFalse(result.contains("unrelated bedroom"));
+    }
+
+    @Test
+    void removesAHumanSubjectThatContradictsTheUsersNoHumansConstraint() {
+        MainModelPonyPromptTransformer transformer = transformer(new CapturingMainModel("""
+                {"subjects":["girl","black cat"],"pose_action":["sitting"],
+                 "setting":["old observatory"],"lighting":["moonlight"],"details":["no humans"]}
+                """));
+
+        String result = transformer.transform("แมวดำในหอดูดาว ห้ามมีมนุษย์");
+
+        assertFalse(result.contains("1girl"));
+        assertTrue(result.contains("black cat"));
+        assertTrue(result.contains("no humans"));
     }
 
     @Test
@@ -131,6 +203,50 @@ class MainModelPonyPromptTransformerTest {
     }
 
     @Test
+    void truncatesOnlyTheAnchorWhenManyVisualFactsArePresent() {
+        MainModelPonyPromptTransformer transformer = transformer(new CapturingMainModel("""
+                {"subjects":["girl","black cat"],
+                 "appearance":["short black hair","red eyes","round glasses","freckles"],
+                 "clothing":["green sweater","blue skirt"],"pose_action":["holding bottle"],
+                 "interaction":["cat beside girl"],"objects":["glowing star bottle","wooden table"],
+                 "setting":["old observatory"],"environment":["rainy night","starry sky"],
+                 "expression":["calm expression"],"lighting":["blue moonlight"],
+                 "palette":["deep blue palette","warm gold accents"],"style":["cinematic illustration"],
+                 "composition":["close-up shot"],"camera":["eye level"],"mood":["quiet wonder"],
+                 "details":["reflected starlight","soft fabric folds"]}
+                """));
+
+        String result = transformer.transform("a detailed reference-based scene");
+
+        assertTrue(result.contains("cinematic illustration"));
+        assertTrue(result.length() > 220);
+    }
+
+    @Test
+    void keepsAllSceneFactsAndDropsReferenceMetaTags() {
+        MainModelPonyPromptTransformer transformer = transformer(new CapturingMainModel("""
+                {"subjects":["white owl"],"appearance":["soft feathers"],"clothing":["purple necklace"],
+                 "pose_action":["perched on branch","looking at windmill"],
+                 "interaction":["beside wooden sign","under red windmill"],
+                 "objects":["wooden sign","red windmill"],"setting":["lavender field","night garden"],
+                 "environment":["starry sky"],"lighting":["moonlight"],"palette":["lavender palette"],
+                 "style":["cinematic illustration"],"composition":["wide shot","centered composition"],
+                 "camera":["eye level"],"mood":["quiet"],
+                 "details":["reference image","different design","wet grass"]}
+                """));
+
+        String result = transformer.transform("VISUAL HANDOFF: white owl, redesign the reference image");
+
+        assertTrue(result.contains("perched on branch"));
+        assertTrue(result.contains("looking at windmill"));
+        assertTrue(result.contains("night garden"));
+        assertTrue(result.contains("centered composition"));
+        assertTrue(result.contains("wet grass"));
+        assertFalse(result.contains("reference image"));
+        assertFalse(result.contains("different design"));
+    }
+
+    @Test
     void dropsContaminatedTagsAndRejectsOnlyStructurallyIncompleteOutput() {
         MainModelPonyPromptTransformer contaminated = transformer(new CapturingMainModel("""
                 {"subjects":["1girl"],"appearance":["short black hair"],"clothing":[],
@@ -148,7 +264,7 @@ class MainModelPonyPromptTransformerTest {
                 {"subjects":[],"appearance":[],"clothing":[],"pose_action":[],"interaction":[],
                  "objects":["red lighthouse","warning beacon"],"setting":["rocky cliff"],
                  "environment":["stormy sea","towering waves"],"expression":[],
-                 "lighting":["orange sunset"],"palette":["deep blue palette"],
+                 "lighting":["orange sunset"],"palette":["deep blue palette","white foam","red beacon"],
                  "style":["cinematic illustration"],"composition":["wide shot"],
                  "camera":["low angle"],"mood":["dramatic"],"details":["distant seagulls"]}
                 """));
@@ -161,6 +277,7 @@ class MainModelPonyPromptTransformerTest {
                 + "distant seagulls:1.35)"));
         assertTrue(result.contains("(red lighthouse:1.3), warning beacon"));
         assertTrue(result.contains("(rocky cliff:1.2), (stormy sea:1.1), towering waves"));
+        assertTrue(result.contains("deep blue palette, white foam, red beacon"));
         assertFalse(result.contains("1girl"));
     }
 

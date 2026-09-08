@@ -5,7 +5,7 @@ import java.util.regex.Pattern;
 
 import org.springframework.stereotype.Service;
 
-/** Cheap, deterministic first-pass router for TinyGrad escalation. */
+/** Cheap, deterministic classifier for technical and creative requests. */
 @Service
 public final class CooperationRouter {
     private static final Pattern HIGH_RISK = Pattern.compile(

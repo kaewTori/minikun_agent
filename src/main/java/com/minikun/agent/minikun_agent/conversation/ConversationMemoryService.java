@@ -1,10 +1,12 @@
 package com.minikun.agent.minikun_agent.conversation;
 
+import java.time.Duration;
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
-import java.util.function.Function;
 
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.memory.InMemoryChatMemoryRepository;
@@ -24,13 +26,21 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class ConversationMemoryService {
 
+    private static final Duration DEFAULT_RECOVERY_PROBE_INTERVAL = Duration.ofSeconds(5);
+
     private final ChatMemory chatMemory;
     private final ChatMemory fallback;
+    private final boolean recoveryEnabled;
+    private final long recoveryProbeIntervalNanos;
+    // ponytail: one lock keeps replay ordered; shard by conversation if throughput matters.
+    private final Object stateLock = new Object();
+    private final Deque<PendingWrite> pendingWrites = new ArrayDeque<>();
     private final AtomicBoolean degraded;
     private volatile String degradedReason;
+    private volatile long nextRecoveryProbeNanos;
 
     public ConversationMemoryService(ChatMemory chatMemory) {
-        this(chatMemory, 20, true);
+        this(chatMemory, 20, true, DEFAULT_RECOVERY_PROBE_INTERVAL);
     }
 
     @Autowired
@@ -38,26 +48,50 @@ public class ConversationMemoryService {
             ChatMemory chatMemory,
             @Value("${spring.ai.chat.memory.max-messages:20}") int maximumMessages,
             @Value("${minikun.database.enabled:true}") boolean databaseEnabled) {
+        this(chatMemory, maximumMessages, databaseEnabled, DEFAULT_RECOVERY_PROBE_INTERVAL);
+    }
+
+    ConversationMemoryService(
+            ChatMemory chatMemory,
+            int maximumMessages,
+            boolean databaseEnabled,
+            Duration recoveryProbeInterval) {
         this.chatMemory = java.util.Objects.requireNonNull(chatMemory, "chat memory must not be null");
+        if (recoveryProbeInterval.isNegative()) {
+            throw new IllegalArgumentException("recovery probe interval must not be negative");
+        }
         this.fallback = databaseEnabled
                 ? MessageWindowChatMemory.builder()
                         .chatMemoryRepository(new InMemoryChatMemoryRepository())
                         .maxMessages(maximumMessages)
                         .build()
                 : chatMemory;
+        this.recoveryEnabled = databaseEnabled;
+        this.recoveryProbeIntervalNanos = recoveryProbeInterval.toNanos();
         this.degraded = new AtomicBoolean(!databaseEnabled);
         this.degradedReason = databaseEnabled ? "" : "database_disabled";
+        this.nextRecoveryProbeNanos = databaseEnabled ? 0 : Long.MAX_VALUE;
     }
 
     public List<ChatMessage> load(ConversationId conversationId) {
-        return read(memory -> memory.get(conversationId.value())).stream()
-                .map(this::toChatMessage)
-                .toList();
+        String conversationKey = conversationId.value();
+        synchronized (stateLock) {
+            if (persistentReady(conversationKey)) {
+                try {
+                    List<Message> messages = chatMemory.get(conversationKey);
+                    mirrorSnapshot(conversationKey, messages);
+                    return toChatMessages(messages);
+                } catch (RuntimeException exception) {
+                    degrade(exception);
+                }
+            }
+            return toChatMessages(fallback.get(conversationKey));
+        }
     }
 
     public void append(ConversationId conversationId, ChatMessage message) {
         Message springMessage = toSpringMessage(message);
-        write(memory -> memory.add(conversationId.value(), springMessage));
+        write(conversationId, memory -> memory.add(conversationId.value(), springMessage));
     }
 
     /** Persists a completed user/assistant turn through one ChatMemory write boundary. */
@@ -72,11 +106,11 @@ public class ConversationMemoryService {
             throw new IllegalArgumentException("turn must end with an assistant message");
         }
         List<Message> messages = List.of(toSpringMessage(userMessage), toSpringMessage(assistantMessage));
-        write(memory -> memory.add(conversationId.value(), messages));
+        write(conversationId, memory -> memory.add(conversationId.value(), messages));
     }
 
     public void clear(ConversationId conversationId) {
-        write(memory -> memory.clear(conversationId.value()));
+        write(conversationId, memory -> memory.clear(conversationId.value()));
     }
 
     boolean degraded() {
@@ -87,31 +121,90 @@ public class ConversationMemoryService {
         return degradedReason;
     }
 
-    private <T> T read(Function<ChatMemory, T> action) {
-        if (degraded()) return action.apply(fallback);
-        try {
-            return action.apply(chatMemory);
-        } catch (RuntimeException exception) {
-            degrade(exception);
-            return action.apply(fallback);
+    private List<ChatMessage> toChatMessages(List<Message> messages) {
+        return messages == null ? List.of() : messages.stream().map(this::toChatMessage).toList();
+    }
+
+    private void write(ConversationId conversationId, Consumer<ChatMemory> action) {
+        String conversationKey = conversationId.value();
+        synchronized (stateLock) {
+            if (!persistentReady(conversationKey)) {
+                if (recoveryEnabled) {
+                    pendingWrites.addLast(new PendingWrite(action));
+                }
+                action.accept(fallback);
+                return;
+            }
+            try {
+                action.accept(chatMemory);
+                mirrorWrite(action);
+            } catch (RuntimeException exception) {
+                degrade(exception);
+                if (recoveryEnabled) {
+                    pendingWrites.addLast(new PendingWrite(action));
+                }
+                action.accept(fallback);
+            }
         }
     }
 
-    private void write(Consumer<ChatMemory> action) {
-        if (degraded()) {
-            action.accept(fallback);
+    private boolean persistentReady(String conversationKey) {
+        if (!degraded()) {
+            return true;
+        }
+        if (!recoveryEnabled || System.nanoTime() < nextRecoveryProbeNanos) {
+            return false;
+        }
+        try {
+            chatMemory.get(conversationKey);
+            int replayed = 0;
+            while (!pendingWrites.isEmpty()) {
+                PendingWrite pending = pendingWrites.peekFirst();
+                pending.action().accept(chatMemory);
+                pendingWrites.removeFirst();
+                replayed++;
+            }
+            degradedReason = "";
+            nextRecoveryProbeNanos = 0;
+            degraded.set(false);
+            log.info("process=conversation_persistence event=recovered replayed_writes={}", replayed);
+            return true;
+        } catch (RuntimeException exception) {
+            degrade(exception);
+            return false;
+        }
+    }
+
+    private void mirrorSnapshot(String conversationKey, List<Message> messages) {
+        if (fallback == chatMemory) {
             return;
         }
         try {
-            action.accept(chatMemory);
+            fallback.clear(conversationKey);
+            if (messages != null && !messages.isEmpty()) {
+                fallback.add(conversationKey, messages);
+            }
         } catch (RuntimeException exception) {
-            degrade(exception);
+            log.debug("process=conversation_persistence event=fallback_mirror_failed reason={}",
+                    exception.getClass().getSimpleName());
+        }
+    }
+
+    private void mirrorWrite(Consumer<ChatMemory> action) {
+        if (fallback == chatMemory) {
+            return;
+        }
+        try {
             action.accept(fallback);
+        } catch (RuntimeException exception) {
+            log.debug("process=conversation_persistence event=fallback_mirror_failed reason={}",
+                    exception.getClass().getSimpleName());
         }
     }
 
     private void degrade(RuntimeException exception) {
         degradedReason = exception.getClass().getSimpleName();
+        nextRecoveryProbeNanos = System.nanoTime() + recoveryProbeIntervalNanos;
         if (degraded.compareAndSet(false, true)) {
             log.warn("process=conversation_persistence event=degraded mode=in_memory reason={}", degradedReason);
         }
@@ -129,4 +222,6 @@ public class ConversationMemoryService {
             case TOOL -> throw new IllegalArgumentException("tool messages are not supported");
         };
     }
+
+    private record PendingWrite(Consumer<ChatMemory> action) { }
 }

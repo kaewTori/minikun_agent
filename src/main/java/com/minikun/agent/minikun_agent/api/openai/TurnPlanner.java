@@ -62,7 +62,7 @@ final class TurnPlanner {
         TurnPlan.Intent intent = intent(mode, hasVision, tools, research, creative, cooperation);
         double confidence = ambiguous ? 0.45 : 0.9;
         String reason = intent == TurnPlan.Intent.TECHNICAL
-                ? "expert_review:" + cooperation.reason() : reason(intent);
+                ? "technical:" + cooperation.reason() : reason(intent);
         if (contextualRoute) reason = "contextual_" + reason;
         TurnPlan.Execution execution = research || BACKGROUND.matcher(text).find()
                 ? TurnPlan.Execution.BACKGROUND
@@ -113,7 +113,7 @@ final class TurnPlanner {
             case ACTION -> "tool_action";
             case RESEARCH -> "deep_research";
             case CREATIVE -> "creative_request";
-            case TECHNICAL -> "expert_review";
+            case TECHNICAL -> "technical_request";
             case VISION -> "vision_input";
             case COMPANION -> "companion_mode";
             case WORK -> "work_mode";

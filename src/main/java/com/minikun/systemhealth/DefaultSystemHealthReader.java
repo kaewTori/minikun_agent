@@ -23,7 +23,6 @@ public final class DefaultSystemHealthReader implements SystemHealthReader {
     private final int connectTimeoutMillis;
     private final double memoryWarningPercent;
     private final double diskWarningPercent;
-    private final NvAllocatorMemoryProbe nvAllocatorMemory;
     private final MacOsMemoryPressureReader macOsMemoryPressure = new MacOsMemoryPressureReader();
 
     public DefaultSystemHealthReader(
@@ -32,17 +31,6 @@ public final class DefaultSystemHealthReader implements SystemHealthReader {
             Duration connectTimeout,
             double memoryWarningPercent,
             double diskWarningPercent) {
-        this(diskPath, dependencies, connectTimeout, memoryWarningPercent, diskWarningPercent,
-                () -> Map.of("status", "UNKNOWN", "device", "NV"));
-    }
-
-    DefaultSystemHealthReader(
-            Path diskPath,
-            List<SystemHealthDependency> dependencies,
-            Duration connectTimeout,
-            double memoryWarningPercent,
-            double diskWarningPercent,
-            NvAllocatorMemoryProbe nvAllocatorMemory) {
         if (diskPath == null || dependencies == null || connectTimeout == null) {
             throw new IllegalArgumentException("system health configuration must not be null");
         }
@@ -56,8 +44,6 @@ public final class DefaultSystemHealthReader implements SystemHealthReader {
         this.connectTimeoutMillis = Math.max(1, Math.toIntExact(Math.min(connectTimeout.toMillis(), Integer.MAX_VALUE)));
         this.memoryWarningPercent = memoryWarningPercent;
         this.diskWarningPercent = diskWarningPercent;
-        this.nvAllocatorMemory = java.util.Objects.requireNonNull(
-                nvAllocatorMemory, "NV allocator memory probe must not be null");
     }
 
     @Override
@@ -179,25 +165,8 @@ public final class DefaultSystemHealthReader implements SystemHealthReader {
 
     private Map<String, Map<String, Object>> dependencies() {
         Map<String, Map<String, Object>> result = new LinkedHashMap<>();
-        boolean tinyGradConfigured = false;
         for (SystemHealthDependency dependency : dependencies) {
-            Map<String, Object> status = check(dependency);
-            if ("tinygrad".equalsIgnoreCase(dependency.name())) {
-                tinyGradConfigured = true;
-                if ("UP".equals(status.get("status"))) {
-                    status.put("allocator_memory", nvAllocatorMemory.read());
-                }
-            }
-            result.put(dependency.name(), status);
-        }
-        if (!tinyGradConfigured) {
-            Map<String, Object> allocatorMemory = nvAllocatorMemory.read();
-            if ("UP".equals(allocatorMemory.get("status"))) {
-                Map<String, Object> optionalTinyGrad = new LinkedHashMap<>();
-                optionalTinyGrad.put("status", "UP");
-                optionalTinyGrad.put("allocator_memory", allocatorMemory);
-                result.put("tinygrad", optionalTinyGrad);
-            }
+            result.put(dependency.name(), check(dependency));
         }
         return result;
     }

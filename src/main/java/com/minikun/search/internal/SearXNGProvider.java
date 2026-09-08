@@ -136,7 +136,7 @@ public final class SearXNGProvider implements SearchProvider {
         try {
             if (failure == null) {
             LOGGER.info("process=searxng event=completed request_id={} duration_ms={} result_count={}",
-                request.requestId(), duration.toMillis(), response.results().size());
+                request.requestId(), duration.toMillis(), response.results().size() + response.images().size());
             } else {
             LOGGER.warn("process=searxng event=failed request_id={} duration_ms={} failure_type={} message={}",
                 request.requestId(), duration.toMillis(), failure.getClass().getSimpleName(), failure.getMessage());

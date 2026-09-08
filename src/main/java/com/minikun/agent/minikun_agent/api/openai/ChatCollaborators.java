@@ -11,7 +11,6 @@ import com.minikun.knowledge.PersonalKnowledgeService;
 import com.minikun.knowledge.acquisition.AcquiredKnowledgeIndex;
 import com.minikun.memory.DeferredReflectionService;
 import com.minikun.memory.event.ObservationPublisher;
-import com.minikun.model.CooperativeChatModelService;
 import com.minikun.model.capability.ModelCapabilityRegistry;
 import com.minikun.personality.companion.CompanionModeService;
 import com.minikun.personality.profile.UserModelService;
@@ -38,7 +37,6 @@ final class ChatCollaborators {
     private final AdaptivePersonaService adaptivePersonaService;
     private final CompanionModeService companionModeService;
     private final UserModelService userModelService;
-    private final CooperativeChatModelService cooperativeChatModelService;
     private final DeferredReflectionService deferredReflectionService;
     private final ObservationPublisher observationPublisher;
     private final ChatPerformanceMetrics performanceMetrics;
@@ -64,7 +62,6 @@ final class ChatCollaborators {
             ObjectProvider<AdaptivePersonaService> adaptivePersonaService,
             ObjectProvider<CompanionModeService> companionModeService,
             ObjectProvider<UserModelService> userModelService,
-            ObjectProvider<CooperativeChatModelService> cooperativeChatModelService,
             ObjectProvider<DeferredReflectionService> deferredReflectionService,
             ObjectProvider<ObservationPublisher> observationPublisher,
             ObjectProvider<ChatPerformanceMetrics> performanceMetrics,
@@ -88,7 +85,6 @@ final class ChatCollaborators {
         this.adaptivePersonaService = adaptivePersonaService.getIfAvailable();
         this.companionModeService = companionModeService.getIfAvailable();
         this.userModelService = userModelService.getIfAvailable();
-        this.cooperativeChatModelService = cooperativeChatModelService.getIfAvailable();
         this.deferredReflectionService = deferredReflectionService.getIfAvailable();
         this.observationPublisher = observationPublisher.getIfAvailable();
         this.performanceMetrics = performanceMetrics.getIfAvailable();
@@ -114,7 +110,6 @@ final class ChatCollaborators {
     AdaptivePersonaService adaptivePersonaService() { return adaptivePersonaService; }
     CompanionModeService companionModeService() { return companionModeService; }
     UserModelService userModelService() { return userModelService; }
-    CooperativeChatModelService cooperativeChatModelService() { return cooperativeChatModelService; }
     DeferredReflectionService deferredReflectionService() { return deferredReflectionService; }
     ObservationPublisher observationPublisher() { return observationPublisher; }
     ChatPerformanceMetrics performanceMetrics() { return performanceMetrics; }

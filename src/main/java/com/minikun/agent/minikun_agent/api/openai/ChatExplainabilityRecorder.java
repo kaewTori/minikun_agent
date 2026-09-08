@@ -41,7 +41,7 @@ final class ChatExplainabilityRecorder {
             decisions.put("turn_confidence", turnPlan.confidence());
             decisions.put("turn_ambiguous", turnPlan.ambiguous());
             decisions.put("turn_reason", turnPlan.reason());
-            decisions.put("expert_review", turnPlan.cooperation().needsExpert());
+            decisions.put("technical_route", turnPlan.cooperation().needsExpert());
         }
         return new Context(sources, tool == null ? List.of() : List.of(tool.toolName()), decisions);
     }

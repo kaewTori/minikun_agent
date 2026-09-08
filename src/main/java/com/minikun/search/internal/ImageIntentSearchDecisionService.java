@@ -29,6 +29,7 @@ public final class ImageIntentSearchDecisionService implements SearchDecisionSer
 
     private SearchDecision applyImageIntent(
             String query, String conversationContext, SearchDecision decision) {
+        // ponytail: keep the lexical fallback small; expand the semantic router, not this list.
         if (!detector.detects(query, conversationContext)
                 || decision.reason() == SearchDecisionReason.IMAGE_REQUEST) {
             return decision;

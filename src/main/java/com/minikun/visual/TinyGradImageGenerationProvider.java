@@ -6,7 +6,6 @@ import java.net.ConnectException;
 import java.net.http.HttpConnectTimeoutException;
 import java.net.http.HttpTimeoutException;
 import java.net.SocketTimeoutException;
-import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -16,8 +15,7 @@ import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.client.ResourceAccessException;
 
 /** Calls Minikun's local TinyGrad SDXL {@code /generate} service and returns its raw PNG response. */
-public final class TinyGradImageGenerationProvider
-        implements StoryIllustrationProvider, RecoverableImageGenerationProvider {
+public final class TinyGradImageGenerationProvider implements StoryIllustrationProvider {
     private final RestClient restClient;
     private final ObjectMapper objectMapper;
     private final String serviceBaseUrl;
@@ -97,7 +95,7 @@ public final class TinyGradImageGenerationProvider
     private GeneratedImage generateExclusively(ImageGenerationRequest request) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("prompt", required(request.prompt(), "prompt"));
-        String negativePrompt = mergeNegativePrompt(defaultNegativePrompt, request.negativePrompt());
+        String negativePrompt = mergeNegativePrompt(request.negativePrompt(), defaultNegativePrompt);
         if (!negativePrompt.isBlank()) {
             payload.put("negative_prompt", negativePrompt);
         }
@@ -131,7 +129,9 @@ public final class TinyGradImageGenerationProvider
                 throw new ImageGenerationException(ImageGenerationException.Code.INVALID_RESPONSE,
                         "TinyGrad returned an image with an invalid size");
             }
-            return new GeneratedImage(bytes, model);
+            return new GeneratedImage(bytes, model,
+                    Objects.toString(payload.get("prompt"), ""),
+                    Objects.toString(payload.get("negative_prompt"), ""));
         } catch (JsonProcessingException exception) {
             throw new ImageGenerationException(ImageGenerationException.Code.INVALID_RESPONSE,
                     "Could not serialize the TinyGrad generation request", exception);
@@ -165,27 +165,6 @@ public final class TinyGradImageGenerationProvider
         }
     }
 
-    @Override
-    public boolean awaitAvailable(Duration timeout) {
-        Duration safeTimeout = timeout == null || timeout.isNegative() ? Duration.ZERO : timeout;
-        long deadline = System.nanoTime() + safeTimeout.toNanos();
-        do {
-            try {
-                Thread.sleep(1_000L);
-                Map<?, ?> health = restClient.get().uri("/health").retrieve().body(Map.class);
-                if (health != null && "ok".equalsIgnoreCase(Objects.toString(health.get("status"), ""))) {
-                    return true;
-                }
-            } catch (InterruptedException exception) {
-                Thread.currentThread().interrupt();
-                return false;
-            } catch (RuntimeException exception) {
-                // launchd may still be loading the checkpoint and LoRAs.
-            }
-        } while (System.nanoTime() < deadline);
-        return false;
-    }
-
     private static Throwable rootCause(Throwable throwable) {
         Throwable result = throwable;
         while (result.getCause() != null && result.getCause() != result) {
@@ -214,11 +193,12 @@ public final class TinyGradImageGenerationProvider
         return value == null ? "" : value.strip();
     }
 
-    private static String mergeNegativePrompt(String defaults, String additions) {
-        String base = optional(defaults);
-        String extra = optional(additions);
-        if (base.isBlank()) return extra;
-        if (extra.isBlank()) return base;
-        return base + ", " + extra;
+    private static String mergeNegativePrompt(String priority, String defaults) {
+        String first = optional(priority);
+        String second = optional(defaults);
+        if (first.isBlank()) return second;
+        if (second.isBlank()) return first;
+        return first + ", " + second;
     }
+
 }
