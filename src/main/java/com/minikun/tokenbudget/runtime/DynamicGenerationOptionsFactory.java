@@ -37,7 +37,13 @@ public final class DynamicGenerationOptionsFactory {
                         allocation.availableOutputTokens() == budget.applicationMaxOutputTokens(),
                         existing != null && existing.maxTokens() != null
                                 && allocation.availableOutputTokens() > existing.maxTokens()),
-                pressure(allocation.availableOutputTokens()));
+                pressure(allocation.availableOutputTokens(), desiredOutputTokens(existing, capability, budget)));
+    }
+
+    public long desiredOutputTokens(GenerationOptions existing, ModelCapability capability, TokenBudget budget) {
+        long maximum = Math.min(capability.maxOutputTokens(), budget.applicationMaxOutputTokens());
+        return existing == null || existing.maxTokens() == null
+                ? maximum : Math.min(maximum, existing.maxTokens());
     }
 
     private Resolution resolve(
@@ -57,8 +63,8 @@ public final class DynamicGenerationOptionsFactory {
                 : new GenerationOptions(resolved.temperature(), maximum, resolved.stop());
     }
 
-    private ContextPressureLevel pressure(long availableOutputTokens) {
-        if (availableOutputTokens >= 1_024) return ContextPressureLevel.NORMAL;
+    private ContextPressureLevel pressure(long availableOutputTokens, long desiredOutputTokens) {
+        if (availableOutputTokens >= desiredOutputTokens) return ContextPressureLevel.NORMAL;
         if (availableOutputTokens >= 256) return ContextPressureLevel.WARNING;
         return ContextPressureLevel.CRITICAL;
     }

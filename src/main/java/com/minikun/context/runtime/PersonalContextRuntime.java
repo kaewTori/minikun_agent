@@ -93,7 +93,19 @@ public final class PersonalContextRuntime {
 
         Timer.Sample timer = meterRegistry == null ? null : Timer.start(meterRegistry);
         try {
-            PromptRequest budgetedRequest = withContextBudget(request, contextBudgetCharacters);
+            long effectiveContextCharacters = contextBudgetCharacters;
+            if (dynamicTokenBudgetEnabled) {
+                TokenBudget tokenBudget = new TokenBudget(capability.contextWindowTokens(),
+                        reservedOutputTokens, configuredGenerationMaxTokens);
+                long desiredOutput = dynamicGenerationOptionsFactory.desiredOutputTokens(
+                        requestedOptions, capability, tokenBudget);
+                long inputTokens = Math.max(0, capability.contextWindowTokens()
+                        - Math.min(reservedOutputTokens, capability.contextWindowTokens()) - desiredOutput);
+                // ponytail: matches the current chars/4 counter; use a model tokenizer if measured error requires it.
+                effectiveContextCharacters = Math.min(contextBudgetCharacters,
+                        inputTokens > Long.MAX_VALUE / 4 ? Long.MAX_VALUE : inputTokens * 4);
+            }
+            PromptRequest budgetedRequest = withContextBudget(request, effectiveContextCharacters);
             Prompt prompt = promptComposer.compose(budgetedRequest);
             recordPrompt(prompt);
             if (!dynamicTokenBudgetEnabled) {
@@ -107,7 +119,7 @@ public final class PersonalContextRuntime {
             int recoveryAttempts = 0;
             if (requiresRecovery(budgetResult)) {
                 ContextRecoveryDecision recovery = contextRecoveryPolicy.decide(
-                        contextBudgetCharacters,
+                        effectiveContextCharacters,
                         budgetResult.pressureLevel());
                 if (recovery.required()) {
                     recoveryAttempts++;
@@ -219,6 +231,8 @@ public final class PersonalContextRuntime {
                 request.searchContext(),
                 request.knowledgeSelection(),
                 request.knowledgeConsolidation(),
-                budget);
+                budget,
+                request.personaSelectionSignals(),
+                request.personalUserModel());
     }
 }

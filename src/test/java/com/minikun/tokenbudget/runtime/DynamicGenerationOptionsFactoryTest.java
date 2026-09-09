@@ -75,11 +75,28 @@ class DynamicGenerationOptionsFactoryTest {
         assertTrue(normal.tokenBudgetDecision().truncated());
         assertFalse(normal.tokenBudgetDecision().cappedByApplicationLimit());
         assertFalse(normal.tokenBudgetDecision().cappedByRequestLimit());
-        assertEquals(ContextPressureLevel.NORMAL, normal.pressureLevel());
+        assertEquals(ContextPressureLevel.WARNING, normal.pressureLevel());
         assertEquals(ContextPressureLevel.WARNING, warning.pressureLevel());
-        assertEquals(ContextPressureLevel.CRITICAL, critical.pressureLevel());
+        assertEquals(ContextPressureLevel.NORMAL, critical.pressureLevel());
         assertTrue(critical.tokenBudgetDecision().cappedByRequestLimit());
         assertEquals(100, critical.generationOptions().maxTokens());
+    }
+
+    @Test
+    void recoversCreativeBudgetAt1076ButHonorsSmallRequestsAndModelLimits() {
+        TokenBudget creative = new TokenBudget(16_384, 256, 4_096);
+        assertEquals(ContextPressureLevel.WARNING, factory(15_052, 1_076, false)
+                .createWithDiagnostics(new GenerationOptions(0.7, 4_096, List.of()),
+                        CAPABILITY, creative, "story").pressureLevel());
+        assertEquals(ContextPressureLevel.NORMAL, factory(100, 100, false)
+                .createWithDiagnostics(new GenerationOptions(0.7, 100, List.of()),
+                        CAPABILITY, creative, "short answer").pressureLevel());
+        assertEquals(ContextPressureLevel.CRITICAL, factory(16_000, 128, false)
+                .createWithDiagnostics(new GenerationOptions(0.7, 4_096, List.of()),
+                        CAPABILITY, creative, "story").pressureLevel());
+        assertEquals(ContextPressureLevel.NORMAL, factory(100, 4_096, false)
+                .createWithDiagnostics(new GenerationOptions(0.7, 8_192, List.of()),
+                        CAPABILITY, new TokenBudget(16_384, 256, 8_192), "story").pressureLevel());
     }
 
     @Test

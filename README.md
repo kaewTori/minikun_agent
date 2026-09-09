@@ -159,7 +159,7 @@ Actuator ที่เปิดให้เข้าถึงคือ `/actuator
 | `MINIKUN_TURN_PLANNING_AMBIGUITY_ENABLED` | `true` | เปิด task-model resolver เฉพาะ turn สั้นที่มีความกำกวม |
 | `MINIKUN_TURN_PLANNING_AMBIGUITY_TIMEOUT` | `PT1S` | เวลาสูงสุดของ ambiguity resolver ก่อนใช้ deterministic fallback |
 | `EMBEDDING_MODEL` | `qwen3-embedding:0.6b` | multilingual embedding model |
-| `OLLAMA_NUM_CTX` | `16384` | context window ของ Ollama |
+| `OLLAMA_NUM_CTX` | `16384` | context window ของ Ollama; dynamic budget จองพื้นที่คำตอบตาม profile ก่อนจัดบริบท |
 | `OLLAMA_KEEP_ALIVE` | `30m` | เก็บโมเดลหลักไว้ใน memory เพื่อลด cold start; ลดค่านี้ถ้า RAM/VRAM ไม่พอให้ main และ task model อยู่พร้อมกัน |
 | `VALKEY_URL` | `redis://127.0.0.1:6379` | Valkey/Redis endpoint |
 | `MINIKUN_SEARCH_SEARXNG_URL` | `http://127.0.0.1:8888` | SearXNG endpoint |
@@ -377,6 +377,11 @@ curl -X POST http://127.0.0.1:8080/v1/chat/completions \
 ```
 
 รองรับฟิลด์หลัก `model`, `messages`, `conversation_id`, `stream`, `temperature`, `max_tokens` และ `max_completion_tokens`
+
+การตรวจคำตอบสั้น: log `process=model_generation event=outcome` แสดง `requested_max_tokens`,
+`prompt_tokens`, `completion_tokens`, `finish_reason` และจำนวน stop sequences โดยไม่บันทึกเนื้อหาแชต
+ค่า max tokens เป็นเพดาน ไม่ใช่ความยาวขั้นต่ำ: `stop` หมายถึงจบตามสัญญาณหยุดของโมเดลหรือ stop sequence,
+ส่วน `length` หมายถึงชนข้อจำกัดความยาว อย่าสรุปว่าชน dynamic budget จากจำนวน token คำตอบเพียงอย่างเดียว
 
 สำหรับ streaming:
 

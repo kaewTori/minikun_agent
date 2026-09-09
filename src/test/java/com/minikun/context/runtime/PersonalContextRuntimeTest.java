@@ -68,6 +68,52 @@ class PersonalContextRuntimeTest {
         return new PersonalContextRuntime(new PromptComposer(), factory);
     }
 
+    @Test
+    void reservesCreativeOutputBeforeComposingLongRolePreservingHistory() {
+        var factory = new DynamicGenerationOptionsFactory(
+                new com.minikun.tokenbudget.planner.DefaultDynamicTokenPlanner(
+                        new com.minikun.tokenbudget.counter.ApproximateTokenCounter(),
+                        new com.minikun.tokenbudget.policy.DefaultTokenBudgetPolicy()),
+                new DefaultGenerationOptionsResolver());
+        var history = new java.util.ArrayList<com.minikun.pcs.model.PromptMessage>();
+        for (int i = 0; i < 80; i++) {
+            history.add(new com.minikun.pcs.model.PromptMessage(
+                    i % 2 == 0 ? com.minikun.pcs.model.PromptRole.USER
+                            : com.minikun.pcs.model.PromptRole.ASSISTANT,
+                    "ฉากที่ " + i + " เรื่องราวในป่าเวทมนตร์".repeat(100)));
+        }
+        PromptRequest base = request();
+        var story = new PromptRequest(base.character(), base.runtime(),
+                new com.minikun.pcs.model.ConversationContext("story", "", history),
+                null, List.of(), new UserMessage("แต่งต่อจากฉากล่าสุด"));
+        for (int window : new int[] {16_384, 32_768}) {
+            var result = runtime(factory).prepare(story,
+                    new GenerationOptions(0.7, 4_096, List.of()),
+                    new ModelCapability(ChatModelId.EXISTING, ModelRole.CHAT, window, 4_096),
+                    true, 200_000, 256, 4_096);
+            assertEquals(4_096, result.generationOptions().maxTokens());
+            assertEquals(0, result.snapshot().recoveryAttempts());
+            assertTrue(result.snapshot().estimatedInputTokens() + 4_096 + 256 <= window);
+            var messages = result.prompt().messages();
+            assertEquals(history.getLast(), messages.get(messages.size() - 2));
+            assertEquals(story.userMessage().content(), messages.getLast().content());
+            assertTrue(messages.size() < history.size() + 2);
+        }
+    }
+
+    @Test
+    void recovers1076TokenAllocationOnceForCreativeRequest() {
+        AtomicInteger calls = new AtomicInteger();
+        var factory = new DynamicGenerationOptionsFactory((capability, budget, prompt) ->
+                new TokenBudgetAllocation(15_052, calls.incrementAndGet() == 1 ? 1_076 : 4_096, false),
+                new DefaultGenerationOptionsResolver());
+        var result = runtime(factory).prepare(request(), new GenerationOptions(0.7, 4_096, List.of()),
+                CAPABILITY, true, 40_000, 256, 4_096);
+        assertEquals(2, calls.get());
+        assertEquals(1, result.snapshot().recoveryAttempts());
+        assertEquals(4_096, result.generationOptions().maxTokens());
+    }
+
     private PromptRequest request() {
         CharacterSpecification character = new CharacterLoader(MCS_ROOT).load();
         return new PromptRequest(

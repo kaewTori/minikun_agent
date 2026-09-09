@@ -75,7 +75,20 @@ final class PromptRenderer {
         List<PromptMessage> messages = new ArrayList<>();
         messages.add(new PromptMessage(PromptRole.SYSTEM, system));
         if (request.conversation() != null) {
-            messages.addAll(request.conversation().messages());
+            List<PromptMessage> history = request.conversation().messages();
+            int start = 0;
+            if (request.contextBudget() != null) {
+                long remaining = Math.max(0, request.contextBudget().total()
+                        - system.length() - request.userMessage().content().length() - 1L);
+                start = history.size();
+                while (start > 0) {
+                    long size = history.get(start - 1).content().length() + 1L;
+                    if (size > remaining) break;
+                    remaining -= size;
+                    start--;
+                }
+            }
+            messages.addAll(history.subList(start, history.size()));
         }
         messages.add(new PromptMessage(PromptRole.USER, request.userMessage().content()));
         return new Prompt(messages);

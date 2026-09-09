@@ -1,6 +1,8 @@
 package com.minikun.model.existing;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -19,7 +21,29 @@ import com.minikun.model.ChatModelId;
 
 import reactor.core.publisher.Flux;
 
+@org.junit.jupiter.api.extension.ExtendWith(org.springframework.boot.test.system.OutputCaptureExtension.class)
 class ExistingChatModelProviderTest {
+    @Test
+    void logsActualFinishReasonWithoutChangingOrExposingResponse(
+            org.springframework.boot.test.system.CapturedOutput output) {
+        ChatModel model = mock(ChatModel.class);
+        Prompt prompt = new Prompt("private user text",
+                org.springframework.ai.chat.prompt.ChatOptions.builder().maxTokens(4096).build());
+        var generation = new Generation(new AssistantMessage("private response"),
+                org.springframework.ai.chat.metadata.ChatGenerationMetadata.builder().finishReason("stop").build());
+        var metadata = org.springframework.ai.chat.metadata.ChatResponseMetadata.builder()
+                .model("test-model").usage(new org.springframework.ai.chat.metadata.DefaultUsage(3283, 1076)).build();
+        ChatResponse response = new ChatResponse(List.of(generation), metadata);
+        when(model.call(prompt)).thenReturn(response);
+        when(model.stream(prompt)).thenReturn(Flux.just(response));
+        var provider = new ExistingChatModelProvider(model);
+        assertEquals(response, provider.chat(prompt));
+        assertEquals(List.of(response), provider.stream(prompt).collectList().block());
+        assertTrue(output.getOut().contains("requested_max_tokens=4096 prompt_tokens=3283 completion_tokens=1076 finish_reason=stop"));
+        assertTrue(output.getOut().contains("stream=true"));
+        assertFalse(output.getOut().contains("private user text"));
+        assertFalse(output.getOut().contains("private response"));
+    }
     @Test
     void delegatesChatToExistingModel() {
         ChatModel chatModel = mock(ChatModel.class);
