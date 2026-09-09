@@ -45,10 +45,12 @@ public final class CooperationRouter {
             "(แต่ง(?:เรื่อง|นิยาย|คำอวยพร|เรื่องสั้น|ฟิค|บทกวี|กลอน)|"
                     + "เขียน(?:นิยาย|เรื่อง|ฟิค|บทกวี|กลอน|แคปชัน)|"
                     + "คิด(?:ตัวละคร|พล็อต|แคปชัน)|สร้าง(?:เรื่อง|ตัวละคร|พล็อต)|"
-                    + "เล่าเรื่อง|เล่านิทาน|เรื่องสั้น|นิทาน|นิยาย|ฟิค|บทละคร|"
+                    + "เล่าเรื่อง|เล่านิทาน|เรื่องสั้น|นิทาน|นิยาย|ฟิค|บทละคร|เขียนฉาก|สร้างฉาก|"
+                    + "บรรยายฉาก|ออกแบบฉาก|ฉากเปิด|ฉากจบ|ต่อเรื่อง|ตอนต่อไป|จินตนาการ|"
                     + "บทกวี|กลอน|กวี|สวมบทบาท|โลกสมมติ|creative writing|write a story|write fiction|"
                     + "tell (?:me )?a story|short story|novel|fanfic|roleplay|poem|poetry|screenplay|"
-                    + "fictional|storytelling|worldbuilding)",
+                    + "fictional scene|storytelling|worldbuilding|(?:write|describe|create) (?:a|the )?scene|"
+                    + "continue (?:the )?story|next chapter)",
             Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
     private static final Pattern CASUAL_CONVERSATION = Pattern.compile(
             "(สวัสดี|หวัดดี|เป็น(?:ยัง)?ไง|ขอบคุณ|ขอบใจ|ฝันดี|คิดถึง|เหงา|เหนื่อย|เครียด|เศร้า|ดีใจ|"

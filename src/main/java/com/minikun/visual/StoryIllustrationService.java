@@ -32,7 +32,8 @@ public final class StoryIllustrationService {
             CharacterVisualMemory characterMemory,
             int maximumStoryboardScenes) {
         this(imageGenerationTool, autoIllustrateCreativeStories, maximumPromptCharacters,
-                visualPlanGenerator, characterMemory, maximumStoryboardScenes, null);
+                visualPlanGenerator, characterMemory, maximumStoryboardScenes, null,
+                new StoryIllustrationIntentDetector());
     }
 
     public StoryIllustrationService(
@@ -43,9 +44,23 @@ public final class StoryIllustrationService {
             CharacterVisualMemory characterMemory,
             int maximumStoryboardScenes,
             PonyPromptTransformer fallbackPromptTransformer) {
+        this(imageGenerationTool, autoIllustrateCreativeStories, maximumPromptCharacters,
+                visualPlanGenerator, characterMemory, maximumStoryboardScenes,
+                fallbackPromptTransformer, new StoryIllustrationIntentDetector());
+    }
+
+    public StoryIllustrationService(
+            ImageGenerationTool imageGenerationTool,
+            boolean autoIllustrateCreativeStories,
+            int maximumPromptCharacters,
+            StoryVisualPlanGenerator visualPlanGenerator,
+            CharacterVisualMemory characterMemory,
+            int maximumStoryboardScenes,
+            PonyPromptTransformer fallbackPromptTransformer,
+            StoryIllustrationIntentDetector intentDetector) {
         this.imageGenerationTool = Objects.requireNonNull(
                 imageGenerationTool, "image generation tool must not be null");
-        this.intentDetector = new StoryIllustrationIntentDetector();
+        this.intentDetector = Objects.requireNonNull(intentDetector, "illustration intent detector must not be null");
         this.autoIllustrateCreativeStories = autoIllustrateCreativeStories;
         if (maximumPromptCharacters < 500) {
             throw new IllegalArgumentException("maximum illustration prompt must be at least 500 characters");
@@ -70,6 +85,18 @@ public final class StoryIllustrationService {
 
     public IllustrationResult illustrate(String userMessage, String assistantStory) {
         return illustrate("default", "standalone", userMessage, assistantStory);
+    }
+
+    public IllustrationResult illustrate(
+            String ownerId,
+            String conversationId,
+            String userMessage,
+            String assistantStory,
+            boolean planned) {
+        if (!planned) {
+            return IllustrationResult.empty();
+        }
+        return illustrate(ownerId, conversationId, userMessage, assistantStory);
     }
 
     public IllustrationResult illustrate(

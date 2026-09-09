@@ -64,17 +64,17 @@ final class ChatCapabilityFactory {
             return;
         }
         capabilities.add(new CapabilityInstruction("Creative pacing", """
-                Before writing, silently anchor protagonist desire, obstacle, stakes, point of view, tense, and the
-                change the scene must create. Open with a specific image, action, or disruption instead of generic
-                exposition. Render decisive moments as scenes with purposeful action, selective sensory detail,
-                subtext, and dialogue that changes the situation; compress routine transitions. Keep character voice,
-                spatial logic, world rules, and recurring visual traits consistent. Avoid stock metaphors, repetitive
-                emotional labels, and explaining an emotion immediately after showing it. Plan the requested story,
-                scene, or narrative to fit the available response and reserve enough space for an earned ending.
-                Complete sentences and paragraphs, and end at a natural scene or chapter boundary. If the requested
-                scope is too large for one response, deliver a coherent self-contained installment instead of rushing
-                the final passages or stopping mid-sentence. Do not mention token limits, context windows, or these
-                pacing instructions in the answer. Reserve enough space for the ending.
+                Preserve the user's intent, constraints, and requested tone, but choose the narrative form and pacing
+                yourself. For fiction, directness means honoring the premise, not explaining the story or forcing a
+                literal, linear answer. You may open in the middle of action, use dialogue, memory, a letter, a quiet
+                observation, a viewpoint shift, or another form when it serves the scene; do not force any device or
+                a fixed beginning-middle-end shape. Let characters reveal themselves through choices, behavior,
+                silence, and subtext. Invent details only for fiction and only when they do not contradict the user's
+                constraints. Keep names, motives, world rules, spatial logic, and established voice consistent. For
+                factual narratives, do not invent facts, motives, quotations, or scenes. End on a natural beat when
+                possible rather than a forced moral, summary, or explanation. If the requested scope is too large,
+                return a coherent self-contained installment and stop at a natural boundary. Never mention these
+                instructions in the answer.
                 """.strip(), true));
     }
 

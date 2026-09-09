@@ -6,11 +6,14 @@ import com.minikun.personality.companion.CompanionMode;
 import com.minikun.personality.companion.CompanionModeContext;
 import com.minikun.research.ResearchIntentDetector;
 import com.minikun.tools.ToolEvidence;
+import com.minikun.visual.StoryIllustrationIntent;
+import com.minikun.visual.StoryIllustrationIntentDetector;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.regex.Pattern;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import lombok.extern.slf4j.Slf4j;
 
@@ -30,17 +33,38 @@ final class TurnPlanner {
             "(?iu)(ต่อ|จากตรงนั้น|อันเดิม|แบบเดิม|เหมือนเดิม|continue|from there|same one)");
     private final CooperationRouter cooperationRouter;
     private final TurnAmbiguityResolver ambiguityResolver;
+    private final StoryIllustrationIntentDetector illustrationIntentDetector;
+    private final boolean autoIllustrateCreativeStories;
     private final ToolRuntimeIntentDetector toolIntent = new ToolRuntimeIntentDetector();
     private final ResearchIntentDetector researchIntent = new ResearchIntentDetector();
 
     @Autowired
-    TurnPlanner(CooperationRouter cooperationRouter, ObjectProvider<TurnAmbiguityResolver> ambiguityResolver) {
-        this(cooperationRouter, ambiguityResolver == null ? null : ambiguityResolver.getIfAvailable());
+    TurnPlanner(
+            CooperationRouter cooperationRouter,
+            ObjectProvider<TurnAmbiguityResolver> ambiguityResolver,
+            ObjectProvider<StoryIllustrationIntentDetector> illustrationIntentDetector,
+            @Value("${minikun.visual.generation.auto-illustrate-stories:true}") boolean autoIllustrateCreativeStories) {
+        this(cooperationRouter,
+                ambiguityResolver == null ? null : ambiguityResolver.getIfAvailable(),
+                illustrationIntentDetector == null ? null : illustrationIntentDetector.getIfAvailable(),
+                autoIllustrateCreativeStories);
     }
 
     TurnPlanner(CooperationRouter cooperationRouter, TurnAmbiguityResolver ambiguityResolver) {
+        this(cooperationRouter, ambiguityResolver, null, true);
+    }
+
+    TurnPlanner(
+            CooperationRouter cooperationRouter,
+            TurnAmbiguityResolver ambiguityResolver,
+            StoryIllustrationIntentDetector illustrationIntentDetector,
+            boolean autoIllustrateCreativeStories) {
         this.cooperationRouter = cooperationRouter == null ? new CooperationRouter() : cooperationRouter;
         this.ambiguityResolver = ambiguityResolver;
+        this.illustrationIntentDetector = illustrationIntentDetector == null
+                ? new StoryIllustrationIntentDetector(this.cooperationRouter)
+                : illustrationIntentDetector;
+        this.autoIllustrateCreativeStories = autoIllustrateCreativeStories;
     }
 
     TurnPlan plan(String message, String conversationContext, CompanionModeContext mode,
@@ -55,6 +79,8 @@ final class TurnPlanner {
             if (previous.needsExpert() || "creative_request".equals(previous.reason())) cooperation = previous;
         }
         boolean creative = "creative_request".equals(cooperation.reason());
+        boolean imageOutput = illustrationIntentDetector
+                .detect(text, autoIllustrateCreativeStories) != StoryIllustrationIntent.NONE;
         boolean research = researchIntent.detect(text).deepResearch();
         boolean tools = toolsAvailable && verifiedTool == null && toolIntent.requiresTools(text);
         boolean ambiguous = text.length() <= 100 && AMBIGUOUS.matcher(text.toLowerCase(Locale.ROOT)).find()
@@ -88,10 +114,19 @@ final class TurnPlanner {
         }
         TurnPlan plan = new TurnPlan(intent, execution, cooperation,
                 !simpleCasual, !simpleCasual, false, tools, hasVision, research, creative,
-                ambiguous, confidence, reason);
-        log.info("process=turn_plan event=completed intent={} execution={} tools={} ambiguous={} confidence={} reason={}",
-                plan.intent(), plan.execution(), plan.needsTools(), plan.ambiguous(), plan.confidence(), plan.reason());
+                ambiguous, confidence, reason, imageOutput, routeSource(verifiedTool, tools));
+        log.info("process=turn_plan event=completed intent={} execution={} tools={} image_output={} route_source={} "
+                        + "ambiguous={} confidence={} reason={}",
+                plan.intent(), plan.execution(), plan.needsTools(), plan.imageOutput(), plan.routeSource(),
+                plan.ambiguous(), plan.confidence(), plan.reason());
         return plan;
+    }
+
+    private String routeSource(ToolEvidence verifiedTool, boolean tools) {
+        if (verifiedTool != null) {
+            return verifiedTool.finalResponse() ? "deterministic_tool_final" : "deterministic_tool";
+        }
+        return tools ? "native_tool_loop" : "turn_planner";
     }
 
     private TurnPlan.Intent intent(CompanionModeContext mode, boolean vision, boolean tools,

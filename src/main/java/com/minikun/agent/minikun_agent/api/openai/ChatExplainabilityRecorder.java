@@ -42,6 +42,8 @@ final class ChatExplainabilityRecorder {
             decisions.put("turn_ambiguous", turnPlan.ambiguous());
             decisions.put("turn_reason", turnPlan.reason());
             decisions.put("technical_route", turnPlan.cooperation().needsExpert());
+            decisions.put("route_source", turnPlan.routeSource());
+            decisions.put("image_output", turnPlan.imageOutput());
         }
         return new Context(sources, tool == null ? List.of() : List.of(tool.toolName()), decisions);
     }
@@ -60,7 +62,9 @@ final class ChatExplainabilityRecorder {
     static Context forTool(ToolEvidence evidence) {
         return new Context(List.of(), List.of(evidence.toolName()),
                 Map.of("deterministic_tool_response", true,
-                        "confirmation_required", evidence.requiresConfirmation()));
+                        "confirmation_required", evidence.requiresConfirmation(),
+                        "route_source", evidence.finalResponse()
+                                ? "deterministic_tool_final" : "deterministic_tool"));
     }
 
     static Context browserFailure() {

@@ -84,7 +84,7 @@ import org.slf4j.MDC;
 @RequiredArgsConstructor(onConstructor_ = @Autowired)
 @Slf4j
 public class ChatService {
-    private static final String DEFAULT_CHAT_MODEL = "hf.co/llmfan46/gemma-4-E4B-it-ultra-uncensored-heretic-GGUF:Q5_K_M";
+    private static final String DEFAULT_CHAT_MODEL = "hf.co/HauhauCS/Gemma4-12B-QAT-Uncensored-HauhauCS-Balanced:Q4_K_M";
     private static final String BLANK_MODEL_RESPONSE = "ขออภัยครับ โมเดลยังไม่ได้ส่งคำตอบที่สมบูรณ์ กรุณาลองสั่งอีกครั้งครับ";
     private final ActiveChatModelProvider activeChatModelProvider;
     private final EmbeddingModel embeddingModel;
@@ -669,7 +669,7 @@ public class ChatService {
                     conversationId.value(),
                     interactionMode,
                     visionInput,
-                    shouldIllustrate(userMessage.content()),
+                    shouldIllustrate(turnPlan),
                     turnPlan));
         } catch (RuntimeException exception) {
             promptResult = "error";
@@ -938,15 +938,16 @@ public class ChatService {
         if (text != null) content.append(text);
     }
 
-    private boolean shouldIllustrate(String userMessage) {
-        return storyIllustrationService != null && storyIllustrationService.shouldIllustrate(userMessage);
+    private boolean shouldIllustrate(TurnPlan turnPlan) {
+        return storyIllustrationService != null && turnPlan != null && turnPlan.imageOutput();
     }
 
     private StoryIllustrationService.IllustrationResult illustrate(
             ChatExecutionContext context, String userMessage, String assistantContent) {
         if (storyIllustrationService == null) return new StoryIllustrationService.IllustrationResult(List.of(), "");
         return storyIllustrationService.illustrate(context.ownerId(), context.conversationId().value(),
-                userMessage, assistantContent);
+                userMessage, assistantContent,
+                context.turnPlan() != null && context.turnPlan().imageOutput());
     }
     private List<ChatAttachment> combineAttachments(
             List<ChatAttachment> existing, List<ChatAttachment> generated) {

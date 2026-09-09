@@ -69,9 +69,10 @@ class ChatCapabilityFactoryTest {
 
         assertTrue(text.contains("Creative pacing"));
         assertTrue(text.contains("Minikun narrative voice"));
-        assertTrue(text.contains("Reserve enough space"));
-        assertTrue(text.contains("scene or chapter"));
-        assertTrue(text.contains("protagonist desire, obstacle, stakes"));
+        assertTrue(text.contains("choose the narrative form and pacing"));
+        assertTrue(text.contains("directness means honoring the premise"));
+        assertTrue(text.contains("fixed beginning-middle-end shape"));
+        assertTrue(text.contains("Invent details only for fiction"));
         assertTrue(text.contains("stock metaphors"));
     }
 

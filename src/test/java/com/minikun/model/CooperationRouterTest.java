@@ -128,4 +128,18 @@ class CooperationRouterTest {
         assertEquals("creative_request", decision.reason());
         assertTrue(!decision.needsExpert());
     }
+
+    @Test
+    void routesSceneAndStoryContinuationPromptsToCreativePath() {
+        assertEquals("creative_request", router.decide("ช่วยเขียนฉากเปิดเรื่องในสถานีอวกาศ").reason());
+        assertEquals("creative_request", router.decide("continue the story with a quiet reveal").reason());
+    }
+
+    @Test
+    void doesNotTreatATechnicalSceneGraphAsCreativeWriting() {
+        CooperationRoutingDecision decision = router.decide("อธิบาย scene graph algorithm");
+
+        assertEquals("technical_work", decision.reason());
+        assertTrue(decision.needsExpert());
+    }
 }

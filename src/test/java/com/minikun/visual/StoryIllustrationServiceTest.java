@@ -81,6 +81,26 @@ class StoryIllustrationServiceTest {
     }
 
     @Test
+    void plannerGateSkipsGenerationWhenImageOutputWasNotPlanned() {
+        AtomicInteger providerCalls = new AtomicInteger();
+        StoryIllustrationProvider provider = value -> {
+            providerCalls.incrementAndGet();
+            return new GeneratedImage(GeneratedImageStoreTest.png(), "should-not-run");
+        };
+        StoryIllustrationService service = new StoryIllustrationService(
+                tool(provider), true, 1000,
+                (user, story, mode, memory, maximum) -> new StoryVisualPlan(
+                        mode, List.of(), List.of(scene("Opening", "opening the door", "wide shot"))),
+                new InMemoryCharacterVisualMemory(), 3);
+
+        var result = service.illustrate("owner", "story", "ช่วยวาดภาพประตู", "เปิดประตู", false);
+
+        assertTrue(result.attachments().isEmpty());
+        assertTrue(result.notice().isEmpty());
+        assertEquals(0, providerCalls.get());
+    }
+
+    @Test
     void rendersStoryboardPanelsSequentiallyAsSeparateAttachments() {
         List<ImageGenerationRequest> requests = new ArrayList<>();
         StoryIllustrationProvider provider = new StoryIllustrationProvider() {

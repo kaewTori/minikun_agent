@@ -20,7 +20,9 @@ record TurnPlan(
         boolean creative,
         boolean ambiguous,
         double confidence,
-        String reason) {
+        String reason,
+        boolean imageOutput,
+        String routeSource) {
 
     TurnPlan {
         intent = Objects.requireNonNullElse(intent, Intent.GENERAL);
@@ -30,6 +32,7 @@ record TurnPlan(
             throw new IllegalArgumentException("turn-plan confidence must be between 0 and 1");
         }
         reason = Objects.requireNonNullElse(reason, "deterministic_default").trim();
+        routeSource = Objects.requireNonNullElse(routeSource, "turn_planner").trim();
     }
 
     TurnPlan refine(ChatKnowledgeSelection knowledge) {
@@ -51,7 +54,7 @@ record TurnPlan(
                 research ? Execution.BACKGROUND : execution,
                 cooperation, needsMemory, needsPersonalKnowledge, searched, needsTools, needsVision,
                 research, creative, ambiguous, refinedConfidence,
-                searched ? reason + "+search" : reason);
+                searched ? reason + "+search" : reason, imageOutput, routeSource);
     }
 
     String intentTag() { return intent.name().toLowerCase(Locale.ROOT); }

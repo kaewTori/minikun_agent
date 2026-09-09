@@ -1,6 +1,7 @@
 package com.minikun.visual;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.minikun.model.CooperationRouter;
 import com.minikun.model.task.OllamaTaskModelProvider;
 import com.minikun.model.task.TaskModelProvider;
 import java.net.http.HttpClient;
@@ -77,6 +78,14 @@ public class StoryIllustrationConfiguration {
     }
 
     @Bean
+    StoryIllustrationIntentDetector storyIllustrationIntentDetector(
+            ObjectProvider<CooperationRouter> cooperationRouter) {
+        CooperationRouter router = cooperationRouter.getIfAvailable();
+        return router == null ? new StoryIllustrationIntentDetector()
+                : new StoryIllustrationIntentDetector(router);
+    }
+
+    @Bean
     StoryVisualPlanGenerator storyVisualPlanGenerator(
             ObjectMapper objectMapper,
             @Value("${minikun.visual.generation.pony-prompt.ollama.base-url:http://127.0.0.1:11434}")
@@ -116,12 +125,14 @@ public class StoryIllustrationConfiguration {
             StoryVisualPlanGenerator visualPlanGenerator,
             CharacterVisualMemory characterVisualMemory,
             PonyPromptTransformer promptTransformer,
+            StoryIllustrationIntentDetector intentDetector,
             @Value("${minikun.visual.generation.auto-illustrate-stories:true}") boolean autoIllustrateStories,
             @Value("${minikun.visual.generation.max-prompt-characters:8000}") int maximumPromptCharacters,
             @Value("${minikun.visual.generation.storyboard.max-scenes:3}") int maximumStoryboardScenes) {
         return new StoryIllustrationService(
                 imageGenerationTool, autoIllustrateStories, maximumPromptCharacters,
-                visualPlanGenerator, characterVisualMemory, maximumStoryboardScenes, promptTransformer);
+                visualPlanGenerator, characterVisualMemory, maximumStoryboardScenes, promptTransformer,
+                intentDetector);
     }
 
     @Bean

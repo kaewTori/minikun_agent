@@ -34,7 +34,7 @@ import com.minikun.notification.NotificationRequest;
 public final class BackgroundChatService implements AutoCloseable {
     private static final Logger LOGGER = LoggerFactory.getLogger(BackgroundChatService.class);
     private static final long RESULT_TTL_HOURS = 24;
-    private static final Duration DEFAULT_JOB_TIMEOUT = Duration.ofSeconds(180);
+    private static final Duration DEFAULT_JOB_TIMEOUT = Duration.ofMinutes(15);
 
     private final ChatService chatService;
     private final NotificationDispatcher notifications;
@@ -56,7 +56,7 @@ public final class BackgroundChatService implements AutoCloseable {
     @Autowired
     BackgroundChatService(ChatService chatService, NotificationDispatcher notifications,
             ObjectProvider<BackgroundChatStore> store,
-            @Value("${minikun.chat.background.timeout:180s}") Duration jobTimeout) {
+            @Value("${minikun.chat.background.timeout:15m}") Duration jobTimeout) {
         this(chatService, notifications, store == null ? null : store.getIfAvailable(), jobTimeout);
     }
 

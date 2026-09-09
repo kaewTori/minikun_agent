@@ -17,8 +17,16 @@ public final class StoryIllustrationIntentDetector {
                     + "(?:with|include|add|accompanied by).{0,30}(?:images?|pictures?|illustrations?|artwork)",
             Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
 
-    private final CooperationRouter cooperationRouter = new CooperationRouter();
+    private final CooperationRouter cooperationRouter;
     private final ResearchIntentDetector narrativeDetector = new ResearchIntentDetector();
+
+    public StoryIllustrationIntentDetector(CooperationRouter cooperationRouter) {
+        this.cooperationRouter = cooperationRouter;
+    }
+
+    StoryIllustrationIntentDetector() {
+        this(new CooperationRouter());
+    }
 
     public StoryIllustrationIntent detect(String message, boolean autoIllustrateCreativeStories) {
         String value = message == null ? "" : message.strip().toLowerCase(Locale.ROOT);

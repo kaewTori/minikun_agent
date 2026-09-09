@@ -42,4 +42,14 @@ class ResearchStorytellingAdvisorTest {
         assertTrue(capabilities.isEmpty());
         assertFalse(capabilities.stream().anyMatch(capability -> capability.name().contains("research")));
     }
+
+    @Test
+    void storyGuidanceAllowsNonlinearFormsWhenThePromptCallsForThem() {
+        var capabilities = advisor.advise("ช่วยเล่าเรื่องราวลึกลับให้ฟัง", KnowledgeSelection.EMPTY);
+        String text = capabilities.stream().map(com.minikun.pcs.model.CapabilityInstruction::content)
+                .reduce((left, right) -> left + "\n" + right).orElse("");
+
+        assertTrue(text.contains("Choose the form and structure that best fit the user's intent"));
+        assertTrue(text.contains("do not force a linear beginning-middle-end shape"));
+    }
 }

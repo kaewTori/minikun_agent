@@ -19,6 +19,10 @@ import com.minikun.vision.VisionInput;
 
 /** Converts provider-neutral prompts into Spring AI requests at the API adapter boundary. */
 final class SpringAiPromptAdapter {
+    private static final int OLLAMA_TOP_K = 64;
+    private static final double OLLAMA_TOP_P = 0.9;
+    private static final double OLLAMA_MIN_P = 0.05;
+    private static final double OLLAMA_REPEAT_PENALTY = 1.1;
 
     Prompt adapt(
             com.minikun.pcs.model.Prompt prompt,
@@ -61,9 +65,24 @@ final class SpringAiPromptAdapter {
             ChatModelId activeModel,
             String configuredModel,
             int ollamaContextSize) {
-        ChatOptions.Builder<?> builder = activeModel == ChatModelId.EXISTING
-                ? OllamaChatOptions.builder().numCtx(ollamaContextSize).disableThinking()
-                : ChatOptions.builder();
+        if (activeModel == ChatModelId.EXISTING) {
+            OllamaChatOptions.Builder builder = OllamaChatOptions.builder()
+                    .numCtx(ollamaContextSize)
+                    .topK(OLLAMA_TOP_K)
+                    .topP(OLLAMA_TOP_P)
+                    .minP(OLLAMA_MIN_P)
+                    .repeatPenalty(OLLAMA_REPEAT_PENALTY)
+                    .disableThinking();
+            builder
+                    .model(configuredModel)
+                    .temperature(generationOptions.temperature())
+                    .maxTokens(generationOptions.maxTokens());
+            if (!generationOptions.stop().isEmpty()) {
+                builder.stopSequences(generationOptions.stop());
+            }
+            return builder.build();
+        }
+        ChatOptions.Builder<?> builder = ChatOptions.builder();
         builder
                 .model(configuredModel)
                 .temperature(generationOptions.temperature())

@@ -8,6 +8,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.minikun.model.CooperationRouter;
 import com.minikun.model.task.TaskModelId;
 import com.minikun.model.task.TaskModelProvider;
+import com.minikun.tools.ToolEvidence;
 import com.minikun.model.task.TaskModelRegistry;
 import java.time.Duration;
 import java.util.Map;
@@ -32,6 +33,24 @@ class TurnPlannerTest {
         assertEquals(TurnPlan.Intent.ACTION, plan.intent());
         assertEquals(TurnPlan.Execution.TOOL_LOOP, plan.execution());
         assertTrue(plan.needsTools());
+        assertEquals("native_tool_loop", plan.routeSource());
+    }
+
+    @Test
+    void imageOutputIsPartOfTheTurnPlan() {
+        TurnPlan plan = planner(null).plan("ช่วยสร้างภาพเมืองลอยฟ้ายามค่ำคืน", "", null, false, null, true);
+
+        assertTrue(plan.imageOutput());
+        assertEquals("turn_planner", plan.routeSource());
+    }
+
+    @Test
+    void deterministicToolEvidenceIsRecordedAsTheRouteSource() {
+        TurnPlan plan = planner(null).plan("อากาศวันนี้เป็นอย่างไร", "", null, false,
+                ToolEvidence.verified("weather.get_forecast", "clear"), true);
+
+        assertEquals("deterministic_tool", plan.routeSource());
+        assertFalse(plan.needsTools());
     }
 
     @Test

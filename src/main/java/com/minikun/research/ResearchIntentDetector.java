@@ -11,7 +11,10 @@ public final class ResearchIntentDetector {
                     + "multiple\\s+sources|primary\\s+sources)",
             Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
     private static final Pattern STORY = Pattern.compile(
-            "(เล่า(?:ให้ฟัง|เป็นเรื่อง|เรื่อง)?|เรื่องราว|สตอรี่|narrative|tell\\s+(?:me\\s+)?(?:a\\s+)?story|storytelling)",
+            "(เล่า(?:ให้ฟัง|เป็นเรื่อง|เรื่อง)?|เรื่องราว|สตอรี่|เขียนฉาก|สร้างฉาก|บรรยายฉาก|"
+                    + "ฉากเปิด|ฉากจบ|ต่อเรื่อง|ตอนต่อไป|narrative|tell\\s+(?:me\\s+)?(?:a\\s+)?story|storytelling|"
+                    + "(?:write|describe|create)\\s+(?:a|the\\s+)?scene|"
+                    + "continue (?:the )?story|next chapter)",
             Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
     private static final Pattern TIMELINE = Pattern.compile(
             "(ประวัติ|ที่มา|พัฒนาการ|ลำดับเหตุการณ์|ไทม์ไลน์|timeline|history|evolution|chronolog)",
