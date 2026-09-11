@@ -47,7 +47,14 @@ final class ChatGenerationOptionsResolver {
         if (performanceMetrics != null) {
             performanceMetrics.generationProfile(profile, maxTokens);
         }
-        return new Result(new GenerationOptions(temperature, maxTokens, stop), profile);
+        var reasoning = request.reasoning_effort() == null
+                ? GenerationOptions.Reasoning.AUTO : request.reasoning_effort();
+        if (reasoning == GenerationOptions.Reasoning.AUTO) {
+            reasoning = deepResearch || turnPlan != null && (turnPlan.cooperation().needsExpert()
+                    || turnPlan.execution() == TurnPlan.Execution.TOOL_LOOP)
+                    ? GenerationOptions.Reasoning.MEDIUM : GenerationOptions.Reasoning.OFF;
+        }
+        return new Result(new GenerationOptions(temperature, maxTokens, stop, reasoning), profile);
     }
 
     record Result(GenerationOptions options, String profile) {

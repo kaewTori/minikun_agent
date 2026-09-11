@@ -46,7 +46,7 @@ class AgentResumeServiceTest {
         AgentExecutionService.AgentRunDetails details = resume.resume("owner", run.id());
 
         assertEquals(1, calls.get());
-        assertEquals(AgentRunStatus.COMPLETED, details.run().status());
+        assertEquals(AgentRunStatus.UNVERIFIED, details.run().status());
         assertEquals(AgentStepStatus.COMPLETED, details.steps().get(0).status());
         assertEquals(2, details.steps().get(0).attempts());
     }
@@ -57,5 +57,24 @@ class AgentResumeServiceTest {
                 (context, call) -> ToolResult.success(Map.of()), new ObjectMapper());
 
         assertThrows(IllegalArgumentException.class, () -> resume.resume("someone-else", run.id()));
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(booleans = {true, false})
+    void stopsBeforeDependentStepWhenConfirmationOrFailureOccurs(boolean confirmation) {
+        executions.beginStep(run.id(), "call-2", "dependent.tool", Map.of());
+        executions.finishStep(run.id(), "call-2", ToolResult.failure(ToolErrorCode.EXECUTION_FAILED, "old"), false);
+        executions.complete(run.id(), "interrupted plan");
+        AtomicInteger calls = new AtomicInteger();
+        var resume = new AgentResumeService(executions, (context, call) -> {
+            calls.incrementAndGet();
+            return confirmation ? ToolResult.success(Map.of("requires_confirmation", true))
+                    : ToolResult.failure(ToolErrorCode.EXECUTION_FAILED, "uncertain outcome");
+        }, new ObjectMapper());
+
+        var result = resume.resume("owner", run.id());
+        assertEquals(1, calls.get());
+        assertEquals(confirmation ? AgentRunStatus.WAITING_CONFIRMATION : AgentRunStatus.FAILED, result.run().status());
+        assertEquals(1, result.steps().get(1).attempts());
     }
 }

@@ -61,7 +61,34 @@ public final class PlannerService {
                 UUID.randomUUID(), conversationId.value(), requireText(title, "title"),
                 Objects.requireNonNullElse(note, "").trim(), startsAt, zone, remindBeforeMinutes, parsedRecurrence,
                 "ACTIVE", startsAt.minusSeconds(remindBeforeMinutes * 60L), now, now);
-        return store.create(event);
+        store.create(event);
+        return verifySaved(event);
+    }
+
+    private PlannerEvent verifySaved(PlannerEvent expected) {
+        PlannerEvent actual = store.find(expected.id(), expected.conversationId())
+                .orElseThrow(() -> new IllegalStateException("saved record could not be verified; inspect before retrying"));
+        if (!sameValue(expected.id(), actual.id())
+                || !sameValue(expected.conversationId(), actual.conversationId())
+                || !sameValue(expected.title(), actual.title())
+                || !sameValue(expected.note(), actual.note())
+                || !sameValue(expected.startsAt(), actual.startsAt())
+                || !sameValue(expected.timezone(), actual.timezone())
+                || !sameValue(expected.remindBeforeMinutes(), actual.remindBeforeMinutes())
+                || !sameValue(expected.recurrence(), actual.recurrence())
+                || !sameValue(expected.status(), actual.status())
+                || !sameValue(expected.nextNotifyAt(), actual.nextNotifyAt())) {
+            throw new IllegalStateException("saved record does not match requested outcome; inspect before retrying");
+        }
+        return actual;
+    }
+
+    private boolean sameValue(Object expected, Object actual) {
+        if (expected instanceof Instant left && actual instanceof Instant right) {
+            // PostgreSQL stores microseconds and may round sub-microsecond input.
+            return java.time.Duration.between(left, right).abs().compareTo(java.time.Duration.ofNanos(1000)) < 0;
+        }
+        return Objects.equals(expected, actual);
     }
 
     public List<PlannerEvent> list(ConversationId conversationId) {
@@ -97,7 +124,8 @@ public final class PlannerService {
                 title == null || title.isBlank() ? current.title() : title.trim(),
                 note == null ? current.note() : note.trim(), startsAt, zone, remind, parsedRecurrence,
                 current.status(), startsAt.minusSeconds(remind * 60L), current.createdAt(), clock.instant());
-        return store.update(updated);
+        store.update(updated);
+        return verifySaved(updated);
     }
 
     public boolean cancel(ConversationId conversationId, UUID id) {
@@ -131,9 +159,9 @@ public final class PlannerService {
                 UUID.randomUUID(), conversationId.value(), original.title(),
                 "Snoozed from " + original.id() + (original.note().isBlank() ? "" : ". " + original.note()),
                 snoozedUntil, zone, 0, PlannerRecurrence.NONE, "ACTIVE", snoozedUntil, now, now);
-        PlannerEvent saved = store.create(snoozed);
+        store.create(snoozed);
         store.recordAction(UUID.randomUUID(), conversationId.value(), id, "SNOOZED", snoozedUntil, now);
-        return saved;
+        return verifySaved(snoozed);
     }
 
     public List<PlannerEvent> due(Instant now) {

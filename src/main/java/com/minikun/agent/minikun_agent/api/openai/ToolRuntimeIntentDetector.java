@@ -16,11 +16,25 @@ final class ToolRuntimeIntentDetector {
                     + "homelab|system|service|website|url|link|memory|portfolio|investment)");
     private static final Pattern SEQUENCE = Pattern.compile(
             "(?iu)(จากนั้น|แล้วค่อย|ต่อด้วย|เสร็จแล้ว|and then|then)");
+    private static final Pattern INVESTMENT_ACTION = Pattern.compile(
+            "(?iu)(ทบทวน|วิเคราะห์|ตรวจสอบ|ตรวจ|เช็ก|เช็ค|ดู|สรุป|ประเมิน|ราคา|มูลค่า|ราคาปัจจุบัน|ราคาล่าสุด|"
+                    + "เพิ่ม|สร้าง|บันทึก|แก้ไข|อัปเดต|ปิด|review|analy[sz]e|check|show|summary|"
+                    + "price|quote|valuation|market|value|add|create|save|update|close)");
+    private static final Pattern INVESTMENT_TARGET = Pattern.compile(
+            "(?iu)(พอร์ต|หุ้นที่ถือ|การลงทุน|thesis|portfolio|holdings?|investment)");
+    private static final Pattern INVESTMENT_MARKET_ACTION = Pattern.compile(
+            "(?iu)(ราคา|มูลค่า|ราคาปัจจุบัน|ราคาล่าสุด|price|quote|valuation|market\\s*value)");
+    private static final Pattern INVESTMENT_MARKET_TARGET = Pattern.compile(
+            "(?iu)(พอร์ต|หุ้น|การลงทุน|portfolio|holdings?|investment|market|quote)");
+    private static final Pattern INVESTMENT_SYMBOL = Pattern.compile("\\b[A-Z][A-Z0-9.-]{0,7}\\b");
 
     boolean requiresTools(String message) {
         String value = message == null ? "" : message.toLowerCase(Locale.ROOT).trim();
         if (value.isBlank()) return false;
         if (EXPLICIT_TOOL.matcher(value).find()) return true;
+        if (INVESTMENT_MARKET_ACTION.matcher(value).find()
+                && (INVESTMENT_MARKET_TARGET.matcher(value).find() || INVESTMENT_SYMBOL.matcher(message).find())) return true;
+        if (INVESTMENT_ACTION.matcher(value).find() && INVESTMENT_TARGET.matcher(value).find()) return true;
         return ACTION.matcher(value).find() && (TARGET.matcher(value).find() || SEQUENCE.matcher(value).find());
     }
 }

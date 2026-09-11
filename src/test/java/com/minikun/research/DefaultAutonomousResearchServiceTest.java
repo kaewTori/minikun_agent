@@ -155,6 +155,39 @@ class DefaultAutonomousResearchServiceTest {
         assertEquals(List.of("https://docs.spring.io/spring-ai/reference/api/index.html"), rendered);
     }
 
+    @Test
+    void respectsPreferredDomainOrderWhenSeveralTrustedDomainsMatch() {
+        SearchService search = request -> KnowledgeContext.fromCandidates(List.of(
+                new KnowledgeCandidate("broad", KnowledgeSource.SEARCH, "Broad result", 0,
+                        "https://amazon.com/book"),
+                new KnowledgeCandidate("issuer", KnowledgeSource.SEARCH, "Issuer result", 1,
+                        "https://ir.aboutamazon.com/results")));
+        List<String> rendered = new ArrayList<>();
+        BrowserContentService browser = new BrowserContentService(url -> {
+            rendered.add(url);
+            return new BrowserContent(url, "Rendered evidence", "text/html", false);
+        }, true, 1);
+        ResearchReasoningProvider reasoning = new ResearchReasoningProvider() {
+            @Override
+            public ResearchPlan plan(String query, String context, int max) {
+                return ResearchPlan.fallback(query);
+            }
+
+            @Override
+            public ResearchEvaluation evaluate(ResearchPlan plan, List<String> queries, String evidence, int max) {
+                return new ResearchEvaluation(true, List.of(), List.of());
+            }
+        };
+        DefaultAutonomousResearchService service = new DefaultAutonomousResearchService(
+                search, browser, reasoning, true, 1, 3, 1, 4_000);
+
+        service.research(new AutonomousResearchRequest(
+                "AMZN", "", "AMZN", List.of(), "en", "", true, 8, 1,
+                List.of("ir.aboutamazon.com", "amazon.com"), Instant.now().plusSeconds(30)));
+
+        assertEquals(List.of("https://ir.aboutamazon.com/results"), rendered);
+    }
+
     private AutonomousResearchRequest request(String query, int sourceReadLimit) {
         return new AutonomousResearchRequest(
                 query, "", query, List.of(), "en", "", true, 8,

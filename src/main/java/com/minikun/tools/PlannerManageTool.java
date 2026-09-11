@@ -40,8 +40,8 @@ public final class PlannerManageTool implements Tool {
     @Override
     public boolean requiresExplicitConfirmation(Map<String, Object> arguments) {
         return switch (text(arguments, "action").toLowerCase(java.util.Locale.ROOT)) {
-            case "create", "update", "cancel", "snooze" -> true;
-            default -> false;
+            case "list" -> false;
+            default -> true;
         };
     }
 
@@ -123,12 +123,16 @@ public final class PlannerManageTool implements Tool {
         }
         boolean cancelled = planner.cancel(context.conversationId(), id);
         confirmations.clear(context.conversationId());
+        if (!cancelled) return ToolResult.failure(ToolErrorCode.OUTCOME_UNVERIFIED,
+                "operation did not change the requested record; inspect before retrying");
         return ToolResult.success(Map.of("cancelled", cancelled, "event_id", id.toString()));
     }
 
     private ToolResult acknowledge(ToolCallContext context, Map<String, Object> arguments) {
         UUID id = id(arguments);
         boolean acknowledged = planner.acknowledge(context.conversationId(), id);
+        if (!acknowledged) return ToolResult.failure(ToolErrorCode.OUTCOME_UNVERIFIED,
+                "operation did not change the requested record; inspect before retrying");
         return ToolResult.success(Map.of("acknowledged", acknowledged, "event_id", id.toString()));
     }
 

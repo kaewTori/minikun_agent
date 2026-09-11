@@ -149,16 +149,25 @@ final class ChatKnowledgeResolver {
         boolean deepResearch = request.turnPlan() == null
                 ? researchIntentDetector.detect(query).deepResearch() : request.turnPlan().deepResearch();
         log.info("process=knowledge_pipeline event=start");
+        if (request.turnPlan() != null && "casual_greeting".equals(request.turnPlan().reason())) {
+            fastPath("casual_greeting");
+            return selection(request, KnowledgeContext.empty(), KnowledgeContext.empty(),
+                    new SearchDecision(false, query), false, null, List.of(), SearchSelectionSignals.EMPTY);
+        }
         long memoryStarted = System.nanoTime();
-        CompletableFuture<KnowledgeContext> memoryFuture =
-                request.turnPlan() != null && !request.turnPlan().needsMemory()
+        long contextDeadline = request.contextDeadline() == 0
+                ? memoryStarted + configuration.contextTimeout().toNanos() : request.contextDeadline();
+        boolean exhausted = contextDeadline <= System.nanoTime();
+        if (exhausted) fastPath("context_budget_exhausted");
+        java.util.concurrent.Future<KnowledgeContext> memoryFuture =
+                exhausted || request.turnPlan() != null && !request.turnPlan().needsMemory()
                         ? CompletableFuture.completedFuture(KnowledgeContext.empty())
-                        : CompletableFuture.supplyAsync(() -> recallMemory(
+                        : OptionalContextBudget.start(() -> recallMemory(
                                 query, request.conversationId(), request.ownerId()));
-        CompletableFuture<KnowledgeContext> personalFuture =
-                request.turnPlan() != null && !request.turnPlan().needsPersonalKnowledge()
+        java.util.concurrent.Future<KnowledgeContext> personalFuture =
+                exhausted || request.turnPlan() != null && !request.turnPlan().needsPersonalKnowledge()
                         ? CompletableFuture.completedFuture(KnowledgeContext.empty())
-                        : CompletableFuture.supplyAsync(() -> recallPersonal(query, request.ownerId()));
+                        : OptionalContextBudget.start(() -> recallPersonal(query, request.ownerId()));
         CompletableFuture<SearchDecision> decisionFuture = configuration.searchEnabled()
                 && !isInternalTitleRequest(query)
                 ? CompletableFuture.supplyAsync(() -> decideSearch(query, request.classifierContext()))
@@ -166,10 +175,14 @@ final class ChatKnowledgeResolver {
         KnowledgeContext memoryKnowledge;
         KnowledgeContext personalKnowledge;
         try {
-            memoryKnowledge = joinKnowledge(memoryFuture, "memory");
-            personalKnowledge = joinKnowledge(personalFuture, "personal");
+            memoryKnowledge = OptionalContextBudget.await(memoryFuture, contextDeadline, KnowledgeContext.empty(),
+                    "memory_wait", performanceMetrics);
+            personalKnowledge = OptionalContextBudget.await(personalFuture, contextDeadline, KnowledgeContext.empty(),
+                    "personal_wait", performanceMetrics);
         } finally {
-            recordStage("memory", memoryStarted, "success");
+            memoryFuture.cancel(true);
+            personalFuture.cancel(true);
+            recordStage("retrieval_wait", memoryStarted, "completed");
         }
 
         KnowledgeContext localKnowledge = combine(memoryKnowledge, personalKnowledge);
@@ -334,16 +347,11 @@ final class ChatKnowledgeResolver {
         if (service == null) {
             return KnowledgeContext.empty();
         }
-        try {
-            KnowledgeContext knowledge = service.recall(
-                    new LongTermMemoryScope(ownerId), query, configuration.memoryRetrievalLimit());
-            log.info("process=memory_recall event=completed candidates={}",
-                    knowledge == null ? 0 : knowledge.candidates().size());
-            return knowledge == null ? KnowledgeContext.empty() : knowledge;
-        } catch (RuntimeException exception) {
-            log.warn("Long-term memory recall failed; continuing without knowledge", exception);
-            return KnowledgeContext.empty();
-        }
+        KnowledgeContext knowledge = service.recall(
+                new LongTermMemoryScope(ownerId), query, configuration.memoryRetrievalLimit());
+        log.info("process=memory_recall event=completed candidates={}",
+                knowledge == null ? 0 : knowledge.candidates().size());
+        return knowledge == null ? KnowledgeContext.empty() : knowledge;
     }
 
     private KnowledgeContext recallPersonal(String query, String ownerId) {
@@ -363,7 +371,7 @@ final class ChatKnowledgeResolver {
                 log.warn("Personal knowledge recall failed; continuing without document context", exception);
             }
         }
-        if (acquiredKnowledgeIndex != null) {
+        if (acquiredKnowledgeIndex != null && !Thread.currentThread().isInterrupted()) {
             try {
                 acquired = acquiredKnowledgeIndex.recall(
                         ownerId, query, Math.min(20, configuration.personalKnowledgeLimit()));
@@ -668,7 +676,12 @@ final class ChatKnowledgeResolver {
             String ownerId,
             boolean conversationContextAvailable,
             String classifierContext,
-            TurnPlan turnPlan) {
+            TurnPlan turnPlan, long contextDeadline) {
+
+        Request(String query, String requestId, ConversationId conversationId, String ownerId,
+                boolean conversationContextAvailable, String classifierContext, TurnPlan turnPlan) {
+            this(query, requestId, conversationId, ownerId, conversationContextAvailable, classifierContext, turnPlan, 0);
+        }
 
         Request(String query, String requestId, ConversationId conversationId, String ownerId,
                 boolean conversationContextAvailable, String classifierContext) {
@@ -685,8 +698,20 @@ final class ChatKnowledgeResolver {
             int memoryRetrievalLimit,
             int personalKnowledgeLimit,
             int researchSourceReadLimit,
-            Duration autonomousResearchTimeout) {
+            Duration autonomousResearchTimeout,
+            Duration contextTimeout) {
+        Configuration(boolean searchEnabled, Duration searchTimeout, boolean safeSearch,
+                boolean queryPlanningEnabled, int searchResultLimit, int memoryRetrievalLimit,
+                int personalKnowledgeLimit, int researchSourceReadLimit, Duration autonomousResearchTimeout) {
+            this(searchEnabled, searchTimeout, safeSearch, queryPlanningEnabled, searchResultLimit,
+                    memoryRetrievalLimit, personalKnowledgeLimit, researchSourceReadLimit,
+                    autonomousResearchTimeout, Duration.ofSeconds(3));
+        }
+
         Configuration {
+            if (contextTimeout == null || contextTimeout.isNegative() || contextTimeout.isZero()) {
+                throw new IllegalArgumentException("context timeout must be positive");
+            }
             if (researchSourceReadLimit < 0 || researchSourceReadLimit > 10) {
                 throw new IllegalArgumentException("research source read limit must be between 0 and 10");
             }

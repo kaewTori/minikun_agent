@@ -40,6 +40,7 @@
       transforming: false,
       runtimeTimer: null,
       runtimeBusy: false,
+      runtimeOnline: false,
       runtimeHistory: []
     },
     sync: {
@@ -667,10 +668,33 @@
     return operation;
   }
 
+  function showBrowserNotification(payload, eventId = "", force = false) {
+    const title = String(payload?.title || "Mini-kun").trim();
+    const message = String(payload?.message || "").trim();
+    if (!message) return;
+    if (!force && document.visibilityState === "visible") {
+      toast(message);
+      return;
+    }
+    if (!("Notification" in window) || Notification.permission !== "granted") return;
+    const tag = `minikun:${payload?.sourceType || "notification"}:${payload?.sourceId || eventId || Date.now()}`;
+    const notification = new Notification(title, { body: message, tag, renotify: false });
+    notification.onclick = () => {
+      window.focus();
+      notification.close();
+    };
+  }
+
   function connectSyncEvents() {
     state.sync.eventSource?.close();
     const source = new EventSource("/v1/sync/events");
     state.sync.eventSource = source;
+    source.addEventListener("notification", (event) => {
+      try {
+        const update = JSON.parse(event.data);
+        showBrowserNotification(update.payload, event.lastEventId);
+      } catch (_) { /* ignore malformed notification events */ }
+    });
     source.addEventListener("sync", async (event) => {
       try {
         const update = JSON.parse(event.data);
@@ -929,7 +953,18 @@
     toast("ลบบทสนทนาและ short-term memory แล้วครับ");
   }
 
-  function showView(view, section = "") {
+  function updateViewUrl(view, section = "", replace = false) {
+    const query = new URLSearchParams();
+    if (view !== "chat") query.set("view", view);
+    if (view === "cockpit" && section) query.set("section", section);
+    const next = `${window.location.pathname}${query.toString() ? `?${query}` : ""}${window.location.hash}`;
+    const method = replace ? "replaceState" : "pushState";
+    if (`${window.location.pathname}${window.location.search}${window.location.hash}` !== next) {
+      window.history[method]({}, "", next);
+    }
+  }
+
+  function showView(view, section = "", options = {}) {
     document.querySelectorAll("[data-view]").forEach((node) => node.classList.toggle("hidden", node.dataset.view !== view));
     document.querySelectorAll("[data-view-target]").forEach((node) => {
       const matchesView = node.dataset.viewTarget === view;
@@ -940,13 +975,15 @@
       else node.removeAttribute("aria-current");
     });
     if (view === "cockpit") {
+      const cockpitPages = new Set(["today", "agent", "memory", "system"]);
       const page = { experiments: "today", inbox: "today", "permission-center": "system" }[section]
-        || state.cockpitPage || "today";
+        || (cockpitPages.has(section) ? section : state.cockpitPage || "today");
       switchCockpitPage(page, section);
       loadDashboard();
     }
     if (view === "studio") updateStudioPrompt();
     updateStudioRuntimePolling(view);
+    if (options.updateHistory) updateViewUrl(view, section);
   }
 
   function switchCockpitPage(page = "today", focusId = "") {
@@ -1167,10 +1204,24 @@
     }
   }
 
+  function updateStudioGenerateButton() {
+    const button = $("#studio-generate");
+    if (!button) return;
+    const offline = !state.studio.runtimeOnline;
+    const busy = state.studio.busy;
+    button.disabled = offline || busy;
+    button.dataset.state = offline ? "offline" : busy ? "busy" : "ready";
+    button.querySelector("span").textContent = busy ? "กำลังสร้างภาพ…" : "สร้างภาพนี้";
+    button.querySelector("small").textContent = offline
+      ? "เปิด TinyGrad ก่อน แล้วมินิคุงจะลองเชื่อมต่อใหม่"
+      : "ส่ง Pony prompt ให้ TinyGrad";
+  }
+
   function renderStudioRuntime(status) {
     const tab = $("#studio-runtime");
     if (!tab) return;
     const online = Boolean(status?.online);
+    state.studio.runtimeOnline = online;
     const activeBytes = Number(status?.memory?.active_bytes);
     const budgetBytes = Number(status?.vram_budget_bytes);
     const percent = Number(status?.vram_used_percent);
@@ -1216,6 +1267,7 @@
       return `${x.toFixed(1)},${y.toFixed(1)}`;
     }).join(" ");
     $("#studio-runtime-line").setAttribute("points", points);
+    updateStudioGenerateButton();
   }
 
   async function refreshStudioRuntime() {
@@ -1297,6 +1349,10 @@
     event.preventDefault();
     const form = $("#studio-form");
     if (!form.reportValidity() || state.studio.busy) return;
+    if (!state.studio.runtimeOnline) {
+      toast("TinyGrad ยังไม่พร้อม เปิด service แล้วลองใหม่ครับ", true);
+      return;
+    }
     const prompt = assembledStudioPrompt();
     if (!prompt) {
       $("#studio-brief").focus();
@@ -1305,8 +1361,7 @@
     }
     state.studio.busy = true;
     updateStudioRuntimePolling("");
-    $("#studio-generate").disabled = true;
-    $("#studio-generate span").textContent = "กำลังสร้างภาพ…";
+    updateStudioGenerateButton();
     setStudioCanvasState("generating");
     try {
       const result = await api("/v1/images/studio/generations", {
@@ -1330,8 +1385,7 @@
     } finally {
       state.studio.busy = false;
       updateStudioRuntimePolling("studio");
-      $("#studio-generate").disabled = false;
-      $("#studio-generate span").textContent = "สร้างภาพนี้";
+      updateStudioGenerateButton();
     }
   }
 
@@ -2628,10 +2682,17 @@
       const activeDifference = Number(activeStatuses.has(right.status)) - Number(activeStatuses.has(left.status));
       return activeDifference || new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime();
     });
-    const visible = sorted.slice(0, 5);
-    const activeCount = items.filter((item) => activeStatuses.has(item.status)).length;
-    $("#agent-run-count").textContent = activeCount ? `${activeCount} กำลังดูแล` : String(items.length);
+    const active = sorted.filter((item) => activeStatuses.has(item.status));
+    const history = sorted.filter((item) => !activeStatuses.has(item.status));
+    const activeCount = active.length;
+    const showingHistory = activeCount === 0 && history.length > 0;
+    const visible = (activeCount ? active : history).slice(0, 5);
+    $("#task-center").dataset.state = showingHistory ? "history" : activeCount ? "active" : "empty";
+    $("#task-center-eyebrow").textContent = activeCount ? "งานที่กำลังเดิน" : showingHistory ? "ประวัติงานล่าสุด" : "งานที่กำลังเดิน";
+    $("#task-center-title").textContent = activeCount ? "งานที่มินิคุงกำลังดูแล" : showingHistory ? "งานล่าสุด" : "งานของมินิคุง";
+    $("#agent-run-count").textContent = activeCount ? `${activeCount} กำลังดูแล` : history.length ? `${Math.min(history.length, 5)} งานล่าสุด` : "0";
     $("#agent-run-empty").classList.toggle("hidden", visible.length > 0);
+    $("#agent-run-empty").textContent = items.length ? "ตอนนี้ไม่มีงานที่กำลังทำอยู่ครับ" : "ยังไม่มีงานเบื้องหลังครับ";
     const list = $("#agent-run-list");
     list.replaceChildren();
     for (const run of visible) {
@@ -2639,9 +2700,11 @@
       const heading = element("div", "agent-run-heading");
       heading.append(element("strong", "", run.objective || "งานของมินิคุง"));
       heading.append(element("span", "run-status", statusLabels[run.status] || run.status));
-      const progress = Math.max(0, Math.min(100, Math.round((Number(run.currentStep) / Math.max(1, Number(run.maxSteps))) * 100)));
+      const currentStep = Math.max(0, Number(run.currentStep) || 0);
+      const maxSteps = Math.max(1, Number(run.maxSteps) || 1);
+      const progress = Math.max(0, Math.min(100, Math.round((currentStep / maxSteps) * 100)));
       const detail = element("div", "agent-run-detail");
-      detail.append(element("span", "", `${run.currentStep}/${run.maxSteps} ขั้นตอน`));
+      detail.append(element("span", "", run.status === "COMPLETED" ? "เสร็จครบแล้ว" : `${currentStep}/${maxSteps} ขั้นตอน`));
       detail.append(element("time", "", relativeTime(run.updatedAt)));
       const track = element("div", "agent-progress");
       const bar = element("span");
@@ -2783,17 +2846,17 @@
   function activateQuickAction(action) {
     switch (action) {
       case "image":
-        showView("chat");
+        showView("chat", "", { updateHistory: true });
         $("#file-input").click();
         break;
       case "idea":
-        showView("cockpit", "inbox");
+        showView("cockpit", "inbox", { updateHistory: true });
         requestAnimationFrame(() => {
           $("#capture-input")?.focus();
         });
         break;
       case "reminder": {
-        showView("chat");
+        showView("chat", "", { updateHistory: true });
         const composer = $("#chat-composer");
         composer.value = "ช่วยสร้าง Reminder ให้ฉัน: ";
         autoGrowComposer();
@@ -2801,11 +2864,11 @@
         break;
       }
       case "location":
-        showView("cockpit", "permission-center");
+        showView("cockpit", "permission-center", { updateHistory: true });
         requestCurrentLocation();
         break;
       case "voice":
-        showView("chat");
+        showView("chat", "", { updateHistory: true });
         toggleRecording();
         break;
       default: break;
@@ -3186,10 +3249,15 @@
       setPermissionUi("notifications", "unsupported");
       return;
     }
+    const alreadyGranted = Notification.permission === "granted";
     const result = await Notification.requestPermission();
     setPermissionUi("notifications", result);
     if (result === "denied") showPermissionHelp("notifications");
-    else toast(result === "granted" ? "อนุญาตการแจ้งเตือนแล้วครับ" : "ยังไม่ได้เปิดการแจ้งเตือนครับ", result !== "granted");
+    else if (result === "granted" && alreadyGranted) {
+      showBrowserNotification({ title: "Mini-kun", message: "การแจ้งเตือนพร้อมใช้งานแล้วครับ" }, "permission-test", true);
+    } else {
+      toast(result === "granted" ? "อนุญาตการแจ้งเตือนแล้วครับ" : "ยังไม่ได้เปิดการแจ้งเตือนครับ", result !== "granted");
+    }
   }
 
   async function loadDashboard() {
@@ -3557,8 +3625,14 @@
   document.querySelectorAll("[data-view-target]").forEach((button) => {
     button.addEventListener("click", () => {
       mobileMenuDialog?.close();
-      showView(button.dataset.viewTarget, button.dataset.section || "");
+      showView(button.dataset.viewTarget, button.dataset.section || "", { updateHistory: true });
     });
+  });
+  window.addEventListener("popstate", () => {
+    const params = new URLSearchParams(window.location.search);
+    const view = params.get("view");
+    const section = params.get("section") || "";
+    showView(new Set(["chat", "studio", "cockpit"]).has(view) ? view : "chat", section);
   });
   document.querySelectorAll("[data-prompt]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -3566,6 +3640,14 @@
       composer.value = button.dataset.prompt;
       autoGrowComposer();
       composer.focus();
+    });
+  });
+  document.querySelectorAll(".starter-more-toggle").forEach((button) => {
+    button.addEventListener("click", () => {
+      const more = button.closest(".starter-more");
+      const collapsed = more.classList.toggle("is-collapsed");
+      button.setAttribute("aria-expanded", String(!collapsed));
+      button.textContent = collapsed ? "ดูอีก 2 แนวทาง" : "ซ่อนแนวทางเพิ่มเติม";
     });
   });
   $("#new-chat").addEventListener("click", startNewChat);
@@ -3738,6 +3820,7 @@
   document.querySelectorAll("[data-cockpit-target]").forEach((button) => {
     button.addEventListener("click", () => {
       switchCockpitPage(button.dataset.cockpitTarget);
+      updateViewUrl("cockpit", button.dataset.cockpitTarget);
       button.blur();
     });
   });
@@ -3807,7 +3890,8 @@
     loadDashboard();
   });
 
-  const requestedView = new URLSearchParams(window.location.search).get("view");
-  showView(new Set(["chat", "studio", "cockpit"]).has(requestedView) ? requestedView : "chat");
+  const requestedParams = new URLSearchParams(window.location.search);
+  const requestedView = requestedParams.get("view");
+  showView(new Set(["chat", "studio", "cockpit"]).has(requestedView) ? requestedView : "chat", requestedParams.get("section") || "");
   initializeSync();
 })();

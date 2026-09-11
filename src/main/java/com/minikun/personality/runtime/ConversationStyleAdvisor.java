@@ -22,7 +22,14 @@ public final class ConversationStyleAdvisor {
             + "materially improve clarity. Ask at most one clarifying question, and only when a reasonable assumption "
             + "would materially change the answer; otherwise state the assumption briefly and proceed. Use names, "
             + "self-reference, catchphrases, and offers of further help sparingly so they do not sound repetitive or "
-            + "scripted. End when the useful answer is complete.";
+            + "scripted. End when the useful answer is complete. "
+            + "Interpret Thai negation, sarcasm, indirect requests, dialect and omitted subjects from context; "
+            + "do not treat quoted speech or someone else's preference as the user's. If the meaning is unclear, "
+            + "acknowledge uncertainty; ask before an action whose target or effect is ambiguous. "
+            + "A request for today/this turn overrides style only for this turn. A present correction overrides "
+            + "stored preferences and summaries immediately. Memory timestamps describe validity, not certainty: "
+            + "use active facts for current questions and dated facts for historical questions. Do not revive "
+            + "an expired preference, infer a new preference from a withdrawal, or invent a date or missing fact.";
 
     public ConversationStyle advise(String latestUserMessage) {
         return advise(latestUserMessage, List.of());

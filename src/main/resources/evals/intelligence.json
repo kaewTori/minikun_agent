@@ -1,0 +1,1346 @@
+[
+  {
+    "id": "thai-semantics-01",
+    "turns": [
+      "รอสองชั่วโมงแล้วคนพูดว่า “เร็วทันใจจริง ๆ” น้ำเสียงประชด เขาหมายถึงอะไร\nA. ยังไม่ได้รอ\nB. บริการช้า\nC. บริการเร็ว\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "B"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "บริการช้า"
+  },
+  {
+    "id": "thai-semantics-02",
+    "turns": [
+      "“ไม่ใช่ว่าไม่ชอบกาแฟ แค่วันนี้ไม่อยากดื่ม” สรุปอย่างไร\nA. เลิกชอบกาแฟถาวร\nB. ยังสรุปว่าเลิกชอบกาแฟไม่ได้\nC. ชอบชามากกว่า\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "B"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "ยังสรุปว่าเลิกชอบกาแฟไม่ได้"
+  },
+  {
+    "id": "thai-semantics-03",
+    "turns": [
+      "“แม่ชอบหวาน แต่เราไม่ชอบ” ใครไม่ชอบหวาน\nA. ผู้พูด\nB. ทั้งคู่\nC. แม่\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "A"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "ผู้พูด"
+  },
+  {
+    "id": "thai-semantics-04",
+    "turns": [
+      "“ต่อไปช่วยตอบละเอียดเป็นค่าเริ่มต้น” ขอบเขตคืออะไร\nA. ความชอบต่อเนื่อง\nB. คำพูดอ้างอิง\nC. เฉพาะคำตอบนี้\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "A"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "ความชอบต่อเนื่อง"
+  },
+  {
+    "id": "thai-semantics-05",
+    "turns": [
+      "“วันนี้ขอสั้น ๆ” ควรเปลี่ยนค่าเริ่มต้นถาวรไหม\nA. ควร\nB. ควรลบประวัติทั้งหมด\nC. ไม่ควร\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "C"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "ไม่ควร"
+  },
+  {
+    "id": "thai-semantics-06",
+    "turns": [
+      "มีร่าง A ทางการ และร่าง B เป็นกันเอง ผู้ใช้บอก “เอาอันหลัง” เลือกอะไร\nA. ร่าง B\nB. ร่าง A\nC. ไม่มีบริบท\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "A"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "ร่าง B"
+  },
+  {
+    "id": "thai-semantics-07",
+    "turns": [
+      "“ไว้ก่อนนะ ยังไม่ต้องส่ง” ควรทำอะไร\nA. ส่งทั้งสองฉบับ\nB. ส่งทันที\nC. พักไว้และไม่ส่ง\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "C"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "พักไว้และไม่ส่ง"
+  },
+  {
+    "id": "thai-semantics-08",
+    "turns": [
+      "“ก็ไม่ได้แย่ แต่ยังไม่เอา” คืออนุญาตให้ซื้อหรือยัง\nA. ให้ซื้อสองชิ้น\nB. อนุญาตแล้ว\nC. ยังไม่อนุญาต\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "C"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "ยังไม่อนุญาต"
+  },
+  {
+    "id": "thai-semantics-09",
+    "turns": [
+      "“เกือบลืมแล้ว” แปลว่าอะไร\nA. ไม่เคยจำ\nB. ลืมแน่นอนแล้ว\nC. ยังไม่ลืมจริงในจังหวะนั้น\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "C"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "ยังไม่ลืมจริงในจังหวะนั้น"
+  },
+  {
+    "id": "thai-semantics-10",
+    "turns": [
+      "“ทำไม่ได้ไม่ใช่ไม่อยากทำ” ข้อใดถูก\nA. ทำเสร็จแล้ว\nB. อยากทำได้แต่มีข้อจำกัด\nC. ไม่อยากทำแน่นอน\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "B"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "อยากทำได้แต่มีข้อจำกัด"
+  },
+  {
+    "id": "thai-semantics-11",
+    "turns": [
+      "“อย่าหาว่าสอนนะ แต่งานนี้ควรตรวจอีกที” เจตนาคืออะไร\nA. ยืนยันว่าถูกทุกอย่าง\nB. ห้ามตรวจงาน\nC. เสนอให้ตรวจงาน\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "C"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "เสนอให้ตรวจงาน"
+  },
+  {
+    "id": "thai-semantics-12",
+    "turns": [
+      "“เออ เอาที่สบายใจ” หลังการโต้เถียง ถือเป็นความยินยอมให้ลบไฟล์แน่ชัดไหม\nA. ไม่ชัด ต้องยืนยันก่อนลบ\nB. ใช่ ลบได้\nC. ให้เผยแพร่ไฟล์\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "A"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "ไม่ชัด ต้องยืนยันก่อนลบ"
+  },
+  {
+    "id": "thai-semantics-13",
+    "turns": [
+      "“บ่เอาเผ็ดเด้อ” ในบริบทสั่งอาหาร หมายถึงอะไร\nA. ไม่เอาอาหาร\nB. เผ็ดมาก\nC. ไม่เอาเผ็ด\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "C"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "ไม่เอาเผ็ด"
+  },
+  {
+    "id": "thai-semantics-14",
+    "turns": [
+      "“ลำขนาด” ในบริบทชิมอาหารเหนือ หมายถึงอะไร\nA. ยาวมาก\nB. อร่อยมาก\nC. ราคาแพง\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "B"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "อร่อยมาก"
+  },
+  {
+    "id": "thai-semantics-15",
+    "turns": [
+      "“หรอยจังฮู้” เมื่อชิมอาหาร หมายถึงอะไร\nA. อร่อยมาก\nB. อาหารเย็น\nC. อยากนอน\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "A"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "อร่อยมาก"
+  },
+  {
+    "id": "thai-semantics-16",
+    "turns": [
+      "“งานนี้กล้วย ๆ” เป็นสำนวน หมายถึงอะไร\nA. งานสีเหลือง\nB. ขายกล้วย\nC. งานง่าย\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "C"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "งานง่าย"
+  },
+  {
+    "id": "thai-semantics-17",
+    "turns": [
+      "“อย่าจับปลาสองมือ” แนะนำอะไร\nA. ห้ามกินปลา\nB. อย่าทำสองอย่างจนเสี่ยงพลาดทั้งคู่\nC. ให้จับปลาสองตัว\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "B"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "อย่าทำสองอย่างจนเสี่ยงพลาดทั้งคู่"
+  },
+  {
+    "id": "thai-semantics-18",
+    "turns": [
+      "“ใจเย็น ๆ ก่อน” ระหว่างถกเถียง หมายถึงอะไร\nA. ให้ดื่มน้ำแข็งเสมอ\nB. ให้ลดแอร์\nC. ให้สงบลง\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "C"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "ให้สงบลง"
+  },
+  {
+    "id": "thai-semantics-19",
+    "turns": [
+      "“ช่วยเกลาให้ professional แต่ไม่แข็ง” ต้องการอะไร\nA. ภาษาทางการแข็งมาก\nB. ใช้ภาษาอังกฤษเท่านั้น\nC. สุภาพเป็นธรรมชาติ\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "C"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "สุภาพเป็นธรรมชาติ"
+  },
+  {
+    "id": "thai-semantics-20",
+    "turns": [
+      "“อันนี้ไม่ต้องละเอียดเหมือนเมื่อวาน” ใช้รูปแบบไหนในครั้งนี้\nA. ลบความชอบเก่าถาวร\nB. กระชับกว่าเมื่อวาน\nC. ละเอียดกว่าเมื่อวาน\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "B"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "กระชับกว่าเมื่อวาน"
+  },
+  {
+    "id": "thai-semantics-21",
+    "turns": [
+      "“ถ้าฉันชอบเผ็ดก็คงสั่งแล้ว” ยืนยันว่าชอบเผ็ดหรือไม่\nA. ไม่ยืนยัน\nB. ยืนยันชัดเจน\nC. ยืนยันว่าแพ้เผ็ด\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "A"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "ไม่ยืนยัน"
+  },
+  {
+    "id": "thai-semantics-22",
+    "turns": [
+      "ผู้ใช้ยกตัวอย่างประโยค “ฉันใช้ Windows” เพื่อให้แปล ควรจำว่าเขาใช้ Windows ไหม\nA. ไม่ควรถือเป็นข้อมูลส่วนตัว\nB. ควรจำว่าใช้ Mac\nC. ควรจำทันที\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "A"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "ไม่ควรถือเป็นข้อมูลส่วนตัว"
+  },
+  {
+    "id": "thai-semantics-23",
+    "turns": [
+      "“ไม่ได้ไม่เห็นด้วยทั้งหมด” สรุปอย่างไร\nA. ไม่เห็นด้วยทุกข้อ\nB. อาจเห็นด้วยบางส่วน\nC. เห็นด้วยทุกข้อแน่ชัด\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "B"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "อาจเห็นด้วยบางส่วน"
+  },
+  {
+    "id": "thai-semantics-24",
+    "turns": [
+      "มีข้อความว่า “มันดีขึ้นแล้ว” แต่ไม่มีบริบทว่า “มัน” คืออะไร ควรทำอย่างไร\nA. ถามว่าสิ่งใดเมื่อจำเป็น\nB. บันทึกว่าหายป่วย\nC. เดาว่าเป็นสุขภาพ\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "A"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "ถามว่าสิ่งใดเมื่อจำเป็น"
+  },
+  {
+    "id": "thai-semantics-25",
+    "turns": [
+      "“เขาว่าเราเรื่องตอบช้า” ใครถูกตำหนิ\nA. ผู้พูด\nB. ไม่มีใคร\nC. คนที่ตำหนิ\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "A"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "ผู้พูด"
+  },
+  {
+    "id": "thai-semantics-26",
+    "turns": [
+      "“ขอแบบไม่หวานน้อยนะ เอาไม่หวานเลย” ต้องการอะไร\nA. หวานปกติ\nB. ไม่ใส่ความหวาน\nC. หวานน้อย\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "B"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "ไม่ใส่ความหวาน"
+  },
+  {
+    "id": "thai-semantics-27",
+    "turns": [
+      "“พรุ่งนี้ค่อยทำ วันนี้พักก่อน” ควรลงมือวันนี้ไหม\nA. ทำเมื่อวาน\nB. ควรทันที\nC. ไม่ควร\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "C"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "ไม่ควร"
+  },
+  {
+    "id": "thai-semantics-28",
+    "turns": [
+      "“อย่าเพิ่งแก้ ฟังให้จบก่อน” ควรตอบแบบใด\nA. รับฟังและรอรายละเอียด\nB. รีบเสนอวิธีแก้หลายข้อ\nC. เปลี่ยนเรื่อง\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "A"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "รับฟังและรอรายละเอียด"
+  },
+  {
+    "id": "thai-semantics-29",
+    "turns": [
+      "“ไม่ได้ว่าเธอนะ หมายถึงระบบ” เป้าหมายคำวิจารณ์คืออะไร\nA. ผู้ใช้เอง\nB. ระบบ\nC. คู่สนทนา\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "B"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "ระบบ"
+  },
+  {
+    "id": "thai-semantics-30",
+    "turns": [
+      "“ชอบอันแรกมากกว่า แต่ซื้ออันที่สองเพราะงบ” ความชอบกับการเลือกตรงกันไหม\nA. ไม่มีข้อจำกัดงบ\nB. ตรงกันแน่นอน\nC. ไม่ตรงกัน\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "C"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "ไม่ตรงกัน"
+  },
+  {
+    "id": "thai-semantics-31",
+    "turns": [
+      "“เมื่อกี้พูดเล่น อย่าเพิ่งจองจริง” ควรทำอะไร\nA. ไม่จอง\nB. จองเพิ่ม\nC. จองทันที\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "A"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "ไม่จอง"
+  },
+  {
+    "id": "thai-semantics-32",
+    "turns": [
+      "“ฉลาดเกินไปแล้วมั้ง” โดยไม่มีบริบท ตีความการประชดได้แน่นอนไหม\nA. ยังไม่ได้\nB. เป็นคำด่าแน่นอน\nC. เป็นคำชมแน่นอน\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "A"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "ยังไม่ได้"
+  },
+  {
+    "id": "temporal-memory-01",
+    "turns": [
+      "มกราคมชอบหวาน มีนาคมบอกว่าไม่ชอบหวานแล้ว ตอนนี้เมษายน ความชอบปัจจุบันคืออะไร\nA. ชอบหวาน\nB. ชอบขม\nC. ไม่ชอบหวาน\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "C"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "ไม่ชอบหวาน"
+  },
+  {
+    "id": "temporal-memory-02",
+    "turns": [
+      "มกราคมชอบหวาน มีนาคมเลิกชอบ เมษายนกลับมาชอบ ตอนนี้พฤษภาคมเป็นอย่างไร\nA. ไม่ชอบหวาน\nB. ไม่เคยชอบหวาน\nC. ชอบหวาน\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "C"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "ชอบหวาน"
+  },
+  {
+    "id": "temporal-memory-03",
+    "turns": [
+      "ปกติชอบกาแฟ วันนี้งดกาแฟเพราะอยากพัก ความชอบถาวรเปลี่ยนไหม\nA. ยังไม่มีหลักฐานว่าเปลี่ยน\nB. ชอบชาถาวร\nC. เลิกชอบถาวร\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "A"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "ยังไม่มีหลักฐานว่าเปลี่ยน"
+  },
+  {
+    "id": "temporal-memory-04",
+    "turns": [
+      "วันที่ 10 กันยายน ผู้ใช้เล่าว่าเลิกกาแฟตั้งแต่ 1 สิงหาคม วันเกิดการเปลี่ยนคือวันใด\nA. 10 กันยายน\nB. ไม่เคยเลิก\nC. 1 สิงหาคม\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "C"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "1 สิงหาคม"
+  },
+  {
+    "id": "temporal-memory-05",
+    "turns": [
+      "ตอนนี้ชอบชา ข้อความล่าสุดเล่าว่าเมื่อก่อนชอบกาแฟ ควรแนะนำอะไรตามความชอบปัจจุบัน\nA. เลือกจากข้อความล่าสุดโดยไม่ดูเวลา\nB. กาแฟ\nC. ชา\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "C"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "ชา"
+  },
+  {
+    "id": "temporal-memory-06",
+    "turns": [
+      "ผู้ใช้บอก “เดือนก่อนเลิกกาแฟ” วันนี้ 10 กันยายน รู้วันเลิกที่แน่นอนไหม\nA. ไม่รู้วันที่แน่นอน\nB. 31 สิงหาคมแน่นอน\nC. 1 สิงหาคมแน่นอน\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "A"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "ไม่รู้วันที่แน่นอน"
+  },
+  {
+    "id": "temporal-memory-07",
+    "turns": [
+      "ผู้ใช้บอกไม่ชอบหวานแล้ว ควรจำว่าชอบขมหรือไม่\nA. ควร\nB. ควรจำว่าแพ้น้ำตาล\nC. ไม่ควรอนุมาน\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "C"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "ไม่ควรอนุมาน"
+  },
+  {
+    "id": "temporal-memory-08",
+    "turns": [
+      "แม่ชอบกาแฟ ผู้ใช้ชอบชา ต่อมาผู้ใช้เลิกชา ความชอบแม่เปลี่ยนไหม\nA. เปลี่ยนเป็นไม่ชอบกาแฟ\nB. แม่ชอบชาแทน\nC. ไม่มีหลักฐานว่าเปลี่ยน\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "C"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "ไม่มีหลักฐานว่าเปลี่ยน"
+  },
+  {
+    "id": "temporal-memory-09",
+    "turns": [
+      "ปีก่อนอยู่เชียงใหม่ ปีนี้ย้ายกรุงเทพ ถามว่าปีก่อนอยู่ไหน\nA. เชียงใหม่\nB. กรุงเทพ\nC. ไม่มีข้อมูล\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "A"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "เชียงใหม่"
+  },
+  {
+    "id": "temporal-memory-10",
+    "turns": [
+      "ปีก่อนอยู่เชียงใหม่ ปีนี้ย้ายกรุงเทพ ถามว่าตอนนี้อยู่ไหน\nA. กรุงเทพ\nB. เชียงใหม่\nC. อยู่ทั้งสองที่แน่นอน\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "A"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "กรุงเทพ"
+  },
+  {
+    "id": "temporal-memory-11",
+    "turns": [
+      "บันทึกใหม่ได้รับก่อนบันทึกเก่าเพราะคิวสลับ ควรจัดตามอะไร\nA. ลำดับที่ worker เสร็จเท่านั้น\nB. ความยาวข้อความ\nC. เวลาเกิดข้อมูลและเวลาแหล่งข้อความ\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "C"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "เวลาเกิดข้อมูลและเวลาแหล่งข้อความ"
+  },
+  {
+    "id": "temporal-memory-12",
+    "turns": [
+      "ผู้ใช้ A ชอบแมว ผู้ใช้ B ชอบหมา ถามความชอบของ B\nA. หมา\nB. เอาข้อมูล A เพราะเก่ากว่า\nC. แมว\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "A"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "หมา"
+  },
+  {
+    "id": "temporal-memory-13",
+    "turns": [
+      "ผู้ใช้ถอนความชอบเดิม แต่ไม่บอกความชอบใหม่ ควรตอบว่าอะไร\nA. ยังชอบเดิมแน่นอน\nB. ชอบสิ่งตรงข้ามแน่นอน\nC. ยังไม่ทราบความชอบใหม่\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "C"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "ยังไม่ทราบความชอบใหม่"
+  },
+  {
+    "id": "temporal-memory-14",
+    "turns": [
+      "ความจำเก่าระบุชอบคำตอบยาว แต่ข้อความนี้ขอสั้น คำตอบนี้ควรเป็นอย่างไร\nA. ไม่ตอบ\nB. ยาว\nC. สั้น\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "C"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "สั้น"
+  },
+  {
+    "id": "temporal-memory-15",
+    "turns": [
+      "การขอสั้นเฉพาะคำตอบหนึ่ง ควรลบประวัติความชอบเดิมไหม\nA. ควรลบทั้งหมด\nB. ควรลบข้อมูลคนอื่น\nC. ไม่ควร\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "C"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "ไม่ควร"
+  },
+  {
+    "id": "temporal-memory-16",
+    "turns": [
+      "สรุปเก่าบอกชื่อแมวมะลิ ข้อความใหม่แก้ว่าชื่อมะนาว ปัจจุบันใช้ชื่ออะไร\nA. มะลิ\nB. ชื่อทั้งสองแน่นอน\nC. มะนาว\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "C"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "มะนาว"
+  },
+  {
+    "id": "temporal-memory-17",
+    "turns": [
+      "มีแค่ “ผมเคยทำงานที่บริษัท A” รู้ว่าตอนนี้ทำที่ A ไหม\nA. รู้ว่าทำที่ A\nB. รู้ว่าทำที่ B\nC. ยังไม่รู้\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "C"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "ยังไม่รู้"
+  },
+  {
+    "id": "temporal-memory-18",
+    "turns": [
+      "ผู้ใช้บอกจะย้ายบ้านเดือนหน้า วันนี้ควรระบุว่าย้ายแล้วไหม\nA. ย้ายเมื่อวาน\nB. ยังไม่ย้ายตามข้อมูลนี้\nC. ย้ายแล้ว\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "B"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "ยังไม่ย้ายตามข้อมูลนี้"
+  },
+  {
+    "id": "temporal-memory-19",
+    "turns": [
+      "เคยชอบเที่ยวภูเขา ตอนนี้เปลี่ยนชอบทะเล ถามว่าอะไรเปลี่ยน\nA. ทะเลเป็นภูเขา\nB. ไม่เปลี่ยน\nC. ภูเขาเป็นทะเล\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "C"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "ภูเขาเป็นทะเล"
+  },
+  {
+    "id": "temporal-memory-20",
+    "turns": [
+      "ไม่มีข้อมูลวันเกิดของผู้ใช้ ถามวันเกิด ควรทำอย่างไร\nA. เดาจากชื่อ\nB. ใช้วันที่เริ่มแชต\nC. บอกว่ายังไม่มีข้อมูล\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "C"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "บอกว่ายังไม่มีข้อมูล"
+  },
+  {
+    "id": "temporal-memory-21",
+    "turns": [
+      "“เราไม่กินกุ้ง” เพียงอย่างเดียว ยืนยันว่าแพ้กุ้งไหม\nA. แพ้อาหารทะเลทั้งหมด\nB. ไม่ยืนยัน\nC. ยืนยัน\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "B"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "ไม่ยืนยัน"
+  },
+  {
+    "id": "temporal-memory-22",
+    "turns": [
+      "ข้อความ “ไม่กินกุ้งเพราะแพ้” ยืนยันข้อใด\nA. แพ้กุ้ง\nB. แพ้ปลาทุกชนิด\nC. ไม่ชอบรสเค็ม\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "A"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "แพ้กุ้ง"
+  },
+  {
+    "id": "temporal-memory-23",
+    "turns": [
+      "ตั้งแต่ 1 มกราคมถึงก่อน 1 มีนาคมใช้ A ตั้งแต่ 1 มีนาคมใช้ B วันที่ 1 มีนาคมใช้อะไร\nA. B\nB. A\nC. ไม่มีข้อมูล\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "A"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "B"
+  },
+  {
+    "id": "temporal-memory-24",
+    "turns": [
+      "ข้อความถูกบันทึกวันนี้ แต่ไม่มีข้อมูลว่าชอบสิ่งนั้นตั้งแต่วันใด ควรเก็บวันเริ่มอย่างไร\nA. วันเกิดผู้ใช้\nB. ไม่ทราบ ไม่สร้างวันขึ้นเอง\nC. 1 มกราคมเสมอ\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "B"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "ไม่ทราบ ไม่สร้างวันขึ้นเอง"
+  },
+  {
+    "id": "temporal-memory-25",
+    "turns": [
+      "ข้อความวันนี้บอก “เมื่อปีที่แล้วชอบวิ่ง แต่ตอนนี้ไม่แล้ว” ค่าปัจจุบันคืออะไร\nA. ไม่ชอบวิ่งแล้ว\nB. ชอบว่ายน้ำ\nC. ชอบวิ่ง\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "A"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "ไม่ชอบวิ่งแล้ว"
+  },
+  {
+    "id": "temporal-memory-26",
+    "turns": [
+      "มีความจำเหมือนเดิมจาก retry ของ turn เดียว ควรเพิ่มเวอร์ชันไหม\nA. ไม่ควรเพิ่มซ้ำ\nB. ลบค่าปัจจุบัน\nC. เพิ่มทุก retry\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "A"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "ไม่ควรเพิ่มซ้ำ"
+  },
+  {
+    "id": "temporal-memory-27",
+    "turns": [
+      "มีความจำ A แล้ว B แล้วผู้ใช้ยืนยัน A อีกครั้ง ควรทิ้ง A ล่าสุดว่าเป็นข้อความซ้ำไหม\nA. ควรลบประวัติ B\nB. ควรทิ้งเสมอ\nC. ไม่ควร เพราะกลับมาเป็นจริงอีกช่วง\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "C"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "ไม่ควร เพราะกลับมาเป็นจริงอีกช่วง"
+  },
+  {
+    "id": "temporal-memory-28",
+    "turns": [
+      "ข้อมูลใหม่ confidence สูงแต่เป็นคำพูด assistant ที่ user ไม่ยืนยัน ควรจำเป็นข้อเท็จจริงของ user ไหม\nA. ขึ้นกับความยาวคำตอบ\nB. ควร\nC. ไม่ควร\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "C"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "ไม่ควร"
+  },
+  {
+    "id": "temporal-memory-29",
+    "turns": [
+      "ผู้ใช้ถาม “ฉันชอบชาใช่ไหม” โดยไม่มีหลักฐานอื่น คำถามยืนยันความชอบไหม\nA. ไม่ยืนยัน\nB. ยืนยันว่าไม่ชอบ\nC. ยืนยัน\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "A"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "ไม่ยืนยัน"
+  },
+  {
+    "id": "temporal-memory-30",
+    "turns": [
+      "ปี 2024 ชอบ A ปี 2025 ชอบ B ปี 2026 ชอบ C ถามความชอบใน 2025\nA. A\nB. B\nC. C\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "B"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "B"
+  },
+  {
+    "id": "temporal-memory-31",
+    "turns": [
+      "ความจำด้านงานชอบคำตอบเทคนิค แต่คุยทั่วไปชอบง่าย ๆ ควรรวมเป็นค่าเดียวไหม\nA. ไม่ควร ต้องรักษาบริบท\nB. ควรใช้ง่ายทุกครั้ง\nC. ควรใช้เทคนิคทุกครั้ง\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "A"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "ไม่ควร ต้องรักษาบริบท"
+  },
+  {
+    "id": "temporal-memory-32",
+    "turns": [
+      "วันนี้ได้รับคำแก้สำหรับเหตุการณ์ 1 มีนาคมที่เคยบันทึกผิด ควรแยกเวลาใด\nA. เวลาเหตุการณ์กับเวลาที่ได้รับคำแก้\nB. ลบเวลาทั้งหมด\nC. ใช้วันนี้แทนทุกเวลา\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "A"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "เวลาเหตุการณ์กับเวลาที่ได้รับคำแก้"
+  },
+  {
+    "id": "reasoning-01",
+    "turns": [
+      "A ก่อน B และ B ก่อน C ลำดับใดถูก\nA. C B A\nB. A B C\nC. B A C\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "B"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "A B C"
+  },
+  {
+    "id": "reasoning-02",
+    "turns": [
+      "มีงบ 100 ของ A ราคา 60 B ราคา 50 ซื้อทั้งสองได้ไหม\nA. ได้พอดี\nB. ได้ เหลือ 10\nC. ไม่ได้ เกินงบ 10\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "C"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "ไม่ได้ เกินงบ 10"
+  },
+  {
+    "id": "reasoning-03",
+    "turns": [
+      "ของลด 20% จาก 500 ราคาใหม่เท่าไร\nA. 100\nB. 480\nC. 400\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "C"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "400"
+  },
+  {
+    "id": "reasoning-04",
+    "turns": [
+      "เดินทาง 120 กม. ใน 2 ชั่วโมง ความเร็วเฉลี่ยเท่าไร\nA. 120 กม./ชม.\nB. 240 กม./ชม.\nC. 60 กม./ชม.\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "C"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "60 กม./ชม."
+  },
+  {
+    "id": "reasoning-05",
+    "turns": [
+      "นัด 09:30 ใช้เวลาเดินทาง 45 นาที ต้องออกช้าที่สุดกี่โมง\nA. 08:45\nB. 10:15\nC. 09:00\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "A"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "08:45"
+  },
+  {
+    "id": "reasoning-06",
+    "turns": [
+      "งาน A 2 ชั่วโมง แล้ว B 3 ชั่วโมง เริ่ม 09:00 เสร็จกี่โมง\nA. 12:00\nB. 11:00\nC. 14:00\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "C"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "14:00"
+  },
+  {
+    "id": "reasoning-07",
+    "turns": [
+      "งาน A กับ B ทำพร้อมกัน ใช้ 2 และ 3 ชั่วโมง รวมช้าที่สุดเท่าไร\nA. 3 ชั่วโมง\nB. 1 ชั่วโมง\nC. 5 ชั่วโมง\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "A"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "3 ชั่วโมง"
+  },
+  {
+    "id": "reasoning-08",
+    "turns": [
+      "ทุกแมวเป็นสัตว์ มะลิเป็นแมว จึงสรุปอะไร\nA. มะลิเป็นสัตว์\nB. มะลิเป็นหมา\nC. ทุกสัตว์เป็นแมว\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "A"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "มะลิเป็นสัตว์"
+  },
+  {
+    "id": "reasoning-09",
+    "turns": [
+      "ทุกแมวเป็นสัตว์ มะลิเป็นสัตว์ สรุปว่าเป็นแมวได้ไหม\nA. ไม่ได้\nB. ได้\nC. เป็นแมวสีขาว\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "A"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "ไม่ได้"
+  },
+  {
+    "id": "reasoning-10",
+    "turns": [
+      "ถ้าฝนตกถนนเปียก ถนนเปียก สรุปว่าฝนตกแน่นอนไหม\nA. แน่นอน\nB. ฝนไม่ตกแน่นอน\nC. ไม่แน่นอน\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "C"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "ไม่แน่นอน"
+  },
+  {
+    "id": "reasoning-11",
+    "turns": [
+      "มีลูกบอลแดง 2 น้ำเงิน 3 รวมกี่ลูก\nA. 5\nB. 6\nC. 1\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "A"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "5"
+  },
+  {
+    "id": "reasoning-12",
+    "turns": [
+      "แบ่ง 12 ชิ้นให้ 3 คนเท่ากัน ได้คนละเท่าไร\nA. 3\nB. 9\nC. 4\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "C"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "4"
+  },
+  {
+    "id": "reasoning-13",
+    "turns": [
+      "เรียงน้อยไปมาก: 0.5, 0.05, 0.15\nA. 0.15 0.05 0.5\nB. 0.5 0.15 0.05\nC. 0.05 0.15 0.5\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "C"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "0.05 0.15 0.5"
+  },
+  {
+    "id": "reasoning-14",
+    "turns": [
+      "1.5 ลิตรเท่ากับกี่มิลลิลิตร\nA. 150\nB. 15\nC. 1500\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "C"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "1500"
+  },
+  {
+    "id": "reasoning-15",
+    "turns": [
+      "สินค้า A 100 กรัม 20 บาท B 250 กรัม 40 บาท อันไหนถูกต่อกรัม\nA. B\nB. A\nC. เท่ากัน\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "A"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "B"
+  },
+  {
+    "id": "reasoning-16",
+    "turns": [
+      "รถออกทุก 15 นาที เริ่ม 09:00 มาถึง 09:07 ขบวนถัดไปกี่โมง\nA. 09:07\nB. 09:30\nC. 09:15\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "C"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "09:15"
+  },
+  {
+    "id": "reasoning-17",
+    "turns": [
+      "ซื้อมาราคา 80 ขาย 100 กำไรเท่าไร\nA. 180\nB. 20\nC. 80\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "B"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "20"
+  },
+  {
+    "id": "reasoning-18",
+    "turns": [
+      "เงิน 1000 จ่าย 250 แล้วรับคืน 50 เหลือเท่าไร\nA. 1300\nB. 700\nC. 800\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "C"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "800"
+  },
+  {
+    "id": "reasoning-19",
+    "turns": [
+      "ค่าเฉลี่ย 2,4,6 คืออะไร\nA. 12\nB. 4\nC. 6\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "B"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "4"
+  },
+  {
+    "id": "reasoning-20",
+    "turns": [
+      "มีตัวเลือก A เร็วแต่เกินงบ B ช้ากว่าแต่ในงบ เงื่อนไขห้ามเกินงบ เลือกอะไร\nA. เลือก A เพราะเร็วเสมอ\nB. A\nC. B\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "C"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "B"
+  },
+  {
+    "id": "reasoning-21",
+    "turns": [
+      "โจทย์ไม่ระบุระยะทาง แต่ให้เวลา 2 ชั่วโมง คำนวณความเร็วได้ไหม\nA. ได้ 2 กม./ชม.\nB. ไม่ได้ ข้อมูลไม่พอ\nC. ได้ 60 กม./ชม.\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "B"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "ไม่ได้ ข้อมูลไม่พอ"
+  },
+  {
+    "id": "reasoning-22",
+    "turns": [
+      "A สูงกว่า B และ C สูงกว่า A ใครสูงสุด\nA. C\nB. B\nC. A\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "A"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "C"
+  },
+  {
+    "id": "reasoning-23",
+    "turns": [
+      "กล่องมี 10 ชิ้น หยิบออก 3 แล้วใส่เพิ่ม 2 เหลือเท่าไร\nA. 9\nB. 15\nC. 5\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "A"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "9"
+  },
+  {
+    "id": "reasoning-24",
+    "turns": [
+      "งานต้องสำรองข้อมูลก่อนลบ ขั้นไหนมาก่อน\nA. สำรองและตรวจว่ากู้คืนได้\nB. ลบก่อนสำรอง\nC. ทำพร้อมกันโดยไม่ตรวจ\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "A"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "สำรองและตรวจว่ากู้คืนได้"
+  },
+  {
+    "id": "reasoning-25",
+    "turns": [
+      "tool ตอบว่าบันทึกล้มเหลว assistant ควรบอกอะไร\nA. บันทึกไม่สำเร็จ\nB. บันทึกแล้ว\nC. บันทึกสำเร็จครึ่งหนึ่งโดยไม่มีหลักฐาน\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "A"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "บันทึกไม่สำเร็จ"
+  },
+  {
+    "id": "reasoning-26",
+    "turns": [
+      "คำสั่งโอนเงิน timeout ไม่ทราบว่าสำเร็จไหม ควร retry ทันทีไหม\nA. ตรวจสถานะก่อนเพื่อกันทำซ้ำ\nB. retry ไม่จำกัด\nC. บอกว่าสำเร็จ\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "A"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "ตรวจสถานะก่อนเพื่อกันทำซ้ำ"
+  },
+  {
+    "id": "reasoning-27",
+    "turns": [
+      "ต้องเลือกจำนวนเต็มมากกว่า 3 และน้อยกว่า 5 คำตอบคืออะไร\nA. 5\nB. 3\nC. 4\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "C"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "4"
+  },
+  {
+    "id": "reasoning-28",
+    "turns": [
+      "ข้อความมีเงื่อนไขให้ตอบสองข้อ แต่ตัวอย่างมีสามข้อ ควรตามอะไร\nA. ตัวอย่างสามข้อเสมอ\nB. ตอบสิบข้อ\nC. คำสั่งสองข้อ\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "C"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "คำสั่งสองข้อ"
+  },
+  {
+    "id": "reasoning-29",
+    "turns": [
+      "จันทร์ทำ A อังคารทำ B พุธทำ C ถามวันถัดจาก B\nA. จันทร์\nB. พุธ\nC. อังคาร\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "B"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "พุธ"
+  },
+  {
+    "id": "reasoning-30",
+    "turns": [
+      "ถ้า A ต้องใช้ไฟล์ X แต่ X ยังไม่มี ควรทำอะไร\nA. อ้างว่าทำ A เสร็จ\nB. หาหรือขอ X ก่อนทำ A\nC. สร้างข้อมูลใน X เองโดยไม่บอก\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "B"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "หาหรือขอ X ก่อนทำ A"
+  },
+  {
+    "id": "reasoning-31",
+    "turns": [
+      "ราคาเพิ่ม 10% จาก 100 แล้วลด 10% จากราคาใหม่ เหลือเท่าไร\nA. 90\nB. 99\nC. 100\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "B"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "99"
+  },
+  {
+    "id": "reasoning-32",
+    "turns": [
+      "ต้องนัดหลัง 10:00 และก่อน 12:00 ช่วงใดตรงเงื่อนไข\nA. 11:00\nB. 09:00\nC. 13:00\nตอบเฉพาะตัวอักษร A, B หรือ C หนึ่งตัวเท่านั้น"
+    ],
+    "mustContain": [
+      "A"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1,
+    "rubric": "11:00"
+  }
+]

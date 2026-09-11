@@ -33,7 +33,7 @@ public final class SyncEventBroker {
         emitter.onError(error -> remove.run());
         try {
             emitter.send(SseEmitter.event().name("ready").data(new SyncEvent(
-                    revision.get(), "ready", null)));
+                    revision.get(), "ready", null, null)));
         } catch (IOException exception) {
             remove.run();
             emitter.completeWithError(exception);
@@ -41,19 +41,32 @@ public final class SyncEventBroker {
         return emitter;
     }
 
-    public void publish(String ownerId, String type, UUID sourceDeviceId) {
-        SyncEvent event = new SyncEvent(revision.incrementAndGet(), type, sourceDeviceId);
-        List<SseEmitter> ownerSubscribers = subscribers.getOrDefault(ownerId, new CopyOnWriteArrayList<>());
+    public boolean publish(String ownerId, String type, UUID sourceDeviceId) {
+        return publish(ownerId, type, sourceDeviceId, null);
+    }
+
+    public boolean publish(String ownerId, String type, UUID sourceDeviceId, Object payload) {
+        SyncEvent event = new SyncEvent(revision.incrementAndGet(), type, sourceDeviceId, payload);
+        List<SseEmitter> ownerSubscribers = subscribers.get(ownerId);
+        if (ownerSubscribers == null || ownerSubscribers.isEmpty()) return false;
+        boolean delivered = false;
+        String eventName = "notification".equals(type) ? "notification" : "sync";
         for (SseEmitter emitter : ownerSubscribers) {
             try {
-                emitter.send(SseEmitter.event().name("sync").id(Long.toString(event.revision())).data(event));
+                emitter.send(SseEmitter.event().name(eventName).id(Long.toString(event.revision())).data(event));
+                delivered = true;
             } catch (Exception exception) {
                 ownerSubscribers.remove(emitter);
                 emitter.complete();
             }
         }
         if (ownerSubscribers.isEmpty()) subscribers.remove(ownerId, ownerSubscribers);
+        return delivered;
     }
 
-    public record SyncEvent(long revision, String type, UUID sourceDeviceId) { }
+    public boolean publishNotification(String ownerId, Map<String, Object> notification) {
+        return publish(ownerId, "notification", null, notification);
+    }
+
+    public record SyncEvent(long revision, String type, UUID sourceDeviceId, Object payload) { }
 }

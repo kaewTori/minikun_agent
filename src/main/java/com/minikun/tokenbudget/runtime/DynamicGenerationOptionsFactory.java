@@ -60,7 +60,7 @@ public final class DynamicGenerationOptionsFactory {
         if (existing.maxTokens() < 0) throw new IllegalArgumentException("existing max tokens must not be negative");
         int maximum = Math.min(existing.maxTokens(), resolved.maxTokens());
         return maximum == resolved.maxTokens() ? resolved
-                : new GenerationOptions(resolved.temperature(), maximum, resolved.stop());
+                : new GenerationOptions(resolved.temperature(), maximum, resolved.stop(), resolved.reasoning());
     }
 
     private ContextPressureLevel pressure(long availableOutputTokens, long desiredOutputTokens) {

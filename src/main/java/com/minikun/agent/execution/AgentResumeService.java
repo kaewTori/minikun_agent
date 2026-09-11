@@ -14,7 +14,7 @@ import java.util.UUID;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
-/** Replays persisted failed tool steps without bypassing the tools' confirmation policies. */
+/** Replays persisted reads and stops at writes or blocked dependencies for outcome review. */
 @Service
 @ConditionalOnProperty(name = "minikun.agent.execution.enabled", havingValue = "true", matchIfMissing = true)
 public final class AgentResumeService {
@@ -28,7 +28,8 @@ public final class AgentResumeService {
         this.objectMapper = Objects.requireNonNull(objectMapper, "object mapper must not be null");
     }
 
-    public AgentExecutionService.AgentRunDetails resume(String ownerId, UUID runId) {
+    // ponytail: one-process resume lock; use a database lease before running multiple servers.
+    public synchronized AgentExecutionService.AgentRunDetails resume(String ownerId, UUID runId) {
         AgentExecutionService.AgentRunDetails details = executions.details(ownerId, runId);
         if (details.run().status() == AgentRunStatus.WAITING_CONFIRMATION) {
             throw new IllegalArgumentException(
@@ -42,7 +43,10 @@ public final class AgentResumeService {
                 .toList();
         if (failed.isEmpty()) throw new IllegalArgumentException("agent run has no failed tool steps to resume");
 
-        for (AgentExecutionStep step : failed) replay(details.run(), step);
+        for (AgentExecutionStep step : failed) {
+            // A later action may depend on this result. Never continue past a blocked step.
+            if (!replay(details.run(), step)) return executions.details(ownerId, runId);
+        }
         AgentExecutionService.AgentRunDetails updated = executions.details(ownerId, runId);
         if (updated.steps().stream().noneMatch(step -> step.status() == AgentStepStatus.WAITING_CONFIRMATION)) {
             executions.markResumed(runId, "resumed persisted failed tool steps");
@@ -50,18 +54,23 @@ public final class AgentResumeService {
         return executions.details(ownerId, runId);
     }
 
-    private void replay(AgentRun run, AgentExecutionStep failed) {
+    private boolean replay(AgentRun run, AgentExecutionStep failed) {
         Map<String, Object> arguments = arguments(failed.argumentsJson());
-        AgentExecutionStep attempt = executions.beginStep(run.id(), failed.toolCallId(), failed.toolName(), arguments);
-        while (true) {
-            ToolResult result = toolExecutor.execute(
+        executions.beginStep(run.id(), failed.toolCallId(), failed.toolName(), arguments);
+        ToolResult result;
+        try (var scope = new com.minikun.tools.BackgroundToolScope(run.id(), true)) {
+            result = toolExecutor.execute(
                     new ToolCallContext(new ConversationId(run.conversationId()), failed.toolCallId(), run.ownerId()),
                     new ToolCall(failed.toolCallId(), failed.toolName(), arguments));
-            boolean retry = executions.shouldRetry(result, attempt.attempts());
-            executions.finishStep(run.id(), failed.toolCallId(), result, retry);
-            if (!retry) return;
-            attempt = executions.beginStep(run.id(), failed.toolCallId(), failed.toolName(), arguments);
+        } catch (RuntimeException exception) {
+            result = ToolResult.failure(com.minikun.tools.ToolErrorCode.EXECUTION_FAILED,
+                    "resume failed; inspect the previous operation before retrying");
         }
+        // Resume is an explicit retry already; never automatically repeat a possibly applied write.
+        executions.finishStep(run.id(), failed.toolCallId(), result, false);
+        if (!result.success()) executions.fail(run.id(), result.error());
+        return result.success() && !(result.value() instanceof Map<?, ?> value
+                && Boolean.parseBoolean(String.valueOf(value.get("requires_confirmation"))));
     }
 
     private Map<String, Object> arguments(String json) {

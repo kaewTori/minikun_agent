@@ -37,6 +37,11 @@ public final class InMemoryAdaptationSignalStore implements AdaptationSignalStor
     }
 
     @Override
+    public synchronized void deleteDimension(String ownerId, String dimension) {
+        values.values().removeIf(signal -> signal.ownerId().equals(ownerId) && signal.dimension().equals(dimension));
+    }
+
+    @Override
     public synchronized int deleteAll(String ownerId) {
         List<String> keys = new ArrayList<>();
         values.forEach((key, signal) -> { if (signal.ownerId().equals(ownerId)) keys.add(key); });

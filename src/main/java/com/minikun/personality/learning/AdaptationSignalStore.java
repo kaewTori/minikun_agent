@@ -9,4 +9,5 @@ public interface AdaptationSignalStore {
             boolean explicit, double competingDecay, Instant observedAt);
     List<AdaptationSignal> findByOwner(String ownerId);
     int deleteAll(String ownerId);
+    void deleteDimension(String ownerId, String dimension);
 }

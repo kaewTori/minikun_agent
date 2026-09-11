@@ -43,7 +43,14 @@ fi
 export PYTHONPATH="$tinygrad_root"
 export ALLOW_TF32="${ALLOW_TF32:-1}"
 export FLOAT16="${FLOAT16:-1}"
-export DEV="${DEV:-NV}"
+default_dev="${MINIKUN_SDXL_DEV:-}"
+if [ -z "$default_dev" ]; then
+  case "$(uname -s)" in
+    Darwin) default_dev="NV" ;;
+    *) default_dev="NV" ;;
+  esac
+fi
+export DEV="${DEV:-$default_dev}"
 # ponytail: keep JIT kernels, skip unstable NV graph replay on this host.
 export JIT="${JIT:-2}"
 export PATH="${MINIKUN_SDXL_PATH:-$HOME/.local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin}"
@@ -78,9 +85,16 @@ set -- "$@" \
 # The full model plus three LoRAs reaches 12.24 GB with ADetailer enabled on
 # this host, leaving too little memory for conditioning. Keep the automatic
 # service within VRAM by default while allowing an explicit future override.
-if [ "${MINIKUN_SDXL_ADETAILER_ENABLED:-0}" = "1" ]; then
+if [ "${MINIKUN_SDXL_ADETAILER_ENABLED:-1}" = "1" ]; then
+  adetailer_device="${MINIKUN_SDXL_ADETAILER_DEVICE:-}"
+  if [ -z "$adetailer_device" ]; then
+    case "$(uname -s)" in
+      Darwin) adetailer_device="auto" ;;
+      *) adetailer_device="nv" ;;
+    esac
+  fi
   set -- "$@" \
-    --adetailer-device "${MINIKUN_SDXL_ADETAILER_DEVICE:-nv}" \
+    --adetailer-device "$adetailer_device" \
     --adetailer-steps "${MINIKUN_SDXL_ADETAILER_STEPS:-18}" \
     --adetailer-strength "${MINIKUN_SDXL_ADETAILER_STRENGTH:-0.30}" \
     --adetailer-mask-padding "${MINIKUN_SDXL_ADETAILER_MASK_PADDING:-0.15}" \

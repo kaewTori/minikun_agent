@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withServerError;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
@@ -26,6 +27,7 @@ class Crawl4AiBrowserContentClientTest {
         server.expect(requestTo(CRAWL4AI_URL + "/md"))
                 .andExpect(method(HttpMethod.POST))
                 .andExpect(header("Authorization", "Bearer secret"))
+                .andExpect(content().json("{\"url\":\"https://example.com/watch\",\"f\":\"fit\",\"c\":\"0\"}"))
                 .andRespond(withSuccess(
                         "{\"url\":\"https://example.com/watch\",\"markdown\":null,\"success\":true}",
                         MediaType.APPLICATION_JSON));

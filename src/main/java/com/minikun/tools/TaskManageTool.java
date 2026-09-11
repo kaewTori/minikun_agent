@@ -151,6 +151,8 @@ public final class TaskManageTool implements Tool {
         }
         boolean cancelled = tasks.cancel(context.ownerId(), id);
         confirmations.clear(context.conversationId());
+        if (!cancelled) return ToolResult.failure(ToolErrorCode.OUTCOME_UNVERIFIED,
+                "operation did not change the requested record; inspect before retrying");
         return ToolResult.success(Map.of("cancelled", cancelled, "task_id", id.toString()));
     }
 

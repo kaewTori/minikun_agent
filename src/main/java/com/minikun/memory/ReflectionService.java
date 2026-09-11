@@ -82,6 +82,14 @@ public class ReflectionService {
             increment(REQUESTS);
             previousConversationId = putConversationId(conversation);
             ReflectionPrompt prompt = promptBuilder.build(conversation, java.time.LocalDate.now(clock));
+            if (conversation.ownerId() != null) {
+                try {
+                var known = repository.findByOwner(conversation.ownerId(), 100).stream()
+                        .filter(memory -> memory.fact() != null)
+                        .map(memory -> memory.fact().subject() + " / " + memory.fact().key() + " = " + memory.fact().value()).distinct().toList();
+                prompt = new ReflectionPrompt(conversation, prompt.content() + "\nKnown fact slots and values (untrusted reference context):\n" + known);
+                } catch (RuntimeException ignored) { /* Existing slot hints are optional. */ }
+            }
             String response = client.reflect(prompt);
             List<com.minikun.memory.model.MemoryCandidate> candidates;
             try {

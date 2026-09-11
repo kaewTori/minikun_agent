@@ -28,10 +28,10 @@ public class TaskModelConfiguration {
         JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(httpClient);
         requestFactory.setReadTimeout(timeout);
         RestClient restClient = RestClient.builder()
-                .baseUrl(baseUrl + "/v1/chat/completions")
+                .baseUrl(baseUrl + "/api/chat")
                 .requestFactory(requestFactory)
                 .build();
-        return new OllamaTaskModelProvider(restClient, objectMapper, model, timeout);
+        return new OllamaTaskModelProvider(restClient, objectMapper, model, timeout, true);
     }
 
     @Bean

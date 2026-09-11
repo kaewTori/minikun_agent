@@ -16,6 +16,17 @@ class TaskServiceTest {
     private static final Instant NOW = Instant.parse("2026-08-19T00:00:00Z");
 
     @Test
+    void doesNotClaimSuccessWhenStoreAcknowledgesWriteButReadBackIsMissing() {
+        var store = org.mockito.Mockito.mock(TaskStore.class);
+        org.mockito.Mockito.when(store.create(org.mockito.ArgumentMatchers.any()))
+                .thenAnswer(call -> call.getArgument(0));
+        var service = new TaskService(store, Clock.fixed(NOW, java.time.ZoneOffset.UTC));
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalStateException.class,
+                () -> service.create("owner", "conversation", "TASK", "ตรวจ backup", "", "", "", "", "", "", ""));
+        org.mockito.Mockito.verify(store, org.mockito.Mockito.times(1)).create(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
     void createsOwnerScopedTaskAndTracksNextActionAndWaitingFor() {
         var store = new InMemoryTaskStore();
         var service = new TaskService(store, Clock.fixed(NOW, ZoneOffset.UTC));

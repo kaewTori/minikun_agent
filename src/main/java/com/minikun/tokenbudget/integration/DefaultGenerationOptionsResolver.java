@@ -21,6 +21,6 @@ public final class DefaultGenerationOptionsResolver implements GenerationOptions
         if (existing == null) {
             return new GenerationOptions(null, maxTokens, List.of());
         }
-        return new GenerationOptions(existing.temperature(), maxTokens, existing.stop());
+        return new GenerationOptions(existing.temperature(), maxTokens, existing.stop(), existing.reasoning());
     }
 }

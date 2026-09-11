@@ -1,0 +1,94 @@
+{
+  "model": "minikun-qwen3:4b",
+  "think": "off",
+  "valid": false,
+  "tokens": 1024,
+  "suite": "intelligence.json",
+  "summary": {
+    "all": {
+      "total": 4,
+      "passed": 0,
+      "errors": 0,
+      "p50Ms": 10601.0,
+      "p95Ms": 30350
+    },
+    "thai-semantics": {
+      "total": 4,
+      "passed": 0,
+      "errors": 0,
+      "p50Ms": 10601.0,
+      "p95Ms": 30350
+    }
+  },
+  "results": [
+    {
+      "id": "thai-semantics-01",
+      "category": "thai-semantics",
+      "passed": false,
+      "answer": "B",
+      "reasoningInContent": true,
+      "rubric": "บริการช้า",
+      "usage": {
+        "eval_count": 280,
+        "prompt_eval_count": 170,
+        "load_duration": 113468500,
+        "eval_duration": 7965436000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 8413,
+      "firstAnswerMs": 447
+    },
+    {
+      "id": "thai-semantics-02",
+      "category": "thai-semantics",
+      "passed": false,
+      "answer": "B",
+      "reasoningInContent": true,
+      "rubric": "ยังสรุปว่าเลิกชอบกาแฟไม่ได้",
+      "usage": {
+        "eval_count": 432,
+        "prompt_eval_count": 169,
+        "load_duration": 83128333,
+        "eval_duration": 12376821000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 12789,
+      "firstAnswerMs": 412
+    },
+    {
+      "id": "thai-semantics-03",
+      "category": "thai-semantics",
+      "passed": false,
+      "answer": "A",
+      "reasoningInContent": true,
+      "rubric": "ผู้พูด",
+      "usage": {
+        "eval_count": 108,
+        "prompt_eval_count": 143,
+        "load_duration": 82986958,
+        "eval_duration": 3043200000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 3385,
+      "firstAnswerMs": 342
+    },
+    {
+      "id": "thai-semantics-04",
+      "category": "thai-semantics",
+      "passed": false,
+      "answer": "[invalid answer format; content omitted]",
+      "reasoningInContent": false,
+      "rubric": "ความชอบต่อเนื่อง",
+      "usage": {
+        "eval_count": 1024,
+        "prompt_eval_count": 159,
+        "load_duration": 85024917,
+        "eval_duration": 30156030000,
+        "done_reason": "length"
+      },
+      "elapsedMs": 30350,
+      "firstAnswerMs": 194
+    }
+  ],
+  "note": "Invalid benchmark: Ollama 0.32.3 leaked <think> content despite think=false and /no_think. Keep for diagnosis only; do not compare as an off-mode score."
+}

@@ -49,7 +49,38 @@ public final class TaskService {
                 TaskKind.parse(kind), require(title, "title"), nullable(description), TaskStatus.OPEN,
                 optionalUuid(parentId), optionalUuid(goalId), due, zone, nullable(nextAction), nullable(waitingFor), followUp, null,
                 now, now, null);
-        return store.create(task);
+        store.create(task);
+        return verifySaved(task);
+    }
+
+    private PersonalTask verifySaved(PersonalTask expected) {
+        PersonalTask actual = store.find(expected.id(), expected.ownerId())
+                .orElseThrow(() -> new IllegalStateException("saved record could not be verified; inspect before retrying"));
+        if (!sameValue(expected.id(), actual.id())
+                || !sameValue(expected.ownerId(), actual.ownerId())
+                || !sameValue(expected.conversationId(), actual.conversationId())
+                || !sameValue(expected.title(), actual.title())
+                || !sameValue(expected.description(), actual.description())
+                || !sameValue(expected.status(), actual.status())
+                || !sameValue(expected.dueAt(), actual.dueAt())
+                || !sameValue(expected.timezone(), actual.timezone())
+                || !sameValue(expected.nextAction(), actual.nextAction())
+                || !sameValue(expected.waitingFor(), actual.waitingFor())
+                || !sameValue(expected.followUpAt(), actual.followUpAt())
+                || !sameValue(expected.goalId(), actual.goalId())
+                || !sameValue(expected.parentId(), actual.parentId())
+                || !sameValue(expected.kind(), actual.kind())) {
+            throw new IllegalStateException("saved record does not match requested outcome; inspect before retrying");
+        }
+        return actual;
+    }
+
+    private boolean sameValue(Object expected, Object actual) {
+        if (expected instanceof Instant left && actual instanceof Instant right) {
+            // PostgreSQL stores microseconds and may round sub-microsecond input.
+            return java.time.Duration.between(left, right).abs().compareTo(java.time.Duration.ofNanos(1000)) < 0;
+        }
+        return Objects.equals(expected, actual);
     }
 
     public List<PersonalTask> list(String ownerId, TaskStatus status) {
@@ -82,7 +113,8 @@ public final class TaskService {
                 patch.waitingFor() == null ? current.waitingFor() : patch.waitingFor().trim(),
                 patch.followUpAt() == null ? current.followUpAt() : patch.followUpAt(),
                 current.lastFollowUpAt(), current.createdAt(), clock.instant(), completedAt);
-        return store.update(updated);
+        store.update(updated);
+        return verifySaved(updated);
     }
 
     public PersonalTask complete(String ownerId, UUID id) {

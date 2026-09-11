@@ -37,6 +37,16 @@ class TurnPlannerTest {
     }
 
     @Test
+    void naturalInvestmentReviewUsesTheToolLoop() {
+        TurnPlan plan = planner(null).plan("ช่วยทบทวนพอร์ตระยะยาวของฉัน", "", null,
+                false, null, true);
+
+        assertEquals(TurnPlan.Intent.ACTION, plan.intent());
+        assertEquals(TurnPlan.Execution.TOOL_LOOP, plan.execution());
+        assertTrue(plan.needsTools());
+    }
+
+    @Test
     void imageOutputIsPartOfTheTurnPlan() {
         TurnPlan plan = planner(null).plan("ช่วยสร้างภาพเมืองลอยฟ้ายามค่ำคืน", "", null, false, null, true);
 

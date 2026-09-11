@@ -102,7 +102,8 @@ public final class ContextItemAssembler {
                     ? ContextBudgetSection.MEMORY
                     : ContextBudgetSection.KNOWLEDGE;
             int priority = sourcePriorityPolicy.priority(candidate.source());
-            addOptional(items, section, candidate.content(), priority);
+            boolean required = candidate.source() == KnowledgeSource.BROWSER;
+            addOptional(items, section, candidate.content(), priority, required);
         });
     }
 

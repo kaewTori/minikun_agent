@@ -23,7 +23,7 @@ final class TaskModelReflectionProvider implements ReflectionProvider {
     @Override
     public String reflect(ReflectionPrompt prompt) {
         String response = taskModelProvider.generate(new TaskModelRequest(
-                List.of(new TaskModelMessage("user", prompt.content())), 384, 0.0,
+                List.of(new TaskModelMessage("user", prompt.content())), 1024, 0.0,
                 TaskModelRequest.ResponseFormat.JSON_OBJECT));
         String normalized = normalizeContent(response);
         if (normalized.isBlank()) {

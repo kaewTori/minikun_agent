@@ -51,6 +51,7 @@ final class ChatCollaborators {
     private final ConversationThreadService conversationThreadService;
     private final StoryIllustrationService storyIllustrationService;
     private final TurnPlanner turnPlanner;
+    private final KimiK3ReasoningClient kimiK3ReasoningClient;
 
     ChatCollaborators(
             ObjectProvider<SpringAiToolCallingRuntime> toolCallingRuntime,
@@ -75,7 +76,8 @@ final class ChatCollaborators {
             ObjectProvider<ChatExplainabilitySink> explainabilitySink,
             ObjectProvider<ConversationThreadService> conversationThreadService,
             ObjectProvider<StoryIllustrationService> storyIllustrationService,
-            ObjectProvider<TurnPlanner> turnPlanner) {
+            ObjectProvider<TurnPlanner> turnPlanner,
+            ObjectProvider<KimiK3ReasoningClient> kimiK3ReasoningClient) {
         this.toolCallingRuntime = toolCallingRuntime.getIfAvailable();
         this.toolRequestRouters = toolRequestRouters.orderedStream().toList();
         this.dynamicGenerationOptionsFactory = dynamicGenerationOptionsFactory.getIfAvailable();
@@ -99,6 +101,7 @@ final class ChatCollaborators {
         this.conversationThreadService = conversationThreadService.getIfAvailable();
         this.storyIllustrationService = storyIllustrationService.getIfAvailable();
         this.turnPlanner = turnPlanner.getIfAvailable();
+        this.kimiK3ReasoningClient = kimiK3ReasoningClient.getIfAvailable();
     }
 
     SpringAiToolCallingRuntime toolCallingRuntime() { return toolCallingRuntime; }
@@ -124,4 +127,5 @@ final class ChatCollaborators {
     ConversationThreadService conversationThreadService() { return conversationThreadService; }
     StoryIllustrationService storyIllustrationService() { return storyIllustrationService; }
     TurnPlanner turnPlanner() { return turnPlanner; }
+    KimiK3ReasoningClient kimiK3ReasoningClient() { return kimiK3ReasoningClient; }
 }

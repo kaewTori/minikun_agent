@@ -78,6 +78,7 @@ public final class UserModelService {
                 .sorted(java.util.Comparator.comparing(Preference::key))
                 .toList();
         List<Memory> memories = memoryRepository.findByOwner(owner, maximumMemories).stream()
+                .filter(memory -> memory.currentAt(now))
                 .filter(memory -> memory.confidence() >= minimumConfidence)
                 .filter(memory -> !memory.createdAt().plus(memoryMaxAge).isBefore(now))
                 .toList();

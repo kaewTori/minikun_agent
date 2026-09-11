@@ -52,10 +52,15 @@ public final class AdaptivePreferenceLearningService {
         if (!enabled) return;
         String owner = owner(ownerId);
         Instant now = clock.instant();
-        List<AdaptationObservation> observations = detector.detect(message);
+        List<AdaptationObservation> observations = detector.detectDurable(message);
         for (AdaptationObservation observation : observations) {
+            if ("unset".equals(observation.value())) {
+                signals.deleteDimension(owner, observation.dimension());
+                preferences.delete(owner, AdaptationDimensions.preferenceKey(observation.dimension()));
+                continue;
+            }
             signals.record(owner, observation.dimension(), observation.value(), observation.weight(),
-                    observation.explicit(), observation.explicit() ? .35 : .95, now);
+                    observation.explicit(), observation.explicit() ? 0 : .95, now);
         }
         observations.stream().map(AdaptationObservation::dimension).distinct()
                 .forEach(dimension -> reconcile(owner, dimension, now));

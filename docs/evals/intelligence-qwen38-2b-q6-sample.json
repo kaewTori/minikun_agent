@@ -1,0 +1,433 @@
+{
+  "model": "hf.co/empero-ai/Qwen3.8-2B-Distill-GGUF:Q6_K",
+  "think": "on",
+  "tokens": 512,
+  "suite": "intelligence.json",
+  "summary": {
+    "all": {
+      "total": 24,
+      "passed": 14,
+      "errors": 0,
+      "p50Ms": 2754.5,
+      "p95Ms": 4016
+    },
+    "thai-semantics": {
+      "total": 24,
+      "passed": 14,
+      "errors": 0,
+      "p50Ms": 2754.5,
+      "p95Ms": 4016
+    }
+  },
+  "results": [
+    {
+      "id": "thai-semantics-01",
+      "category": "thai-semantics",
+      "passed": false,
+      "answer": "C",
+      "reasoningInContent": false,
+      "rubric": "บริการช้า",
+      "usage": {
+        "eval_count": 148,
+        "prompt_eval_count": 91,
+        "load_duration": 184189625,
+        "eval_duration": 2977903000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 3385,
+      "firstAnswerMs": 3364
+    },
+    {
+      "id": "thai-semantics-02",
+      "category": "thai-semantics",
+      "passed": true,
+      "answer": "B",
+      "reasoningInContent": false,
+      "rubric": "ยังสรุปว่าเลิกชอบกาแฟไม่ได้",
+      "usage": {
+        "eval_count": 100,
+        "prompt_eval_count": 94,
+        "load_duration": 134546417,
+        "eval_duration": 1999770000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 2304,
+      "firstAnswerMs": 2284
+    },
+    {
+      "id": "thai-semantics-03",
+      "category": "thai-semantics",
+      "passed": true,
+      "answer": "A",
+      "reasoningInContent": false,
+      "rubric": "ผู้พูด",
+      "usage": {
+        "eval_count": 59,
+        "prompt_eval_count": 80,
+        "load_duration": 132067750,
+        "eval_duration": 1171213000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 1469,
+      "firstAnswerMs": 1449
+    },
+    {
+      "id": "thai-semantics-04",
+      "category": "thai-semantics",
+      "passed": false,
+      "answer": "B",
+      "reasoningInContent": false,
+      "rubric": "ความชอบต่อเนื่อง",
+      "usage": {
+        "eval_count": 126,
+        "prompt_eval_count": 85,
+        "load_duration": 132402250,
+        "eval_duration": 2516710000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 2813,
+      "firstAnswerMs": 2793
+    },
+    {
+      "id": "thai-semantics-05",
+      "category": "thai-semantics",
+      "passed": true,
+      "answer": "C",
+      "reasoningInContent": false,
+      "rubric": "ไม่ควร",
+      "usage": {
+        "eval_count": 109,
+        "prompt_eval_count": 83,
+        "load_duration": 133430583,
+        "eval_duration": 2176644000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 2477,
+      "firstAnswerMs": 2457
+    },
+    {
+      "id": "thai-semantics-06",
+      "category": "thai-semantics",
+      "passed": false,
+      "answer": "B",
+      "reasoningInContent": false,
+      "rubric": "ร่าง B",
+      "usage": {
+        "eval_count": 69,
+        "prompt_eval_count": 90,
+        "load_duration": 133913958,
+        "eval_duration": 1373273000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 1678,
+      "firstAnswerMs": 1658
+    },
+    {
+      "id": "thai-semantics-07",
+      "category": "thai-semantics",
+      "passed": true,
+      "answer": "C",
+      "reasoningInContent": false,
+      "rubric": "พักไว้และไม่ส่ง",
+      "usage": {
+        "eval_count": 91,
+        "prompt_eval_count": 82,
+        "load_duration": 135855250,
+        "eval_duration": 1816534000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 2130,
+      "firstAnswerMs": 2110
+    },
+    {
+      "id": "thai-semantics-08",
+      "category": "thai-semantics",
+      "passed": true,
+      "answer": "C",
+      "reasoningInContent": false,
+      "rubric": "ยังไม่อนุญาต",
+      "usage": {
+        "eval_count": 172,
+        "prompt_eval_count": 86,
+        "load_duration": 136163917,
+        "eval_duration": 3444901000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 3780,
+      "firstAnswerMs": 3759
+    },
+    {
+      "id": "thai-semantics-09",
+      "category": "thai-semantics",
+      "passed": false,
+      "answer": "[invalid answer format; content omitted]",
+      "reasoningInContent": false,
+      "rubric": "ยังไม่ลืมจริงในจังหวะนั้น",
+      "usage": {
+        "eval_count": 149,
+        "prompt_eval_count": 86,
+        "load_duration": 134219041,
+        "eval_duration": 2992885000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 3304,
+      "firstAnswerMs": 3244
+    },
+    {
+      "id": "thai-semantics-10",
+      "category": "thai-semantics",
+      "passed": false,
+      "answer": "[invalid answer format; content omitted]",
+      "reasoningInContent": false,
+      "rubric": "อยากทำได้แต่มีข้อจำกัด",
+      "usage": {
+        "eval_count": 155,
+        "prompt_eval_count": 85,
+        "load_duration": 136354667,
+        "eval_duration": 3125897000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 3448,
+      "firstAnswerMs": 3388
+    },
+    {
+      "id": "thai-semantics-11",
+      "category": "thai-semantics",
+      "passed": true,
+      "answer": "C",
+      "reasoningInContent": false,
+      "rubric": "เสนอให้ตรวจงาน",
+      "usage": {
+        "eval_count": 101,
+        "prompt_eval_count": 95,
+        "load_duration": 136240000,
+        "eval_duration": 2015963000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 2324,
+      "firstAnswerMs": 2303
+    },
+    {
+      "id": "thai-semantics-12",
+      "category": "thai-semantics",
+      "passed": true,
+      "answer": "A",
+      "reasoningInContent": false,
+      "rubric": "ไม่ชัด ต้องยืนยันก่อนลบ",
+      "usage": {
+        "eval_count": 116,
+        "prompt_eval_count": 97,
+        "load_duration": 135272250,
+        "eval_duration": 2358957000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 2662,
+      "firstAnswerMs": 2642
+    },
+    {
+      "id": "thai-semantics-13",
+      "category": "thai-semantics",
+      "passed": false,
+      "answer": "[invalid answer format; content omitted]",
+      "reasoningInContent": false,
+      "rubric": "ไม่เอาเผ็ด",
+      "usage": {
+        "eval_count": 155,
+        "prompt_eval_count": 88,
+        "load_duration": 154461084,
+        "eval_duration": 3112728000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 3455,
+      "firstAnswerMs": 3395
+    },
+    {
+      "id": "thai-semantics-14",
+      "category": "thai-semantics",
+      "passed": false,
+      "answer": "A",
+      "reasoningInContent": false,
+      "rubric": "อร่อยมาก",
+      "usage": {
+        "eval_count": 185,
+        "prompt_eval_count": 83,
+        "load_duration": 136185541,
+        "eval_duration": 3712681000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 4016,
+      "firstAnswerMs": 3996
+    },
+    {
+      "id": "thai-semantics-15",
+      "category": "thai-semantics",
+      "passed": true,
+      "answer": "A",
+      "reasoningInContent": false,
+      "rubric": "อร่อยมาก",
+      "usage": {
+        "eval_count": 121,
+        "prompt_eval_count": 82,
+        "load_duration": 134499000,
+        "eval_duration": 2423592000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 2708,
+      "firstAnswerMs": 2688
+    },
+    {
+      "id": "thai-semantics-16",
+      "category": "thai-semantics",
+      "passed": false,
+      "answer": "[invalid answer format; content omitted]",
+      "reasoningInContent": false,
+      "rubric": "งานง่าย",
+      "usage": {
+        "eval_count": 126,
+        "prompt_eval_count": 80,
+        "load_duration": 135343959,
+        "eval_duration": 2521363000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 2801,
+      "firstAnswerMs": 2680
+    },
+    {
+      "id": "thai-semantics-17",
+      "category": "thai-semantics",
+      "passed": true,
+      "answer": "B",
+      "reasoningInContent": false,
+      "rubric": "อย่าทำสองอย่างจนเสี่ยงพลาดทั้งคู่",
+      "usage": {
+        "eval_count": 112,
+        "prompt_eval_count": 89,
+        "load_duration": 134305541,
+        "eval_duration": 2240824000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 2527,
+      "firstAnswerMs": 2506
+    },
+    {
+      "id": "thai-semantics-18",
+      "category": "thai-semantics",
+      "passed": true,
+      "answer": "C",
+      "reasoningInContent": false,
+      "rubric": "ให้สงบลง",
+      "usage": {
+        "eval_count": 96,
+        "prompt_eval_count": 88,
+        "load_duration": 135948833,
+        "eval_duration": 1915816000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 2241,
+      "firstAnswerMs": 2221
+    },
+    {
+      "id": "thai-semantics-19",
+      "category": "thai-semantics",
+      "passed": true,
+      "answer": "C",
+      "reasoningInContent": false,
+      "rubric": "สุภาพเป็นธรรมชาติ",
+      "usage": {
+        "eval_count": 109,
+        "prompt_eval_count": 85,
+        "load_duration": 135255625,
+        "eval_duration": 2191417000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 2518,
+      "firstAnswerMs": 2497
+    },
+    {
+      "id": "thai-semantics-20",
+      "category": "thai-semantics",
+      "passed": true,
+      "answer": "B",
+      "reasoningInContent": false,
+      "rubric": "กระชับกว่าเมื่อวาน",
+      "usage": {
+        "eval_count": 169,
+        "prompt_eval_count": 91,
+        "load_duration": 135515333,
+        "eval_duration": 3620695000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 3957,
+      "firstAnswerMs": 3910
+    },
+    {
+      "id": "thai-semantics-21",
+      "category": "thai-semantics",
+      "passed": true,
+      "answer": "A",
+      "reasoningInContent": false,
+      "rubric": "ไม่ยืนยัน",
+      "usage": {
+        "eval_count": 145,
+        "prompt_eval_count": 90,
+        "load_duration": 176592500,
+        "eval_duration": 3504086000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 3839,
+      "firstAnswerMs": 3815
+    },
+    {
+      "id": "thai-semantics-22",
+      "category": "thai-semantics",
+      "passed": false,
+      "answer": "[invalid answer format; content omitted]",
+      "reasoningInContent": false,
+      "rubric": "ไม่ควรถือเป็นข้อมูลส่วนตัว",
+      "usage": {
+        "eval_count": 261,
+        "prompt_eval_count": 96,
+        "load_duration": 173110709,
+        "eval_duration": 5555984000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 5885,
+      "firstAnswerMs": 4191
+    },
+    {
+      "id": "thai-semantics-23",
+      "category": "thai-semantics",
+      "passed": false,
+      "answer": "[invalid answer format; content omitted]",
+      "reasoningInContent": false,
+      "rubric": "อาจเห็นด้วยบางส่วน",
+      "usage": {
+        "eval_count": 137,
+        "prompt_eval_count": 85,
+        "load_duration": 145028542,
+        "eval_duration": 3061997000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 3358,
+      "firstAnswerMs": 3298
+    },
+    {
+      "id": "thai-semantics-24",
+      "category": "thai-semantics",
+      "passed": true,
+      "answer": "A",
+      "reasoningInContent": false,
+      "rubric": "ถามว่าสิ่งใดเมื่อจำเป็น",
+      "usage": {
+        "eval_count": 115,
+        "prompt_eval_count": 97,
+        "load_duration": 134433709,
+        "eval_duration": 2327454000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 2615,
+      "firstAnswerMs": 2595
+    }
+  ],
+  "note": "Model-only synthetic benchmark; not a claim of persistent memory correctness or all Thai dialect coverage. First case includes cold-load cost. Thinking traces are not stored."
+}

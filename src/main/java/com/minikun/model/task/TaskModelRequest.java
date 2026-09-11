@@ -7,9 +7,13 @@ public record TaskModelRequest(
         List<TaskModelMessage> messages,
         int maxOutputTokens,
         double temperature,
-        ResponseFormat responseFormat) {
+        ResponseFormat responseFormat, com.minikun.model.GenerationOptions.Reasoning reasoning) {
 
+    public TaskModelRequest(List<TaskModelMessage> messages, int maxOutputTokens, double temperature, ResponseFormat responseFormat) {
+        this(messages, maxOutputTokens, temperature, responseFormat, com.minikun.model.GenerationOptions.Reasoning.OFF);
+    }
     public TaskModelRequest {
+        reasoning = reasoning == null ? com.minikun.model.GenerationOptions.Reasoning.OFF : reasoning;
         Objects.requireNonNull(messages, "messages must not be null");
         Objects.requireNonNull(responseFormat, "responseFormat must not be null");
         messages = List.copyOf(messages);

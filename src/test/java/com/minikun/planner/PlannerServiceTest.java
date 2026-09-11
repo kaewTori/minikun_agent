@@ -24,6 +24,32 @@ class PlannerServiceTest {
     private static final Instant NOW = Instant.parse("2026-08-18T00:00:00Z");
 
     @Test
+    void rejectsAReadBackWithTheWrongScheduledTime() {
+        var store = org.mockito.Mockito.spy(new InMemoryPlannerStore());
+        org.mockito.Mockito.doAnswer(call -> {
+            Optional<PlannerEvent> saved = (Optional<PlannerEvent>) call.callRealMethod();
+            return saved.map(event -> new PlannerEvent(event.id(), event.conversationId(), event.title(), event.note(),
+                    event.startsAt().plusSeconds(3600), event.timezone(), event.remindBeforeMinutes(), event.recurrence(),
+                    event.status(), event.nextNotifyAt(), event.createdAt(), event.updatedAt()));
+        }).when(store).find(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+        var service = new PlannerService(store, Clock.fixed(NOW, java.time.ZoneOffset.UTC));
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalStateException.class, () -> service.create(
+                new ConversationId("conversation"), "ประชุม", "", "2026-08-20T09:00:00", "Asia/Bangkok", 15, "NONE"));
+        assertEquals(1, store.events.size());
+    }
+
+    @Test
+    void doesNotClaimSuccessWhenStoreAcknowledgesWriteButReadBackIsMissing() {
+        var store = org.mockito.Mockito.mock(PlannerStore.class);
+        org.mockito.Mockito.when(store.create(org.mockito.ArgumentMatchers.any()))
+                .thenAnswer(call -> call.getArgument(0));
+        var service = new PlannerService(store, Clock.fixed(NOW, java.time.ZoneOffset.UTC));
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalStateException.class,
+                () -> service.create(new ConversationId("conversation"), "ประชุม", "", "2026-08-20T09:00:00", "Asia/Bangkok", 15, "NONE"));
+        org.mockito.Mockito.verify(store, org.mockito.Mockito.times(1)).create(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
     void plannerRequiresConfirmationBeforeWritingAndStoresBangkokTime() {
         InMemoryPlannerStore store = new InMemoryPlannerStore();
         PlannerService planner = new PlannerService(store, Clock.fixed(NOW, ZoneId.of("UTC")));

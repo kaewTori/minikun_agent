@@ -7,7 +7,7 @@
   <meta name="description" content="Minikun — ผู้ช่วยส่วนตัวที่คุย คิด ค้นหา และลงมือทำร่วมกับคุณ">
   <title>Minikun</title>
   <link rel="icon" href="/cockpit/minikun-avatar.jpg">
-  <link rel="stylesheet" href="/cockpit/cockpit.css?v=20260905-cockpit-shortcut6">
+  <link rel="stylesheet" href="/cockpit/cockpit.css?v=20260911-responsive1">
 </head>
 <body>
   <a class="skip-link" href="#main-content">ข้ามไปยังเนื้อหาหลัก</a>
@@ -17,7 +17,7 @@
         <img src="/cockpit/minikun-avatar.jpg" alt="" class="brand-avatar">
         <span><strong>MINIKUN</strong><small>PERSONAL AGENT</small></span>
       </a>
-      <button class="new-chat-button" id="new-chat" type="button"><span aria-hidden="true">＋</span> แชตใหม่</button>
+      <button class="new-chat-button" id="new-chat" type="button"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg> แชตใหม่</button>
       <nav class="main-nav">
         <button class="nav-item active" type="button" data-view-target="chat" aria-current="page"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 17.5 3.5 21l4.2-1.4c1.3.6 2.7.9 4.3.9 5.2 0 9.5-3.8 9.5-8.5S17.2 3.5 12 3.5 2.5 7.3 2.5 12c0 2.1.9 4 2.5 5.5Z"/><path d="M8 12h.01M12 12h.01M16 12h.01"/></svg><b>แชต</b></button>
         <button class="nav-item" type="button" data-view-target="studio"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7.5h4l1.4-2h5.2l1.4 2h4v11H4Z"/><circle cx="12" cy="13" r="3.5"/><path d="m18 3 .5 1.5L20 5l-1.5.5L18 7l-.5-1.5L16 5l1.5-.5Z"/></svg><b>สร้างภาพ</b></button>
@@ -32,7 +32,7 @@
       </section>
       <div class="rail-bottom">
         <div class="privacy-note"><span class="status-dot"></span><span>LOCAL FIRST<small>ข้อมูลอยู่กับเรา</small></span></div>
-        <button class="icon-button labelled" id="open-settings" type="button"><span aria-hidden="true">⚙</span> ตั้งค่า</button>
+        <button class="icon-button labelled" id="open-settings" type="button"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 1.1 2.3 2.5.7.7 2.5L18.5 10l-1.8 1.9.4 2.5-2.3 1.1-.8 2.4H11l-.8-2.4-2.3-1.1.4-2.5L6.5 10l2.2-1.5.7-2.5 2.5-.7Z"/><circle cx="12" cy="11.5" r="2.4"/></svg> ตั้งค่า</button>
       </div>
     </aside>
 
@@ -46,9 +46,9 @@
           </div>
           <div class="chat-actions">
             <span class="model-pill" id="model-pill">MINI-KUN</span>
-            <button class="icon-button" id="open-inspiration-boards" type="button" aria-label="เปิดบอร์ดแรงบันดาลใจ">▧</button>
-            <button class="icon-button voice-toggle" id="voice-output" type="button" aria-pressed="false" aria-label="อ่านคำตอบออกเสียง">◖</button>
-            <button class="icon-button" id="mobile-new-chat" type="button" aria-label="เริ่มแชตใหม่">＋</button>
+            <button class="icon-button" id="open-inspiration-boards" type="button" aria-label="เปิดบอร์ดแรงบันดาลใจ"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="m6 16 4-4 3 3 2-2 3 3"/></svg></button>
+            <button class="icon-button voice-toggle" id="voice-output" type="button" aria-pressed="false" aria-label="อ่านคำตอบออกเสียง"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 10v4h3l4 3V7l-4 3H5Z"/><path d="M16 9.5a4 4 0 0 1 0 5M18.5 7a7 7 0 0 1 0 10"/></svg></button>
+            <button class="icon-button" id="mobile-new-chat" type="button" aria-label="เริ่มแชตใหม่"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
           </div>
         </header>
         <div class="messages-scroll" id="messages-scroll">
@@ -59,10 +59,15 @@
             <h1 id="welcome-title">คุยกับมินิคุงได้ทุกเรื่องครับ</h1>
             <p>คิด วางแผน ค้นข้อมูล ดูแล homelab จัดการงานและปฏิทิน—ถ้าต้องลงมือจริง มินิคุงจะขออนุญาตก่อนเสมอ</p>
             <div class="starter-grid" aria-label="คำแนะนำเริ่มต้น">
-              <button type="button" data-prompt="ช่วยสรุปสิ่งสำคัญที่ฉันควรโฟกัสวันนี้"><span>◎</span><strong>โฟกัสวันนี้</strong><small>งาน เป้าหมาย และเรื่องเร่งด่วน</small></button>
-              <button type="button" data-prompt="ช่วยตรวจสุขภาพ homelab และสรุปเฉพาะสิ่งที่ควรรู้"><span>⌁</span><strong>ดูแล Homelab</strong><small>ตรวจสุขภาพและอธิบายความเสี่ยง</small></button>
-              <button type="button" data-prompt="ช่วยค้นข้อมูลล่าสุดเรื่องนี้ให้หน่อย: "><span>↗</span><strong>ค้นและวิจัย</strong><small>ค้นเว็บพร้อมอ้างอิงแหล่งที่มา</small></button>
-              <button type="button" data-prompt="ช่วยเปลี่ยนความคิดนี้ให้เป็นแผนที่ลงมือทำได้: "><span>◇</span><strong>วางแผนให้ฉัน</strong><small>แตกเป็นงาน เตือน และก้าวถัดไป</small></button>
+              <button type="button" data-prompt="ช่วยสรุปสิ่งสำคัญที่ฉันควรโฟกัสวันนี้"><span aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg></span><strong>โฟกัสวันนี้</strong><small>งาน เป้าหมาย และเรื่องเร่งด่วน</small></button>
+              <button type="button" data-prompt="ช่วยตรวจสุขภาพ homelab และสรุปเฉพาะสิ่งที่ควรรู้"><span aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24"><path d="M3 12h4l2-5 4 10 2-5h6"/></svg></span><strong>ดูแล Homelab</strong><small>ตรวจสุขภาพและอธิบายความเสี่ยง</small></button>
+              <div class="starter-more is-collapsed">
+                <button class="starter-more-toggle" type="button" aria-expanded="false">ดูอีก 2 แนวทาง</button>
+                <div class="starter-more-grid">
+                  <button type="button" data-prompt="ช่วยค้นข้อมูลล่าสุดเรื่องนี้ให้หน่อย: "><span aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="5.5"/><path d="m15 15 4 4M10.5 8v5M8 10.5h5"/></svg></span><strong>ค้นและวิจัย</strong><small>ค้นเว็บพร้อมอ้างอิงแหล่งที่มา</small></button>
+                  <button type="button" data-prompt="ช่วยเปลี่ยนความคิดนี้ให้เป็นแผนที่ลงมือทำได้: "><span aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24"><path d="M7 3h10v18H7Z"/><path d="M10 7h4M10 11h4M10 15h4"/></svg></span><strong>วางแผนให้ฉัน</strong><small>แตกเป็นงาน เตือน และก้าวถัดไป</small></button>
+                </div>
+              </div>
             </div>
             <div class="capability-strip"><span>ค้นเว็บ</span><span>ความรู้ส่วนตัว</span><span>วิเคราะห์ภาพ</span><span>งานและปฏิทิน</span><span>เสียง</span><span>Agent mode</span></div>
           </section>
@@ -125,7 +130,7 @@
 
             <section class="assembled-prompt" aria-labelledby="assembled-prompt-title" data-state="empty">
               <header><div><p class="eyebrow">PONY PROMPT · แก้ต่อได้</p><h2 id="assembled-prompt-title">Prompt ที่พร้อมส่งให้โมเดล</h2></div><button id="studio-copy-prompt" type="button">คัดลอก</button></header>
-              <textarea id="studio-prompt-preview" rows="6" maxlength="8000" placeholder="Pony tags ที่มินิคุงแปลงให้จะอยู่ตรงนี้ หรือวาง prompt ของเราเองได้เลย"></textarea>
+              <label class="sr-only" for="studio-prompt-preview">Prompt ที่พร้อมส่งให้โมเดล</label><textarea id="studio-prompt-preview" rows="6" maxlength="8000" aria-labelledby="assembled-prompt-title" aria-describedby="studio-readiness" placeholder="Pony tags ที่มินิคุงแปลงให้จะอยู่ตรงนี้ หรือวาง prompt ของเราเองได้เลย"></textarea>
               <div class="prompt-readiness" id="studio-readiness"><span></span><small>เล่าภาพด้านบน แล้วกดแปลงเป็น Pony prompt</small></div>
             </section>
 
@@ -183,7 +188,7 @@
               </div>
             </details>
 
-            <div class="studio-form-actions"><button class="text-button" id="studio-load-example" type="button">ลองโจทย์ตัวอย่าง</button><button class="generate-button" id="studio-generate" type="submit"><span>สร้างภาพนี้</span><small>ส่ง Pony prompt ให้ TinyGrad</small><i aria-hidden="true">↗</i></button></div>
+            <div class="studio-form-actions"><button class="text-button" id="studio-load-example" type="button">ลองโจทย์ตัวอย่าง</button><button class="generate-button" id="studio-generate" type="submit" disabled><span>สร้างภาพนี้</span><small id="studio-generate-note">กำลังตรวจ TinyGrad</small><i aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24"><path d="M5 12h13M13 6l6 6-6 6"/></svg></i></button></div>
           </form>
 
           <aside class="studio-canvas" aria-live="polite">
@@ -213,7 +218,7 @@
       </section>
 
       <section class="cockpit-view hidden" id="cockpit-view" data-view="cockpit" aria-label="Cockpit ส่วนตัว">
-        <header class="topbar"><div class="cockpit-heading"><button class="mobile-menu-trigger" type="button" data-open-mobile-menu aria-label="เปิดเมนูมินิคุง"><img src="/cockpit/minikun-avatar.jpg" alt=""></button><div><p class="eyebrow" id="today-label">วันของเรา</p><h1 id="greeting">สวัสดีครับ พี่สาว</h1></div></div><div class="top-actions"><span class="sync-state" id="sync-state"><span class="status-dot"></span> พร้อมดูแล</span><button class="icon-button" id="refresh" type="button" aria-label="โหลดข้อมูลใหม่">↻</button></div></header>
+        <header class="topbar"><div class="cockpit-heading"><button class="mobile-menu-trigger" type="button" data-open-mobile-menu aria-label="เปิดเมนูมินิคุง"><img src="/cockpit/minikun-avatar.jpg" alt=""></button><div><p class="eyebrow" id="today-label">วันของเรา</p><h1 id="greeting">สวัสดีครับ พี่สาว</h1></div></div><div class="top-actions"><span class="sync-state" id="sync-state"><span class="status-dot"></span> พร้อมดูแล</span><button class="icon-button" id="refresh" type="button" aria-label="โหลดข้อมูลใหม่"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0 1 4"/><path d="M20 5v6h-6"/></svg></button></div></header>
         <section class="attention-strip" id="today" data-cockpit-page="today" data-state="checking" aria-labelledby="attention-title">
           <div class="minikun-pulse" aria-hidden="true"><span></span><img src="/cockpit/minikun-avatar.jpg" alt=""><i></i></div>
           <div class="signal-copy"><p class="eyebrow light">MINIKUN PULSE</p><h2 id="attention-title">วันนี้เอาแค่สิ่งสำคัญให้เดินหน้าก็พอครับ</h2><p id="attention-copy">มินิคุงกำลังรวบรวมงาน เป้าหมาย และสิ่งที่รอการตัดสินใจให้ครับ</p></div>
@@ -227,7 +232,7 @@
         </nav>
         <section class="dashboard-grid" aria-label="ภาพรวมส่วนตัว">
           <article class="panel task-center-panel" id="task-center" data-cockpit-page="agent" aria-labelledby="task-center-title">
-            <div class="panel-heading"><div><p class="eyebrow">งานที่กำลังเดิน</p><h2 id="task-center-title">งานที่มินิคุงกำลังดูแล</h2></div><span class="count-badge" id="agent-run-count">—</span></div>
+            <div class="panel-heading"><div><p class="eyebrow" id="task-center-eyebrow">งานที่กำลังเดิน</p><h2 id="task-center-title">งานที่มินิคุงกำลังดูแล</h2></div><span class="count-badge" id="agent-run-count">—</span></div>
             <div class="agent-run-list" id="agent-run-list" aria-live="polite"><div class="loading-row"><span></span><div><i></i><i></i></div></div></div>
             <p class="empty-state hidden" id="agent-run-empty">ยังไม่มีงานเบื้องหลังครับ</p>
           </article>
@@ -350,7 +355,7 @@
   <dialog id="mobile-menu-dialog" class="mobile-menu-dialog" aria-labelledby="mobile-menu-title">
     <section class="mobile-menu-card">
       <header class="mobile-menu-heading"><img src="/cockpit/minikun-avatar.jpg" alt=""><div><strong id="mobile-menu-title">MINIKUN</strong><span><i class="status-dot"></i> พร้อมอยู่ข้างพี่สาว</span></div><button class="close-button" type="button" data-close-dialog aria-label="ปิดเมนู">×</button></header>
-      <button class="mobile-menu-new-chat" id="mobile-menu-new-chat" type="button"><span aria-hidden="true">＋</span> เริ่มแชตใหม่</button>
+      <button class="mobile-menu-new-chat" id="mobile-menu-new-chat" type="button"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg> เริ่มแชตใหม่</button>
       <nav class="mobile-menu-nav" aria-label="เมนูมือถือ">
         <button class="mobile-nav-item active" type="button" data-view-target="chat" aria-current="page"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 17.5 3.5 21l4.2-1.4c1.3.6 2.7.9 4.3.9 5.2 0 9.5-3.8 9.5-8.5S17.2 3.5 12 3.5 2.5 7.3 2.5 12c0 2.1.9 4 2.5 5.5Z"/><path d="M8 12h.01M12 12h.01M16 12h.01"/></svg><b>แชต</b></button>
         <button class="mobile-nav-item" type="button" data-view-target="studio"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7.5h4l1.4-2h5.2l1.4 2h4v11H4Z"/><circle cx="12" cy="13" r="3.5"/><path d="m18 3 .5 1.5L20 5l-1.5.5L18 7l-.5-1.5L16 5l1.5-.5Z"/></svg><b>สร้างภาพ</b></button>
@@ -363,7 +368,7 @@
         <ol class="conversation-list" data-conversation-list></ol>
         <p class="conversation-empty" data-conversation-empty>บทสนทนาจะซิงก์ข้ามอุปกรณ์ครับ</p>
       </section>
-      <footer class="mobile-menu-footer"><div class="privacy-note"><span class="status-dot"></span><span>LOCAL FIRST<small>ข้อมูลอยู่กับเรา</small></span></div><button id="mobile-menu-settings" type="button"><span aria-hidden="true">⚙</span> ตั้งค่า</button></footer>
+      <footer class="mobile-menu-footer"><div class="privacy-note"><span class="status-dot"></span><span>LOCAL FIRST<small>ข้อมูลอยู่กับเรา</small></span></div><button id="mobile-menu-settings" type="button"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 1.1 2.3 2.5.7.7 2.5L18.5 10l-1.8 1.9.4 2.5-2.3 1.1-.8 2.4H11l-.8-2.4-2.3-1.1.4-2.5L6.5 10l2.2-1.5.7-2.5 2.5-.7Z"/><circle cx="12" cy="11.5" r="2.4"/></svg> ตั้งค่า</button></footer>
     </section>
   </dialog>
   <dialog id="settings-dialog"><form method="dialog" class="dialog-card settings-card" id="settings-form"><div class="dialog-heading"><div><p class="eyebrow">DEVICE SYNC</p><h2>อุปกรณ์และการเชื่อมต่อ</h2></div><button class="close-button" type="button" data-close-dialog aria-label="ปิด">×</button></div><section class="device-sync-panel" aria-labelledby="device-sync-title"><div class="device-sync-heading"><div><strong id="device-sync-title">ซิงก์บทสนทนา</strong><small id="device-sync-copy">กำลังตรวจอุปกรณ์นี้…</small></div><span class="device-sync-state" id="device-sync-state">กำลังตรวจ</span></div><div class="pairing-actions"><button class="primary-button" id="create-pairing" type="button" disabled>เชื่อมต่ออุปกรณ์ใหม่</button></div><div class="pairing-card hidden" id="pairing-card"><img id="pairing-qr" alt="QR สำหรับจับคู่อุปกรณ์"><div><small>สแกนด้วยอุปกรณ์ใหม่</small><strong id="pairing-code">—</strong><button class="text-button" id="copy-pair-link" type="button">คัดลอกลิงก์</button><span id="pairing-expiry"></span></div></div><div class="paired-device-list" id="paired-device-list" aria-live="polite"></div></section><label>รูปแบบการคุยในบทสนทนานี้<select id="companion-mode"><option value="BALANCED">ปรับตามบริบทอัตโนมัติ</option><option value="COMPANION">คู่หู — ฟังและคุยอย่างอบอุ่น</option><option value="WORK">ทำงาน — เน้นผลลัพธ์และลงมือ</option><option value="FOCUS">โฟกัส — สั้นและทีละก้าว</option></select></label><details class="advanced-settings"><summary>การตั้งค่าขั้นสูง</summary><label>Owner ID<input id="owner-id" name="ownerId" value="default" autocomplete="off"></label><label>Personal token<input id="personal-token" name="token" type="password" autocomplete="off" placeholder="ไม่ต้องกรอก หากไม่ได้ตั้ง token"></label><label>โมเดลหลักจาก Ollama<select id="chat-model" name="model"><option value="">กำลังโหลด…</option></select></label></details><div class="dialog-actions"><button class="secondary-button" type="button" data-close-dialog>ปิด</button><button class="primary-button" value="default" id="save-settings">บันทึก</button></div></form></dialog>
@@ -376,6 +381,6 @@
   <dialog id="conversation-actions-dialog"><form method="dialog" class="dialog-card"><div class="dialog-heading"><div><p class="eyebrow">CONVERSATION</p><h2>จัดการบทสนทนา</h2></div><button class="close-button" type="button" data-close-dialog aria-label="ปิด">×</button></div><label>ชื่อบทสนทนา<input id="conversation-title-input" maxlength="160" autocomplete="off"></label><div class="conversation-action-grid"><button class="secondary-button" id="rename-conversation" type="button">เปลี่ยนชื่อ</button><button class="secondary-button" id="pin-conversation" type="button">ปักหมุด</button><button class="secondary-button" id="archive-conversation" type="button">เก็บเข้าคลัง</button><button class="secondary-button" id="duplicate-conversation" type="button">ทำสำเนา</button><button class="secondary-button" id="export-conversation" type="button">Export Markdown</button><button class="secondary-button" id="export-conversation-json" type="button">Export JSON</button><button class="danger-button" id="delete-conversation" type="button">ลบบทสนทนา</button></div></form></dialog>
   <script src="/cockpit/cockpit-chat-assets.js?v=20260828-storage1" defer></script>
   <script src="/cockpit/cockpit-markdown.js?v=20260829-markdown1" defer></script>
-  <script src="/cockpit/cockpit.js?v=20260907-background1" defer></script>
+  <script src="/cockpit/cockpit.js?v=20260911-responsive1" defer></script>
 </body>
 </html>

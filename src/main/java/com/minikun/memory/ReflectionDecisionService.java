@@ -32,7 +32,7 @@ public final class ReflectionDecisionService {
                 .filter(this::valid)
                 .map(candidate -> new AcceptedMemory(
                     ownerId, candidate.conversationId(), candidate.category(), candidate.content(),
-                    candidate.confidence(), candidate.reason(), MemorySource.LLM_EXTRACTION))
+                    candidate.confidence(), candidate.reason(), MemorySource.LLM_EXTRACTION, candidate.fact()))
                 .toList();
         increment(ACCEPTED, accepted.size());
         increment(REJECTED, candidates.size() - accepted.size());
@@ -51,12 +51,21 @@ public final class ReflectionDecisionService {
                 && candidate.conversationId() != null
                 && !candidate.conversationId().isBlank()
                 && candidate.category() != null
+                && !(candidate.category() == com.minikun.memory.model.MemoryCategory.PREFERENCE
+                    && MemoryPolicy.temporaryPreference(candidate.fact() == null ? candidate.content() : candidate.fact().evidence()))
+                && !(candidate.category() == com.minikun.memory.model.MemoryCategory.PREFERENCE
+                    && candidate.fact() == null && temporalWording(candidate.content()))
                 && candidate.content() != null
                 && !candidate.content().isBlank()
                 && Double.isFinite(candidate.confidence())
-                && candidate.confidence() >= 0.0
+                && candidate.confidence() >= (candidate.fact() == null ? 0.0 : 0.7)
                 && candidate.confidence() <= 1.0
                 && candidate.reason() != null
                 && !candidate.reason().isBlank();
+    }
+
+    private boolean temporalWording(String content) {
+        return content != null && content.toLowerCase(java.util.Locale.ROOT).matches(
+                ".*(เมื่อก่อน|แต่ก่อน|ตอนนี้|ไม่แล้ว|ไม่ชอบ.*แล้ว|เลิก|used to|no longer|anymore).*");
     }
 }

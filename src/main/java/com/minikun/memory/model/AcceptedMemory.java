@@ -9,10 +9,14 @@ public record AcceptedMemory(
         String content,
         double confidence,
     String reason,
-    MemorySource source) {
+    MemorySource source, TemporalFact fact) {
+    public AcceptedMemory(String ownerId, String conversationId, MemoryCategory category, String content,
+            double confidence, String reason, MemorySource source) {
+        this(ownerId, conversationId, category, content, confidence, reason, source, null);
+    }
     public AcceptedMemory(String conversationId, MemoryCategory category, String content,
             double confidence, String reason, MemorySource source) {
-        this(null, conversationId, category, content, confidence, reason, source);
+        this(null, conversationId, category, content, confidence, reason, source, null);
     }
 
     public AcceptedMemory {

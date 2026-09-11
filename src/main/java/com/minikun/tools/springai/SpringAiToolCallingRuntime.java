@@ -161,6 +161,12 @@ public final class SpringAiToolCallingRuntime {
             }
             ChatResponse finalResponse = response;
             agentRun.ifPresent(run -> executionTracker.complete(run.id(), responseText(finalResponse)));
+            Optional<String> notice = agentRun.flatMap(run -> executionTracker.completionNotice(run.id()));
+            if (notice.isPresent()) {
+                return new ChatResponse(List.of(new Generation(
+                        new AssistantMessage(responseText(response) + "\n\n" + notice.get()),
+                        response.getResult().getMetadata())), response.getMetadata());
+            }
             return response;
         } catch (RuntimeException exception) {
             agentRun.ifPresent(run -> executionTracker.fail(run.id(), exception.getClass().getSimpleName()));

@@ -36,7 +36,7 @@ public final class NtfyNotificationService implements NotificationTransport {
     }
 
     @Override
-    public void publish(NotificationChannel channel, String title, String message, int priority, String tags) {
+    public boolean publish(NotificationChannel channel, String title, String message, int priority, String tags) {
         Objects.requireNonNull(channel, "notification channel must not be null");
         Objects.requireNonNull(title, "notification title must not be null");
         Objects.requireNonNull(message, "notification message must not be null");
@@ -45,7 +45,7 @@ public final class NtfyNotificationService implements NotificationTransport {
         }
         if (!enabled) {
             LOGGER.info("process=notification event=skipped channel={} reason=disabled", channel);
-            return;
+            return false;
         }
         int safePriority = Math.max(1, Math.min(5, priority));
         HttpRequest.Builder request = HttpRequest.newBuilder()
@@ -66,6 +66,7 @@ public final class NtfyNotificationService implements NotificationTransport {
             }
             LOGGER.info("process=notification event=published channel={} status={} priority={}",
                     channel, response.statusCode(), safePriority);
+            return true;
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("ntfy notification was interrupted", exception);

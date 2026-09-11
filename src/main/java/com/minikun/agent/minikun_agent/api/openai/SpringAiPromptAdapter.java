@@ -33,6 +33,10 @@ final class SpringAiPromptAdapter {
         List<Message> messages = prompt.messages().stream()
                 .map(this::message)
                 .toList();
+        if (com.minikun.model.OllamaReasoning.qwen3Family(configuredModel)
+                && generationOptions.reasoning() == GenerationOptions.Reasoning.OFF) {
+            messages = appendNoThink(messages);
+        }
         return new Prompt(messages, chatOptions(
                 generationOptions, activeModel, configuredModel, ollamaContextSize));
     }
@@ -73,6 +77,7 @@ final class SpringAiPromptAdapter {
                     .minP(OLLAMA_MIN_P)
                     .repeatPenalty(OLLAMA_REPEAT_PENALTY)
                     .disableThinking();
+            applyReasoning(builder, configuredModel, generationOptions.reasoning());
             builder
                     .model(configuredModel)
                     .temperature(generationOptions.temperature())
@@ -91,6 +96,29 @@ final class SpringAiPromptAdapter {
             builder.stopSequences(generationOptions.stop());
         }
         return builder.build();
+    }
+
+    private void applyReasoning(OllamaChatOptions.Builder builder, String model, GenerationOptions.Reasoning effort) {
+        com.minikun.model.OllamaReasoning.apply(builder, model, effort);
+    }
+
+    private List<Message> appendNoThink(List<Message> messages) {
+        int lastUser = -1;
+        for (int index = 0; index < messages.size(); index++) {
+            if (messages.get(index) instanceof UserMessage) {
+                lastUser = index;
+            }
+        }
+        if (lastUser < 0) {
+            return messages;
+        }
+        List<Message> result = new java.util.ArrayList<>(messages);
+        UserMessage user = (UserMessage) result.get(lastUser);
+        String text = user.getText() == null ? "" : user.getText();
+        if (!text.contains("/no_think")) {
+            result.set(lastUser, user.mutate().text(text + "\n/no_think").build());
+        }
+        return List.copyOf(result);
     }
 
     private Message message(PromptMessage message) {

@@ -11,8 +11,15 @@ public record ChatCompletionRequest(
         Integer max_tokens,
         Integer max_completion_tokens,
         List<String> stop,
-        String owner_id
+        String owner_id,
+        com.minikun.model.GenerationOptions.Reasoning reasoning_effort
 ) {
+    public ChatCompletionRequest(String model, List<Message> messages, String conversationId,
+            Boolean stream, Double temperature, Integer maxTokens, Integer maxCompletionTokens,
+            List<String> stop, String ownerId) {
+        this(model, messages, conversationId, stream, temperature, maxTokens, maxCompletionTokens, stop, ownerId, null);
+    }
+
     public ChatCompletionRequest(String model, List<Message> messages, String conversationId,
             Boolean stream, Double temperature, Integer maxTokens, Integer maxCompletionTokens) {
         this(model, messages, conversationId, stream, temperature, maxTokens, maxCompletionTokens, null, null);

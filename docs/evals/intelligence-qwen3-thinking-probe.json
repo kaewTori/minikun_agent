@@ -1,0 +1,76 @@
+{
+  "model": "qwen3:4b",
+  "think": "on",
+  "tokens": 2048,
+  "suite": "intelligence.json",
+  "summary": {
+    "all": {
+      "total": 3,
+      "passed": 2,
+      "errors": 0,
+      "p50Ms": 28143,
+      "p95Ms": 62341
+    },
+    "thai-semantics": {
+      "total": 3,
+      "passed": 2,
+      "errors": 0,
+      "p50Ms": 28143,
+      "p95Ms": 62341
+    }
+  },
+  "results": [
+    {
+      "id": "thai-semantics-01",
+      "category": "thai-semantics",
+      "passed": true,
+      "answer": "B",
+      "reasoningInContent": false,
+      "rubric": "บริการช้า",
+      "usage": {
+        "eval_count": 429,
+        "prompt_eval_count": 168,
+        "load_duration": 121558583,
+        "eval_duration": 12265386000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 12435,
+      "firstAnswerMs": 12406
+    },
+    {
+      "id": "thai-semantics-02",
+      "category": "thai-semantics",
+      "passed": true,
+      "answer": "B",
+      "reasoningInContent": false,
+      "rubric": "ยังสรุปว่าเลิกชอบกาแฟไม่ได้",
+      "usage": {
+        "eval_count": 956,
+        "prompt_eval_count": 167,
+        "load_duration": 87352875,
+        "eval_duration": 28016488000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 28143,
+      "firstAnswerMs": 28113
+    },
+    {
+      "id": "thai-semantics-03",
+      "category": "thai-semantics",
+      "passed": false,
+      "answer": "",
+      "reasoningInContent": false,
+      "rubric": "ผู้พูด",
+      "usage": {
+        "eval_count": 2048,
+        "prompt_eval_count": 141,
+        "load_duration": 85855917,
+        "eval_duration": 62211324000,
+        "done_reason": "length"
+      },
+      "elapsedMs": 62341,
+      "firstAnswerMs": null
+    }
+  ],
+  "note": "Model-only synthetic benchmark; not a claim of persistent memory correctness or all Thai dialect coverage. First case includes cold-load cost. Thinking traces are not stored."
+}

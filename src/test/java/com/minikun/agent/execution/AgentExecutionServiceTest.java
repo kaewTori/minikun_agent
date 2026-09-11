@@ -42,7 +42,7 @@ class AgentExecutionServiceTest {
         service.complete(run.id(), "done");
 
         AgentExecutionService.AgentRunDetails details = service.details("owner-a", run.id());
-        assertEquals(AgentRunStatus.COMPLETED, details.run().status());
+        assertEquals(AgentRunStatus.UNVERIFIED, details.run().status());
         assertEquals(AgentStepStatus.COMPLETED, details.steps().get(0).status());
         assertEquals(2, details.steps().get(0).attempts());
     }
@@ -57,6 +57,16 @@ class AgentExecutionServiceTest {
         AgentExecutionService.AgentRunDetails details = service.details("owner-a", run.id());
         assertEquals(AgentRunStatus.WAITING_CONFIRMATION, details.run().status());
         assertEquals(AgentStepStatus.WAITING_CONFIRMATION, details.steps().get(0).status());
+        service.complete(run.id(), "model incorrectly said done");
+        assertEquals(AgentRunStatus.WAITING_CONFIRMATION, service.find("owner-a", run.id()).status());
+    }
+
+    @Test
+    void modelStoppingWithoutToolsDoesNotProvePlanCompletion() {
+        AgentRun run = start("owner-a");
+        service.complete(run.id(), "everything is done");
+        assertEquals(AgentRunStatus.UNVERIFIED, service.find("owner-a", run.id()).status());
+        assertTrue(service.completionNotice(run.id()).isPresent());
     }
 
     @Test

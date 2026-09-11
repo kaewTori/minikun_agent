@@ -34,6 +34,23 @@ import org.springframework.beans.factory.ObjectProvider;
 
 class ChatKnowledgeResolverResearchTest {
     @Test
+    void casualGreetingDoesNotSpendASearchDecisionOrRetrievalCall() {
+        ObjectProvider<MemoryRecallService> memory = mock(ObjectProvider.class);
+        com.minikun.search.SearchDecisionService decisions = mock(com.minikun.search.SearchDecisionService.class);
+        var resolver = new ChatKnowledgeResolver(memory, null, request -> { throw new AssertionError("unexpected search"); },
+                decisions, new DefaultSearchQueryPlanningService(), new DefaultSearchContextAwarenessService(),
+                new DefaultKnowledgeSelectionService(), new DefaultKnowledgeConsolidationService(),
+                new SearchSelectionSignalMapper(), null, null, null,
+                new ChatKnowledgeResolver.Configuration(true, Duration.ofSeconds(10), true, true, 8, 5, 5, 3,
+                        Duration.ofSeconds(30)));
+        var plan = new TurnPlanner(new com.minikun.model.CooperationRouter(), (TurnAmbiguityResolver) null)
+                .plan("สวัสดี", "", null, false, null, true);
+        var result = resolver.resolve(new ChatKnowledgeResolver.Request("สวัสดี", "greeting", null, "owner", false, "", plan));
+        assertFalse(result.searchContext().searchAttempted());
+        org.mockito.Mockito.verifyNoInteractions(memory, decisions);
+    }
+
+    @Test
     void continuesWhenTheSearchWorkerStopsResponding() throws Exception {
         CountDownLatch started = new CountDownLatch(1);
         CountDownLatch release = new CountDownLatch(1);

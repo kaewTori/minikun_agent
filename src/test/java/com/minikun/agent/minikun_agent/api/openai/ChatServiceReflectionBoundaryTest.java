@@ -86,7 +86,7 @@ class ChatServiceReflectionBoundaryTest {
                 new ChatMessage("user", "user"),
                 new ChatMessage("assistant", "assistant"))));
 
-        assertEquals(first, second);
+        assertEquals(first.orElseThrow().messages(), second.orElseThrow().messages());
         assertEquals("user", first.orElseThrow().messages().getFirst().content());
         org.junit.jupiter.api.Assertions.assertThrows(UnsupportedOperationException.class,
                 () -> first.orElseThrow().messages().add(null));

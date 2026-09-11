@@ -15,7 +15,7 @@ import com.minikun.memory.model.MemorySource;
 
 class MemoryRecallComponentsTest {
     @Test
-    void selectorOrdersAllCategoriesAndAppliesMaximumCount() {
+    void selectorPreservesRelevanceOrderBeforeApplyingMaximumCount() {
         Instant sameTime = Instant.parse("2026-08-01T00:00:00Z");
         Memory older = memory("00000000-0000-0000-0000-000000000003", MemoryCategory.PROFILE,
                 "older", sameTime.minusSeconds(1));
@@ -26,7 +26,7 @@ class MemoryRecallComponentsTest {
 
         List<Memory> selected = new MemorySelector(2).select(List.of(older, tieHigherId, tieLowerId));
 
-        assertEquals(List.of(tieLowerId, tieHigherId), selected);
+        assertEquals(List.of(older, tieHigherId), selected);
     }
 
     @Test
@@ -37,7 +37,7 @@ class MemoryRecallComponentsTest {
                 "Learn Java", Instant.now());
 
         assertEquals("", new MemoryFormatter(20).format(List.of()).content());
-        assertEquals("PROFILE: Lives in Bangkok (confidence=0.9, source=LLM_EXTRACTION, reason=user stated directly)", new MemoryFormatter(100)
+        assertEquals("PROFILE: Lives in Bangkok [legacy: validity unknown] (confidence=0.9, source=LLM_EXTRACTION, reason=user stated directly)", new MemoryFormatter(150)
                 .format(List.of(first, second)).content());
     }
 

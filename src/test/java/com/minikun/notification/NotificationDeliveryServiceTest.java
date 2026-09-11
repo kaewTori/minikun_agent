@@ -2,6 +2,11 @@ package com.minikun.notification;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.anyMap;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -11,6 +16,8 @@ import java.util.List;
 import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
+
+import com.minikun.sync.SyncEventBroker;
 
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 
@@ -25,7 +32,7 @@ class NotificationDeliveryServiceTest {
         RecordingStore store = new RecordingStore();
         SimpleMeterRegistry registry = new SimpleMeterRegistry();
         NotificationDeliveryService service = new NotificationDeliveryService(
-                (channel, title, message, priority, tags) -> { }, Optional.of(store),
+                (channel, title, message, priority, tags) -> true, Optional.of(store),
                 Clock.fixed(NOW, ZoneOffset.UTC), registry);
 
         service.publish(REQUEST);
@@ -67,10 +74,47 @@ class NotificationDeliveryServiceTest {
             }
         };
         NotificationDeliveryService service = new NotificationDeliveryService(
-                (channel, title, message, priority, tags) -> { }, Optional.of(brokenStore),
+                (channel, title, message, priority, tags) -> true, Optional.of(brokenStore),
                 Clock.fixed(NOW, ZoneOffset.UTC), new SimpleMeterRegistry());
 
         service.publish(REQUEST);
+    }
+
+    @Test
+    void prefersBrowserDeliveryWhenAClientIsConnected() {
+        RecordingStore store = new RecordingStore();
+        SyncEventBroker browserEvents = mock(SyncEventBroker.class);
+        when(browserEvents.publishNotification(eq("default"), anyMap())).thenReturn(true);
+        NotificationTransport ntfy = (channel, title, message, priority, tags) -> {
+            throw new AssertionError("ntfy should not be used when browser delivery succeeds");
+        };
+        NotificationDeliveryService service = new NotificationDeliveryService(
+                ntfy, Optional.of(store), Clock.fixed(NOW, ZoneOffset.UTC),
+                new SimpleMeterRegistry(), Optional.of(browserEvents));
+
+        service.publish(REQUEST);
+
+        verify(browserEvents).publishNotification(eq("default"), anyMap());
+        assertEquals(NotificationDeliveryStatus.DELIVERED, store.deliveries.getFirst().status());
+    }
+
+    @Test
+    void fallsBackToNtfyWhenNoBrowserClientIsConnected() {
+        SyncEventBroker browserEvents = mock(SyncEventBroker.class);
+        when(browserEvents.publishNotification(eq("default"), anyMap())).thenReturn(false);
+        NotificationTransport ntfy = mock(NotificationTransport.class);
+        when(ntfy.publish(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyInt(),
+                org.mockito.ArgumentMatchers.anyString())).thenReturn(true);
+        NotificationDeliveryService service = new NotificationDeliveryService(
+                ntfy, Optional.empty(), Clock.fixed(NOW, ZoneOffset.UTC),
+                new SimpleMeterRegistry(), Optional.of(browserEvents));
+
+        service.publish(REQUEST);
+
+        verify(ntfy).publish(NotificationChannel.REMINDER, REQUEST.title(), REQUEST.message(),
+                REQUEST.priority(), REQUEST.tags());
+        verify(browserEvents).publishNotification(eq("default"), anyMap());
     }
 
     private static final class RecordingStore implements NotificationDeliveryStore {

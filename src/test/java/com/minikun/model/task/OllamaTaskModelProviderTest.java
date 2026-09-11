@@ -29,7 +29,7 @@ class OllamaTaskModelProviderTest {
         server.expect(requestTo("http://ollama.test/v1/chat/completions"))
                 .andExpect(method(HttpMethod.POST))
                 .andExpect(content().json("""
-                        {"model":"qwen3.5:0.6b","messages":[{"role":"user","content":"Name this"}],
+                        {"model":"qwen3.5:0.6b","messages":[{"role":"user","content":"Name this\\n/no_think"}],
                         "stream":false,"max_tokens":32,"temperature":0.0}
                         """, false))
                 .andRespond(withSuccess("""
@@ -92,6 +92,23 @@ class OllamaTaskModelProviderTest {
                         """, false))
                 .andRespond(withSuccess("""
                         {"message":{"role":"assistant","content":"{\\"claims\\":[]}"}}
+                        """, MediaType.APPLICATION_JSON));
+
+        assertEquals("{\"claims\":[]}", provider.generate(new TaskModelRequest(
+                List.of(new TaskModelMessage("user", "Extract claims")), 64, 0.0,
+                TaskModelRequest.ResponseFormat.JSON_OBJECT)));
+        server.verify();
+    }
+
+    @Test
+    void stripsLeakedThinkingBeforeParsingNativeJson() {
+        RestClient.Builder builder = RestClient.builder().baseUrl("http://ollama.test/api/chat");
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        OllamaTaskModelProvider provider = new OllamaTaskModelProvider(
+                builder.build(), new ObjectMapper(), "qwen3.5:0.6b", Duration.ofSeconds(2), true);
+        server.expect(requestTo("http://ollama.test/api/chat"))
+                .andRespond(withSuccess("""
+                        {"message":{"role":"assistant","content":"<think>private</think>\\n{\\"claims\\":[]}"}}
                         """, MediaType.APPLICATION_JSON));
 
         assertEquals("{\"claims\":[]}", provider.generate(new TaskModelRequest(

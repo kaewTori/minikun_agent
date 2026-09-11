@@ -1,0 +1,59 @@
+{
+  "model": "hf.co/mradermacher/llama3.2-typhoon2-3b-GGUF:Q4_K_M",
+  "think": "off",
+  "tokens": 1024,
+  "suite": "intelligence.json",
+  "summary": {
+    "all": {
+      "total": 2,
+      "passed": 0,
+      "errors": 0,
+      "p50Ms": 26218.5,
+      "p95Ms": 28203
+    },
+    "thai-semantics": {
+      "total": 2,
+      "passed": 0,
+      "errors": 0,
+      "p50Ms": 26218.5,
+      "p95Ms": 28203
+    }
+  },
+  "results": [
+    {
+      "id": "thai-semantics-01",
+      "category": "thai-semantics",
+      "passed": false,
+      "answer": "[invalid answer format; content omitted]",
+      "reasoningInContent": false,
+      "rubric": "บริการช้า",
+      "usage": {
+        "eval_count": 1024,
+        "prompt_eval_count": 142,
+        "load_duration": 4004290417,
+        "eval_duration": 23878716000,
+        "done_reason": "length"
+      },
+      "elapsedMs": 28203,
+      "firstAnswerMs": 4325
+    },
+    {
+      "id": "thai-semantics-02",
+      "category": "thai-semantics",
+      "passed": false,
+      "answer": "[invalid answer format; content omitted]",
+      "reasoningInContent": false,
+      "rubric": "ยังสรุปว่าเลิกชอบกาแฟไม่ได้",
+      "usage": {
+        "eval_count": 1024,
+        "prompt_eval_count": 151,
+        "load_duration": 102881084,
+        "eval_duration": 23927121000,
+        "done_reason": "length"
+      },
+      "elapsedMs": 24234,
+      "firstAnswerMs": 307
+    }
+  ],
+  "note": "Model-only synthetic benchmark; not a claim of persistent memory correctness or all Thai dialect coverage. First case includes cold-load cost. Thinking traces are not stored."
+}

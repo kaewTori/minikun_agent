@@ -12,7 +12,11 @@ public record Memory(
         String content,
         Instant createdAt,
         double confidence,
-        String reason) {
+        String reason, TemporalFact fact, java.util.UUID supersedesId) {
+    public Memory(String ownerId, String conversationId, MemoryId id, MemoryCategory category, MemorySource source,
+            String content, Instant createdAt, double confidence, String reason) {
+        this(ownerId, conversationId, id, category, source, content, createdAt, confidence, reason, null, null);
+    }
     public Memory(MemoryId id, MemoryCategory category, MemorySource source, String content,
             Instant createdAt, double confidence, String reason) {
         this(null, null, id, category, source, content, createdAt, confidence, reason);
@@ -23,6 +27,10 @@ public record Memory(
         this(ownerId, null, id, category, source, content, createdAt, confidence, reason);
     }
 
+    public boolean currentAt(Instant now) {
+        return fact == null || (!(fact.validFrom() == null ? fact.recordedAt() : fact.validFrom()).isAfter(now)
+                && (fact.validTo() == null || fact.validTo().isAfter(now)));
+    }
     public Memory {
         if (ownerId != null && (ownerId.isBlank() || "*".equals(ownerId))) {
             throw new IllegalArgumentException("owner id must not be blank or wildcard");

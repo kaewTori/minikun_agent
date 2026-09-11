@@ -231,12 +231,15 @@ public final class DefaultAutonomousResearchService implements AutonomousResearc
         if (preferredDomains == null || preferredDomains.isEmpty()) return 0;
         try {
             String host = URI.create(Objects.requireNonNullElse(url, "")).getHost();
-            if (host == null) return 1;
+            if (host == null) return preferredDomains.size();
             String normalized = host.toLowerCase(Locale.ROOT);
-            return preferredDomains.stream().anyMatch(domain -> normalized.equals(domain)
-                    || normalized.endsWith("." + domain)) ? 0 : 1;
+            for (int index = 0; index < preferredDomains.size(); index++) {
+                String domain = preferredDomains.get(index).toLowerCase(Locale.ROOT);
+                if (normalized.equals(domain) || normalized.endsWith("." + domain)) return index;
+            }
+            return preferredDomains.size();
         } catch (RuntimeException exception) {
-            return 1;
+            return preferredDomains.size();
         }
     }
 

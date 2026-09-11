@@ -51,6 +51,17 @@ mkdir -p \
   "$HOME/Library/Logs/Minikun" \
   "$HOME/Library/LaunchAgents"
 
+# Credentials are declared in the private source launcher below. Remove
+# copies from previous runtime deployments so the launcher is the only
+# investment/Crawl4AI secret source.
+rm -f \
+  "$local_root/config/crawl4ai.token" \
+  "$local_root/config/investment/twelve-data.key" \
+  "$local_root/config/investment/alpaca-key-id" \
+  "$local_root/config/investment/alpaca-secret" \
+  "$local_root/config/investment/sec-user-agent"
+rmdir "$local_root/config/investment" 2>/dev/null || true
+
 /bin/sh "$app_root/deploy/setup-local-https.sh"
 
 staged_jar="$local_app/target/.minikun_agent-1.0.0.jar.$$"
@@ -59,17 +70,18 @@ cp "$app_root/target/minikun_agent-1.0.0.jar" "$staged_jar"
 mv "$staged_jar" "$local_app/target/minikun_agent-1.0.0.jar"
 trap - EXIT HUP INT TERM
 source_launcher="$workspace_root/java/script/minikun-agent.sh"
-# The legacy shared launcher contains an environment-file loader. Deploy only
-# its stable bootstrap, explicit runtime configuration, and the narrow
-# Crawl4AI token loader. Preserve Tavily's explicit key export even though it
-# appears immediately before the MCS_ROOT section.
+# The shared launcher contains legacy environment loading. Deploy only its
+# stable bootstrap, explicit runtime configuration, and the investment/Crawl4AI
+# credential exports kept in that launcher. Preserve Tavily's explicit key
+# export even though it appears immediately before the MCS_ROOT section.
 staged_launcher="$local_script/.minikun-agent.sh.$$"
 trap 'rm -f "$staged_launcher"' EXIT HUP INT TERM
 {
   sed -n '1,7p' "$source_launcher"
   sed -n '/^export MINIKUN_SEARCH_TAVILY_API_KEY=/p' "$source_launcher"
+  sed -n '/^export MCS_ROOT/p' "$source_launcher"
   sed -n '/^export MCS_ROOT/,$p' "$source_launcher" \
-    | sed '/^export MINIKUN_SEARCH_TAVILY_API_KEY=/d'
+    | sed '1d;/^export MINIKUN_SEARCH_TAVILY_API_KEY=/d'
 } > "$staged_launcher"
 mv "$staged_launcher" "$local_script/minikun-agent.sh"
 trap - EXIT HUP INT TERM

@@ -1,7 +1,6 @@
 package com.minikun.tools;
 
 import com.minikun.agent.execution.AgentExecutionService;
-import com.minikun.agent.execution.AgentExecutionStep;
 import com.minikun.agent.minikun_agent.conversation.ConversationId;
 import com.minikun.planner.PendingPlannerConfirmation;
 import com.minikun.planner.PlannerConfirmationService;
@@ -79,19 +78,14 @@ public final class AgentRiskConfirmationRouter implements ToolRequestRouter {
             return executor.execute(new ToolCallContext(conversationId, callId, ownerId),
                     new ToolCall(callId, toolName, arguments));
         }
-        AgentExecutionStep attempt = executions.beginStep(runId.get(), callId, toolName, arguments);
-        while (true) {
-            ToolResult result = executor.execute(new ToolCallContext(conversationId, callId, ownerId),
-                    new ToolCall(callId, toolName, arguments));
-            boolean retry = executions.shouldRetry(result, attempt.attempts());
-            executions.finishStep(runId.get(), callId, result, retry);
-            if (!retry) {
-                if (result.success()) executions.markResumed(runId.get(), "completed after explicit risk review");
-                else executions.fail(runId.get(), result.error());
-                return result;
-            }
-            attempt = executions.beginStep(runId.get(), callId, toolName, arguments);
-        }
+        executions.beginStep(runId.get(), callId, toolName, arguments);
+        ToolResult result = executor.execute(new ToolCallContext(conversationId, callId, ownerId),
+                new ToolCall(callId, toolName, arguments));
+        // A confirmed write may have taken effect even when its response failed.
+        executions.finishStep(runId.get(), callId, result, false);
+        if (result.success()) executions.markResumed(runId.get(), "completed after explicit risk review");
+        else executions.fail(runId.get(), result.error());
+        return result;
     }
 
     private Optional<UUID> removeUuid(Map<String, Object> arguments, String key) {

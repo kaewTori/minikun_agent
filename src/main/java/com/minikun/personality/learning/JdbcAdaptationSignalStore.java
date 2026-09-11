@@ -53,6 +53,11 @@ public final class JdbcAdaptationSignalStore implements AdaptationSignalStore {
     }
 
     @Override
+    public void deleteDimension(String ownerId, String dimension) {
+        jdbc.update("DELETE FROM minikun_adaptation_signal WHERE owner_id = ? AND dimension = ?", ownerId, dimension);
+    }
+
+    @Override
     public int deleteAll(String ownerId) {
         return jdbc.update("DELETE FROM minikun_adaptation_signal WHERE owner_id = ?", ownerId);
     }

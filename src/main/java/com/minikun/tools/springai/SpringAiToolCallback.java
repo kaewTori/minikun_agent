@@ -91,6 +91,11 @@ public final class SpringAiToolCallback implements ToolCallback {
             AgentExecutionStep step = runId.map(id -> executionTracker.beginStep(
                     id, toolCallId, tool.definition().name(), arguments)).orElse(null);
             ToolResult result;
+            ToolResult blocked = com.minikun.tools.BackgroundToolScope.guard(tool.requiresExplicitConfirmation(arguments));
+            if (blocked != null) {
+                if (runId.isPresent()) executionTracker.finishStep(runId.get(), toolCallId, blocked, false);
+                return objectMapper.writeValueAsString(modelFacingResult(blocked));
+            }
             if (genericRiskConfirmation) {
                 result = createRiskConfirmation(conversationValue, ownerValue, toolCallId, runId, arguments);
                 if (runId.isPresent()) executionTracker.finishStep(runId.get(), toolCallId, result, false);

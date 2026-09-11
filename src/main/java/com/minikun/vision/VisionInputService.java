@@ -24,6 +24,8 @@ import org.springframework.util.MimeType;
 import org.springframework.util.MimeTypeUtils;
 
 import com.minikun.agent.minikun_agent.api.openai.dto.Message;
+import com.minikun.visual.GeneratedImageStore;
+import com.minikun.visual.ImageGenerationException;
 
 /** Resolves untrusted OpenAI image_url parts into bounded in-memory Spring AI media. */
 @Service
@@ -38,6 +40,7 @@ public final class VisionInputService {
     private final boolean allowHttp;
     private final Duration readTimeout;
     private final HttpClient httpClient;
+    private final GeneratedImageStore generatedImageStore;
 
     public VisionInputService(
             @Value("${minikun.vision.enabled:true}") boolean enabled,
@@ -46,11 +49,13 @@ public final class VisionInputService {
             @Value("${minikun.vision.remote-url.enabled:true}") boolean remoteUrlsEnabled,
             @Value("${minikun.vision.remote-url.allow-http:false}") boolean allowHttp,
             @Value("${minikun.vision.connect-timeout:PT5S}") Duration connectTimeout,
-            @Value("${minikun.vision.read-timeout:PT15S}") Duration readTimeout) {
+            @Value("${minikun.vision.read-timeout:PT15S}") Duration readTimeout,
+            GeneratedImageStore generatedImageStore) {
         if (maxImages < 1 || maxImageBytes < 1) {
             throw new IllegalArgumentException("vision image limits must be positive");
         }
         this.enabled = enabled;
+        this.generatedImageStore = generatedImageStore;
         this.maxImages = maxImages;
         this.maxImageBytes = maxImageBytes;
         this.remoteUrlsEnabled = remoteUrlsEnabled;
@@ -99,6 +104,17 @@ public final class VisionInputService {
     private ResolvedImage resolve(String source) {
         if (source.startsWith("data:")) {
             return resolveDataUrl(source);
+        }
+        if (source.startsWith("/v1/images/generated/")) {
+            try {
+                var image = generatedImageStore.read(source.substring("/v1/images/generated/".length()));
+                byte[] bytes = image.bytes();
+                validateMimeType(image.contentType());
+                validateBytes(image.contentType(), bytes);
+                return new ResolvedImage(image.contentType(), bytes);
+            } catch (ImageGenerationException exception) {
+                throw new VisionInputException(exception.getMessage(), exception);
+            }
         }
         if (!remoteUrlsEnabled) {
             throw new VisionInputException("remote image URLs are disabled");

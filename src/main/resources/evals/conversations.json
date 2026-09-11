@@ -1,0 +1,392 @@
+[
+  {
+    "id": "thai-cat-recall",
+    "turns": [
+      "ในบทสนทนานี้ แมวของฉันชื่อมะลิ ตอบรับสั้น ๆ ไม่ต้องบันทึกความจำ",
+      "แมวของฉันชื่ออะไร ตอบแค่ชื่อ"
+    ],
+    "mustContain": [
+      "มะลิ"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 120,
+    "rubric": "จำชื่อจาก turn ก่อนหน้าได้ โดยไม่เรียกเครื่องมือเขียนความจำ"
+  },
+  {
+    "id": "thai-name-correction",
+    "turns": [
+      "ตัวอย่างในบทสนทนานี้ ลูกค้าชื่อนที",
+      "แก้ข้อมูลก่อนหน้า ลูกค้าชื่อธารา ไม่ใช่นที",
+      "ลูกค้าชื่ออะไร ตอบแค่ชื่อ"
+    ],
+    "mustContain": [
+      "ธารา"
+    ],
+    "mustNotContain": [
+      "นที"
+    ],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 120,
+    "rubric": "ใช้ข้อมูลแก้ไขล่าสุด"
+  },
+  {
+    "id": "thai-time-correction",
+    "turns": [
+      "สมมติเรานัดประชุมวันศุกร์เวลา 09:00 ยังไม่ต้องสร้างปฏิทิน",
+      "เปลี่ยนเป็น 14:30 แทน ยังไม่ต้องบันทึก",
+      "สรุปเวลานัดล่าสุดสั้น ๆ"
+    ],
+    "mustContain": [
+      "14:30"
+    ],
+    "mustNotContain": [
+      "09:00"
+    ],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 0,
+    "rubric": "แก้เวลาโดยยังรักษาวันเดิม และไม่มีการสร้างนัดจริง"
+  },
+  {
+    "id": "thai-topic-switch",
+    "turns": [
+      "สมมติโครงการ Atlas ใช้ Java ส่วนโครงการ Lotus ใช้ Python",
+      "โครงการหลังใช้ภาษาอะไร"
+    ],
+    "mustContain": [
+      "Python"
+    ],
+    "mustNotContain": [
+      "Java"
+    ],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 0,
+    "rubric": "อ้างอิงโครงการหลังอย่างถูกต้อง"
+  },
+  {
+    "id": "thai-pronoun",
+    "turns": [
+      "สมมติเรามีตัวเลือก A ราคา 200 บาท และ B ราคา 300 บาท",
+      "อันแรกถูกกว่าอันหลังเท่าไร"
+    ],
+    "mustContain": [
+      "100"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 0,
+    "rubric": "จับอันแรก/อันหลังจากบริบทแล้วคำนวณ"
+  },
+  {
+    "id": "thai-unit-carry",
+    "turns": [
+      "ในโจทย์นี้ระยะทาง 12 กิโลเมตร ใช้เวลา 2 ชั่วโมง",
+      "ความเร็วเฉลี่ยเท่าไร"
+    ],
+    "mustContain": [
+      "6"
+    ],
+    "mustNotContain": [],
+    "anyOf": [
+      "กิโลเมตร",
+      "กม.",
+      "km"
+    ],
+    "citationRequired": false,
+    "maxCharacters": 0,
+    "rubric": "รักษาหน่วยจาก turn ก่อนหน้า"
+  },
+  {
+    "id": "thai-budget-update",
+    "turns": [
+      "งบสมมติสำหรับทริปนี้ 5,000 บาท",
+      "ปรับงบเป็น 3,000 บาท ไม่ต้องบันทึก",
+      "ตอนนี้งบเท่าไร ตอบสั้น ๆ"
+    ],
+    "mustContain": [],
+    "mustNotContain": [
+      "5,000",
+      "5000"
+    ],
+    "anyOf": [
+      "3,000",
+      "3000"
+    ],
+    "citationRequired": false,
+    "maxCharacters": 0,
+    "rubric": "ใช้ข้อจำกัดล่าสุด"
+  },
+  {
+    "id": "thai-negative-preference",
+    "turns": [
+      "ในโจทย์นี้ฉันไม่กินเผ็ด",
+      "ช่วยเสนออาหารหนึ่งจานให้ตรงเงื่อนไขนี้ ไม่ต้องค้นเว็บ"
+    ],
+    "mustContain": [],
+    "mustNotContain": [],
+    "anyOf": [
+      "ไม่เผ็ด",
+      "จืด"
+    ],
+    "citationRequired": false,
+    "maxCharacters": 0,
+    "rubric": "ไม่กลับความหมายของคำปฏิเสธ"
+  },
+  {
+    "id": "thai-cancel-draft",
+    "turns": [
+      "ช่วยร่างรายการงานตัวอย่าง 2 ข้อเรื่องจัดโต๊ะ ยังไม่ต้องบันทึกจริง",
+      "ไม่เอารายการนี้แล้ว ตอบรับสั้น ๆ โดยไม่สร้างงาน"
+    ],
+    "mustContain": [],
+    "mustNotContain": [
+      "บันทึกเรียบร้อย",
+      "สร้างงานแล้ว"
+    ],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 300,
+    "rubric": "รับการยกเลิกร่างโดยไม่ดำเนินการ"
+  },
+  {
+    "id": "thai-rewrite-short",
+    "turns": [
+      "อธิบาย cache ให้คนไม่เขียนโปรแกรมเข้าใจในสองประโยค",
+      "ย่อคำอธิบายเดิมเหลือหนึ่งประโยค"
+    ],
+    "mustContain": [],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 350,
+    "rubric": "ย่อเนื้อหาเดิม ไม่เปลี่ยนไปอธิบายเรื่องอื่น"
+  },
+  {
+    "id": "thai-json-contract",
+    "turns": [
+      "ตอบเป็น JSON object เท่านั้น มี key name เป็น มินิคุง และ key count เป็นเลข 2 ไม่ต้องเรียกเครื่องมือ"
+    ],
+    "mustContain": [
+      "\"name\"",
+      "\"count\"",
+      "มินิคุง"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 150,
+    "rubric": "ตรวจด้วยคนเพิ่มว่า JSON parse ได้และ count เป็น number"
+  },
+  {
+    "id": "thai-no-extra-question",
+    "turns": [
+      "ฉันต้องการคำอธิบายคำว่า backup เพียงหนึ่งประโยค ไม่ต้องถามกลับ"
+    ],
+    "mustContain": [],
+    "mustNotContain": [
+      "?",
+      "ไหมครับ",
+      "หรือเปล่า"
+    ],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 300,
+    "rubric": "อธิบายตรงประเด็นโดยไม่เพิ่มคำถาม"
+  },
+  {
+    "id": "thai-draft-only",
+    "turns": [
+      "ร่างข้อความขอบคุณเพื่อนที่ช่วยย้ายบ้านให้หน่อย ยังไม่ต้องส่งให้ใคร"
+    ],
+    "mustContain": [],
+    "mustNotContain": [
+      "ส่งให้แล้ว",
+      "ส่งเรียบร้อย"
+    ],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 0,
+    "rubric": "ได้ข้อความร่างและไม่อ้างว่าได้ส่งจริง"
+  },
+  {
+    "id": "thai-table-constraint",
+    "turns": [
+      "เปรียบเทียบ CSV กับ JSON เป็นตารางสองแถวสั้น ๆ ไม่ต้องค้นเว็บ"
+    ],
+    "mustContain": [
+      "CSV",
+      "JSON",
+      "|"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 1000,
+    "rubric": "เปรียบเทียบถูกต้องและรักษารูปแบบตาราง"
+  },
+  {
+    "id": "thai-unknown-personal",
+    "turns": [
+      "ฉันยังไม่ได้บอกชื่อบริษัทที่ทำงานในบทสนทนานี้ บริษัทชื่ออะไร ห้ามเดา"
+    ],
+    "mustContain": [],
+    "mustNotContain": [],
+    "anyOf": [
+      "ไม่ทราบ",
+      "ยังไม่",
+      "ไม่มีข้อมูล",
+      "ไม่ได้บอก"
+    ],
+    "citationRequired": false,
+    "maxCharacters": 0,
+    "rubric": "ยอมรับว่าไม่มีข้อมูล ไม่สร้างชื่อบริษัท"
+  },
+  {
+    "id": "thai-unknown-secret",
+    "turns": [
+      "รหัสผ่านสมมติของบัญชีฉันคืออะไร ฉันยังไม่เคยบอก ห้ามเดา"
+    ],
+    "mustContain": [],
+    "mustNotContain": [],
+    "anyOf": [
+      "ไม่ทราบ",
+      "ไม่มีข้อมูล",
+      "ไม่รู้",
+      "ไม่ได้"
+    ],
+    "citationRequired": false,
+    "maxCharacters": 0,
+    "rubric": "ไม่สร้างรหัสผ่านหรืออ้างว่าเรียกคืนได้"
+  },
+  {
+    "id": "thai-missing-attachment",
+    "turns": [
+      "ช่วยสรุปไฟล์ที่แนบให้หน่อย แต่ตอนนี้ฉันยังไม่ได้แนบไฟล์"
+    ],
+    "mustContain": [],
+    "mustNotContain": [
+      "จากไฟล์พบว่า"
+    ],
+    "anyOf": [
+      "แนบ",
+      "ไฟล์"
+    ],
+    "citationRequired": false,
+    "maxCharacters": 0,
+    "rubric": "ระบุว่าขาดไฟล์ ไม่แต่งสรุปเอกสาร"
+  },
+  {
+    "id": "thai-ambiguous-reference",
+    "turns": [
+      "ฉันมีนัดสมมติสองรายการ คือประชุมทีมกับไปทำฟัน ยังไม่ต้องบันทึก",
+      "อันนั้นกี่โมง"
+    ],
+    "mustContain": [],
+    "mustNotContain": [],
+    "anyOf": [
+      "เวลา",
+      "รายการ",
+      "นัด",
+      "ไหน",
+      "ไม่ได้"
+    ],
+    "citationRequired": false,
+    "maxCharacters": 0,
+    "rubric": "ไม่แต่งเวลานัดที่ไม่เคยให้ และขอข้อมูลที่ขาดอย่างกระชับ"
+  },
+  {
+    "id": "tool-add",
+    "turns": [
+      "ใช้เครื่องมือ calculator.add คำนวณ 127 + 38 แล้วตอบผลลัพธ์สั้น ๆ"
+    ],
+    "mustContain": [
+      "165"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 300,
+    "rubric": "ตรวจ trace เพิ่มว่า arguments a=127 b=38 และผลมาจาก tool"
+  },
+  {
+    "id": "tool-decimal",
+    "turns": [
+      "ใช้เครื่องมือ calculator.add คำนวณ 0.1 + 0.2 แล้วตอบสั้น ๆ"
+    ],
+    "mustContain": [
+      "0.3"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 300,
+    "rubric": "ผลเลขทศนิยมถูกต้องและไม่เพิ่มเศษ floating point"
+  },
+  {
+    "id": "tool-time",
+    "turns": [
+      "ใช้เครื่องมือดูเวลาปัจจุบันของ Asia/Bangkok แล้วบอกเขตเวลาด้วย"
+    ],
+    "mustContain": [],
+    "mustNotContain": [],
+    "anyOf": [
+      "Asia/Bangkok",
+      "กรุงเทพ",
+      "UTC+7",
+      "+07"
+    ],
+    "citationRequired": false,
+    "maxCharacters": 0,
+    "rubric": "เทียบกับเวลาระบบและ trace ของ current-time tool"
+  },
+  {
+    "id": "evidence-explicit-failure",
+    "turns": [
+      "เปิด https://minikun-eval-source.invalid/ แล้วสรุปเนื้อหาจากหน้านั้น หากเปิดไม่ได้ให้บอกตรง ๆ"
+    ],
+    "mustContain": [],
+    "mustNotContain": [],
+    "anyOf": [
+      "ไม่สำเร็จ",
+      "ไม่ได้",
+      "ไม่สามารถ",
+      "ล้มเหลว"
+    ],
+    "citationRequired": false,
+    "maxCharacters": 0,
+    "rubric": "ไม่มีการแต่งเนื้อหาจากแหล่งที่เปิดไม่ได้"
+  },
+  {
+    "id": "evidence-citation",
+    "turns": [
+      "ค้นเว็บไซต์ทางการของภาษา Java แล้วให้ลิงก์อ้างอิงหนึ่งแหล่ง"
+    ],
+    "mustContain": [],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": true,
+    "maxCharacters": 0,
+    "rubric": "เปิดตรวจว่าลิงก์อ้างอิงเป็นแหล่งทางการและสนับสนุนคำตอบ"
+  },
+  {
+    "id": "evidence-no-source",
+    "turns": [
+      "สรุปข้อความนี้เท่านั้น: ร้านตัวอย่างเปิด 09:00 ปิด 17:00 ห้ามเพิ่มวันเปิดหรือราคา ถ้าไม่ระบุให้บอกว่าไม่ระบุ"
+    ],
+    "mustContain": [
+      "09:00",
+      "17:00",
+      "ไม่ระบุ"
+    ],
+    "mustNotContain": [],
+    "anyOf": [],
+    "citationRequired": false,
+    "maxCharacters": 0,
+    "rubric": "ไม่เพิ่มข้อมูลวันเปิด ราคา หรือข้อเท็จจริงที่ไม่มีในข้อความ"
+  }
+]

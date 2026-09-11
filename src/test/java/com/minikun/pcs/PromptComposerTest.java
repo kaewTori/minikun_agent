@@ -277,6 +277,27 @@ class PromptComposerTest {
         assertEquals("hello", result.prompt().messages().get(1).content());
         }
 
+    @Test
+    void keepsRenderedBrowserEvidenceWhenKnowledgeBudgetIsTooSmall() {
+        KnowledgeCandidate browser = new KnowledgeCandidate(
+                "browser-0", KnowledgeSource.BROWSER,
+                "Source URL: https://www.facebook.com/share/p/test\n"
+                        + "Rendered page content:\nactual post ".repeat(500),
+                0, "https://www.facebook.com/share/p/test");
+        ContextBudget budget = budgetWithAllocations(
+                100_000, 100_000, 100_000, 100_000, 1, 100_000, 100_000);
+        PromptRequest request = new PromptRequest(
+                character(), new RuntimeContext("now"), null, null, List.of(),
+                new UserMessage("summarize this post"), SearchSelectionSignals.EMPTY,
+                SearchContext.EMPTY, new KnowledgeSelection(List.of(browser), false),
+                KnowledgeConsolidation.EMPTY, budget);
+
+        PromptCompositionResult result = new PromptComposer().composeWithDiagnostics(request);
+
+        assertTrue(result.contextProcessingResult().orElseThrow().diagnostics().requiredOverflow());
+        assertTrue(result.prompt().messages().getFirst().content().contains("actual post"));
+    }
+
         @Test
         void oversizedConversationIsWindowedToRecentTurnsBeforeSelection() {
         String conversation = "user: oldest-" + "ก".repeat(180)

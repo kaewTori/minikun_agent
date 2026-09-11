@@ -248,7 +248,8 @@ class ChatServiceChatOrchestrationTest {
         when(chatModel.call(any(Prompt.class))).thenReturn(response("เห็นภาพแล้วครับ"));
         ChatService service = service(chatModel, conversation);
         setField(service, "visionInputService", new VisionInputService(
-                true, 3, 1024, true, false, Duration.ofSeconds(1), Duration.ofSeconds(1)));
+                true, 3, 1024, true, false, Duration.ofSeconds(1), Duration.ofSeconds(1),
+                new GeneratedImageStore(temporaryDirectory, 1024, Clock.systemUTC())));
         ChatCompletionRequest request = new ObjectMapper().readValue("""
                 {"model":"mini-kun","conversation_id":"vision-test","stream":false,"messages":[
                   {"role":"user","content":[
@@ -293,7 +294,8 @@ class ChatServiceChatOrchestrationTest {
                 imageTool, true, 2000, visualPlan(),
                 new InMemoryCharacterVisualMemory(), 3));
         setField(service, "visionInputService", new VisionInputService(
-                true, 3, 1024, true, false, Duration.ofSeconds(1), Duration.ofSeconds(1)));
+                true, 3, 1024, true, false, Duration.ofSeconds(1), Duration.ofSeconds(1),
+                new GeneratedImageStore(temporaryDirectory, 1024, Clock.systemUTC())));
 
         ChatCompletionRequest request = new ObjectMapper().readValue("""
                 {"model":"mini-kun","conversation_id":"reference-image","stream":false,"messages":[

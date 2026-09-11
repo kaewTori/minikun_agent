@@ -34,9 +34,17 @@ public record MemoryPolicy(
                 && hasContextForShortContent(candidate.content(), conversation);
     }
 
+    /** Explicit turn-only scope must never become a lasting preference, even if the extractor says otherwise. */
+    public static boolean temporaryPreference(String evidence) {
+        return evidence != null && java.util.regex.Pattern.compile(
+                "(?:แค่|เฉพาะ)(?:วันนี้|ครั้งนี้|คราวนี้|มื้อนี้|คำตอบนี้)|(?:วันนี้|ครั้งนี้|มื้อนี้).*(?:ขอ|ไม่เอา|ไม่ต้อง)"
+                + "|(?:ขอ|ไม่เอา|ไม่ต้อง).*(?:วันนี้|ครั้งนี้|มื้อนี้)|for this (?:answer|turn|meal)|today only|just (?:today|this time)",
+                java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.DOTALL).matcher(evidence).find();
+    }
+
     private boolean isTemporary(String content) {
         String normalized = content.toLowerCase(Locale.ROOT);
-        return normalized.matches(".*\\b(today|tonight|this week|for now|ชั่วคราว|วันนี้|คืนนี้)\\b.*");
+        return normalized.matches(".*\\b(today|tonight|this week|for now|just this time|ชั่วคราว|วันนี้|คืนนี้|ครั้งนี้|คราวนี้|มื้อนี้)\\b.*");
     }
 
     private boolean isQuestionOrRequest(String content) {

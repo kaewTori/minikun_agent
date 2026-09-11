@@ -1,0 +1,1671 @@
+{
+  "model": "hf.co/empero-ai/Qwen3.8-2B-Distill-GGUF:Q6_K",
+  "think": "on",
+  "tokens": 1024,
+  "suite": "intelligence.json",
+  "summary": {
+    "all": {
+      "total": 96,
+      "passed": 63,
+      "errors": 0,
+      "p50Ms": 2503.0,
+      "p95Ms": 3938
+    },
+    "reasoning": {
+      "total": 32,
+      "passed": 22,
+      "errors": 0,
+      "p50Ms": 2257.5,
+      "p95Ms": 4002
+    },
+    "temporal-memory": {
+      "total": 32,
+      "passed": 20,
+      "errors": 0,
+      "p50Ms": 2489.0,
+      "p95Ms": 3394
+    },
+    "thai-semantics": {
+      "total": 32,
+      "passed": 21,
+      "errors": 0,
+      "p50Ms": 2679.0,
+      "p95Ms": 4056
+    }
+  },
+  "results": [
+    {
+      "id": "thai-semantics-01",
+      "category": "thai-semantics",
+      "passed": false,
+      "answer": "C",
+      "reasoningInContent": false,
+      "rubric": "บริการช้า",
+      "usage": {
+        "eval_count": 148,
+        "prompt_eval_count": 91,
+        "load_duration": 169213791,
+        "eval_duration": 3059842000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 3319,
+      "firstAnswerMs": 3299
+    },
+    {
+      "id": "thai-semantics-02",
+      "category": "thai-semantics",
+      "passed": true,
+      "answer": "B",
+      "reasoningInContent": false,
+      "rubric": "ยังสรุปว่าเลิกชอบกาแฟไม่ได้",
+      "usage": {
+        "eval_count": 100,
+        "prompt_eval_count": 94,
+        "load_duration": 136918125,
+        "eval_duration": 2061496000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 2284,
+      "firstAnswerMs": 2258
+    },
+    {
+      "id": "thai-semantics-03",
+      "category": "thai-semantics",
+      "passed": true,
+      "answer": "A",
+      "reasoningInContent": false,
+      "rubric": "ผู้พูด",
+      "usage": {
+        "eval_count": 59,
+        "prompt_eval_count": 80,
+        "load_duration": 134374542,
+        "eval_duration": 1213629000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 1434,
+      "firstAnswerMs": 1413
+    },
+    {
+      "id": "thai-semantics-04",
+      "category": "thai-semantics",
+      "passed": false,
+      "answer": "B",
+      "reasoningInContent": false,
+      "rubric": "ความชอบต่อเนื่อง",
+      "usage": {
+        "eval_count": 126,
+        "prompt_eval_count": 85,
+        "load_duration": 135745333,
+        "eval_duration": 2585484000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 2806,
+      "firstAnswerMs": 2780
+    },
+    {
+      "id": "thai-semantics-05",
+      "category": "thai-semantics",
+      "passed": true,
+      "answer": "C",
+      "reasoningInContent": false,
+      "rubric": "ไม่ควร",
+      "usage": {
+        "eval_count": 109,
+        "prompt_eval_count": 83,
+        "load_duration": 137492125,
+        "eval_duration": 2267949000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 2488,
+      "firstAnswerMs": 2468
+    },
+    {
+      "id": "thai-semantics-06",
+      "category": "thai-semantics",
+      "passed": false,
+      "answer": "B",
+      "reasoningInContent": false,
+      "rubric": "ร่าง B",
+      "usage": {
+        "eval_count": 69,
+        "prompt_eval_count": 90,
+        "load_duration": 136091125,
+        "eval_duration": 1438863000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 1660,
+      "firstAnswerMs": 1640
+    },
+    {
+      "id": "thai-semantics-07",
+      "category": "thai-semantics",
+      "passed": true,
+      "answer": "C",
+      "reasoningInContent": false,
+      "rubric": "พักไว้และไม่ส่ง",
+      "usage": {
+        "eval_count": 91,
+        "prompt_eval_count": 82,
+        "load_duration": 135014209,
+        "eval_duration": 1870930000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 2082,
+      "firstAnswerMs": 2062
+    },
+    {
+      "id": "thai-semantics-08",
+      "category": "thai-semantics",
+      "passed": true,
+      "answer": "C",
+      "reasoningInContent": false,
+      "rubric": "ยังไม่อนุญาต",
+      "usage": {
+        "eval_count": 172,
+        "prompt_eval_count": 86,
+        "load_duration": 135608708,
+        "eval_duration": 3549834000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 3769,
+      "firstAnswerMs": 3747
+    },
+    {
+      "id": "thai-semantics-09",
+      "category": "thai-semantics",
+      "passed": false,
+      "answer": "[invalid answer format; content omitted]",
+      "reasoningInContent": false,
+      "rubric": "ยังไม่ลืมจริงในจังหวะนั้น",
+      "usage": {
+        "eval_count": 149,
+        "prompt_eval_count": 86,
+        "load_duration": 134351833,
+        "eval_duration": 3071233000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 3292,
+      "firstAnswerMs": 3224
+    },
+    {
+      "id": "thai-semantics-10",
+      "category": "thai-semantics",
+      "passed": false,
+      "answer": "[invalid answer format; content omitted]",
+      "reasoningInContent": false,
+      "rubric": "อยากทำได้แต่มีข้อจำกัด",
+      "usage": {
+        "eval_count": 155,
+        "prompt_eval_count": 85,
+        "load_duration": 135541708,
+        "eval_duration": 3191223000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 3409,
+      "firstAnswerMs": 3349
+    },
+    {
+      "id": "thai-semantics-11",
+      "category": "thai-semantics",
+      "passed": true,
+      "answer": "C",
+      "reasoningInContent": false,
+      "rubric": "เสนอให้ตรวจงาน",
+      "usage": {
+        "eval_count": 101,
+        "prompt_eval_count": 95,
+        "load_duration": 133397125,
+        "eval_duration": 2076931999,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 2298,
+      "firstAnswerMs": 2278
+    },
+    {
+      "id": "thai-semantics-12",
+      "category": "thai-semantics",
+      "passed": true,
+      "answer": "A",
+      "reasoningInContent": false,
+      "rubric": "ไม่ชัด ต้องยืนยันก่อนลบ",
+      "usage": {
+        "eval_count": 116,
+        "prompt_eval_count": 97,
+        "load_duration": 135627875,
+        "eval_duration": 2400021000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 2630,
+      "firstAnswerMs": 2609
+    },
+    {
+      "id": "thai-semantics-13",
+      "category": "thai-semantics",
+      "passed": false,
+      "answer": "[invalid answer format; content omitted]",
+      "reasoningInContent": false,
+      "rubric": "ไม่เอาเผ็ด",
+      "usage": {
+        "eval_count": 155,
+        "prompt_eval_count": 88,
+        "load_duration": 135579708,
+        "eval_duration": 3193931000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 3414,
+      "firstAnswerMs": 3353
+    },
+    {
+      "id": "thai-semantics-14",
+      "category": "thai-semantics",
+      "passed": false,
+      "answer": "A",
+      "reasoningInContent": false,
+      "rubric": "อร่อยมาก",
+      "usage": {
+        "eval_count": 185,
+        "prompt_eval_count": 83,
+        "load_duration": 137009500,
+        "eval_duration": 3827956000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 4056,
+      "firstAnswerMs": 4036
+    },
+    {
+      "id": "thai-semantics-15",
+      "category": "thai-semantics",
+      "passed": true,
+      "answer": "A",
+      "reasoningInContent": false,
+      "rubric": "อร่อยมาก",
+      "usage": {
+        "eval_count": 121,
+        "prompt_eval_count": 82,
+        "load_duration": 135242000,
+        "eval_duration": 2487902000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 2713,
+      "firstAnswerMs": 2693
+    },
+    {
+      "id": "thai-semantics-16",
+      "category": "thai-semantics",
+      "passed": false,
+      "answer": "[invalid answer format; content omitted]",
+      "reasoningInContent": false,
+      "rubric": "งานง่าย",
+      "usage": {
+        "eval_count": 126,
+        "prompt_eval_count": 80,
+        "load_duration": 136684083,
+        "eval_duration": 2598108000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 2814,
+      "firstAnswerMs": 2687
+    },
+    {
+      "id": "thai-semantics-17",
+      "category": "thai-semantics",
+      "passed": true,
+      "answer": "B",
+      "reasoningInContent": false,
+      "rubric": "อย่าทำสองอย่างจนเสี่ยงพลาดทั้งคู่",
+      "usage": {
+        "eval_count": 112,
+        "prompt_eval_count": 89,
+        "load_duration": 136134541,
+        "eval_duration": 2303165000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 2516,
+      "firstAnswerMs": 2489
+    },
+    {
+      "id": "thai-semantics-18",
+      "category": "thai-semantics",
+      "passed": true,
+      "answer": "C",
+      "reasoningInContent": false,
+      "rubric": "ให้สงบลง",
+      "usage": {
+        "eval_count": 96,
+        "prompt_eval_count": 88,
+        "load_duration": 138054458,
+        "eval_duration": 1969642000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 2184,
+      "firstAnswerMs": 2164
+    },
+    {
+      "id": "thai-semantics-19",
+      "category": "thai-semantics",
+      "passed": true,
+      "answer": "C",
+      "reasoningInContent": false,
+      "rubric": "สุภาพเป็นธรรมชาติ",
+      "usage": {
+        "eval_count": 109,
+        "prompt_eval_count": 85,
+        "load_duration": 135680417,
+        "eval_duration": 2251779000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 2474,
+      "firstAnswerMs": 2454
+    },
+    {
+      "id": "thai-semantics-20",
+      "category": "thai-semantics",
+      "passed": true,
+      "answer": "B",
+      "reasoningInContent": false,
+      "rubric": "กระชับกว่าเมื่อวาน",
+      "usage": {
+        "eval_count": 169,
+        "prompt_eval_count": 91,
+        "load_duration": 134917583,
+        "eval_duration": 3479151000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 3698,
+      "firstAnswerMs": 3671
+    },
+    {
+      "id": "thai-semantics-21",
+      "category": "thai-semantics",
+      "passed": true,
+      "answer": "A",
+      "reasoningInContent": false,
+      "rubric": "ไม่ยืนยัน",
+      "usage": {
+        "eval_count": 145,
+        "prompt_eval_count": 90,
+        "load_duration": 136081709,
+        "eval_duration": 2978732000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 3195,
+      "firstAnswerMs": 3175
+    },
+    {
+      "id": "thai-semantics-22",
+      "category": "thai-semantics",
+      "passed": false,
+      "answer": "[invalid answer format; content omitted]",
+      "reasoningInContent": false,
+      "rubric": "ไม่ควรถือเป็นข้อมูลส่วนตัว",
+      "usage": {
+        "eval_count": 261,
+        "prompt_eval_count": 96,
+        "load_duration": 135691166,
+        "eval_duration": 5550897000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 5765,
+      "firstAnswerMs": 4194
+    },
+    {
+      "id": "thai-semantics-23",
+      "category": "thai-semantics",
+      "passed": false,
+      "answer": "[invalid answer format; content omitted]",
+      "reasoningInContent": false,
+      "rubric": "อาจเห็นด้วยบางส่วน",
+      "usage": {
+        "eval_count": 137,
+        "prompt_eval_count": 85,
+        "load_duration": 137176750,
+        "eval_duration": 2758636000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 2967,
+      "firstAnswerMs": 2906
+    },
+    {
+      "id": "thai-semantics-24",
+      "category": "thai-semantics",
+      "passed": true,
+      "answer": "A",
+      "reasoningInContent": false,
+      "rubric": "ถามว่าสิ่งใดเมื่อจำเป็น",
+      "usage": {
+        "eval_count": 115,
+        "prompt_eval_count": 97,
+        "load_duration": 136164750,
+        "eval_duration": 2428646000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 2637,
+      "firstAnswerMs": 2615
+    },
+    {
+      "id": "thai-semantics-25",
+      "category": "thai-semantics",
+      "passed": true,
+      "answer": "A",
+      "reasoningInContent": false,
+      "rubric": "ผู้พูด",
+      "usage": {
+        "eval_count": 105,
+        "prompt_eval_count": 84,
+        "load_duration": 135901834,
+        "eval_duration": 2132632999,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 2414,
+      "firstAnswerMs": 2394
+    },
+    {
+      "id": "thai-semantics-26",
+      "category": "thai-semantics",
+      "passed": true,
+      "answer": "B",
+      "reasoningInContent": false,
+      "rubric": "ไม่ใส่ความหวาน",
+      "usage": {
+        "eval_count": 69,
+        "prompt_eval_count": 86,
+        "load_duration": 134692334,
+        "eval_duration": 1377318000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 1668,
+      "firstAnswerMs": 1646
+    },
+    {
+      "id": "thai-semantics-27",
+      "category": "thai-semantics",
+      "passed": false,
+      "answer": "[invalid answer format; content omitted]",
+      "reasoningInContent": false,
+      "rubric": "ไม่ควร",
+      "usage": {
+        "eval_count": 126,
+        "prompt_eval_count": 84,
+        "load_duration": 134944791,
+        "eval_duration": 2545752000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 2836,
+      "firstAnswerMs": 2775
+    },
+    {
+      "id": "thai-semantics-28",
+      "category": "thai-semantics",
+      "passed": true,
+      "answer": "A",
+      "reasoningInContent": false,
+      "rubric": "รับฟังและรอรายละเอียด",
+      "usage": {
+        "eval_count": 117,
+        "prompt_eval_count": 90,
+        "load_duration": 136748541,
+        "eval_duration": 2353680000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 2645,
+      "firstAnswerMs": 2625
+    },
+    {
+      "id": "thai-semantics-29",
+      "category": "thai-semantics",
+      "passed": true,
+      "answer": "B",
+      "reasoningInContent": false,
+      "rubric": "ระบบ",
+      "usage": {
+        "eval_count": 111,
+        "prompt_eval_count": 84,
+        "load_duration": 134245833,
+        "eval_duration": 2234504000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 2524,
+      "firstAnswerMs": 2504
+    },
+    {
+      "id": "thai-semantics-30",
+      "category": "thai-semantics",
+      "passed": true,
+      "answer": "C",
+      "reasoningInContent": false,
+      "rubric": "ไม่ตรงกัน",
+      "usage": {
+        "eval_count": 123,
+        "prompt_eval_count": 91,
+        "load_duration": 136292834,
+        "eval_duration": 2497373000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 2778,
+      "firstAnswerMs": 2757
+    },
+    {
+      "id": "thai-semantics-31",
+      "category": "thai-semantics",
+      "passed": true,
+      "answer": "A",
+      "reasoningInContent": false,
+      "rubric": "ไม่จอง",
+      "usage": {
+        "eval_count": 84,
+        "prompt_eval_count": 82,
+        "load_duration": 137907375,
+        "eval_duration": 1682737000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 1975,
+      "firstAnswerMs": 1955
+    },
+    {
+      "id": "thai-semantics-32",
+      "category": "thai-semantics",
+      "passed": true,
+      "answer": "A",
+      "reasoningInContent": false,
+      "rubric": "ยังไม่ได้",
+      "usage": {
+        "eval_count": 125,
+        "prompt_eval_count": 93,
+        "load_duration": 135966666,
+        "eval_duration": 2531464000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 2821,
+      "firstAnswerMs": 2801
+    },
+    {
+      "id": "temporal-memory-01",
+      "category": "temporal-memory",
+      "passed": true,
+      "answer": "C",
+      "reasoningInContent": false,
+      "rubric": "ไม่ชอบหวาน",
+      "usage": {
+        "eval_count": 93,
+        "prompt_eval_count": 87,
+        "load_duration": 136275666,
+        "eval_duration": 1866365000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 2154,
+      "firstAnswerMs": 2134
+    },
+    {
+      "id": "temporal-memory-02",
+      "category": "temporal-memory",
+      "passed": false,
+      "answer": "A",
+      "reasoningInContent": false,
+      "rubric": "ชอบหวาน",
+      "usage": {
+        "eval_count": 85,
+        "prompt_eval_count": 86,
+        "load_duration": 135514542,
+        "eval_duration": 1722086000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 2002,
+      "firstAnswerMs": 1982
+    },
+    {
+      "id": "temporal-memory-03",
+      "category": "temporal-memory",
+      "passed": true,
+      "answer": "A",
+      "reasoningInContent": false,
+      "rubric": "ยังไม่มีหลักฐานว่าเปลี่ยน",
+      "usage": {
+        "eval_count": 111,
+        "prompt_eval_count": 93,
+        "load_duration": 137167625,
+        "eval_duration": 2249607000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 2532,
+      "firstAnswerMs": 2511
+    },
+    {
+      "id": "temporal-memory-04",
+      "category": "temporal-memory",
+      "passed": false,
+      "answer": "A",
+      "reasoningInContent": false,
+      "rubric": "1 สิงหาคม",
+      "usage": {
+        "eval_count": 126,
+        "prompt_eval_count": 93,
+        "load_duration": 136652958,
+        "eval_duration": 2523320000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 2813,
+      "firstAnswerMs": 2793
+    },
+    {
+      "id": "temporal-memory-05",
+      "category": "temporal-memory",
+      "passed": true,
+      "answer": "C",
+      "reasoningInContent": false,
+      "rubric": "ชา",
+      "usage": {
+        "eval_count": 117,
+        "prompt_eval_count": 93,
+        "load_duration": 135006416,
+        "eval_duration": 2354520000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 2642,
+      "firstAnswerMs": 2621
+    },
+    {
+      "id": "temporal-memory-06",
+      "category": "temporal-memory",
+      "passed": false,
+      "answer": "[invalid answer format; content omitted]",
+      "reasoningInContent": false,
+      "rubric": "ไม่รู้วันที่แน่นอน",
+      "usage": {
+        "eval_count": 122,
+        "prompt_eval_count": 94,
+        "load_duration": 136454083,
+        "eval_duration": 2574750000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 2868,
+      "firstAnswerMs": 2802
+    },
+    {
+      "id": "temporal-memory-07",
+      "category": "temporal-memory",
+      "passed": true,
+      "answer": "C",
+      "reasoningInContent": false,
+      "rubric": "ไม่ควรอนุมาน",
+      "usage": {
+        "eval_count": 80,
+        "prompt_eval_count": 87,
+        "load_duration": 134439125,
+        "eval_duration": 1692315000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 1974,
+      "firstAnswerMs": 1953
+    },
+    {
+      "id": "temporal-memory-08",
+      "category": "temporal-memory",
+      "passed": true,
+      "answer": "C",
+      "reasoningInContent": false,
+      "rubric": "ไม่มีหลักฐานว่าเปลี่ยน",
+      "usage": {
+        "eval_count": 72,
+        "prompt_eval_count": 92,
+        "load_duration": 135665000,
+        "eval_duration": 1519848000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 1808,
+      "firstAnswerMs": 1788
+    },
+    {
+      "id": "temporal-memory-09",
+      "category": "temporal-memory",
+      "passed": true,
+      "answer": "A",
+      "reasoningInContent": false,
+      "rubric": "เชียงใหม่",
+      "usage": {
+        "eval_count": 30,
+        "prompt_eval_count": 79,
+        "load_duration": 135787416,
+        "eval_duration": 597336000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 880,
+      "firstAnswerMs": 860
+    },
+    {
+      "id": "temporal-memory-10",
+      "category": "temporal-memory",
+      "passed": true,
+      "answer": "A",
+      "reasoningInContent": false,
+      "rubric": "กรุงเทพ",
+      "usage": {
+        "eval_count": 62,
+        "prompt_eval_count": 83,
+        "load_duration": 145784875,
+        "eval_duration": 1357931000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 1657,
+      "firstAnswerMs": 1637
+    },
+    {
+      "id": "temporal-memory-11",
+      "category": "temporal-memory",
+      "passed": true,
+      "answer": "C",
+      "reasoningInContent": false,
+      "rubric": "เวลาเกิดข้อมูลและเวลาแหล่งข้อความ",
+      "usage": {
+        "eval_count": 144,
+        "prompt_eval_count": 94,
+        "load_duration": 135215917,
+        "eval_duration": 2957377000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 3243,
+      "firstAnswerMs": 3223
+    },
+    {
+      "id": "temporal-memory-12",
+      "category": "temporal-memory",
+      "passed": false,
+      "answer": "C",
+      "reasoningInContent": false,
+      "rubric": "หมา",
+      "usage": {
+        "eval_count": 92,
+        "prompt_eval_count": 86,
+        "load_duration": 136956209,
+        "eval_duration": 1910978000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 2202,
+      "firstAnswerMs": 2182
+    },
+    {
+      "id": "temporal-memory-13",
+      "category": "temporal-memory",
+      "passed": true,
+      "answer": "C",
+      "reasoningInContent": false,
+      "rubric": "ยังไม่ทราบความชอบใหม่",
+      "usage": {
+        "eval_count": 115,
+        "prompt_eval_count": 92,
+        "load_duration": 137416750,
+        "eval_duration": 2358211000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 2643,
+      "firstAnswerMs": 2623
+    },
+    {
+      "id": "temporal-memory-14",
+      "category": "temporal-memory",
+      "passed": false,
+      "answer": "[invalid answer format; content omitted]",
+      "reasoningInContent": false,
+      "rubric": "สั้น",
+      "usage": {
+        "eval_count": 178,
+        "prompt_eval_count": 87,
+        "load_duration": 135342666,
+        "eval_duration": 3651039000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 3938,
+      "firstAnswerMs": 3818
+    },
+    {
+      "id": "temporal-memory-15",
+      "category": "temporal-memory",
+      "passed": true,
+      "answer": "C",
+      "reasoningInContent": false,
+      "rubric": "ไม่ควร",
+      "usage": {
+        "eval_count": 151,
+        "prompt_eval_count": 85,
+        "load_duration": 136289708,
+        "eval_duration": 3110422000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 3394,
+      "firstAnswerMs": 3374
+    },
+    {
+      "id": "temporal-memory-16",
+      "category": "temporal-memory",
+      "passed": false,
+      "answer": "B",
+      "reasoningInContent": false,
+      "rubric": "มะนาว",
+      "usage": {
+        "eval_count": 67,
+        "prompt_eval_count": 89,
+        "load_duration": 147791666,
+        "eval_duration": 1402788000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 1708,
+      "firstAnswerMs": 1688
+    },
+    {
+      "id": "temporal-memory-17",
+      "category": "temporal-memory",
+      "passed": true,
+      "answer": "C",
+      "reasoningInContent": false,
+      "rubric": "ยังไม่รู้",
+      "usage": {
+        "eval_count": 74,
+        "prompt_eval_count": 92,
+        "load_duration": 133532417,
+        "eval_duration": 1512866000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 1799,
+      "firstAnswerMs": 1778
+    },
+    {
+      "id": "temporal-memory-18",
+      "category": "temporal-memory",
+      "passed": true,
+      "answer": "B",
+      "reasoningInContent": false,
+      "rubric": "ยังไม่ย้ายตามข้อมูลนี้",
+      "usage": {
+        "eval_count": 95,
+        "prompt_eval_count": 89,
+        "load_duration": 136764292,
+        "eval_duration": 1935549000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 2220,
+      "firstAnswerMs": 2194
+    },
+    {
+      "id": "temporal-memory-19",
+      "category": "temporal-memory",
+      "passed": false,
+      "answer": "B",
+      "reasoningInContent": false,
+      "rubric": "ภูเขาเป็นทะเล",
+      "usage": {
+        "eval_count": 107,
+        "prompt_eval_count": 84,
+        "load_duration": 135214834,
+        "eval_duration": 2189876000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 2488,
+      "firstAnswerMs": 2468
+    },
+    {
+      "id": "temporal-memory-20",
+      "category": "temporal-memory",
+      "passed": false,
+      "answer": "B",
+      "reasoningInContent": false,
+      "rubric": "บอกว่ายังไม่มีข้อมูล",
+      "usage": {
+        "eval_count": 111,
+        "prompt_eval_count": 86,
+        "load_duration": 135888500,
+        "eval_duration": 2394468000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 2685,
+      "firstAnswerMs": 2662
+    },
+    {
+      "id": "temporal-memory-21",
+      "category": "temporal-memory",
+      "passed": true,
+      "answer": "B",
+      "reasoningInContent": false,
+      "rubric": "ไม่ยืนยัน",
+      "usage": {
+        "eval_count": 111,
+        "prompt_eval_count": 86,
+        "load_duration": 139105000,
+        "eval_duration": 2237213000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 2521,
+      "firstAnswerMs": 2501
+    },
+    {
+      "id": "temporal-memory-22",
+      "category": "temporal-memory",
+      "passed": false,
+      "answer": "[invalid answer format; content omitted]",
+      "reasoningInContent": false,
+      "rubric": "แพ้กุ้ง",
+      "usage": {
+        "eval_count": 96,
+        "prompt_eval_count": 87,
+        "load_duration": 136283042,
+        "eval_duration": 1921855000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 2209,
+      "firstAnswerMs": 2068
+    },
+    {
+      "id": "temporal-memory-23",
+      "category": "temporal-memory",
+      "passed": false,
+      "answer": "B",
+      "reasoningInContent": false,
+      "rubric": "B",
+      "usage": {
+        "eval_count": 98,
+        "prompt_eval_count": 90,
+        "load_duration": 135891875,
+        "eval_duration": 1970425000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 2262,
+      "firstAnswerMs": 2242
+    },
+    {
+      "id": "temporal-memory-24",
+      "category": "temporal-memory",
+      "passed": true,
+      "answer": "B",
+      "reasoningInContent": false,
+      "rubric": "ไม่ทราบ ไม่สร้างวันขึ้นเอง",
+      "usage": {
+        "eval_count": 118,
+        "prompt_eval_count": 95,
+        "load_duration": 134836708,
+        "eval_duration": 2363145000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 2653,
+      "firstAnswerMs": 2633
+    },
+    {
+      "id": "temporal-memory-25",
+      "category": "temporal-memory",
+      "passed": true,
+      "answer": "A",
+      "reasoningInContent": false,
+      "rubric": "ไม่ชอบวิ่งแล้ว",
+      "usage": {
+        "eval_count": 63,
+        "prompt_eval_count": 87,
+        "load_duration": 135428084,
+        "eval_duration": 1253844000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 1545,
+      "firstAnswerMs": 1525
+    },
+    {
+      "id": "temporal-memory-26",
+      "category": "temporal-memory",
+      "passed": true,
+      "answer": "A",
+      "reasoningInContent": false,
+      "rubric": "ไม่ควรเพิ่มซ้ำ",
+      "usage": {
+        "eval_count": 150,
+        "prompt_eval_count": 87,
+        "load_duration": 136049208,
+        "eval_duration": 3021476000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 3322,
+      "firstAnswerMs": 3301
+    },
+    {
+      "id": "temporal-memory-27",
+      "category": "temporal-memory",
+      "passed": false,
+      "answer": "B",
+      "reasoningInContent": false,
+      "rubric": "ไม่ควร เพราะกลับมาเป็นจริงอีกช่วง",
+      "usage": {
+        "eval_count": 118,
+        "prompt_eval_count": 96,
+        "load_duration": 134857833,
+        "eval_duration": 2375531000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 2668,
+      "firstAnswerMs": 2647
+    },
+    {
+      "id": "temporal-memory-28",
+      "category": "temporal-memory",
+      "passed": true,
+      "answer": "C",
+      "reasoningInContent": false,
+      "rubric": "ไม่ควร",
+      "usage": {
+        "eval_count": 120,
+        "prompt_eval_count": 91,
+        "load_duration": 135375208,
+        "eval_duration": 2426833000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 2721,
+      "firstAnswerMs": 2701
+    },
+    {
+      "id": "temporal-memory-29",
+      "category": "temporal-memory",
+      "passed": false,
+      "answer": "C",
+      "reasoningInContent": false,
+      "rubric": "ไม่ยืนยัน",
+      "usage": {
+        "eval_count": 106,
+        "prompt_eval_count": 88,
+        "load_duration": 135684291,
+        "eval_duration": 2199149000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 2490,
+      "firstAnswerMs": 2470
+    },
+    {
+      "id": "temporal-memory-30",
+      "category": "temporal-memory",
+      "passed": true,
+      "answer": "B",
+      "reasoningInContent": false,
+      "rubric": "B",
+      "usage": {
+        "eval_count": 63,
+        "prompt_eval_count": 98,
+        "load_duration": 136967500,
+        "eval_duration": 1266225000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 1596,
+      "firstAnswerMs": 1576
+    },
+    {
+      "id": "temporal-memory-31",
+      "category": "temporal-memory",
+      "passed": true,
+      "answer": "A",
+      "reasoningInContent": false,
+      "rubric": "ไม่ควร ต้องรักษาบริบท",
+      "usage": {
+        "eval_count": 127,
+        "prompt_eval_count": 96,
+        "load_duration": 134863083,
+        "eval_duration": 2597245000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 2886,
+      "firstAnswerMs": 2866
+    },
+    {
+      "id": "temporal-memory-32",
+      "category": "temporal-memory",
+      "passed": true,
+      "answer": "A",
+      "reasoningInContent": false,
+      "rubric": "เวลาเหตุการณ์กับเวลาที่ได้รับคำแก้",
+      "usage": {
+        "eval_count": 108,
+        "prompt_eval_count": 93,
+        "load_duration": 136646541,
+        "eval_duration": 2162840000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 2447,
+      "firstAnswerMs": 2426
+    },
+    {
+      "id": "reasoning-01",
+      "category": "reasoning",
+      "passed": false,
+      "answer": "[invalid answer format; content omitted]",
+      "reasoningInContent": false,
+      "rubric": "A B C",
+      "usage": {
+        "eval_count": 96,
+        "prompt_eval_count": 82,
+        "load_duration": 136427417,
+        "eval_duration": 1925286000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 2214,
+      "firstAnswerMs": 2154
+    },
+    {
+      "id": "reasoning-02",
+      "category": "reasoning",
+      "passed": true,
+      "answer": "C",
+      "reasoningInContent": false,
+      "rubric": "ไม่ได้ เกินงบ 10",
+      "usage": {
+        "eval_count": 109,
+        "prompt_eval_count": 98,
+        "load_duration": 134780417,
+        "eval_duration": 2203488000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 2523,
+      "firstAnswerMs": 2503
+    },
+    {
+      "id": "reasoning-03",
+      "category": "reasoning",
+      "passed": true,
+      "answer": "C",
+      "reasoningInContent": false,
+      "rubric": "400",
+      "usage": {
+        "eval_count": 93,
+        "prompt_eval_count": 89,
+        "load_duration": 135157917,
+        "eval_duration": 1881076000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 2182,
+      "firstAnswerMs": 2161
+    },
+    {
+      "id": "reasoning-04",
+      "category": "reasoning",
+      "passed": true,
+      "answer": "C",
+      "reasoningInContent": false,
+      "rubric": "60 กม./ชม.",
+      "usage": {
+        "eval_count": 70,
+        "prompt_eval_count": 101,
+        "load_duration": 137483291,
+        "eval_duration": 1411229000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 1734,
+      "firstAnswerMs": 1713
+    },
+    {
+      "id": "reasoning-05",
+      "category": "reasoning",
+      "passed": false,
+      "answer": "[invalid answer format; content omitted]",
+      "reasoningInContent": false,
+      "rubric": "08:45",
+      "usage": {
+        "eval_count": 147,
+        "prompt_eval_count": 100,
+        "load_duration": 140967417,
+        "eval_duration": 3031576000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 3358,
+      "firstAnswerMs": 3298
+    },
+    {
+      "id": "reasoning-06",
+      "category": "reasoning",
+      "passed": true,
+      "answer": "C",
+      "reasoningInContent": false,
+      "rubric": "14:00",
+      "usage": {
+        "eval_count": 100,
+        "prompt_eval_count": 102,
+        "load_duration": 137010208,
+        "eval_duration": 2024477000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 2346,
+      "firstAnswerMs": 2326
+    },
+    {
+      "id": "reasoning-07",
+      "category": "reasoning",
+      "passed": false,
+      "answer": "[invalid answer format; content omitted]",
+      "reasoningInContent": false,
+      "rubric": "3 ชั่วโมง",
+      "usage": {
+        "eval_count": 492,
+        "prompt_eval_count": 90,
+        "load_duration": 137479250,
+        "eval_duration": 9974159000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 10257,
+      "firstAnswerMs": 10114
+    },
+    {
+      "id": "reasoning-08",
+      "category": "reasoning",
+      "passed": false,
+      "answer": "[invalid answer format; content omitted]",
+      "reasoningInContent": false,
+      "rubric": "มะลิเป็นสัตว์",
+      "usage": {
+        "eval_count": 151,
+        "prompt_eval_count": 85,
+        "load_duration": 136654125,
+        "eval_duration": 3050841000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 3337,
+      "firstAnswerMs": 3255
+    },
+    {
+      "id": "reasoning-09",
+      "category": "reasoning",
+      "passed": true,
+      "answer": "A",
+      "reasoningInContent": false,
+      "rubric": "ไม่ได้",
+      "usage": {
+        "eval_count": 145,
+        "prompt_eval_count": 80,
+        "load_duration": 134660583,
+        "eval_duration": 2920655000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 3205,
+      "firstAnswerMs": 3184
+    },
+    {
+      "id": "reasoning-10",
+      "category": "reasoning",
+      "passed": true,
+      "answer": "C",
+      "reasoningInContent": false,
+      "rubric": "ไม่แน่นอน",
+      "usage": {
+        "eval_count": 115,
+        "prompt_eval_count": 85,
+        "load_duration": 136973334,
+        "eval_duration": 2310145000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 2591,
+      "firstAnswerMs": 2571
+    },
+    {
+      "id": "reasoning-11",
+      "category": "reasoning",
+      "passed": true,
+      "answer": "A",
+      "reasoningInContent": false,
+      "rubric": "5",
+      "usage": {
+        "eval_count": 50,
+        "prompt_eval_count": 81,
+        "load_duration": 135479542,
+        "eval_duration": 1004824000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 1283,
+      "firstAnswerMs": 1262
+    },
+    {
+      "id": "reasoning-12",
+      "category": "reasoning",
+      "passed": false,
+      "answer": "[invalid answer format; content omitted]",
+      "reasoningInContent": false,
+      "rubric": "4",
+      "usage": {
+        "eval_count": 87,
+        "prompt_eval_count": 84,
+        "load_duration": 142396500,
+        "eval_duration": 1847140000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 2132,
+      "firstAnswerMs": 2071
+    },
+    {
+      "id": "reasoning-13",
+      "category": "reasoning",
+      "passed": true,
+      "answer": "C",
+      "reasoningInContent": false,
+      "rubric": "0.05 0.15 0.5",
+      "usage": {
+        "eval_count": 95,
+        "prompt_eval_count": 125,
+        "load_duration": 137049041,
+        "eval_duration": 1957892000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 2286,
+      "firstAnswerMs": 2265
+    },
+    {
+      "id": "reasoning-14",
+      "category": "reasoning",
+      "passed": true,
+      "answer": "C",
+      "reasoningInContent": false,
+      "rubric": "1500",
+      "usage": {
+        "eval_count": 81,
+        "prompt_eval_count": 86,
+        "load_duration": 134004000,
+        "eval_duration": 1677679000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 1964,
+      "firstAnswerMs": 1943
+    },
+    {
+      "id": "reasoning-15",
+      "category": "reasoning",
+      "passed": false,
+      "answer": "B",
+      "reasoningInContent": false,
+      "rubric": "B",
+      "usage": {
+        "eval_count": 141,
+        "prompt_eval_count": 92,
+        "load_duration": 135111916,
+        "eval_duration": 2939908000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 3229,
+      "firstAnswerMs": 3208
+    },
+    {
+      "id": "reasoning-16",
+      "category": "reasoning",
+      "passed": false,
+      "answer": "[invalid answer format; content omitted]",
+      "reasoningInContent": false,
+      "rubric": "09:15",
+      "usage": {
+        "eval_count": 137,
+        "prompt_eval_count": 108,
+        "load_duration": 136211250,
+        "eval_duration": 2830336000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 3156,
+      "firstAnswerMs": 2948
+    },
+    {
+      "id": "reasoning-17",
+      "category": "reasoning",
+      "passed": true,
+      "answer": "B",
+      "reasoningInContent": false,
+      "rubric": "20",
+      "usage": {
+        "eval_count": 57,
+        "prompt_eval_count": 90,
+        "load_duration": 135305416,
+        "eval_duration": 1176545000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 1478,
+      "firstAnswerMs": 1458
+    },
+    {
+      "id": "reasoning-18",
+      "category": "reasoning",
+      "passed": true,
+      "answer": "C",
+      "reasoningInContent": false,
+      "rubric": "800",
+      "usage": {
+        "eval_count": 106,
+        "prompt_eval_count": 96,
+        "load_duration": 135095833,
+        "eval_duration": 2183526000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 2478,
+      "firstAnswerMs": 2458
+    },
+    {
+      "id": "reasoning-19",
+      "category": "reasoning",
+      "passed": true,
+      "answer": "B",
+      "reasoningInContent": false,
+      "rubric": "4",
+      "usage": {
+        "eval_count": 80,
+        "prompt_eval_count": 79,
+        "load_duration": 134734417,
+        "eval_duration": 1639879000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 1932,
+      "firstAnswerMs": 1911
+    },
+    {
+      "id": "reasoning-20",
+      "category": "reasoning",
+      "passed": true,
+      "answer": "C",
+      "reasoningInContent": false,
+      "rubric": "B",
+      "usage": {
+        "eval_count": 80,
+        "prompt_eval_count": 92,
+        "load_duration": 134246708,
+        "eval_duration": 1637288000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 1943,
+      "firstAnswerMs": 1923
+    },
+    {
+      "id": "reasoning-21",
+      "category": "reasoning",
+      "passed": true,
+      "answer": "B",
+      "reasoningInContent": false,
+      "rubric": "ไม่ได้ ข้อมูลไม่พอ",
+      "usage": {
+        "eval_count": 36,
+        "prompt_eval_count": 99,
+        "load_duration": 134466000,
+        "eval_duration": 726211000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 1047,
+      "firstAnswerMs": 1027
+    },
+    {
+      "id": "reasoning-22",
+      "category": "reasoning",
+      "passed": true,
+      "answer": "A",
+      "reasoningInContent": false,
+      "rubric": "C",
+      "usage": {
+        "eval_count": 47,
+        "prompt_eval_count": 76,
+        "load_duration": 136320708,
+        "eval_duration": 957705000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 1256,
+      "firstAnswerMs": 1235
+    },
+    {
+      "id": "reasoning-23",
+      "category": "reasoning",
+      "passed": true,
+      "answer": "A",
+      "reasoningInContent": false,
+      "rubric": "9",
+      "usage": {
+        "eval_count": 82,
+        "prompt_eval_count": 89,
+        "load_duration": 133680917,
+        "eval_duration": 1678413000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 1982,
+      "firstAnswerMs": 1961
+    },
+    {
+      "id": "reasoning-24",
+      "category": "reasoning",
+      "passed": false,
+      "answer": "[invalid answer format; content omitted]",
+      "reasoningInContent": false,
+      "rubric": "สำรองและตรวจว่ากู้คืนได้",
+      "usage": {
+        "eval_count": 103,
+        "prompt_eval_count": 87,
+        "load_duration": 134235334,
+        "eval_duration": 2111215000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 2420,
+      "firstAnswerMs": 2171
+    },
+    {
+      "id": "reasoning-25",
+      "category": "reasoning",
+      "passed": true,
+      "answer": "A",
+      "reasoningInContent": false,
+      "rubric": "บันทึกไม่สำเร็จ",
+      "usage": {
+        "eval_count": 93,
+        "prompt_eval_count": 87,
+        "load_duration": 134301667,
+        "eval_duration": 1912780000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 2229,
+      "firstAnswerMs": 2209
+    },
+    {
+      "id": "reasoning-26",
+      "category": "reasoning",
+      "passed": true,
+      "answer": "A",
+      "reasoningInContent": false,
+      "rubric": "ตรวจสถานะก่อนเพื่อกันทำซ้ำ",
+      "usage": {
+        "eval_count": 136,
+        "prompt_eval_count": 89,
+        "load_duration": 135031125,
+        "eval_duration": 2784576000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 3100,
+      "firstAnswerMs": 3079
+    },
+    {
+      "id": "reasoning-27",
+      "category": "reasoning",
+      "passed": true,
+      "answer": "C",
+      "reasoningInContent": false,
+      "rubric": "4",
+      "usage": {
+        "eval_count": 81,
+        "prompt_eval_count": 82,
+        "load_duration": 134985250,
+        "eval_duration": 1667893000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 1973,
+      "firstAnswerMs": 1953
+    },
+    {
+      "id": "reasoning-28",
+      "category": "reasoning",
+      "passed": false,
+      "answer": "[invalid answer format; content omitted]",
+      "reasoningInContent": false,
+      "rubric": "คำสั่งสองข้อ",
+      "usage": {
+        "eval_count": 179,
+        "prompt_eval_count": 88,
+        "load_duration": 135471792,
+        "eval_duration": 3685498000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 4002,
+      "firstAnswerMs": 2725
+    },
+    {
+      "id": "reasoning-29",
+      "category": "reasoning",
+      "passed": false,
+      "answer": "C",
+      "reasoningInContent": false,
+      "rubric": "พุธ",
+      "usage": {
+        "eval_count": 63,
+        "prompt_eval_count": 85,
+        "load_duration": 134274042,
+        "eval_duration": 1280877000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 1586,
+      "firstAnswerMs": 1565
+    },
+    {
+      "id": "reasoning-30",
+      "category": "reasoning",
+      "passed": true,
+      "answer": "B",
+      "reasoningInContent": false,
+      "rubric": "หาหรือขอ X ก่อนทำ A",
+      "usage": {
+        "eval_count": 92,
+        "prompt_eval_count": 96,
+        "load_duration": 137300208,
+        "eval_duration": 1894753000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 2195,
+      "firstAnswerMs": 2175
+    },
+    {
+      "id": "reasoning-31",
+      "category": "reasoning",
+      "passed": true,
+      "answer": "B",
+      "reasoningInContent": false,
+      "rubric": "99",
+      "usage": {
+        "eval_count": 126,
+        "prompt_eval_count": 97,
+        "load_duration": 134407042,
+        "eval_duration": 2599745000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 2987,
+      "firstAnswerMs": 2967
+    },
+    {
+      "id": "reasoning-32",
+      "category": "reasoning",
+      "passed": true,
+      "answer": "A",
+      "reasoningInContent": false,
+      "rubric": "11:00",
+      "usage": {
+        "eval_count": 129,
+        "prompt_eval_count": 101,
+        "load_duration": 135721083,
+        "eval_duration": 2660946000,
+        "done_reason": "stop"
+      },
+      "elapsedMs": 2974,
+      "firstAnswerMs": 2953
+    }
+  ],
+  "note": "Model-only synthetic benchmark; not a claim of persistent memory correctness or all Thai dialect coverage. First case includes cold-load cost. Thinking traces are not stored."
+}

@@ -80,7 +80,7 @@ public final class BackgroundChatService implements AutoCloseable {
         Job job = new Job();
         jobs.put(id, job);
         if (store != null) store.create(id, request, conversationId.value());
-        job.runner = executor.submit(() -> run(id, job, request, conversationId));
+        job.runner = executor.submit(() -> run(id, job, request, conversationId, false));
         timeoutAfter(id, job);
         return id;
     }
@@ -100,13 +100,20 @@ public final class BackgroundChatService implements AutoCloseable {
             expire(id, job);
             return true;
         }
-        return jobs.remove(id, job);
+        return job.finished && jobs.remove(id, job);
     }
 
-    private void run(UUID id, Job job, ChatCompletionRequest request, ConversationId conversationId) {
-        try {
+    private void run(UUID id, Job job, ChatCompletionRequest request, ConversationId conversationId, boolean replay) {
+        try (var scope = new com.minikun.tools.BackgroundToolScope(id, replay,
+                () -> job.state.get() == State.RUNNING && !shuttingDown)) {
             job.response = chatService.chatCompletion(request, conversationId);
-            if (job.state.compareAndSet(State.RUNNING, State.COMPLETED)) {
+            if (scope.blocked()) {
+                if (job.state.compareAndSet(State.RUNNING, State.REVIEW_REQUIRED)) {
+                    job.error = "งานนี้อาจทำสำเร็จไปบางส่วนแล้ว กรุณาตรวจผลเดิมก่อนสั่งเปลี่ยนข้อมูลอีกครั้ง";
+                    if (store != null) store.update(id, "REVIEW_REQUIRED", job.response, job.error);
+                    notify(id, job.error);
+                }
+            } else if (job.state.compareAndSet(State.RUNNING, State.COMPLETED)) {
                 if (store != null) store.update(id, "COMPLETED", job.response, "");
                 notify(id, "ตอบคำถามเสร็จแล้วครับ เปิดมินิคุงเพื่ออ่านคำตอบ");
             }
@@ -122,18 +129,22 @@ public final class BackgroundChatService implements AutoCloseable {
                 notify(id, "ตอบคำถามไม่สำเร็จครับ กลับมาที่มินิคุงเพื่อลองอีกครั้ง");
             }
         } finally {
+            job.finished = true;
             expire(id, job);
         }
     }
 
-    public boolean resume(UUID id) {
-        if (store == null || jobs.containsKey(id)) return false;
+    public synchronized boolean resume(UUID id) {
+        Job current = jobs.get(id);
+        // Do not race a cancelled worker that has not actually stopped yet.
+        if (store == null || current != null && !current.finished) return false;
+        if (current != null) jobs.remove(id, current);
         return store.find(id).filter(job -> "FAILED".equals(job.status()) || "CANCELLED".equals(job.status()))
                 .map(job -> { start(job); return true; }).orElse(false);
     }
 
     @EventListener(ApplicationReadyEvent.class)
-    void resumePending() {
+    synchronized void resumePending() {
         if (store == null) return;
         store.deleteExpired();
         store.pending().stream().filter(job -> !jobs.containsKey(job.id())).forEach(this::start);
@@ -143,7 +154,7 @@ public final class BackgroundChatService implements AutoCloseable {
         Job job = new Job();
         jobs.put(saved.id(), job);
         store.create(saved.id(), saved.request(), saved.conversationId());
-        job.runner = executor.submit(() -> run(saved.id(), job, saved.request(), new ConversationId(saved.conversationId())));
+        job.runner = executor.submit(() -> run(saved.id(), job, saved.request(), new ConversationId(saved.conversationId()), true));
         timeoutAfter(saved.id(), job);
     }
 
@@ -188,11 +199,12 @@ public final class BackgroundChatService implements AutoCloseable {
 
     public record View(UUID id, String status, ChatCompletionResponse response, String error) { }
 
-    private enum State { RUNNING, COMPLETED, FAILED, CANCELLED }
+    private enum State { RUNNING, COMPLETED, FAILED, CANCELLED, REVIEW_REQUIRED }
 
     private static final class Job {
         private final AtomicReference<State> state = new AtomicReference<>(State.RUNNING);
         private volatile ChatCompletionResponse response;
+        private volatile boolean finished;
         private volatile String error = "";
         private volatile Future<?> runner;
 

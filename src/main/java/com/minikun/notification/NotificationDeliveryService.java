@@ -2,6 +2,7 @@ package com.minikun.notification;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
@@ -10,7 +11,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import com.minikun.proactive.ProactiveAttentionBudget;
+import com.minikun.sync.SyncEventBroker;
 
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -26,6 +29,10 @@ public final class NotificationDeliveryService implements NotificationDispatcher
     private final Clock clock;
     private final MeterRegistry meterRegistry;
     private final ProactiveAttentionBudget attentionBudget;
+    private final Optional<SyncEventBroker> browserEvents;
+    private final boolean browserEnabled;
+    private final boolean ntfyFallbackEnabled;
+    private final String browserOwnerId;
 
     @Autowired
     public NotificationDeliveryService(
@@ -33,12 +40,21 @@ public final class NotificationDeliveryService implements NotificationDispatcher
             Optional<NotificationDeliveryStore> store,
             Clock clock,
             MeterRegistry meterRegistry,
-            ProactiveAttentionBudget attentionBudget) {
+            ProactiveAttentionBudget attentionBudget,
+            Optional<SyncEventBroker> browserEvents,
+            @Value("${minikun.notification.browser.enabled:true}") boolean browserEnabled,
+            @Value("${minikun.notification.ntfy-fallback.enabled:true}") boolean ntfyFallbackEnabled,
+            @Value("${minikun.sync.owner-id:default}") String browserOwnerId) {
         this.transport = Objects.requireNonNull(transport, "notification transport must not be null");
         this.store = Objects.requireNonNull(store, "notification store optional must not be null");
         this.clock = Objects.requireNonNull(clock, "notification clock must not be null");
         this.meterRegistry = Objects.requireNonNull(meterRegistry, "meter registry must not be null");
         this.attentionBudget = attentionBudget;
+        this.browserEvents = Objects.requireNonNull(browserEvents, "browser event broker optional must not be null");
+        this.browserEnabled = browserEnabled;
+        this.ntfyFallbackEnabled = ntfyFallbackEnabled;
+        String owner = Objects.requireNonNullElse(browserOwnerId, "").trim();
+        this.browserOwnerId = owner.isBlank() ? "default" : owner;
     }
 
     public NotificationDeliveryService(
@@ -46,7 +62,16 @@ public final class NotificationDeliveryService implements NotificationDispatcher
             Optional<NotificationDeliveryStore> store,
             Clock clock,
             MeterRegistry meterRegistry) {
-        this(transport, store, clock, meterRegistry, null);
+        this(transport, store, clock, meterRegistry, null, Optional.empty(), true, true, "default");
+    }
+
+    public NotificationDeliveryService(
+            NotificationTransport transport,
+            Optional<NotificationDeliveryStore> store,
+            Clock clock,
+            MeterRegistry meterRegistry,
+            Optional<SyncEventBroker> browserEvents) {
+        this(transport, store, clock, meterRegistry, null, browserEvents, true, true, "default");
     }
 
     @Override
@@ -62,13 +87,41 @@ public final class NotificationDeliveryService implements NotificationDispatcher
         }
         Instant attemptedAt = clock.instant();
         try {
-            transport.publish(request.channel(), request.title(), request.message(), request.priority(), request.tags());
+            if (!publishToBrowser(request)) {
+                if (!ntfyFallbackEnabled) {
+                    throw new IllegalStateException("browser notification has no active client");
+                }
+                if (!transport.publish(request.channel(), request.title(), request.message(),
+                        request.priority(), request.tags())) {
+                    throw new IllegalStateException("notification transport did not deliver");
+                }
+                incrementTransport(request, "ntfy");
+            }
             save(request, NotificationDeliveryStatus.DELIVERED, attemptedAt, clock.instant(), "");
             increment(request, NotificationDeliveryStatus.DELIVERED);
         } catch (RuntimeException exception) {
             save(request, NotificationDeliveryStatus.FAILED, attemptedAt, clock.instant(), failureReason(exception));
             increment(request, NotificationDeliveryStatus.FAILED);
             throw exception;
+        }
+    }
+
+    private boolean publishToBrowser(NotificationRequest request) {
+        if (!browserEnabled || browserEvents.isEmpty()) return false;
+        try {
+            boolean delivered = browserEvents.get().publishNotification(browserOwnerId, Map.of(
+                    "sourceType", request.sourceType(),
+                    "sourceId", request.sourceId(),
+                    "title", request.title(),
+                    "message", request.message(),
+                    "priority", request.priority(),
+                    "tags", request.tags()));
+            if (delivered) incrementTransport(request, "browser");
+            return delivered;
+        } catch (RuntimeException exception) {
+            LOGGER.warn("process=notification event=browser_publish_failed source_type={} source_id={} reason={}",
+                    request.sourceType(), request.sourceId(), exception.getMessage());
+            return false;
         }
     }
 
@@ -96,6 +149,15 @@ public final class NotificationDeliveryService implements NotificationDispatcher
                 .tag("source", request.sourceType().toLowerCase(java.util.Locale.ROOT))
                 .tag("channel", request.channel().name().toLowerCase(java.util.Locale.ROOT))
                 .tag("status", status.name().toLowerCase(java.util.Locale.ROOT))
+                .register(meterRegistry)
+                .increment();
+    }
+
+    private void incrementTransport(NotificationRequest request, String transport) {
+        Counter.builder("minikun.notification.transport")
+                .tag("source", request.sourceType().toLowerCase(java.util.Locale.ROOT))
+                .tag("channel", request.channel().name().toLowerCase(java.util.Locale.ROOT))
+                .tag("transport", transport)
                 .register(meterRegistry)
                 .increment();
     }

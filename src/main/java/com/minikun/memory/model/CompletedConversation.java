@@ -3,7 +3,10 @@ package com.minikun.memory.model;
 import java.util.List;
 import java.util.Objects;
 
-public record CompletedConversation(String ownerId, String conversationId, List<Message> messages) {
+public record CompletedConversation(String ownerId, String conversationId, List<Message> messages, java.time.Instant observedAt) {
+    public CompletedConversation(String ownerId, String conversationId, List<Message> messages) {
+        this(ownerId, conversationId, messages, java.time.Instant.now());
+    }
     public CompletedConversation(String conversationId, List<Message> messages) {
         this(null, conversationId, messages);
     }
@@ -18,6 +21,7 @@ public record CompletedConversation(String ownerId, String conversationId, List<
             throw new IllegalArgumentException("conversation id must not be blank");
         }
         messages = List.copyOf(messages);
+        Objects.requireNonNull(observedAt, "observedAt");
     }
 
     public record Message(String role, String content) {

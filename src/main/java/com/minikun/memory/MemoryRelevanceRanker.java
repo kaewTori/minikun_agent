@@ -24,9 +24,18 @@ public final class MemoryRelevanceRanker {
         long matches = terms.stream().filter(text::contains).count();
         return (double) matches / terms.size() * .7 + memory.confidence() * .2;
     }
-    private static Set<String> terms(String query) {
-        if (query == null) return Set.of();
-        return java.util.Arrays.stream(query.toLowerCase(Locale.ROOT).split("[^\\p{L}\\p{N}]+"))
-                .filter(term -> term.length() > 1).collect(Collectors.toUnmodifiableSet());
+    public static Set<String> terms(String query) {
+        if (query == null || query.isBlank()) return Set.of();
+        String normalized = query.toLowerCase(Locale.ROOT);
+        java.text.BreakIterator words = java.text.BreakIterator.getWordInstance(Locale.forLanguageTag("th"));
+        words.setText(normalized);
+        Set<String> result = new java.util.LinkedHashSet<>();
+        int start = words.first();
+        for (int end = words.next(); end != java.text.BreakIterator.DONE; start = end, end = words.next()) {
+            String word = normalized.substring(start, end).strip();
+            if (word.length() > 1 && word.codePoints().anyMatch(Character::isLetterOrDigit)) result.add(word);
+            if (result.size() == 24) break;
+        }
+        return java.util.Collections.unmodifiableSet(result);
     }
 }

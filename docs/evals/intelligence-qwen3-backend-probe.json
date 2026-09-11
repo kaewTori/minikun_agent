@@ -1,0 +1,23 @@
+{
+  "model": "qwen3:4b",
+  "think": "off",
+  "tokens": 1024,
+  "suite": "intelligence.json",
+  "summary": {
+    "all": {
+      "total": 3,
+      "passed": 0,
+      "errors": 0,
+      "p50Ms": 29945,
+      "p95Ms": 29956
+    },
+    "thai-semantics": {
+      "total": 3,
+      "passed": 0,
+      "errors": 0,
+      "p50Ms": 29945,
+      "p95Ms": 29956
+    }
+  },
+  "note": "Aborted backend probe: native think=false produced reasoning in content. Raw traces discarded. Not a valid off-mode benchmark."
+}

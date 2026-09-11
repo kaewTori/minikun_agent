@@ -7,12 +7,13 @@ public enum AgentRunStatus {
     RUNNING,
     WAITING_CONFIRMATION,
     COMPLETED,
+    UNVERIFIED,
     COMPLETED_WITH_ERRORS,
     FAILED,
     LIMIT_REACHED;
 
     public boolean terminal() {
-        return this == COMPLETED || this == COMPLETED_WITH_ERRORS || this == FAILED || this == LIMIT_REACHED;
+        return this == UNVERIFIED || this == COMPLETED || this == COMPLETED_WITH_ERRORS || this == FAILED || this == LIMIT_REACHED;
     }
 
     public static AgentRunStatus parse(String value) {

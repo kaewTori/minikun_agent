@@ -14,6 +14,7 @@ public interface AgentExecutionTracker {
     void complete(UUID runId, String summary);
     void limitReached(UUID runId, String reason);
     void fail(UUID runId, String reason);
+    default Optional<String> completionNotice(UUID runId) { return Optional.empty(); }
 
     static AgentExecutionTracker noop() {
         return NoOpAgentExecutionTracker.INSTANCE;

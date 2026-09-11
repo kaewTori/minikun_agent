@@ -82,7 +82,9 @@ final class ChatTurnFinalizer {
         publishTurnCompleted(ownerId, conversationId, requestId);
         updateConversationSummary(ownerId, conversationId);
         observeConversationThread(ownerId, conversationId, userMessage.content(), assistantContent);
-        reflectOnCompletedConversation(ownerId, conversationId);
+        reflectOnCompletedConversation(new CompletedConversation(ownerId, conversationId.value(), List.of(
+                new CompletedConversation.Message("user", userMessage.content()),
+                new CompletedConversation.Message("assistant", assistantContent))));
     }
 
     void persistDeterministic(
@@ -164,7 +166,9 @@ final class ChatTurnFinalizer {
         return "system".equalsIgnoreCase(message.role());
     }
 
-    private void reflectOnCompletedConversation(String ownerId, ConversationId conversationId) {
+    private void reflectOnCompletedConversation(CompletedConversation completed) {
+        String ownerId = completed.ownerId();
+        ConversationId conversationId = new ConversationId(completed.conversationId());
         if (!reflectionEnabled) {
             return;
         }
@@ -173,24 +177,18 @@ final class ChatTurnFinalizer {
             if (service == null) {
                 return;
             }
+            Optional<CompletedConversation> snapshot = Optional.of(completed);
+            if (snapshot.isEmpty()) return;
             if (deferredReflectionService != null) {
                 boolean submitted = deferredReflectionService.submit(
-                        () -> runReflection(service, ownerId, conversationId));
+                        () -> service.reflect(snapshot.get()));
                 if (!submitted) {
                     log.warn("memory_reflection conversation_id={} success=false reason=queue_full action=dropped",
                             conversationId.value());
                 }
                 return;
             }
-            runReflection(service, ownerId, conversationId);
-        } catch (RuntimeException exception) {
-            log.warn("memory_reflection conversation_id={} success=false", conversationId.value(), exception);
-        }
-    }
-
-    private void runReflection(ReflectionService service, String ownerId, ConversationId conversationId) {
-        try {
-            completedConversation(ownerId, conversationId).ifPresent(service::reflect);
+            service.reflect(snapshot.get());
         } catch (RuntimeException exception) {
             log.warn("memory_reflection conversation_id={} success=false", conversationId.value(), exception);
         }

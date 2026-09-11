@@ -28,6 +28,10 @@ final class MemoryFormatter {
             Memory memory = memories.get(index);
             String entry = memory.category().name()
                     + ": " + memory.content()
+                    + (memory.fact() == null ? " [legacy: validity unknown]" : " [subject=" + memory.fact().subject()
+                        + ", key=" + memory.fact().key() + ", value=" + memory.fact().value()
+                        + ", validFrom=" + memory.fact().validFrom() + ", validTo=" + memory.fact().validTo()
+                        + ", recordedAt=" + memory.fact().recordedAt() + ", evidence=" + memory.fact().evidence() + "]")
                     + " (confidence=" + memory.confidence()
                     + ", source=" + memory.source()
                     + ", reason=" + memory.reason() + ")";

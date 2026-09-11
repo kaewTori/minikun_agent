@@ -24,6 +24,42 @@ import com.minikun.notification.NotificationRequest;
 
 class BackgroundChatServiceTest {
     @Test
+    void restartBlocksOperationalWritesEvenWithANewModelCallId() throws Exception {
+        var writes = new java.util.concurrent.atomic.AtomicInteger();
+        com.minikun.tools.Tool tool = new com.minikun.tools.Tool() {
+            public com.minikun.tools.ToolDefinition definition() {
+                return new com.minikun.tools.ToolDefinition("write", "write", java.util.Map.of());
+            }
+            public com.minikun.tools.ToolResult execute(com.minikun.tools.ToolCallContext context, java.util.Map<String, Object> args) {
+                writes.incrementAndGet();
+                return com.minikun.tools.ToolResult.success("saved");
+            }
+        };
+        var executor = new com.minikun.tools.DefaultToolExecutor(new com.minikun.tools.DefaultToolRegistry(List.of(tool)));
+        var chat = mock(ChatService.class);
+        when(chat.chatCompletion(any(), any())).thenAnswer(call -> {
+            executor.execute(new com.minikun.tools.ToolCallContext(new ConversationId("recovery"), "new-call"),
+                    new com.minikun.tools.ToolCall("new-call", "write", java.util.Map.of()));
+            return new ChatCompletionResponse("eval", "chat.completion", 1, "mini-kun",
+                    List.of(new ChatCompletionResponse.Choice(0, new Message("assistant", "ตรวจผลเดิมก่อนครับ"), "stop")),
+                    new ChatCompletionResponse.Usage(0, 0, 0));
+        });
+        var store = new BackgroundChatStore((org.springframework.jdbc.core.JdbcTemplate) null, new ObjectMapper());
+        UUID id = UUID.randomUUID();
+        store.create(id, new ChatCompletionRequest("mini-kun", List.of(new Message("user", "ทำต่อ")),
+                "recovery", false, null, null, null), "recovery");
+        var notified = new CountDownLatch(1);
+        try (var service = new BackgroundChatService(chat, ignored -> notified.countDown(), store)) {
+            service.resumePending();
+            assertTrue(notified.await(2, TimeUnit.SECONDS));
+            assertEquals("review_required", service.find(id).orElseThrow().status());
+            assertEquals("REVIEW_REQUIRED", store.find(id).orElseThrow().status());
+            assertEquals(0, writes.get());
+            org.junit.jupiter.api.Assertions.assertFalse(service.resume(id));
+        }
+    }
+
+    @Test
     void completesWithoutAWaitingBrowserAndNotifiesTheUser() throws Exception {
         ChatService chat = mock(ChatService.class);
         ChatCompletionResponse response = new ChatCompletionResponse(

@@ -104,14 +104,19 @@ public final class OllamaTaskModelProvider implements TaskModelProvider {
     }
 
     private String call(TaskModelRequest request) {
+        List<TaskModelMessage> messages = request.messages();
+        if (com.minikun.model.OllamaReasoning.qwen3Family(model)
+                && request.reasoning() == com.minikun.model.GenerationOptions.Reasoning.OFF) {
+            messages = appendNoThink(messages);
+        }
         if (nativeChatApi) {
             NativeResponse response = restClient.post()
                     .contentType(MediaType.APPLICATION_JSON)
-                    .body(new NativeRequest(model, request.messages(), false,
+                    .body(new NativeRequest(model, messages, false,
                             new Options(request.maxOutputTokens(), request.temperature()),
                             request.responseFormat() == TaskModelRequest.ResponseFormat.JSON_OBJECT
                                     ? "json" : null,
-                            false))
+                            com.minikun.model.OllamaReasoning.wire(model, request.reasoning())))
                     .retrieve()
                     .body(NativeResponse.class);
             if (response == null || response.message() == null) {
@@ -121,12 +126,12 @@ public final class OllamaTaskModelProvider implements TaskModelProvider {
             if (content == null || content.isBlank()) {
                 throw new IllegalStateException("task model response has empty content");
             }
-            return content;
+            return stripThinking(content);
         }
         Response response = restClient.post()
                 .contentType(MediaType.APPLICATION_JSON)
-                .body(new Request(model, request.messages(), false, request.maxOutputTokens(),
-                        request.temperature(), responseFormat(request.responseFormat())))
+                .body(new Request(model, messages, false, request.maxOutputTokens(),
+                        request.temperature(), responseFormat(request.responseFormat()), reasoningEffort(request)))
                 .retrieve()
                 .body(Response.class);
         if (response == null || response.choices() == null || response.choices().isEmpty()
@@ -137,7 +142,36 @@ public final class OllamaTaskModelProvider implements TaskModelProvider {
         if (content == null || content.isBlank()) {
             throw new IllegalStateException("task model response has empty content");
         }
-        return content;
+        return stripThinking(content);
+    }
+
+    private String stripThinking(String content) {
+        String normalized = content == null ? "" : content.strip();
+        int opening = normalized.indexOf("<think>");
+        if (opening < 0) return normalized;
+        int closing = normalized.indexOf("</think>", opening + "<think>".length());
+        if (closing < 0) return normalized;
+        return (normalized.substring(0, opening)
+                + normalized.substring(closing + "</think>".length())).strip();
+    }
+
+    private String reasoningEffort(TaskModelRequest request) {
+        Object option = com.minikun.model.OllamaReasoning.wire(model, request.reasoning());
+        return Boolean.FALSE.equals(option) ? "none" : option instanceof String level ? level : "medium";
+    }
+
+    private List<TaskModelMessage> appendNoThink(List<TaskModelMessage> messages) {
+        List<TaskModelMessage> result = new java.util.ArrayList<>(messages);
+        for (int index = result.size() - 1; index >= 0; index--) {
+            TaskModelMessage message = result.get(index);
+            if ("user".equalsIgnoreCase(message.role())) {
+                if (!message.content().contains("/no_think")) {
+                    result.set(index, new TaskModelMessage(message.role(), message.content() + "\n/no_think"));
+                }
+                return List.copyOf(result);
+            }
+        }
+        return messages;
     }
 
     private ResponseFormat responseFormat(TaskModelRequest.ResponseFormat format) {
@@ -146,10 +180,10 @@ public final class OllamaTaskModelProvider implements TaskModelProvider {
     }
 
     private record Request(String model, List<TaskModelMessage> messages, boolean stream,
-            int max_tokens, double temperature, ResponseFormat response_format) {}
+            int max_tokens, double temperature, ResponseFormat response_format, String reasoning_effort) {}
 
     private record NativeRequest(String model, List<TaskModelMessage> messages, boolean stream,
-            Options options, String format, boolean think) {}
+            Options options, String format, Object think) {}
 
     private record Options(int num_predict, double temperature) {}
 

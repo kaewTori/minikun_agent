@@ -42,7 +42,9 @@ public final class ReflectionParser {
             List<MemoryCandidate> result = new ArrayList<>();
             for (JsonNode memory : memories) {
                 requireObject(memory, "memory");
-                requireExactFields(memory, MEMORY_FIELDS, "memory");
+                var fields = new ArrayList<>(MEMORY_FIELDS);
+                if (memory.has("fact")) fields.add("fact");
+                requireExactFields(memory, fields, "memory");
                 String category = requiredText(memory, "category");
                 String content = requiredText(memory, "content");
                 String reason = requiredText(memory, "reason");
@@ -56,10 +58,16 @@ public final class ReflectionParser {
                 }
                 try {
                     result.add(new MemoryCandidate(conversation.conversationId(),
-                            MemoryCategory.valueOf(category), content, confidenceValue, reason));
+                            MemoryCategory.valueOf(category), content, confidenceValue, reason, fact(memory.get("fact"), conversation)));
                 } catch (IllegalArgumentException exception) {
                     throw invalid("invalid memory category", exception);
                 }
+            }
+            var slots = new java.util.HashSet<String>();
+            for (var candidate : result) {
+                var fact = candidate.fact();
+                if (fact != null && !slots.add(fact.subject() + "\u0000" + fact.key() + "\u0000" + fact.validFrom()))
+                    throw invalid("duplicate fact slot at the same effective time");
             }
             List<MemoryCandidate> parsed = List.copyOf(result);
             incrementParsed(parsed.size());
@@ -69,6 +77,26 @@ public final class ReflectionParser {
         } catch (Exception exception) {
             throw new MemoryException("reflection response is not valid JSON", exception);
         }
+    }
+
+    private com.minikun.memory.model.TemporalFact fact(JsonNode node, CompletedConversation conversation) {
+        if (node == null || node.isNull()) return null;
+        requireObject(node, "fact");
+        requireExactFields(node, List.of("subject", "key", "value", "validFrom", "validTo", "evidence"), "fact");
+        String evidence = requiredText(node, "evidence");
+        boolean grounded = conversation.messages().stream()
+                .anyMatch(message -> "user".equalsIgnoreCase(message.role()) && message.content().contains(evidence));
+        if (!grounded) throw invalid("fact evidence must be an exact user quote");
+        return new com.minikun.memory.model.TemporalFact(requiredText(node, "subject"),
+                requiredText(node, "key"), requiredText(node, "value"), instant(node, "validFrom"),
+                instant(node, "validTo"), conversation.observedAt(), evidence);
+    }
+
+    private java.time.Instant instant(JsonNode node, String name) {
+        JsonNode value = node.get(name);
+        if (value == null || value.isNull()) return null;
+        if (!value.isTextual()) throw invalid(name + " must be an ISO instant or null");
+        return java.time.Instant.parse(value.asText());
     }
 
     private String jsonPayload(String response) {

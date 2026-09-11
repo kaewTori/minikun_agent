@@ -89,7 +89,9 @@ public class PersonalityConfiguration {
     }
 
     @Bean
-    ResponsePreferenceDetector responsePreferenceDetector() { return new ResponsePreferenceDetector(); }
+    ResponsePreferenceDetector responsePreferenceDetector(
+            org.springframework.beans.factory.ObjectProvider<com.minikun.model.task.TaskModelProvider> model,
+            com.fasterxml.jackson.databind.ObjectMapper json) { return new ResponsePreferenceDetector(model.getIfAvailable(), json); }
 
     @Bean
     @ConditionalOnBean(MemoryRepository.class)

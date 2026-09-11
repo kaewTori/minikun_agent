@@ -1,6 +1,7 @@
 package com.minikun.agent.minikun_agent.api.openai;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.minikun.model.ChatModelId;
 import com.minikun.model.GenerationOptions;
@@ -27,6 +28,16 @@ class SpringAiPromptAdapterTest {
         assertEquals(800, options.getMaxTokens());
         assertEquals(List.of("END"), options.getStopSequences());
         assertEquals(false, options.getThinkOption().toJsonValue());
+    }
+
+    @Test
+    void putsQwenNoThinkDirectiveOnTheLatestUserTurn() {
+        var prompt = new com.minikun.pcs.model.Prompt(List.of(
+                new PromptMessage(PromptRole.SYSTEM, "persona"),
+                new PromptMessage(PromptRole.USER, "ตอบสั้น ๆ")));
+        var adapted = adapter.adapt(prompt, new GenerationOptions(0.0, 200, List.of()),
+                ChatModelId.EXISTING, "qwen3:4b", 8_192);
+        assertTrue(adapted.getInstructions().getLast().getText().endsWith("/no_think"));
     }
 
     private OllamaChatOptions adapt() {

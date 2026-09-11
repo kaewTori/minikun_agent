@@ -47,6 +47,13 @@ class ReflectionDecisionServiceTest {
     }
 
     @Test
+    void rejectsTemporalPreferenceWithoutAValidatedFactSlot() {
+        MemoryCandidate candidate = candidate(MemoryCategory.PREFERENCE, "ผู้ใช้ไม่ชอบหวานแล้ว", 0.95);
+
+        assertEquals(List.of(), service.decide(List.of(candidate)));
+    }
+
+    @Test
     void supportsZeroCandidatesAndNeverIncreasesCardinality() {
         MemoryCandidate valid = candidate(MemoryCategory.PROFILE, "Uses macOS", 0.9);
         MemoryCandidate rejected = candidate(MemoryCategory.PROFILE, "", 0.9);

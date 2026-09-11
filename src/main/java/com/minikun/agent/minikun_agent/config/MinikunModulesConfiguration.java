@@ -24,6 +24,7 @@ import com.minikun.guardian.HomelabGuardianScheduler;
 import com.minikun.https.LocalCertificateController;
 import com.minikun.https.LocalHttpsConfiguration;
 import com.minikun.investment.InvestmentService;
+import com.minikun.investment.InvestmentExternalDataConfiguration;
 import com.minikun.investment.JdbcInvestmentStore;
 import com.minikun.knowledge.PersonalKnowledgeConfiguration;
 import com.minikun.knowledge.acquisition.KnowledgeAcquisitionConfiguration;
@@ -86,8 +87,12 @@ import com.minikun.tools.GuardianConfirmationRouter;
 import com.minikun.tools.HomelabGuardianRouter;
 import com.minikun.tools.HomelabGuardianTool;
 import com.minikun.tools.InvestmentAnalyzeTool;
+import com.minikun.tools.InvestmentDataTool;
 import com.minikun.tools.InvestmentConfirmationRouter;
+import com.minikun.tools.AlpacaPaperConfirmationRouter;
+import com.minikun.tools.InvestmentMarketRouter;
 import com.minikun.tools.InvestmentManageTool;
+import com.minikun.tools.InvestmentReviewRouter;
 import com.minikun.tools.LocalComputerRouter;
 import com.minikun.tools.LocalComputerTool;
 import com.minikun.tools.LocationResolveTool;
@@ -163,7 +168,10 @@ import com.minikun.relationship.RelationshipConfiguration;
         TaskCaptureToolRouter.class, TaskController.class,
         TaskFollowUpScheduler.class, DailyBriefingScheduler.class,
         JdbcInvestmentStore.class, InvestmentService.class, InvestmentManageTool.class,
-        InvestmentAnalyzeTool.class, InvestmentConfirmationRouter.class, SpringAiToolCallingRuntime.class
+        InvestmentExternalDataConfiguration.class, InvestmentDataTool.class, InvestmentAnalyzeTool.class,
+        InvestmentReviewRouter.class, InvestmentMarketRouter.class, InvestmentConfirmationRouter.class,
+        AlpacaPaperConfirmationRouter.class,
+        SpringAiToolCallingRuntime.class
 })
 public class MinikunModulesConfiguration {
 }

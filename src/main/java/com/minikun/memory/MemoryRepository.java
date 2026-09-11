@@ -23,7 +23,11 @@ public interface MemoryRepository {
     }
 
     default List<Memory> findLongTerm(LongTermMemoryScope scope, int limit) {
-        return findByOwner(scope.ownerId(), limit);
+        return findByOwner(scope.ownerId(), limit).stream().filter(memory -> memory.currentAt(java.time.Instant.now())).toList();
+    }
+
+    default List<Memory> findLongTerm(LongTermMemoryScope scope, String query, int limit) {
+        return findLongTerm(scope, limit);
     }
 
     default boolean deleteByOwner(String ownerId, MemoryId memoryId) {

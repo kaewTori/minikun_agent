@@ -1,0 +1,23 @@
+{
+  "model": "hf.co/mradermacher/llama3.2-typhoon2-3b-GGUF:Q4_K_M",
+  "suite": "intelligence.json",
+  "sample": "first 8 cases from each category",
+  "tokens": 256,
+  "formatConstrained": {
+    "total": 24,
+    "passed": 0,
+    "p50Ms": 6183.5,
+    "p95Ms": 6262,
+    "note": "All cases exceeded the one-character answer contract; this is a formatting failure, not a semantic-only score."
+  },
+  "semanticOnly": {
+    "total": 24,
+    "passed": 21,
+    "p50Ms": 6240,
+    "p95Ms": 6302,
+    "thaiSemantics": "7/8",
+    "temporalMemory": "7/8",
+    "reasoning": "7/8"
+  },
+  "note": "Representative comparison only; maxCharacters was disabled for semanticOnly. It is not directly comparable to the 96-case Gemma baseline."
+}

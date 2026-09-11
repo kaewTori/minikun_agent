@@ -39,7 +39,9 @@ public final class DefaultToolExecutor implements ToolExecutor {
 
     private ToolResult executeRegisteredTool(Tool tool, ToolCallContext context, ToolCall toolCall) {
         ToolResult validation = validate(tool.definition(), toolCall.arguments());
-        return validation == null ? tool.execute(context, toolCall.arguments()) : validation;
+        if (validation != null) return validation;
+        ToolResult blocked = BackgroundToolScope.guard(tool.requiresExplicitConfirmation(toolCall.arguments()));
+        return blocked == null ? tool.execute(context, toolCall.arguments()) : blocked;
     }
 
     private ToolResult validate(ToolDefinition definition, Map<String, Object> arguments) {

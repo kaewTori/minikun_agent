@@ -17,8 +17,9 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
 
 class AgentRiskConfirmationRouterTest {
-    @Test
-    void executesGenericHighRiskProposalOnlyAfterExplicitConfirmation() {
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(booleans = {true, false})
+    void executesGenericHighRiskProposalOnceEvenWhenTheOutcomeFails(boolean succeeds) {
         ToolExecutor executor = mock(ToolExecutor.class);
         ToolRegistry registry = mock(ToolRegistry.class);
         PlannerConfirmationService confirmations = mock(PlannerConfirmationService.class);
@@ -37,19 +38,23 @@ class AgentRiskConfirmationRouterTest {
         Instant now = Instant.parse("2026-08-22T00:00:00Z");
         PendingPlannerConfirmation pending = new PendingPlannerConfirmation(
                 conversationId.value(), "owner", "agent-risk.memory.write",
-                Map.of("value", "approved", "_risk_tool_call_id", "call-1"), now, now.plusSeconds(60));
-        when(executions.getIfAvailable()).thenReturn(null);
+                Map.of("value", "approved", "_risk_tool_call_id", "call-1",
+                        "_risk_agent_run_id", "00000000-0000-0000-0000-000000000001"), now, now.plusSeconds(60));
+        var tracker = mock(AgentExecutionService.class);
+        when(executions.getIfAvailable()).thenReturn(tracker);
         when(confirmations.find(conversationId, "owner")).thenReturn(Optional.of(pending));
         when(registry.find("memory.write")).thenReturn(Optional.of(tool));
-        when(executor.execute(any(), any())).thenReturn(ToolResult.success(Map.of("saved", true)));
+        when(executor.execute(any(), any())).thenReturn(succeeds ? ToolResult.success(Map.of("saved", true))
+                : ToolResult.failure(ToolErrorCode.EXECUTION_FAILED, "response lost after write"));
         AgentRiskConfirmationRouter router = new AgentRiskConfirmationRouter(
                 executor, registry, confirmations, executions);
 
         Optional<ToolEvidence> result = router.route("ยืนยัน", conversationId, "owner");
 
         assertTrue(result.isPresent());
-        assertTrue(result.get().success());
+        org.junit.jupiter.api.Assertions.assertEquals(succeeds, result.get().success());
         verify(executor).execute(any(), any());
-        verify(confirmations).clear(conversationId);
+        if (succeeds) verify(confirmations).clear(conversationId);
+        verify(tracker, org.mockito.Mockito.never()).shouldRetry(any(), org.mockito.ArgumentMatchers.anyInt());
     }
 }

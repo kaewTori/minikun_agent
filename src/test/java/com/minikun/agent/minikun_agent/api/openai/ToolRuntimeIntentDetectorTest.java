@@ -23,4 +23,18 @@ class ToolRuntimeIntentDetectorTest {
         assertTrue(detector.requiresTools("เปิดเว็บไซต์นี้ให้หน่อย"));
         assertTrue(detector.requiresTools("เช็กสถานะ service ให้หน่อย"));
     }
+
+    @Test
+    void routesNaturalInvestmentReviewsToTools() {
+        assertTrue(detector.requiresTools("ช่วยวิเคราะห์พอร์ตระยะยาวของฉัน"));
+        assertTrue(detector.requiresTools("ช่วยดู portfolio ที่ถืออยู่"));
+        assertTrue(detector.requiresTools("ช่วยบันทึก thesis ของ AMZN"));
+        assertFalse(detector.requiresTools("ช่วยวิเคราะห์หุ้น AMZN ให้หน่อย"));
+    }
+
+    @Test
+    void routesNaturalInvestmentPriceQuestionsToTools() {
+        assertTrue(detector.requiresTools("ดูราคาปัจจุบันของ AMZN"));
+        assertTrue(detector.requiresTools("ช่วยประเมินมูลค่าพอร์ตจากราคาตลาด"));
+    }
 }

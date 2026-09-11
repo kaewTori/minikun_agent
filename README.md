@@ -29,7 +29,7 @@
 - Communication Assistant สำหรับ draft, rewrite, reply และ summarize โดยใช้โมเดลหลักแบบ draft-only
 - Agent Planner + Execution Loop สำหรับคำสั่งหลายขั้น พร้อม state, retry, confirmation stop และ resume จาก PostgreSQL
 - Investment Copilot แบบ owner-scoped สำหรับ policy, transaction ledger, average-cost portfolio,
-  decision journal และการจำลองซื้อโดยไม่เชื่อม broker หรือส่งคำสั่งซื้อขาย
+  decision journal, latest-quote valuation, SEC filings และ Alpaca Paper ที่ต้องยืนยันก่อนส่ง
 - เก็บ short-term conversation history ด้วย Spring AI Chat Memory และ PostgreSQL
 - สกัด long-term memory จาก PostgreSQL และเรียกคืนเชิงความหมายด้วย embedding พร้อม lexical fallback
 - ประกอบ prompt ผ่าน Provider Composition System (PCS)
@@ -41,9 +41,9 @@
 - ส่ง language/category/time-range/safe-search options ไปยัง search provider พร้อม multi-query ranking และ URL deduplication
 - Actuator health และ metrics
 - คำสั่ง runtime และ diagnostics ที่จัดการในระดับ application
-- Native function tools: `time.get_current_time`, `weather.get_forecast`, `web.search`, `web.open_url`, `image.generate`, `calculator.add`, `planner.manage`, `calendar.manage`, `task.manage`, `investment.manage`, `investment.analyze`, `homelab.guardian`, `computer.local`, `knowledge.personal`, `communication.assist` และ `personal.loop`
+- Native function tools: `time.get_current_time`, `weather.get_forecast`, `web.search`, `web.open_url`, `image.generate`, `calculator.add`, `planner.manage`, `calendar.manage`, `task.manage`, `investment.manage`, `investment.analyze`, `investment.data`, `homelab.guardian`, `computer.local`, `knowledge.personal`, `communication.assist` และ `personal.loop`
 - ผลลัพธ์จาก tool จะถูกส่งกลับเข้า prompt ของ MCS/PCS เพื่อให้โมเดลตอบต่อด้วยตัวตน บริบท และน้ำเสียงเดิมของมินิคุง
-- เก็บ reminder ใน PostgreSQL และส่ง notification ผ่าน ntfy
+- เก็บ reminder ใน PostgreSQL และส่ง browser notification ผ่าน Cockpit โดยมี ntfy เป็น fallback
 - เชื่อม private iCalendar feed จาก Google, Apple หรือ Outlook เพื่ออ่าน agenda และเตือนก่อนนัด
 - มี proactive safety policy สำหรับ quiet hours และ daily briefing ที่รวมอากาศ นัดหมาย งาน และสิ่งค้างเวลา 08:00 (`Asia/Bangkok`)
 - Closed-loop Personal Agent สำหรับ weekly review, outcome learning, universal inbox,
@@ -161,6 +161,14 @@ Actuator ที่เปิดให้เข้าถึงคือ `/actuator
 | `EMBEDDING_MODEL` | `qwen3-embedding:0.6b` | multilingual embedding model |
 | `OLLAMA_NUM_CTX` | `16384` | context window ของ Ollama; dynamic budget จองพื้นที่คำตอบตาม profile ก่อนจัดบริบท |
 | `OLLAMA_KEEP_ALIVE` | `30m` | เก็บโมเดลหลักไว้ใน memory เพื่อลด cold start; ลดค่านี้ถ้า RAM/VRAM ไม่พอให้ main และ task model อยู่พร้อมกัน |
+| `MINIKUN_REASONING_MODEL` | ว่าง | โมเดล Ollama สำรองสำหรับ request ที่ตั้ง `reasoning_effort` หรือเข้า deep-research/tool-loop; ว่าง = ใช้โมเดลหลัก |
+| `MINIKUN_REASONING_CONTEXT_SIZE` | `8192` | context size ของ reasoning model สำรอง (ขั้นต่ำ 1024) |
+| `MINIKUN_REASONING_MODELS` | ว่าง | comma-separated aliases ของโมเดลที่รองรับ thinking เพิ่มเติมจาก qwen3/deepseek/gpt-oss |
+| `NVIDIA_API_KEY` | ว่าง | API key ของ NVIDIA Build สำหรับ Kimi K3; ตั้งใน environment เท่านั้น |
+| `MINIKUN_KIMI_MODEL` | `moonshotai/kimi-k3` | โมเดล reasoning บน NVIDIA Build |
+| `MINIKUN_KIMI_BASE_URL` | `https://integrate.api.nvidia.com/v1` | NVIDIA OpenAI-compatible endpoint |
+| `MINIKUN_KIMI_TIMEOUT` | `PT120S` | timeout ของ reasoning request |
+| `MINIKUN_MODEL_TASK_OLLAMA_MODEL` | `hf.co/mradermacher/llama3.2-typhoon2-3b-GGUF:Q4_K_M` | task model สำหรับ reflection, preference extraction และ planner; ใช้ native `/api/chat` |
 | `VALKEY_URL` | `redis://127.0.0.1:6379` | Valkey/Redis endpoint |
 | `MINIKUN_SEARCH_SEARXNG_URL` | `http://127.0.0.1:8888` | SearXNG endpoint |
 | `MINIKUN_SEARCH_TAVILY_ENABLED` | `true` | เปิด/ปิด Tavily provider |
@@ -174,6 +182,18 @@ Actuator ที่เปิดให้เข้าถึงคือ `/actuator
 | `MINIKUN_SEARCH_ENABLED` | `true` | เปิด/ปิด web search |
 | `MINIKUN_SEARCH_DECISION_MODE` | `llm` | ใช้ task model ตัดสินใจและวาง query plan; fast path ใช้เฉพาะ intent ที่ชัด และ local discovery ผ่าน model |
 | `MINIKUN_SEARCH_DECISION_TIMEOUT` | `PT2S` | เวลาสูงสุดของ LLM classifier ก่อน fallback อย่างปลอดภัย |
+
+ตั้ง key ก่อนรันแอป โดยไม่ต้องใส่ใน `application.properties`, source code หรือ commit:
+
+```sh
+export NVIDIA_API_KEY='nvapi-ใส่คีย์ของเราแทนตรงนี้'
+./mvnw spring-boot:run
+```
+
+ถ้าใช้ตัวติดตั้ง launchd ของ homelab ให้เพิ่ม `export NVIDIA_API_KEY='...'` ในไฟล์ส่วนตัว
+`/Volumes/minikun/homelab/java/script/minikun-agent.sh` ใกล้กลุ่ม credential แล้วรัน `deploy/deploy-minikun-agent.sh` ใหม่
+
+งานปกติยังใช้ Ollama; เมื่อ classifier หรือ `reasoning_effort` เลือก reasoning ระบบจะส่งงานไป Kimi K3 แล้วให้ Ollama เขียนคำตอบสุดท้าย
 | `MINIKUN_VISUAL_GENERATION_ENABLED` | `true` | เปิดการสร้างภาพจากเรื่องและ Image Studio |
 | `MINIKUN_VISUAL_TINYGRAD_BASE_URL` | `http://127.0.0.1:8002` | TinyGrad SDXL service ที่มี `/generate` และ `/health` |
 | `MINIKUN_VISUAL_TINYGRAD_TOKEN` | ว่าง | Bearer token หากตั้ง `SDXL_SERVER_TOKEN` ฝั่ง TinyGrad |
@@ -195,6 +215,12 @@ Actuator ที่เปิดให้เข้าถึงคือ `/actuator
 | `MINIKUN_TASK_ENABLED` | `true` | เปิด goal/task store, tool และ follow-up scheduler |
 | `MINIKUN_INVESTMENT_ENABLED` | `true` | เปิด investment ledger, policy, thesis และ native tools |
 | `MINIKUN_INVESTMENT_DEFAULT_BASE_CURRENCY` | `THB` | สกุลเงินฐานเริ่มต้นของพอร์ตในเฟส single-currency |
+| `MINIKUN_INVESTMENT_TWELVE_DATA_API_KEY` | ว่าง | key สำหรับราคาหุ้น/ETF ล่าสุดจาก Twelve Data; ว่าง = รายงาน `setup_required` |
+| `MINIKUN_INVESTMENT_FRANKFURTER_URL` | `https://api.frankfurter.dev` | reference FX รายวันจาก Frankfurter/ECB ไม่ต้องใช้ key |
+| `MINIKUN_INVESTMENT_SEC_TICKER_URL` | `https://www.sec.gov` | SEC endpoint สำหรับ ticker-to-CIK mapping |
+| `MINIKUN_INVESTMENT_SEC_USER_AGENT` | `MinikunAgent/1.0 (contact: minikun@example.com)` | User-Agent ที่ส่งให้ SEC EDGAR; เปลี่ยนเป็น contact จริงเมื่อใช้งาน |
+| `MINIKUN_INVESTMENT_ALPACA_KEY_ID` / `MINIKUN_INVESTMENT_ALPACA_SECRET` | ว่าง | credentials สำหรับ Alpaca Paper เท่านั้น; ว่าง = ปิด paper order |
+| `MINIKUN_INVESTMENT_ALPACA_PAPER_URL` | `https://paper-api.alpaca.markets` | endpoint ของบัญชีจำลอง Alpaca |
 | `MINIKUN_TASK_POLL_INTERVAL_MS` | `30000` | รอบตรวจ task follow-up ที่ถึงเวลาแล้ว |
 | `MINIKUN_TASK_MANAGEMENT_TOKEN` | ใช้ค่า memory token ถ้ามี | token สำหรับ Task API ที่ใช้โดย dashboard/automation |
 | `MINIKUN_COMPANION_MODE_ENABLED` | `true` | เปิด interaction mode แบบ conversation-scoped |
@@ -228,6 +254,8 @@ Actuator ที่เปิดให้เข้าถึงคือ `/actuator
 | `MINIKUN_NTFY_ENABLED` | `true` | เปิด/ปิดการส่ง ntfy |
 | `MINIKUN_NTFY_TOKEN` | ว่าง | Bearer token สำหรับ ntfy topic ถ้าตั้ง access control |
 | `MINIKUN_NTFY_REMINDER_TOPIC` | topic ที่กำหนดใน `application.properties` | topic สำหรับ reminder |
+| `MINIKUN_NOTIFICATION_BROWSER_ENABLED` | `true` | ส่ง notification เข้า Cockpit ผ่าน browser SSE |
+| `MINIKUN_NTFY_FALLBACK_ENABLED` | `true` | ใช้ ntfy เมื่อไม่มี browser ที่เชื่อมต่ออยู่ |
 | `MINIKUN_NOTIFICATION_MANAGEMENT_TOKEN` | ใช้ค่า task/memory token ถ้ามี | token สำหรับอ่านประวัติการส่ง notification |
 | `MINIKUN_NOTIFICATION_SCHEDULER_STALE_AFTER` | `2m` | ระยะที่ scheduler ไม่ poll ก่อน health เปลี่ยนเป็น `DOWN` |
 | `MINIKUN_NOTIFICATION_SCHEDULER_FAILURE_THRESHOLD` | `3` | จำนวน delivery failure ติดต่อกันก่อน health เปลี่ยนเป็น `DOWN` |
@@ -297,8 +325,19 @@ Whisper Large V3 Turbo Q4 ผ่าน MLX สำหรับถอดเสี�
 | `MINIKUN_ADAPTATION_MANAGEMENT_TOKEN` | ใช้ค่า memory token ถ้ามี | token สำหรับดู ให้ feedback และ reset Adaptive Companion |
 | `MINIKUN_COMMUNICATION_MANAGEMENT_TOKEN` | ใช้ค่า memory token ถ้ามี | token สำหรับ Communication Assistant API |
 
-โปรเจกต์นี้ไม่ใช้ไฟล์ `.env` การตั้งค่ารันไทม์ให้ใช้ `application.properties`, LaunchAgent plist
-หรือ system environment เท่านั้น
+Investment และ Crawl4AI credentials ให้กำหนดเป็น `export` ใน launcher ส่วนตัว
+`/Volumes/minikun/homelab/java/script/minikun-agent.sh` แล้วรัน `./deploy/deploy-minikun-agent.sh`;
+deploy จะไม่อ่านค่าเหล่านี้จาก `.env` และจะฝังค่าไว้ใน launcher ที่ติดตั้งสำหรับ LaunchAgent
+
+ตัวอย่างชื่อค่าที่อยู่ใน launcher:
+
+```sh
+export CRAWL4AI_API_TOKEN="..."
+export MINIKUN_INVESTMENT_TWELVE_DATA_API_KEY="..."
+export MINIKUN_INVESTMENT_ALPACA_KEY_ID="..."
+export MINIKUN_INVESTMENT_ALPACA_SECRET="..."
+export MINIKUN_INVESTMENT_SEC_USER_AGENT="MinikunAgent/1.0 (contact: your-email@example.com)"
+```
 
 Browser จะอ่านหลาย URL แบบ best-effort: URL ที่อ่านไม่ได้จะถูกบันทึกเป็น failure แต่ URL อื่นยังถูกส่งต่อให้ model ได้ ส่วน URL ที่ชี้ไปยัง localhost หรือ private address จะถูก block โดยค่าเริ่มต้นเพื่อป้องกัน SSRF; หากต้องการเปิด resource ภายในอย่างตั้งใจควรทำ allowlist แยกที่ browser worker/gateway แทนการปิด policy ทั้งหมด
 
@@ -376,7 +415,7 @@ curl -X POST http://127.0.0.1:8080/v1/chat/completions \
   }'
 ```
 
-รองรับฟิลด์หลัก `model`, `messages`, `conversation_id`, `stream`, `temperature`, `max_tokens` และ `max_completion_tokens`
+รองรับฟิลด์หลัก `model`, `messages`, `conversation_id`, `stream`, `temperature`, `max_tokens`, `max_completion_tokens` และ `reasoning_effort` (`off`, `auto`, `low`, `medium`, `high`)
 
 การตรวจคำตอบสั้น: log `process=model_generation event=outcome` แสดง `requested_max_tokens`,
 `prompt_tokens`, `completion_tokens`, `finish_reason` และจำนวน stop sequences โดยไม่บันทึกเนื้อหาแชต
@@ -409,7 +448,7 @@ curl -X POST http://127.0.0.1:8080/v1/chat/completions \
 ```
 
 ตั้ง `MINIKUN_CRAWL4AI_BASE_URL` ให้ agent มองเห็น Crawl4AI และกำหนด
-`CRAWL4AI_API_TOKEN` ใน `/Volumes/minikun/homelab/.env`.
+`CRAWL4AI_API_TOKEN` เป็น `export` ใน `/Volumes/minikun/homelab/java/script/minikun-agent.sh`.
 
 ระบบจะส่ง `X-Conversation-Id` กลับมาใน response หาก request ไม่ได้ระบุ conversation ID ระบบจะสร้าง UUID ใหม่ให้โดยอัตโนมัติ ลำดับการเลือก ID คือ:
 
@@ -725,7 +764,8 @@ curl -X POST -H "X-Minikun-Task-Token: $MINIKUN_TASK_MANAGEMENT_TOKEN" \
 
 `planner.manage` รองรับ `create`, `list`, `update`, `cancel`, `acknowledge` และ `snooze`
 สำหรับ reminder โดยการสร้าง แก้ไข ยกเลิก และ snooze ต้องผ่าน confirmation ก่อนเสมอ
-งานที่บันทึกแล้วจะถูกส่งไปยัง ntfy เมื่อถึงเวลา และรายการที่ตั้งซ้ำแบบ `DAILY` หรือ `WEEKLY`
+งานที่บันทึกแล้วจะส่ง browser notification ผ่าน Cockpit เมื่อถึงเวลา และรายการที่ตั้งซ้ำแบบ `DAILY` หรือ `WEEKLY`
+จะ fallback ไป ntfy เมื่อไม่มี browser ที่เชื่อมต่ออยู่
 จะเลื่อนรอบถัดไปอัตโนมัติ Explicit reminder ที่ผู้ใช้ตั้งเวลาเองจะส่งตามเวลานั้นแม้ตรงกับ quiet hours
 
 Notification client สามารถรับทราบหรือเลื่อน reminder ผ่าน API ได้ด้วย:
@@ -821,10 +861,11 @@ https://mini-kun:8443/cockpit/
 
 หน้า Chat ส่งงานไปที่ `/v1/chat/background` แล้วให้ server ทำต่อแม้สลับไปใช้แอปอื่น โดยยังใช้
 model, memory, search, vision, native tools และ confirmation policy ชุดเดียวกับ API หลัก
-เมื่อเสร็จจะส่งผ่าน ntfy และหน้า Chat จะรับผลกลับอัตโนมัติเมื่อเปิดค้างไว้หรือกลับมาอีกครั้ง
+เมื่อเสร็จจะส่ง browser notification ผ่าน Cockpit และ fallback ไป ntfy เมื่อไม่มี browser ที่เชื่อมต่ออยู่
+หน้า Chat จะรับผลกลับอัตโนมัติเมื่อเปิดค้างไว้หรือกลับมาอีกครั้ง
 สถานะและ payload ของงานเก็บใน PostgreSQL เป็นเวลา 24 ชั่วโมง งานที่ค้างระหว่าง restart จะทำต่ออัตโนมัติ
 และงานที่ failed/cancelled เริ่มใหม่ได้ด้วย `POST /v1/chat/background/{jobId}/resume`
-ให้ติดตั้งแอป ntfy บนมือถือและ subscribe topic จาก `MINIKUN_NTFY_REMINDER_TOPIC` เพื่อรับแจ้งเตือน
+ถ้าต้องการ fallback บนมือถือ ให้ติดตั้งแอป ntfy และ subscribe topic จาก `MINIKUN_NTFY_REMINDER_TOPIC`
 รองรับการแนบ JPEG/PNG/WebP, ไฟล์ข้อความ, การถอดเสียงผ่าน `/v1/audio/transcriptions`
 และอ่านคำตอบผ่าน `/v1/audio/speech`
 
@@ -899,6 +940,7 @@ schema อยู่ใน `personal-loop-schema.sql` และใช้ token �
 - [Conversation memory](docs/conversation-memory.md)
 - [Provider Composition System](docs/pcs.md)
 - [Conversation policy and relationship continuity](docs/conversation-policy-runtime.md)
+- [Logic reliability, recovery และชุดประเมินบทสนทนาไทย](docs/logic-reliability.md)
 - [Visual Companion](docs/visual-companion.md)
 
 ## การทดสอบ

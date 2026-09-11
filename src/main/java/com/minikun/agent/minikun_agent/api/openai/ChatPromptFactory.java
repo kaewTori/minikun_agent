@@ -143,10 +143,17 @@ final class ChatPromptFactory {
                 configuration.generationTemperature(),
                 generationProfileSelector,
                 performanceMetrics);
+        String selectedModel = com.minikun.model.OllamaReasoning.selectedModel(configuration.configuredModel(), generation.options().reasoning());
+        boolean alternateReasoner = !java.util.Objects.equals(selectedModel, configuration.configuredModel());
         long effectiveContextBudgetCharacters = creativeRequest
                 ? Math.max(configuration.contextBudgetCharacters(),
                         configuration.creativeContextBudgetCharacters())
                 : configuration.contextBudgetCharacters();
+        if (alternateReasoner) {
+            // Conservative character budget reserves output space for the smaller reasoning model.
+            effectiveContextBudgetCharacters = Math.min(effectiveContextBudgetCharacters,
+                    Math.max(1024, com.minikun.model.OllamaReasoning.contextSize() - configuration.generationMaxTokens()));
+        }
         String runtime = request.messages().stream()
                 .filter(message -> "system".equals(message.role()))
                 .map(com.minikun.agent.minikun_agent.api.openai.dto.Message::content)
@@ -229,7 +236,7 @@ final class ChatPromptFactory {
             recordEffectiveGenerationLimit(generation.profile(), generation.options().maxTokens());
             return new Result(
                     adapt(promptComposer.compose(promptRequest), generation.options(), input.visionInput()),
-                    generation.profile(), null);
+                    generation.profile(), null, generation.options().reasoning());
         }
         ModelCapability capability = configuration.dynamicTokenBudgetEnabled()
                 && modelCapabilityRegistry != null
@@ -256,7 +263,8 @@ final class ChatPromptFactory {
         recordEffectiveGenerationLimit(generation.profile(), result.generationOptions().maxTokens());
         return new Result(
                 adapt(result.prompt(), result.generationOptions(), input.visionInput()),
-                generation.profile(), result.snapshot().estimatedInputTokens());
+                generation.profile(), result.snapshot().estimatedInputTokens(),
+                result.generationOptions().reasoning());
     }
 
     private void recordEffectiveGenerationLimit(String profile, Integer maxTokens) {
@@ -269,12 +277,16 @@ final class ChatPromptFactory {
             com.minikun.pcs.model.Prompt prompt,
             GenerationOptions generationOptions,
             VisionInput visionInput) {
+        String selectedModel = com.minikun.model.OllamaReasoning.selectedModel(
+                configuration.configuredModel(), generationOptions.reasoning());
+        boolean alternateReasoner = !java.util.Objects.equals(
+                selectedModel, configuration.configuredModel());
         Prompt adapted = promptAdapter.adapt(
                 prompt,
                 generationOptions,
                 activeChatModelProvider.get().id(),
-                configuration.configuredModel(),
-                configuration.ollamaContextSize());
+                selectedModel,
+                alternateReasoner ? com.minikun.model.OllamaReasoning.contextSize() : configuration.ollamaContextSize());
         return promptAdapter.withVisionMedia(adapted, visionInput);
     }
 
@@ -470,7 +482,11 @@ final class ChatPromptFactory {
         }
     }
 
-    record Result(Prompt prompt, String generationProfile, Long estimatedInputTokens) {
+    record Result(
+            Prompt prompt,
+            String generationProfile,
+            Long estimatedInputTokens,
+            GenerationOptions.Reasoning reasoning) {
     }
 
     record Configuration(

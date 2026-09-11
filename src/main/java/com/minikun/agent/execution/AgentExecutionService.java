@@ -104,9 +104,15 @@ public final class AgentExecutionService implements AgentExecutionTracker {
     @Override
     public void complete(UUID runId, String summary) {
         AgentRun run = run(runId);
-        boolean errors = store.listSteps(runId).stream().anyMatch(step -> step.status() == AgentStepStatus.FAILED);
-        updateRun(run, errors ? AgentRunStatus.COMPLETED_WITH_ERRORS : AgentRunStatus.COMPLETED,
-                run.currentStep(), bounded(summary, 4000), "", clock.instant());
+        List<AgentExecutionStep> steps = store.listSteps(runId);
+        if (steps.stream().anyMatch(step -> step.status() == AgentStepStatus.WAITING_CONFIRMATION)) {
+            waitingConfirmation(runId, "waiting for confirmation; remaining plan has not been verified");
+            return;
+        }
+        boolean errors = steps.stream().anyMatch(step -> step.status() == AgentStepStatus.FAILED);
+        // Tool success proves that invocation only, not coverage of a natural-language plan.
+        updateRun(run, errors ? AgentRunStatus.COMPLETED_WITH_ERRORS : AgentRunStatus.UNVERIFIED,
+                run.currentStep(), bounded(summary, 4000), "plan completion has not been independently verified", clock.instant());
     }
 
     @Override
@@ -144,6 +150,13 @@ public final class AgentExecutionService implements AgentExecutionTracker {
 
     public void markResumed(UUID runId, String summary) {
         complete(runId, summary);
+    }
+
+    @Override
+    public Optional<String> completionNotice(UUID runId) {
+        return run(runId).status() == AgentRunStatus.UNVERIFIED
+                ? Optional.of("ยังยืนยันไม่ได้ว่าผลลัพธ์ครบทุกข้อของแผนครับ กรุณาดูผลแต่ละขั้นประกอบ")
+                : Optional.empty();
     }
 
     private AgentRun run(UUID id) {
