@@ -2,6 +2,16 @@
 
 Minikun can return a visual gallery for image-search requests while retrieving normal web evidence for the answer in parallel.
 
+## Reverse-image search
+
+The Cockpit action `หารูปคล้ายกัน` sends the already validated attached image through the chat pipeline. When
+`MINIKUN_SEARCH_BY_IMAGE_ENABLED=true` and `MINIKUN_SEARCH_BY_IMAGE_URL` is configured, Minikun posts a bounded
+JPEG/PNG/WebP multipart part named `image` plus `limit` to that endpoint. The provider response is intentionally small
+and vendor-neutral: `{"results":[{"image_url":"https://…","title":"…","source_url":"https://…",
+"description":"…","thumbnail_url":"https://…","provider":"…","license":"…"}]}`. Returned entries
+reuse the existing image gallery, source links, and evidence selection. The feature is fail-open and disabled by
+default; no provider means Minikun keeps the vision answer and reports that no matching image was retrieved.
+
 ## Image Studio
 
 The Cockpit exposes a dedicated `สร้างภาพ` view that teaches Pony/SDXL tag construction while the user works. It starts each positive prompt with `score_9, score_8_up, score_7_up` without forcing a source tag, then assembles comma-separated English tags for character count, appearance, action, expression, scene, lighting, style, and camera. Extra exclusions are merged into the separate negative prompt, and per-face prompts remain available for ADetailer.

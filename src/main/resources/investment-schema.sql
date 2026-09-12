@@ -3,10 +3,17 @@ CREATE TABLE IF NOT EXISTS minikun_investment_policy (
     base_currency VARCHAR(3) NOT NULL,
     benchmark VARCHAR(64) NOT NULL DEFAULT '',
     max_single_position_percent NUMERIC(9, 6) NOT NULL DEFAULT 20,
+    goal TEXT NOT NULL DEFAULT '',
+    time_horizon VARCHAR(64) NOT NULL DEFAULT '',
+    risk_tolerance VARCHAR(64) NOT NULL DEFAULT '',
     created_at TIMESTAMPTZ NOT NULL,
     updated_at TIMESTAMPTZ NOT NULL,
     CHECK (max_single_position_percent > 0 AND max_single_position_percent <= 100)
 );
+
+ALTER TABLE minikun_investment_policy ADD COLUMN IF NOT EXISTS goal TEXT NOT NULL DEFAULT '';
+ALTER TABLE minikun_investment_policy ADD COLUMN IF NOT EXISTS time_horizon VARCHAR(64) NOT NULL DEFAULT '';
+ALTER TABLE minikun_investment_policy ADD COLUMN IF NOT EXISTS risk_tolerance VARCHAR(64) NOT NULL DEFAULT '';
 
 CREATE TABLE IF NOT EXISTS minikun_investment_transaction (
     id UUID PRIMARY KEY,
@@ -62,3 +69,43 @@ CREATE TABLE IF NOT EXISTS minikun_investment_thesis (
 
 CREATE INDEX IF NOT EXISTS idx_minikun_investment_thesis_owner_status
     ON minikun_investment_thesis (owner_id, status, next_review_at);
+
+CREATE TABLE IF NOT EXISTS minikun_investment_quote_priority (
+    owner_id VARCHAR(255) NOT NULL,
+    symbol VARCHAR(64) NOT NULL,
+    priority VARCHAR(16) NOT NULL DEFAULT 'NORMAL',
+    updated_at TIMESTAMPTZ NOT NULL,
+    PRIMARY KEY (owner_id, symbol),
+    CHECK (priority IN ('HIGH', 'NORMAL', 'MINOR'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_minikun_investment_quote_priority_owner
+    ON minikun_investment_quote_priority (owner_id, priority, symbol);
+
+CREATE TABLE IF NOT EXISTS minikun_investment_monitor_state (
+    owner_id VARCHAR(255) PRIMARY KEY,
+    report_date DATE,
+    report_json TEXT NOT NULL DEFAULT '',
+    last_delivered_date DATE,
+    last_delivered_at TIMESTAMPTZ,
+    updated_at TIMESTAMPTZ NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS minikun_investment_news_event (
+    id UUID PRIMARY KEY,
+    owner_id VARCHAR(255) NOT NULL,
+    event_key VARCHAR(128) NOT NULL,
+    symbol VARCHAR(64) NOT NULL,
+    title TEXT NOT NULL,
+    summary TEXT NOT NULL,
+    url TEXT NOT NULL,
+    source VARCHAR(64) NOT NULL,
+    published_at TIMESTAMPTZ,
+    discovered_at TIMESTAMPTZ NOT NULL,
+    materiality VARCHAR(16) NOT NULL,
+    UNIQUE (owner_id, event_key),
+    CHECK (materiality IN ('HIGH', 'MEDIUM', 'LOW'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_minikun_investment_news_owner_time
+    ON minikun_investment_news_event (owner_id, discovered_at DESC);

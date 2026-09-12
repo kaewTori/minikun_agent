@@ -89,12 +89,26 @@ final class SearchFormatter {
     }
 
     KnowledgeContext formatImages(List<ImageSearchResult> results, int resultLimit, String query) {
+        return formatImages(results, resultLimit, query, false);
+    }
+
+    KnowledgeContext formatImagesByImage(List<ImageSearchResult> results, int resultLimit) {
+        return formatImages(results, resultLimit, "", true);
+    }
+
+    private KnowledgeContext formatImages(
+            List<ImageSearchResult> results,
+            int resultLimit,
+            String query,
+            boolean preserveProviderOrder) {
         if (results == null || results.isEmpty() || resultLimit < 1) {
             return KnowledgeContext.empty();
         }
         List<String> terms = imageTerms(query);
         boolean requireRelevance = query != null && !query.isBlank();
-        List<ImageSearchResult> ranked = rankImages(results, query);
+        List<ImageSearchResult> ranked = preserveProviderOrder
+                ? results.stream().filter(Objects::nonNull).toList()
+                : rankImages(results, query);
         for (ImageSearchResult result : ranked) {
             if (result != null) {
                 recordImageMetric(IMAGE_CANDIDATE_METRIC, result, imageDomain(result), "");

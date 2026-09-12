@@ -18,10 +18,13 @@ final class ToolRuntimeIntentDetector {
             "(?iu)(จากนั้น|แล้วค่อย|ต่อด้วย|เสร็จแล้ว|and then|then)");
     private static final Pattern INVESTMENT_ACTION = Pattern.compile(
             "(?iu)(ทบทวน|วิเคราะห์|ตรวจสอบ|ตรวจ|เช็ก|เช็ค|ดู|สรุป|ประเมิน|ราคา|มูลค่า|ราคาปัจจุบัน|ราคาล่าสุด|"
-                    + "เพิ่ม|สร้าง|บันทึก|แก้ไข|อัปเดต|ปิด|review|analy[sz]e|check|show|summary|"
+                    + "ข่าว|วันนี้|ล่าสุด|ติดตาม|แนะนำ|มุมมอง|แผน|เพิ่ม|สร้าง|บันทึก|แก้ไข|อัปเดต|ปิด|"
+                    + "review|analy[sz]e|check|show|summary|news|today|latest|monitor|advice|plan|"
                     + "price|quote|valuation|market|value|add|create|save|update|close)");
     private static final Pattern INVESTMENT_TARGET = Pattern.compile(
-            "(?iu)(พอร์ต|หุ้นที่ถือ|การลงทุน|thesis|portfolio|holdings?|investment)");
+            "(?iu)(พอร์ต|หุ้นที่ถือ|การลงทุน|ตลาดทุน|ตลาดหุ้น|thesis|portfolio|holdings?|investment|market)");
+    private static final Pattern INVESTMENT_MONITOR_TARGET = Pattern.compile(
+            "(?iu)(ข่าว|market\s*news|ตลาดทุน|ตลาดหุ้น)");
     private static final Pattern INVESTMENT_MARKET_ACTION = Pattern.compile(
             "(?iu)(ราคา|มูลค่า|ราคาปัจจุบัน|ราคาล่าสุด|price|quote|valuation|market\\s*value)");
     private static final Pattern INVESTMENT_MARKET_TARGET = Pattern.compile(
@@ -34,6 +37,8 @@ final class ToolRuntimeIntentDetector {
         if (EXPLICIT_TOOL.matcher(value).find()) return true;
         if (INVESTMENT_MARKET_ACTION.matcher(value).find()
                 && (INVESTMENT_MARKET_TARGET.matcher(value).find() || INVESTMENT_SYMBOL.matcher(message).find())) return true;
+        if (INVESTMENT_MONITOR_TARGET.matcher(value).find()
+                && INVESTMENT_ACTION.matcher(value).find()) return true;
         if (INVESTMENT_ACTION.matcher(value).find() && INVESTMENT_TARGET.matcher(value).find()) return true;
         return ACTION.matcher(value).find() && (TARGET.matcher(value).find() || SEQUENCE.matcher(value).find());
     }

@@ -65,6 +65,25 @@ class ChatModelGatewayTest {
         assertTrue(captured.getValue().getUserMessage().getText().contains("private handoff"));
     }
 
+    @Test
+    void failedKimiReasoningFallsBackToTheOriginalOllamaPrompt() {
+        ActiveChatModelProvider active = mock(ActiveChatModelProvider.class);
+        ChatModelProvider provider = mock(ChatModelProvider.class);
+        when(active.get()).thenReturn(provider);
+        when(provider.chat(any(Prompt.class))).thenReturn(response("fallback answer"));
+        KimiK3ReasoningClient kimi = mock(KimiK3ReasoningClient.class);
+        when(kimi.configured()).thenReturn(true);
+        when(kimi.handoff(any(Prompt.class), eq(GenerationOptions.Reasoning.HIGH)))
+                .thenThrow(new IllegalStateException("NVIDIA unavailable"));
+        ChatModelGateway gateway = new ChatModelGateway(active, null, null, false, kimi, "main-model");
+        Prompt prompt = new Prompt("solve");
+
+        assertEquals("fallback answer", gateway.chat(
+                prompt, GenerationOptions.Reasoning.HIGH, "chat_model", "request", new ConversationId("fallback"))
+                .getResult().getOutput().getText());
+        verify(provider).chat(prompt);
+    }
+
     private ChatResponse response(String text) {
         return new ChatResponse(List.of(new Generation(new AssistantMessage(text))));
     }

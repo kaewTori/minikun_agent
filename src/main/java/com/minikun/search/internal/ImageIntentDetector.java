@@ -34,6 +34,14 @@ public final class ImageIntentDetector {
             "\\bwhat\\s+does\\s+.+\\s+look\\s+like\\b");
     private static final Pattern STRUCTURAL_IMAGE_TERM = Pattern.compile(
             "(?:รูปแบบ|ภาพรวม|\\bdesign\\s+pattern\\b|\\barchitecture\\s+(?:explanation|discussion)\\b)");
+    private static final Pattern IMAGE_TO_IMAGE_SEARCH_REQUEST = Pattern.compile(
+            "(?:reverse\\s+image|search\\s+by\\s+image|"
+                    + "(?:search|find|look\\s+up)\\b.*(?:this\\s+(?:image|picture|photo)|"
+                    + "similar|matching)|"
+                    + "(?:ค้นหา|ค้นจาก|ช่วยหา|ช่วยค้นหา|หา).*"
+                    + "(?:คล้าย|เหมือน|ภาพนี้|รูปนี้|reference|ต้นฉบับ|แหล่งที่มา|มาจากไหน)|"
+                    + "(?:คล้าย|เหมือน|ต้นฉบับ|แหล่งที่มา|มาจากไหน).*(?:รูป|ภาพ|image|photo|picture|reference|นี้|กัน))",
+            Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
 
     public boolean detects(String query) {
         if (query == null || query.isBlank()) {
@@ -64,5 +72,13 @@ public final class ImageIntentDetector {
         String normalized = query.trim().toLowerCase(Locale.ROOT);
         return THAI_ARTWORK_FOLLOW_UP.matcher(normalized).find()
                 || ENGLISH_ARTWORK_FOLLOW_UP.matcher(normalized).find();
+    }
+
+    /** Detects a request to use an attached image as the search query. */
+    public boolean detectsByImage(String query) {
+        if (query == null || query.isBlank()) {
+            return false;
+        }
+        return IMAGE_TO_IMAGE_SEARCH_REQUEST.matcher(query.trim().toLowerCase(Locale.ROOT)).find();
     }
 }

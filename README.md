@@ -171,6 +171,10 @@ Actuator ที่เปิดให้เข้าถึงคือ `/actuator
 | `MINIKUN_MODEL_TASK_OLLAMA_MODEL` | `hf.co/mradermacher/llama3.2-typhoon2-3b-GGUF:Q4_K_M` | task model สำหรับ reflection, preference extraction และ planner; ใช้ native `/api/chat` |
 | `VALKEY_URL` | `redis://127.0.0.1:6379` | Valkey/Redis endpoint |
 | `MINIKUN_SEARCH_SEARXNG_URL` | `http://127.0.0.1:8888` | SearXNG endpoint |
+| `MINIKUN_SEARCH_BY_IMAGE_ENABLED` | `false` | เปิด reverse-image search สำหรับรูปที่แนบ |
+| `MINIKUN_SEARCH_BY_IMAGE_URL` | ว่าง | multipart endpoint ที่รับ field `image` และคืน JSON `results` |
+| `MINIKUN_SEARCH_BY_IMAGE_TOKEN` | ว่าง | Bearer token ของ reverse-image provider (เก็บใน environment เท่านั้น) |
+| `MINIKUN_SEARCH_BY_IMAGE_TIMEOUT` | `15s` | timeout ของ reverse-image provider |
 | `MINIKUN_SEARCH_TAVILY_ENABLED` | `true` | เปิด/ปิด Tavily provider |
 | `MINIKUN_SEARCH_TAVILY_API_KEY` | ว่าง | Tavily API key (เก็บใน environment เท่านั้น) |
 | `MINIKUN_SEARCH_TAVILY_URL` | `https://api.tavily.com` | Tavily endpoint |
@@ -194,6 +198,7 @@ export NVIDIA_API_KEY='nvapi-ใส่คีย์ของเราแทนต
 `/Volumes/minikun/homelab/java/script/minikun-agent.sh` ใกล้กลุ่ม credential แล้วรัน `deploy/deploy-minikun-agent.sh` ใหม่
 
 งานปกติยังใช้ Ollama; เมื่อ classifier หรือ `reasoning_effort` เลือก reasoning ระบบจะส่งงานไป Kimi K3 แล้วให้ Ollama เขียนคำตอบสุดท้าย
+ถ้า Kimi K3 เรียกไม่สำเร็จหรือ timeout ระบบจะข้าม reasoning และใช้ Ollama หลักตอบต่อใน request เดิมทันที
 | `MINIKUN_VISUAL_GENERATION_ENABLED` | `true` | เปิดการสร้างภาพจากเรื่องและ Image Studio |
 | `MINIKUN_VISUAL_TINYGRAD_BASE_URL` | `http://127.0.0.1:8002` | TinyGrad SDXL service ที่มี `/generate` และ `/health` |
 | `MINIKUN_VISUAL_TINYGRAD_TOKEN` | ว่าง | Bearer token หากตั้ง `SDXL_SERVER_TOKEN` ฝั่ง TinyGrad |

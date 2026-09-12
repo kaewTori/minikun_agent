@@ -24,6 +24,8 @@ public final class InvestmentReviewRouter implements ToolRequestRouter {
     private static final Pattern ACTION = Pattern.compile(
             "(?iu)(ทบทวน|วิเคราะห์|ตรวจสอบ|ตรวจ|เช็ก|เช็ค|ดู|สรุป|ประเมิน|"
                     + "review|analy[sz]e|check|show|summary)");
+    private static final Pattern MONITOR_SIGNAL = Pattern.compile(
+            "(?iu)(ข่าว|วันนี้|ล่าสุด|ติดตาม|แนะนำ|มุมมอง|แผน|monitor|news|latest|today|advice|brief|plan)");
 
     private final ToolExecutor executor;
     private final ObjectMapper objectMapper;
@@ -62,6 +64,7 @@ public final class InvestmentReviewRouter implements ToolRequestRouter {
 
     private boolean isReviewRequest(String text) {
         String normalized = text.toLowerCase(Locale.ROOT);
-        return TARGET.matcher(normalized).find() && ACTION.matcher(normalized).find();
+        return TARGET.matcher(normalized).find() && ACTION.matcher(normalized).find()
+                && !MONITOR_SIGNAL.matcher(normalized).find();
     }
 }

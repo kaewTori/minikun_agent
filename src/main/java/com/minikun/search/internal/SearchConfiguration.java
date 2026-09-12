@@ -2,6 +2,7 @@ package com.minikun.search.internal;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.minikun.search.SearchManager;
+import com.minikun.search.ImageSearchProvider;
 import com.minikun.search.SearchProvider;
 import com.minikun.search.SearchQueryExpansionService;
 import com.minikun.search.SearchQueryPlanningService;
@@ -79,6 +80,38 @@ public class SearchConfiguration {
                 .build();
         return new TavilySearchProvider(
                 restClient, objectMapper, memoryClock, apiKey, enabled, searchDepth);
+    }
+
+    @Bean(name = "imageSearchProvider")
+    ImageSearchProvider imageSearchProvider(
+            ObjectMapper objectMapper,
+            Clock memoryClock,
+            @Value("${minikun.search.by-image.url:}") String endpoint,
+            @Value("${minikun.search.by-image.timeout:15s}") Duration timeout,
+            @Value("${minikun.search.by-image.enabled:false}") boolean enabled,
+            @Value("${minikun.search.by-image.token:}") String token) {
+        HttpClient httpClient = HttpClient.newBuilder()
+                .connectTimeout(timeout)
+                .build();
+        JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(httpClient);
+        requestFactory.setReadTimeout(timeout);
+        RestClient.Builder builder = RestClient.builder().requestFactory(requestFactory);
+        if (token != null && !token.isBlank()) {
+            builder.defaultHeader("Authorization", "Bearer " + token.trim());
+        }
+        HttpImageSearchProvider provider = new HttpImageSearchProvider(
+                builder.build(), objectMapper, memoryClock, endpoint, enabled);
+        if (!provider.configured()) {
+            LOGGER.info("process=search_configuration event=reverse_image_disabled reason=missing_or_disabled_endpoint");
+        }
+        return provider;
+    }
+
+    @Bean
+    DefaultImageSearchService imageSearchService(
+            @Qualifier("imageSearchProvider") ImageSearchProvider provider,
+            SearchFormatter formatter) {
+        return new DefaultImageSearchService(provider, formatter);
     }
 
     @Bean

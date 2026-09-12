@@ -38,14 +38,18 @@ import com.minikun.search.SearchDecisionService;
 import com.minikun.search.SearchQueryPlanningService;
 import com.minikun.search.SearchSelectionSignalMapper;
 import com.minikun.search.SearchService;
+import com.minikun.search.internal.DefaultImageSearchService;
 import com.minikun.search.internal.ExternalContextPlanner;
+import com.minikun.search.internal.ImageIntentDetector;
 import com.minikun.search.model.ExternalContextAction;
 import com.minikun.search.model.ExternalContextDecision;
 import com.minikun.search.model.SearchDecision;
 import com.minikun.search.model.SearchDecisionReason;
+import com.minikun.search.model.ImageSearchRequest;
 import com.minikun.search.model.SearchOptions;
 import com.minikun.search.model.SearchQueryPlan;
 import com.minikun.search.model.SearchRequest;
+import com.minikun.vision.VisionInput;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -65,9 +69,11 @@ final class ChatKnowledgeResolver {
     private final BrowserContentService browserContentService;
     private final AutonomousResearchService autonomousResearchService;
     private final ChatPerformanceMetrics performanceMetrics;
+    private final DefaultImageSearchService imageSearchService;
     private final Configuration configuration;
     private final ExternalContextPlanner externalContextPlanner = new ExternalContextPlanner();
     private final ResearchIntentDetector researchIntentDetector = new ResearchIntentDetector();
+    private final ImageIntentDetector imageIntentDetector = new ImageIntentDetector();
 
     ChatKnowledgeResolver(
             ObjectProvider<MemoryRecallService> memoryRecallService,
@@ -86,7 +92,7 @@ final class ChatKnowledgeResolver {
         this(memoryRecallService, personalKnowledgeService, null, searchService, searchDecisionService,
                 searchQueryPlanningService, searchContextAwarenessService, knowledgeSelectionService,
                 knowledgeConsolidationService, searchSelectionSignalMapper, browserContentService,
-                autonomousResearchService, performanceMetrics, configuration);
+                autonomousResearchService, performanceMetrics, null, configuration);
     }
 
     ChatKnowledgeResolver(
@@ -104,6 +110,28 @@ final class ChatKnowledgeResolver {
             AutonomousResearchService autonomousResearchService,
             ChatPerformanceMetrics performanceMetrics,
             Configuration configuration) {
+        this(memoryRecallService, personalKnowledgeService, acquiredKnowledgeIndex, searchService,
+                searchDecisionService, searchQueryPlanningService, searchContextAwarenessService,
+                knowledgeSelectionService, knowledgeConsolidationService, searchSelectionSignalMapper,
+                browserContentService, autonomousResearchService, performanceMetrics, null, configuration);
+    }
+
+    ChatKnowledgeResolver(
+            ObjectProvider<MemoryRecallService> memoryRecallService,
+            PersonalKnowledgeService personalKnowledgeService,
+            AcquiredKnowledgeIndex acquiredKnowledgeIndex,
+            SearchService searchService,
+            SearchDecisionService searchDecisionService,
+            SearchQueryPlanningService searchQueryPlanningService,
+            SearchContextAwarenessService searchContextAwarenessService,
+            KnowledgeSelectionService knowledgeSelectionService,
+            KnowledgeConsolidationService knowledgeConsolidationService,
+            SearchSelectionSignalMapper searchSelectionSignalMapper,
+            BrowserContentService browserContentService,
+            AutonomousResearchService autonomousResearchService,
+            ChatPerformanceMetrics performanceMetrics,
+            DefaultImageSearchService imageSearchService,
+            Configuration configuration) {
         this.memoryRecallService = memoryRecallService;
         this.personalKnowledgeService = personalKnowledgeService;
         this.acquiredKnowledgeIndex = acquiredKnowledgeIndex;
@@ -117,6 +145,7 @@ final class ChatKnowledgeResolver {
         this.browserContentService = browserContentService;
         this.autonomousResearchService = autonomousResearchService;
         this.performanceMetrics = performanceMetrics;
+        this.imageSearchService = imageSearchService;
         this.configuration = configuration;
     }
 
@@ -200,6 +229,11 @@ final class ChatKnowledgeResolver {
         SearchDecision decision = decisionFuture == null
                 ? new SearchDecision(false, query)
                 : joinSearchDecision(decisionFuture, query);
+        boolean imageByImageRequest = hasImageByImageRequest(request, query);
+        if (imageByImageRequest) {
+            decision = new SearchDecision(true, query, SearchDecisionReason.IMAGE_REQUEST, decision.planHints());
+            log.info("process=search_decision event=image_input_override reason=image_to_image");
+        }
         log.info("process=search_decision event=completed should_search={} reason={}",
                 decision.shouldSearch(), decision.reason());
 
@@ -242,6 +276,25 @@ final class ChatKnowledgeResolver {
             return selection(
                     request, memoryKnowledge, personalKnowledge, plannedDecision, false, null,
                     browserCandidates, searchSignals);
+        }
+
+        if (imageByImageRequest) {
+            List<KnowledgeCandidate> browserCandidates = joinBrowser(browserFuture);
+            try {
+                KnowledgeContext searchKnowledge = searchByImage(request);
+                log.info("process=reverse_image_search event=completed knowledgeCharacters={}",
+                        searchKnowledge.content().length());
+                recordStage("search", searchStarted, "success");
+                return selection(
+                        request, memoryKnowledge, personalKnowledge, plannedDecision, true, searchKnowledge,
+                        browserCandidates, searchSignals);
+            } catch (RuntimeException exception) {
+                log.warn("Reverse image search failed; continuing without search knowledge", exception);
+                recordStage("search", searchStarted, "error");
+                return selection(
+                        request, memoryKnowledge, personalKnowledge, plannedDecision, true, null,
+                        browserCandidates, searchSignals);
+            }
         }
 
         if (deepResearch && autonomousResearchService != null) {
@@ -466,6 +519,28 @@ final class ChatKnowledgeResolver {
         }
     }
 
+    private KnowledgeContext searchByImage(Request request) {
+        if (imageSearchService == null || request.visionInput() == null
+                || request.visionInput().images().isEmpty()) {
+            return KnowledgeContext.empty();
+        }
+        // ponytail: use the first attached image; add multi-image fusion when a real request needs it.
+        VisionInput.Image image = request.visionInput().images().getFirst();
+        return imageSearchService.search(new ImageSearchRequest(
+                UUID.randomUUID(),
+                image.bytes(),
+                image.mimeType(),
+                Math.max(1, Math.min(100, configuration.searchResultLimit())),
+                Instant.now().plus(configuration.searchTimeout())));
+    }
+
+    private boolean hasImageByImageRequest(Request request, String query) {
+        return request.visionInput() != null
+                && request.visionInput().hasImages()
+                && !request.visionInput().images().isEmpty()
+                && imageIntentDetector.detectsByImage(query);
+    }
+
     private List<KnowledgeCandidate> readResearchSourceCandidates(KnowledgeContext searchKnowledge) {
         if (browserContentService == null || configuration.researchSourceReadLimit() < 1
                 || searchKnowledge == null || searchKnowledge.candidates().isEmpty()) {
@@ -676,11 +751,25 @@ final class ChatKnowledgeResolver {
             String ownerId,
             boolean conversationContextAvailable,
             String classifierContext,
-            TurnPlan turnPlan, long contextDeadline) {
+            TurnPlan turnPlan,
+            long contextDeadline,
+            VisionInput visionInput) {
+
+        Request {
+            visionInput = visionInput == null ? VisionInput.EMPTY : visionInput;
+        }
 
         Request(String query, String requestId, ConversationId conversationId, String ownerId,
                 boolean conversationContextAvailable, String classifierContext, TurnPlan turnPlan) {
-            this(query, requestId, conversationId, ownerId, conversationContextAvailable, classifierContext, turnPlan, 0);
+            this(query, requestId, conversationId, ownerId, conversationContextAvailable, classifierContext,
+                    turnPlan, 0, VisionInput.EMPTY);
+        }
+
+        Request(String query, String requestId, ConversationId conversationId, String ownerId,
+                boolean conversationContextAvailable, String classifierContext, TurnPlan turnPlan,
+                long contextDeadline) {
+            this(query, requestId, conversationId, ownerId, conversationContextAvailable, classifierContext,
+                    turnPlan, contextDeadline, VisionInput.EMPTY);
         }
 
         Request(String query, String requestId, ConversationId conversationId, String ownerId,

@@ -16,11 +16,14 @@ import com.minikun.pcs.KnowledgeCandidate;
 import com.minikun.pcs.KnowledgeSource;
 import com.minikun.pcs.model.KnowledgeContext;
 import com.minikun.search.SearchSelectionSignalMapper;
+import com.minikun.search.internal.DefaultImageSearchService;
 import com.minikun.search.internal.DefaultSearchContextAwarenessService;
 import com.minikun.search.internal.DefaultSearchQueryPlanningService;
+import com.minikun.search.model.ImageSearchResult;
 import com.minikun.search.model.SearchDecision;
 import com.minikun.search.model.SearchDecisionReason;
 import com.minikun.search.model.SearchPlanHints;
+import com.minikun.search.model.SearchProviderResponse;
 import com.minikun.research.AutonomousResearchResult;
 import com.minikun.research.ResearchStopReason;
 import com.minikun.research.ResearchTrace;
@@ -30,7 +33,12 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
+import org.springframework.ai.content.Media;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.core.io.ByteArrayResource;
+import org.springframework.util.MimeTypeUtils;
+
+import com.minikun.vision.VisionInput;
 
 class ChatKnowledgeResolverResearchTest {
     @Test
@@ -48,6 +56,42 @@ class ChatKnowledgeResolverResearchTest {
         var result = resolver.resolve(new ChatKnowledgeResolver.Request("สวัสดี", "greeting", null, "owner", false, "", plan));
         assertFalse(result.searchContext().searchAttempted());
         org.mockito.Mockito.verifyNoInteractions(memory, decisions);
+    }
+
+    @Test
+    void routesAnAttachedSimilarImageRequestToReverseImageSearch() {
+        AtomicInteger reverseSearches = new AtomicInteger();
+        DefaultImageSearchService imageSearch = new DefaultImageSearchService(request -> {
+            reverseSearches.incrementAndGet();
+            assertEquals("image/png", request.mimeType());
+            return new SearchProviderResponse(List.of(), List.of(new ImageSearchResult(
+                    "https://images.example/match.png", "Match", "https://source.example/page",
+                    "same subject")));
+        });
+        ObjectProvider<MemoryRecallService> memory = mock(ObjectProvider.class);
+        ChatKnowledgeResolver resolver = new ChatKnowledgeResolver(
+                memory, null, null,
+                request -> { throw new AssertionError("text search must not run"); },
+                query -> new SearchDecision(false, query),
+                new DefaultSearchQueryPlanningService(), new DefaultSearchContextAwarenessService(),
+                new DefaultKnowledgeSelectionService(), new DefaultKnowledgeConsolidationService(),
+                new SearchSelectionSignalMapper(), null, null, null, imageSearch,
+                new ChatKnowledgeResolver.Configuration(
+                        true, Duration.ofSeconds(5), true, true, 8, 5, 5, 3,
+                        Duration.ofSeconds(30)));
+        Media media = new Media(MimeTypeUtils.parseMimeType("image/png"), new ByteArrayResource(new byte[] {1}));
+        VisionInput visionInput = new VisionInput(
+                List.of(media), List.of(new VisionInput.Image("image/png", new byte[] {1, 2, 3})));
+
+        ChatKnowledgeSelection result = resolver.resolve(new ChatKnowledgeResolver.Request(
+                "ช่วยค้นหารูปที่มีสไตล์คล้าย reference นี้", "image-search", null,
+                "default", false, "", null, 0, visionInput));
+
+        assertEquals(1, reverseSearches.get());
+        assertTrue(result.searchContext().searchAttempted());
+        assertEquals("https://source.example/page", result.selection().selectedCandidates().stream()
+                .filter(candidate -> candidate.source() == KnowledgeSource.SEARCH)
+                .findFirst().orElseThrow().provenance());
     }
 
     @Test

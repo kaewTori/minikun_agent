@@ -90,6 +90,7 @@ public final class VisionInputService {
         }
 
         List<Media> media = new ArrayList<>(imageParts.size());
+        List<VisionInput.Image> images = new ArrayList<>(imageParts.size());
         for (Message.ContentPart part : imageParts) {
             if (part.imageUrl() == null || blank(part.imageUrl().url())) {
                 throw new VisionInputException("image_url content parts must contain a non-blank URL");
@@ -97,8 +98,9 @@ public final class VisionInputService {
             ResolvedImage image = resolve(part.imageUrl().url());
             media.add(new Media(MimeTypeUtils.parseMimeType(image.mimeType()),
                     new ByteArrayResource(image.bytes())));
+            images.add(new VisionInput.Image(image.mimeType(), image.bytes()));
         }
-        return new VisionInput(media);
+        return new VisionInput(media, images);
     }
 
     private ResolvedImage resolve(String source) {

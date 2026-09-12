@@ -59,6 +59,7 @@ import com.minikun.search.SearchQueryPlanningService;
 import com.minikun.search.SearchContextAwarenessService;
 import com.minikun.search.SearchService;
 import com.minikun.search.SearchSelectionSignalMapper;
+import com.minikun.search.internal.DefaultImageSearchService;
 import com.minikun.research.AutonomousResearchService;
 import com.minikun.tools.springai.SpringAiToolCallingRuntime;
 import com.minikun.tools.ToolEvidence;
@@ -145,7 +146,7 @@ public class ChatService {
     private BrowserContentService browserContentService;
 
     private VisionInputService visionInputService;
-
+    private DefaultImageSearchService imageSearchService;
     private PersonalKnowledgeService personalKnowledgeService;
 
     private AcquiredKnowledgeIndex acquiredKnowledgeIndex;
@@ -180,7 +181,7 @@ public class ChatService {
         performanceMetrics = collaborators.performanceMetrics();
         generationProfileSelector = collaborators.generationProfileSelector();
         browserContentService = collaborators.browserContentService();
-        visionInputService = collaborators.visionInputService();
+        visionInputService = collaborators.visionInputService(); imageSearchService = collaborators.imageSearchService();
         personalKnowledgeService = collaborators.personalKnowledgeService();
         acquiredKnowledgeIndex = collaborators.acquiredKnowledgeIndex();
         conversationSummaryService = collaborators.conversationSummaryService();
@@ -656,7 +657,7 @@ public class ChatService {
         ChatKnowledgeSelection knowledgeSelection = knowledgeResolver().resolve(
                 new ChatKnowledgeResolver.Request(
                         userMessage.content(), transaction.requestId(), conversationId, ownerId,
-                        hasConversationContext(history, request), classifierContext, turnPlan, contextDeadline));
+                        hasConversationContext(history, request), classifierContext, turnPlan, contextDeadline, visionInput));
         turnPlan = turnPlan.refine(knowledgeSelection);
         if (performanceMetrics != null) performanceMetrics.turnPlan(turnPlan);
         ChatImagePreparer.Result preparedImages = ChatImagePreparer.prepare(knowledgeSelection);
@@ -840,6 +841,7 @@ public class ChatService {
                 browserContentService,
                 autonomousResearchService,
                 performanceMetrics,
+                imageSearchService,
                 new ChatKnowledgeResolver.Configuration(
                         searchEnabled,
                         searchTimeout,

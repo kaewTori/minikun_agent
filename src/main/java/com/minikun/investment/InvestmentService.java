@@ -48,6 +48,18 @@ public class InvestmentService {
     @Transactional
     public InvestmentPolicy setPolicy(
             String ownerId, String baseCurrency, String benchmark, BigDecimal maxSinglePositionPercent) {
+        return setPolicy(ownerId, baseCurrency, benchmark, maxSinglePositionPercent, null, null, null);
+    }
+
+    @Transactional
+    public InvestmentPolicy setPolicy(
+            String ownerId,
+            String baseCurrency,
+            String benchmark,
+            BigDecimal maxSinglePositionPercent,
+            String goal,
+            String timeHorizon,
+            String riskTolerance) {
         String owner = InvestmentPolicy.requireOwner(ownerId);
         Instant now = clock.instant();
         Optional<InvestmentPolicy> existing = store.findPolicy(owner);
@@ -63,6 +75,9 @@ public class InvestmentService {
                 maxSinglePositionPercent == null
                         ? existing.map(InvestmentPolicy::maxSinglePositionPercent).orElse(new BigDecimal("20"))
                         : maxSinglePositionPercent,
+                goal == null ? current.goal() : goal,
+                timeHorizon == null ? current.timeHorizon() : timeHorizon,
+                riskTolerance == null ? current.riskTolerance() : riskTolerance,
                 existing.map(InvestmentPolicy::createdAt).orElse(now),
                 now);
         if (!store.listTransactions(owner).isEmpty()
@@ -189,6 +204,35 @@ public class InvestmentService {
 
     public List<InvestmentThesis> theses(String ownerId, InvestmentThesisStatus status) {
         return List.copyOf(store.listTheses(InvestmentPolicy.requireOwner(ownerId), status));
+    }
+
+    public Map<String, InvestmentQuotePriority> quotePriorities(String ownerId) {
+        return Map.copyOf(store.listQuotePriorities(InvestmentPolicy.requireOwner(ownerId)));
+    }
+
+    @Transactional
+    public Map<String, InvestmentQuotePriority> setQuotePriorities(
+            String ownerId, List<String> symbols, InvestmentQuotePriority priority) {
+        String owner = InvestmentPolicy.requireOwner(ownerId);
+        if (priority == null) throw new IllegalArgumentException("quote priority must not be null");
+        List<String> normalizedSymbols = symbols == null ? List.of() : symbols.stream()
+                .filter(Objects::nonNull)
+                .map(value -> value.trim().toUpperCase(Locale.ROOT))
+                .filter(value -> !value.isBlank())
+                .distinct()
+                .toList();
+        if (normalizedSymbols.isEmpty()) throw new IllegalArgumentException("at least one symbol is required");
+
+        List<String> heldSymbols = summary(owner).positions().stream().map(PortfolioPosition::symbol).toList();
+        List<String> unknownSymbols = normalizedSymbols.stream()
+                .filter(symbol -> !heldSymbols.contains(symbol)).toList();
+        if (!unknownSymbols.isEmpty()) {
+            throw new IllegalArgumentException("quote priority can only be set for held symbols: "
+                    + String.join(", ", unknownSymbols));
+        }
+        Instant now = clock.instant();
+        normalizedSymbols.forEach(symbol -> store.saveQuotePriority(owner, symbol, priority, now));
+        return quotePriorities(owner);
     }
 
     public PortfolioSummary summary(String ownerId) {

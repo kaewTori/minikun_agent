@@ -34,4 +34,11 @@ class InvestmentReviewRouterTest {
 
         assertTrue(router.route("ช่วยวิเคราะห์หุ้น AMZN", new ConversationId("research"), "owner-a").isEmpty());
     }
+
+    @Test
+    void leavesDailyNewsRequestsToTheInvestmentMonitor() {
+        InvestmentReviewRouter router = new InvestmentReviewRouter(mock(ToolExecutor.class), new ObjectMapper());
+
+        assertTrue(router.route("ช่วยสรุปข่าวการลงทุนวันนี้", new ConversationId("news"), "owner-a").isEmpty());
+    }
 }

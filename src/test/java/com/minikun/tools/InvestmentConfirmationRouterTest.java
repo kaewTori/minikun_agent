@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.minikun.agent.minikun_agent.conversation.ConversationId;
 import com.minikun.investment.InvestmentPolicy;
+import com.minikun.investment.InvestmentQuotePriority;
 import com.minikun.investment.InvestmentService;
 import com.minikun.investment.InvestmentStore;
 import com.minikun.investment.InvestmentThesis;
@@ -13,10 +14,12 @@ import com.minikun.investment.InvestmentTransaction;
 import com.minikun.planner.PendingPlannerConfirmation;
 import com.minikun.planner.PlannerConfirmationService;
 import com.minikun.planner.PlannerConfirmationStore;
+import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -74,6 +77,33 @@ class InvestmentConfirmationRouterTest {
         assertTrue(investments.policy == null);
     }
 
+    @Test
+    void persistsQuotePriorityOnlyAfterConfirmation() {
+        InMemoryInvestmentStore investments = new InMemoryInvestmentStore();
+        InMemoryConfirmationStore pending = new InMemoryConfirmationStore();
+        Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
+        InvestmentService service = new InvestmentService(investments, clock, "THB");
+        service.addTransaction("owner-a", "conversation-a", "broker", "BUY", "AAA", "Alpha",
+                "EQUITY", "THB", BigDecimal.ONE, BigDecimal.valueOf(100), null, null, NOW, "");
+        service.addTransaction("owner-a", "conversation-a", "broker", "BUY", "BBB", "Beta",
+                "EQUITY", "THB", BigDecimal.ONE, BigDecimal.valueOf(100), null, null, NOW, "");
+        PlannerConfirmationService confirmations = new PlannerConfirmationService(pending, clock);
+        InvestmentManageTool tool = new InvestmentManageTool(service, confirmations);
+        ToolExecutor executor = new DefaultToolExecutor(new DefaultToolRegistry(List.of(tool)));
+        InvestmentConfirmationRouter router = new InvestmentConfirmationRouter(executor, confirmations);
+        ConversationId conversation = new ConversationId("quote-priority-confirmation");
+
+        ToolResult proposal = tool.execute(new ToolCallContext(conversation, "proposal", "owner-a"), Map.of(
+                "action", "set_quote_priority", "symbols", "AAA,BBB", "priority", "MINOR"));
+
+        assertTrue(proposal.success());
+        assertTrue(tool.requiresExplicitConfirmation(Map.of("action", "set_quote_priority")));
+        assertTrue(investments.quotePriorities.isEmpty());
+        assertTrue(router.route("ยืนยันครับ", conversation, "owner-a").isPresent());
+        assertEquals(InvestmentQuotePriority.MINOR, investments.quotePriorities.get("AAA"));
+        assertEquals(InvestmentQuotePriority.MINOR, investments.quotePriorities.get("BBB"));
+    }
+
     private static final class InMemoryConfirmationStore implements PlannerConfirmationStore {
         private PendingPlannerConfirmation value;
 
@@ -89,6 +119,7 @@ class InvestmentConfirmationRouterTest {
 
     private static final class InMemoryInvestmentStore implements InvestmentStore {
         private InvestmentPolicy policy;
+        private final Map<String, InvestmentQuotePriority> quotePriorities = new HashMap<>();
         private final List<InvestmentTransaction> transactions = new ArrayList<>();
         private final List<InvestmentThesis> theses = new ArrayList<>();
 
@@ -107,6 +138,13 @@ class InvestmentConfirmationRouterTest {
         @Override public InvestmentThesis saveThesis(InvestmentThesis value) { theses.add(value); return value; }
         @Override public List<InvestmentThesis> listTheses(String ownerId, InvestmentThesisStatus status) {
             return List.of();
+        }
+        @Override public Map<String, InvestmentQuotePriority> listQuotePriorities(String ownerId) {
+            return new HashMap<>(quotePriorities);
+        }
+        @Override public void saveQuotePriority(
+                String ownerId, String symbol, InvestmentQuotePriority priority, Instant updatedAt) {
+            quotePriorities.put(symbol, priority);
         }
     }
 }

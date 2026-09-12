@@ -32,6 +32,16 @@ class InvestmentServiceTest {
     }
 
     @Test
+    void storesTheOwnersGoalHorizonAndRiskToleranceWithThePolicy() {
+        InvestmentPolicy policy = service(new InMemoryInvestmentStore()).setPolicy(
+                "owner-a", "THB", "SET TRI", decimal("60"), "เกษียณ", "15 ปี", "ปานกลาง");
+
+        assertEquals("เกษียณ", policy.goal());
+        assertEquals("15 ปี", policy.timeHorizon());
+        assertEquals("ปานกลาง", policy.riskTolerance());
+    }
+
+    @Test
     void calculatesAverageCostRealizedProfitAndPolicyWarningsWithoutMarketPrices() {
         InMemoryInvestmentStore store = new InMemoryInvestmentStore();
         InvestmentService service = service(store);
@@ -127,6 +137,22 @@ class InvestmentServiceTest {
         assertTrue(closed.closedAt() != null);
     }
 
+    @Test
+    void storesQuoteRefreshPriorityOnlyForHeldSymbols() {
+        InMemoryInvestmentStore store = new InMemoryInvestmentStore();
+        InvestmentService service = service(store);
+        addTrade(service, "BUY", "AAA", "1", "100", "0", NOW);
+        addTrade(service, "BUY", "BBB", "1", "100", "0", NOW);
+
+        Map<String, InvestmentQuotePriority> priorities = service.setQuotePriorities(
+                "owner-a", List.of("aaa", "BBB"), InvestmentQuotePriority.MINOR);
+
+        assertEquals(InvestmentQuotePriority.MINOR, priorities.get("AAA"));
+        assertEquals(InvestmentQuotePriority.MINOR, priorities.get("BBB"));
+        assertThrows(IllegalArgumentException.class,
+                () -> service.setQuotePriorities("owner-a", List.of("CCC"), InvestmentQuotePriority.MINOR));
+    }
+
     private InvestmentService service(InMemoryInvestmentStore store) {
         return new InvestmentService(store, Clock.fixed(NOW, ZoneOffset.UTC), "THB");
     }
@@ -148,6 +174,7 @@ class InvestmentServiceTest {
 
     static final class InMemoryInvestmentStore implements InvestmentStore {
         private final Map<String, InvestmentPolicy> policies = new HashMap<>();
+        private final Map<String, Map<String, InvestmentQuotePriority>> quotePriorities = new HashMap<>();
         private final List<InvestmentTransaction> transactions = new ArrayList<>();
         private final List<InvestmentThesis> theses = new ArrayList<>();
 
@@ -206,6 +233,16 @@ class InvestmentServiceTest {
         public List<InvestmentThesis> listTheses(String ownerId, InvestmentThesisStatus status) {
             return theses.stream().filter(value -> value.ownerId().equals(ownerId))
                     .filter(value -> status == null || value.status() == status).toList();
+        }
+
+        @Override
+        public Map<String, InvestmentQuotePriority> listQuotePriorities(String ownerId) {
+            return new HashMap<>(quotePriorities.getOrDefault(ownerId, Map.of()));
+        }
+
+        @Override
+        public void saveQuotePriority(String ownerId, String symbol, InvestmentQuotePriority priority, Instant updatedAt) {
+            quotePriorities.computeIfAbsent(ownerId, ignored -> new HashMap<>()).put(symbol, priority);
         }
     }
 }

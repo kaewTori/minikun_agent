@@ -1,6 +1,8 @@
 package com.minikun.investment;
 
+import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -20,4 +22,8 @@ public interface InvestmentStore {
     InvestmentThesis saveThesis(InvestmentThesis thesis);
 
     List<InvestmentThesis> listTheses(String ownerId, InvestmentThesisStatus status);
+
+    Map<String, InvestmentQuotePriority> listQuotePriorities(String ownerId);
+
+    void saveQuotePriority(String ownerId, String symbol, InvestmentQuotePriority priority, Instant updatedAt);
 }

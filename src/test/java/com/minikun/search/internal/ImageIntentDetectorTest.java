@@ -66,4 +66,20 @@ class ImageIntentDetectorTest {
         assertFalse(detector.detects(" "));
         assertTrue(detector.detects("หารูปแมว") == detector.detects("หารูปแมว"));
     }
+
+    @Test
+    void distinguishesAttachedImageSearchFromVisionAnalysisAndGeneration() {
+        List<String> searchRequests = List.of(
+                "ช่วยค้นหารูปที่มีสไตล์หรือบรรยากาศคล้าย reference นี้",
+                "หารูปนี้มาจากไหน",
+                "find similar images using this image",
+                "reverse image search");
+        searchRequests.forEach(query -> assertTrue(detector.detectsByImage(query), query));
+
+        List<String> nonSearchRequests = List.of(
+                "ช่วยวิเคราะห์ภาพนี้",
+                "ใช้รูปนี้สร้างภาพใหม่",
+                "สร้างต่อจาก reference นี้");
+        nonSearchRequests.forEach(query -> assertFalse(detector.detectsByImage(query), query));
+    }
 }

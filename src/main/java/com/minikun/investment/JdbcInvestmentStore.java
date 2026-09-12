@@ -4,7 +4,9 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
@@ -26,7 +28,8 @@ public final class JdbcInvestmentStore implements InvestmentStore {
     @Override
     public Optional<InvestmentPolicy> findPolicy(String ownerId) {
         return jdbc.query("""
-                SELECT owner_id, base_currency, benchmark, max_single_position_percent, created_at, updated_at
+                SELECT owner_id, base_currency, benchmark, max_single_position_percent,
+                       goal, time_horizon, risk_tolerance, created_at, updated_at
                 FROM minikun_investment_policy WHERE owner_id = ?
                 """, this::mapPolicy, ownerId).stream().findFirst();
     }
@@ -35,15 +38,20 @@ public final class JdbcInvestmentStore implements InvestmentStore {
     public InvestmentPolicy savePolicy(InvestmentPolicy policy) {
         jdbc.update("""
                 INSERT INTO minikun_investment_policy
-                    (owner_id, base_currency, benchmark, max_single_position_percent, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?)
+                    (owner_id, base_currency, benchmark, max_single_position_percent,
+                     goal, time_horizon, risk_tolerance, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT (owner_id) DO UPDATE SET
                     base_currency = EXCLUDED.base_currency,
                     benchmark = EXCLUDED.benchmark,
                     max_single_position_percent = EXCLUDED.max_single_position_percent,
+                    goal = EXCLUDED.goal,
+                    time_horizon = EXCLUDED.time_horizon,
+                    risk_tolerance = EXCLUDED.risk_tolerance,
                     updated_at = EXCLUDED.updated_at
                 """, policy.ownerId(), policy.baseCurrency(), policy.benchmark(),
-                policy.maxSinglePositionPercent(), timestamp(policy.createdAt()), timestamp(policy.updatedAt()));
+                policy.maxSinglePositionPercent(), policy.goal(), policy.timeHorizon(), policy.riskTolerance(),
+                timestamp(policy.createdAt()), timestamp(policy.updatedAt()));
         return policy;
     }
 
@@ -132,10 +140,40 @@ public final class JdbcInvestmentStore implements InvestmentStore {
                 """, this::mapThesis, ownerId, status.name());
     }
 
+    @Override
+    public Map<String, InvestmentQuotePriority> listQuotePriorities(String ownerId) {
+        Map<String, InvestmentQuotePriority> priorities = new LinkedHashMap<>();
+        jdbc.query("""
+                SELECT symbol, priority
+                FROM minikun_investment_quote_priority
+                WHERE owner_id = ?
+                ORDER BY symbol
+                """, (resultSet, rowNum) -> {
+                    priorities.put(resultSet.getString("symbol"),
+                            InvestmentQuotePriority.parse(resultSet.getString("priority")));
+                    return 0;
+                }, ownerId);
+        return Map.copyOf(priorities);
+    }
+
+    @Override
+    public void saveQuotePriority(
+            String ownerId, String symbol, InvestmentQuotePriority priority, Instant updatedAt) {
+        jdbc.update("""
+                INSERT INTO minikun_investment_quote_priority (owner_id, symbol, priority, updated_at)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT (owner_id, symbol) DO UPDATE SET
+                    priority = EXCLUDED.priority,
+                    updated_at = EXCLUDED.updated_at
+                """, ownerId, symbol, priority.name(), timestamp(updatedAt));
+    }
+
     private InvestmentPolicy mapPolicy(ResultSet rs, int row) throws SQLException {
         return new InvestmentPolicy(
                 rs.getString("owner_id"), rs.getString("base_currency"), rs.getString("benchmark"),
-                rs.getBigDecimal("max_single_position_percent"), instant(rs, "created_at"), instant(rs, "updated_at"));
+                rs.getBigDecimal("max_single_position_percent"), rs.getString("goal"),
+                rs.getString("time_horizon"), rs.getString("risk_tolerance"), instant(rs, "created_at"),
+                instant(rs, "updated_at"));
     }
 
     private InvestmentTransaction mapTransaction(ResultSet rs, int row) throws SQLException {

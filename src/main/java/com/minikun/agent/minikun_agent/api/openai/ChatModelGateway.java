@@ -62,7 +62,9 @@ final class ChatModelGateway {
         long started = System.nanoTime();
         String result = "success";
         try {
-            return provider().chat(reasoningEnabled(reasoning) ? reasonedPrompt(prompt, reasoning) : prompt);
+            return reasoningEnabled(reasoning)
+                    ? reasonedChat(prompt, reasoning, null)
+                    : provider().chat(prompt);
         } catch (RuntimeException exception) {
             result = "error";
             throw exception;
@@ -83,7 +85,7 @@ final class ChatModelGateway {
         if (!reasoningEnabled(reasoning)) {
             return provider().stream(prompt);
         }
-        return Flux.defer(() -> provider().stream(reasonedPrompt(prompt, reasoning)));
+        return Flux.defer(() -> reasonedStream(prompt, reasoning));
     }
 
     ChatResponse chatWithTools(
@@ -101,9 +103,6 @@ final class ChatModelGateway {
             ConversationId conversationId,
             String ownerId,
             String requestId) {
-        if (reasoningEnabled(reasoning)) {
-            requireReasoningClient();
-        }
         if (!toolsAvailable()) {
             return chat(prompt, reasoning, "chat_model", requestId, conversationId);
         }
@@ -112,8 +111,7 @@ final class ChatModelGateway {
         try {
             ChatResponse draft = reviewToolRuntimeDraft(prompt, conversationId, ownerId);
             return reasoningEnabled(reasoning)
-                    ? provider().chat(reasonedPrompt(withToolDraft(prompt, draft), reasoning))
-                    : draft;
+                    ? reasonedChat(withToolDraft(prompt, draft), reasoning, draft) : draft;
         } catch (RuntimeException exception) {
             result = "error";
             throw exception;
@@ -156,12 +154,11 @@ final class ChatModelGateway {
         if (!reasoningEnabled(reasoning)) {
             return reviewToolRuntimeDraft(prompt, conversationId, ownerId);
         }
-        requireReasoningClient();
         long started = System.nanoTime();
         String result = "success";
         try {
             ChatResponse draft = reviewToolRuntimeDraft(prompt, conversationId, ownerId);
-            return provider().chat(reasonedPrompt(withToolDraft(prompt, draft), reasoning));
+            return reasonedChat(withToolDraft(prompt, draft), reasoning, draft);
         } catch (RuntimeException exception) {
             result = "error";
             throw exception;
@@ -180,15 +177,11 @@ final class ChatModelGateway {
                 && reasoning != null && reasoning != GenerationOptions.Reasoning.OFF;
     }
 
-    private void requireReasoningClient() {
+    private Prompt reasonedPrompt(Prompt prompt, GenerationOptions.Reasoning reasoning) {
         if (kimiK3ReasoningClient == null || !kimiK3ReasoningClient.configured()) {
             throw new IllegalStateException(
                     "Kimi K3 reasoning is selected but NVIDIA_API_KEY is not configured");
         }
-    }
-
-    private Prompt reasonedPrompt(Prompt prompt, GenerationOptions.Reasoning reasoning) {
-        requireReasoningClient();
         String handoff = kimiK3ReasoningClient.handoff(prompt, reasoning);
         String finalizerInstruction = """
                 You are Minikun's final answer writer. Answer the user's original request using the full prompt
@@ -209,6 +202,32 @@ final class ChatModelGateway {
             return new Prompt(finalizer.getInstructions(), options.build());
         }
         return finalizer;
+    }
+
+    private ChatResponse reasonedChat(
+            Prompt prompt, GenerationOptions.Reasoning reasoning, ChatResponse fallback) {
+        Prompt finalizer;
+        try {
+            finalizer = reasonedPrompt(prompt, reasoning);
+        } catch (RuntimeException exception) {
+            logReasoningFallback(exception);
+            return fallback == null ? provider().chat(prompt) : fallback;
+        }
+        return provider().chat(finalizer);
+    }
+
+    private Flux<ChatResponse> reasonedStream(Prompt prompt, GenerationOptions.Reasoning reasoning) {
+        try {
+            return provider().stream(reasonedPrompt(prompt, reasoning));
+        } catch (RuntimeException exception) {
+            logReasoningFallback(exception);
+            return provider().stream(prompt);
+        }
+    }
+
+    private void logReasoningFallback(RuntimeException exception) {
+        log.warn("process=reasoning event=fallback_to_main_model reason={}",
+                exception.getClass().getSimpleName());
     }
 
     private Prompt withToolDraft(Prompt prompt, ChatResponse draft) {

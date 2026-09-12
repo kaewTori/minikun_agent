@@ -2,6 +2,7 @@ package com.minikun.tools;
 
 import com.minikun.investment.InvestmentService;
 import com.minikun.investment.InvestmentThesisStatus;
+import com.minikun.investment.InvestmentQuotePriority;
 import com.minikun.planner.PlannerConfirmationService;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -20,9 +21,9 @@ import org.springframework.stereotype.Component;
 public final class InvestmentManageTool implements Tool {
     private static final ToolDefinition DEFINITION = new ToolDefinition(
             "investment.manage",
-            "Manage an owner-scoped investment policy, immutable transaction ledger, and decision-journal theses. "
+            "Manage an owner-scoped investment policy (goal, time horizon, risk tolerance), immutable transaction ledger, and decision-journal theses. "
                     + "Read with get_policy, list_transactions, or list_theses. Writes are set_policy, "
-                    + "add_transaction, void_transaction, save_thesis, and close_thesis, and always require explicit "
+                    + "set_quote_priority, add_transaction, void_transaction, save_thesis, and close_thesis, and always require explicit "
                     + "confirmation. This tool never fetches market prices or submits brokerage orders.",
             parameters());
 
@@ -42,7 +43,7 @@ public final class InvestmentManageTool implements Tool {
     @Override
     public boolean requiresExplicitConfirmation(Map<String, Object> arguments) {
         return switch (text(arguments, "action").toLowerCase(java.util.Locale.ROOT)) {
-            case "set_policy", "add_transaction", "void_transaction", "save_thesis", "close_thesis" -> true;
+            case "set_policy", "set_quote_priority", "add_transaction", "void_transaction", "save_thesis", "close_thesis" -> true;
             default -> false;
         };
     }
@@ -61,11 +62,11 @@ public final class InvestmentManageTool implements Tool {
                         "owner_id", context.ownerId(),
                         "theses", investments.theses(context.ownerId(),
                                 InvestmentThesisStatus.parse(text(arguments, "status")))));
-                case "set_policy", "add_transaction", "void_transaction", "save_thesis", "close_thesis" ->
+                case "set_policy", "set_quote_priority", "add_transaction", "void_transaction", "save_thesis", "close_thesis" ->
                     write(context, action, arguments, confirmed);
                 default -> ToolResult.failure(ToolErrorCode.INVALID_ARGUMENTS,
                         "investment action must be get_policy, set_policy, list_transactions, add_transaction, "
-                                + "void_transaction, list_theses, save_thesis, or close_thesis");
+                                + "void_transaction, list_theses, set_quote_priority, save_thesis, or close_thesis");
             };
         } catch (IllegalArgumentException exception) {
             return ToolResult.failure(ToolErrorCode.INVALID_ARGUMENTS, exception.getMessage());
@@ -100,7 +101,10 @@ public final class InvestmentManageTool implements Tool {
         Object result = switch (action) {
             case "set_policy" -> investments.setPolicy(
                     context.ownerId(), text(arguments, "base_currency"), nullable(arguments, "benchmark"),
-                    decimal(arguments, "max_single_position_percent"));
+                    decimal(arguments, "max_single_position_percent"), nullable(arguments, "goal"),
+                    nullable(arguments, "time_horizon"), nullable(arguments, "risk_tolerance"));
+            case "set_quote_priority" -> investments.setQuotePriorities(
+                    context.ownerId(), symbols(arguments), InvestmentQuotePriority.parse(text(arguments, "priority")));
             case "add_transaction" -> investments.addTransaction(
                     context.ownerId(), context.conversationId().value(), text(arguments, "account"),
                     text(arguments, "type"), text(arguments, "symbol"), text(arguments, "instrument_name"),
@@ -125,6 +129,7 @@ public final class InvestmentManageTool implements Tool {
     private String confirmationMessage(String action) {
         return switch (action) {
             case "set_policy" -> "มินิคุงเตรียมแก้ไขกติกาการลงทุนแล้ว ยืนยันให้บันทึกไหมครับ";
+            case "set_quote_priority" -> "มินิคุงเตรียมเปลี่ยน priority การติดตามราคาของหุ้นแล้ว ยืนยันให้บันทึกไหมครับ";
             case "add_transaction" -> "มินิคุงเตรียมเพิ่มธุรกรรมในพอร์ตแล้ว กรุณาตรวจตัวเลขและยืนยันครับ";
             case "void_transaction" -> "มินิคุงเตรียมทำเครื่องหมายยกเลิกธุรกรรมนี้แล้ว ยืนยันไหมครับ";
             case "save_thesis" -> "มินิคุงเตรียมบันทึก thesis การลงทุนแล้ว ยืนยันไหมครับ";
@@ -138,7 +143,9 @@ public final class InvestmentManageTool implements Tool {
         proposed.put("action", action);
         java.util.List<String> keys = switch (action) {
             case "set_policy" -> java.util.List.of(
-                    "base_currency", "benchmark", "max_single_position_percent");
+                    "base_currency", "benchmark", "max_single_position_percent", "goal", "time_horizon",
+                    "risk_tolerance");
+            case "set_quote_priority" -> java.util.List.of("symbols", "priority");
             case "add_transaction" -> java.util.List.of(
                     "account", "type", "symbol", "currency", "quantity", "unit_price", "amount", "fee",
                     "occurred_at");
@@ -158,20 +165,30 @@ public final class InvestmentManageTool implements Tool {
     private static Map<String, ToolParameter> parameters() {
         Map<String, ToolParameter> values = new LinkedHashMap<>();
         values.put("action", parameter("action", ToolParameterType.STRING, true,
-                "get_policy, set_policy, list_transactions, add_transaction, void_transaction, list_theses, "
-                        + "save_thesis, or close_thesis."));
+                "get_policy, set_policy, list_transactions, set_quote_priority, add_transaction, "
+                        + "void_transaction, list_theses, save_thesis, or close_thesis."));
         values.put("base_currency", parameter("base_currency", ToolParameterType.STRING, false,
                 "Three-letter portfolio base currency, such as THB."));
         values.put("benchmark", parameter("benchmark", ToolParameterType.STRING, false,
                 "Optional benchmark identifier chosen by the owner."));
         values.put("max_single_position_percent", parameter("max_single_position_percent", ToolParameterType.NUMBER,
                 false, "Maximum cost-basis allocation percentage for one symbol."));
+        values.put("goal", parameter("goal", ToolParameterType.STRING, false,
+                "Investment goal, for example long-term wealth or a home deposit."));
+        values.put("time_horizon", parameter("time_horizon", ToolParameterType.STRING, false,
+                "Investment time horizon, for example 10 years or retirement."));
+        values.put("risk_tolerance", parameter("risk_tolerance", ToolParameterType.STRING, false,
+                "Owner-described risk tolerance, for example low, moderate, or high."));
         values.put("account", parameter("account", ToolParameterType.STRING, false,
                 "Investment account name; required for add_transaction."));
         values.put("type", parameter("type", ToolParameterType.STRING, false,
                 "BUY, SELL, DIVIDEND, FEE, CASH_DEPOSIT, or CASH_WITHDRAWAL."));
         values.put("symbol", parameter("symbol", ToolParameterType.STRING, false,
                 "Instrument ticker or identifier."));
+        values.put("symbols", parameter("symbols", ToolParameterType.STRING, false,
+                "Comma-separated held symbols whose quote refresh priority should change."));
+        values.put("priority", parameter("priority", ToolParameterType.STRING, false,
+                "Quote refresh priority: HIGH, NORMAL, or MINOR."));
         values.put("instrument_name", parameter("instrument_name", ToolParameterType.STRING, false,
                 "Human-readable instrument name."));
         values.put("asset_class", parameter("asset_class", ToolParameterType.STRING, false,
@@ -224,6 +241,13 @@ public final class InvestmentManageTool implements Tool {
     private String textOr(Map<String, Object> arguments, String key, String fallback) {
         String value = text(arguments, key);
         return value.isBlank() ? fallback : value;
+    }
+
+    private java.util.List<String> symbols(Map<String, Object> arguments) {
+        String value = text(arguments, "symbols");
+        if (value.isBlank()) value = text(arguments, "symbol");
+        return java.util.Arrays.stream(value.split(","))
+                .map(String::strip).filter(item -> !item.isBlank()).distinct().toList();
     }
 
     private BigDecimal decimal(Map<String, Object> arguments, String key) {

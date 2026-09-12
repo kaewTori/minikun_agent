@@ -11,8 +11,22 @@ public record InvestmentPolicy(
         String baseCurrency,
         String benchmark,
         BigDecimal maxSinglePositionPercent,
+        String goal,
+        String timeHorizon,
+        String riskTolerance,
         Instant createdAt,
         Instant updatedAt) {
+
+    /** Keeps source compatibility with the original ledger-only policy. */
+    public InvestmentPolicy(
+            String ownerId,
+            String baseCurrency,
+            String benchmark,
+            BigDecimal maxSinglePositionPercent,
+            Instant createdAt,
+            Instant updatedAt) {
+        this(ownerId, baseCurrency, benchmark, maxSinglePositionPercent, "", "", "", createdAt, updatedAt);
+    }
 
     public InvestmentPolicy {
         ownerId = requireOwner(ownerId);
@@ -24,6 +38,9 @@ public record InvestmentPolicy(
             throw new IllegalArgumentException("maximum single-position percentage must be greater than 0 and at most 100");
         }
         maxSinglePositionPercent = maxSinglePositionPercent.stripTrailingZeros();
+        goal = boundedText(goal, "investment goal", 500);
+        timeHorizon = boundedText(timeHorizon, "investment time horizon", 64);
+        riskTolerance = boundedText(riskTolerance, "investment risk tolerance", 64);
         Objects.requireNonNull(createdAt, "investment policy creation time must not be null");
         Objects.requireNonNull(updatedAt, "investment policy update time must not be null");
     }
@@ -39,6 +56,14 @@ public record InvestmentPolicy(
         String normalized = value == null ? "" : value.trim().toUpperCase(Locale.ROOT);
         if (!normalized.matches("[A-Z]{3}")) {
             throw new IllegalArgumentException("currency must be a three-letter ISO code");
+        }
+        return normalized;
+    }
+
+    private static String boundedText(String value, String field, int maximumLength) {
+        String normalized = Objects.requireNonNullElse(value, "").trim();
+        if (normalized.length() > maximumLength) {
+            throw new IllegalArgumentException(field + " must be at most " + maximumLength + " characters");
         }
         return normalized;
     }
