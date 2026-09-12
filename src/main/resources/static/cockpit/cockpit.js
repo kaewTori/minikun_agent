@@ -957,6 +957,8 @@
     const query = new URLSearchParams();
     if (view !== "chat") query.set("view", view);
     if (view === "cockpit" && section) query.set("section", section);
+    const conversationId = new URLSearchParams(window.location.search).get("conversation_id");
+    if (conversationId) query.set("conversation_id", conversationId);
     const next = `${window.location.pathname}${query.toString() ? `?${query}` : ""}${window.location.hash}`;
     const method = replace ? "replaceState" : "pushState";
     if (`${window.location.pathname}${window.location.search}${window.location.hash}` !== next) {
@@ -3512,7 +3514,17 @@
   }
 
   state.conversations = safeConversationList();
-  if (state.conversations.length) {
+  const requestedConversationId = new URLSearchParams(window.location.search).get("conversation_id");
+  const safeRequestedConversationId = /^[a-zA-Z0-9._:-]{1,200}$/.test(String(requestedConversationId || "").trim())
+    ? requestedConversationId.trim() : "";
+  const requestedConversation = state.conversations.find((conversation) => conversation.id === safeRequestedConversationId);
+  if (requestedConversation) {
+    state.currentConversationId = requestedConversation.id;
+    state.chatMessages = requestedConversation.messages;
+  } else if (safeRequestedConversationId) {
+    state.currentConversationId = safeRequestedConversationId;
+    state.chatMessages = [];
+  } else if (state.conversations.length) {
     state.currentConversationId = state.conversations[0].id;
     state.chatMessages = Array.isArray(state.conversations[0].messages) ? state.conversations[0].messages : [];
   } else {
@@ -3652,6 +3664,11 @@
       mobileMenuDialog?.close();
       showView(button.dataset.viewTarget, button.dataset.section || "", { updateHistory: true });
     });
+  });
+  $("#open-voice-room").addEventListener("click", () => {
+    const url = new URL("/cockpit/voice-room.html", window.location.origin);
+    url.searchParams.set("conversation_id", state.currentConversationId);
+    window.location.assign(`${url.pathname}${url.search}`);
   });
   window.addEventListener("popstate", () => {
     const params = new URLSearchParams(window.location.search);

@@ -110,6 +110,8 @@ final class ChatCapabilityFactory {
                 .anyMatch(candidate -> candidate.source() == KnowledgeSource.PERSONAL);
         boolean hasSearchContent = selection.selection().selectedCandidates().stream()
                 .anyMatch(candidate -> candidate.source() == KnowledgeSource.SEARCH);
+        boolean imageRequested = selection.searchContext().searchDecisionReason()
+                == SearchDecisionReason.IMAGE_REQUEST;
         if (hasSearchContent) {
             String concreteEvidence = selection.selection().selectedCandidates().stream()
                     .filter(candidate -> candidate.source() == KnowledgeSource.SEARCH)
@@ -131,13 +133,19 @@ final class ChatCapabilityFactory {
                 && selection.searchContext().searchAttempted()
                 && !selection.searchContext().searchKnowledgeAvailable()
                 && !hasSearchContent) {
-            capabilities.add(new CapabilityInstruction("Web search outcome", """
+            String outcome = imageRequested ? """
+                    The application attempted image search but found no usable image result. Do not call or simulate
+                    a search or image-generation tool, and do not output tool markup, JSON, XML, or provider protocol.
+                    State plainly that no usable image was retrieved and ask for a more specific visual query only if
+                    useful.
+                    """ : """
                     A web search was attempted for this request but returned no usable evidence. Do not claim that
                     the search succeeded, do not narrate a simulated search, and do not present model knowledge as a
                     search result. If a native web-search tool is available, retry once with a shorter, focused query.
                     Otherwise state plainly that no usable results were retrieved and ask only for identifiers that
                     would materially improve a follow-up search.
-                    """.strip(), true));
+                    """;
+            capabilities.add(new CapabilityInstruction("Web search outcome", outcome.strip(), true));
         }
         if (hasPersonalKnowledge) {
             capabilities.add(new CapabilityInstruction("Personal Knowledge",
@@ -154,8 +162,6 @@ final class ChatCapabilityFactory {
                             + "facts beyond it, and cite the Source URL for each summarized source as a descriptive "
                             + "Markdown link. Never expose internal evidence IDs such as [search-1] or [browser-2]."));
         }
-        boolean imageRequested = selection.searchContext().searchDecisionReason()
-                == SearchDecisionReason.IMAGE_REQUEST;
         if (imageAwareness != null && imageAwareness.hasImages()) {
             capabilities.add(new CapabilityInstruction("Retrieved Images",
                     "Search-result images were retrieved for this request and will be available to the user as response "
@@ -164,13 +170,16 @@ final class ChatCapabilityFactory {
                             + "images, and do not redirect the user elsewhere merely to view images that are attached"
                             + ". These search-result attachments are not model inputs, so the assistant cannot "
                             + "see, inspect, or analyze their visual contents "
-                            + "and must not claim visual details unless trusted text explicitly provides them."));
+                            + "and must not claim visual details unless trusted text explicitly provides them. "
+                            + "The application has already completed the search; do not call or simulate another tool, "
+                            + "and never output tool markup, JSON, XML, or provider protocol."));
         } else if (imageRequested) {
             capabilities.add(new CapabilityInstruction("Image retrieval outcome", """
                     This application supports returning search-result images as response attachments, but no usable
                     image attachment was retrieved for this request. State that no usable image was retrieved this
                     time and, if helpful, suggest a more specific query or source. Never claim categorically that you
-                    are only a language model or that you cannot display or return images.
+                    are only a language model or that you cannot display or return images. Do not call or simulate a
+                    search or image-generation tool, and never output tool markup, JSON, XML, or provider protocol.
                     """.strip(), true));
         }
     }

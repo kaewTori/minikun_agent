@@ -210,7 +210,8 @@ final class ChatKnowledgeResolver {
         if (visionToTextRequest) {
             SearchPlanHints imageHints = request.visionSearchQuery().isBlank()
                     ? SearchPlanHints.EMPTY
-                    : new SearchPlanHints("images", 1.0, searchQuery, List.of(), List.of(), "");
+                    : new SearchPlanHints("images", 1.0, searchQuery,
+                            request.visionSearchAlternates(), List.of(), "");
             decision = new SearchDecision(true, searchQuery, SearchDecisionReason.IMAGE_REQUEST,
                     imageHints);
             log.info("process=search_decision event=image_input_override reason=vision_to_text");
@@ -701,31 +702,47 @@ final class ChatKnowledgeResolver {
             TurnPlan turnPlan,
             long contextDeadline,
             VisionInput visionInput,
-            String visionSearchQuery) {
+            String visionSearchQuery,
+            List<String> visionSearchAlternates) {
 
         Request {
             visionInput = visionInput == null ? VisionInput.EMPTY : visionInput;
-            visionSearchQuery = visionSearchQuery == null ? "" : visionSearchQuery.trim();
+            String normalizedVisionSearchQuery = visionSearchQuery == null ? "" : visionSearchQuery.trim();
+            visionSearchQuery = normalizedVisionSearchQuery;
+            visionSearchAlternates = visionSearchAlternates == null ? List.of() : visionSearchAlternates.stream()
+                    .filter(value -> value != null && !value.isBlank()
+                            && !value.equalsIgnoreCase(normalizedVisionSearchQuery))
+                    .map(String::trim)
+                    .distinct()
+                    .limit(2)
+                    .toList();
         }
 
         Request(String query, String requestId, ConversationId conversationId, String ownerId,
                 boolean conversationContextAvailable, String classifierContext, TurnPlan turnPlan,
                 long contextDeadline, VisionInput visionInput) {
             this(query, requestId, conversationId, ownerId, conversationContextAvailable, classifierContext,
-                    turnPlan, contextDeadline, visionInput, "");
+                    turnPlan, contextDeadline, visionInput, "", List.of());
+        }
+
+        Request(String query, String requestId, ConversationId conversationId, String ownerId,
+                boolean conversationContextAvailable, String classifierContext, TurnPlan turnPlan,
+                long contextDeadline, VisionInput visionInput, String visionSearchQuery) {
+            this(query, requestId, conversationId, ownerId, conversationContextAvailable, classifierContext,
+                    turnPlan, contextDeadline, visionInput, visionSearchQuery, List.of());
         }
 
         Request(String query, String requestId, ConversationId conversationId, String ownerId,
                 boolean conversationContextAvailable, String classifierContext, TurnPlan turnPlan) {
             this(query, requestId, conversationId, ownerId, conversationContextAvailable, classifierContext,
-                    turnPlan, 0, VisionInput.EMPTY);
+                    turnPlan, 0, VisionInput.EMPTY, "", List.of());
         }
 
         Request(String query, String requestId, ConversationId conversationId, String ownerId,
                 boolean conversationContextAvailable, String classifierContext, TurnPlan turnPlan,
                 long contextDeadline) {
             this(query, requestId, conversationId, ownerId, conversationContextAvailable, classifierContext,
-                    turnPlan, contextDeadline, VisionInput.EMPTY);
+                    turnPlan, contextDeadline, VisionInput.EMPTY, "", List.of());
         }
 
         Request(String query, String requestId, ConversationId conversationId, String ownerId,

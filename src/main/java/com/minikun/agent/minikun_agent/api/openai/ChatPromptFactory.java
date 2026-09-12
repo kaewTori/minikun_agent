@@ -201,11 +201,14 @@ final class ChatPromptFactory {
         var conversationStyle = conversationStyleAdvisor.advise(
                 userMessage.content(), conversationWindow.messages());
         PersonalUserModel userModel = userModelFuture.join();
+        boolean currentTurnUsesTools = input.verifiedToolResult() != null
+                || configuration.nativeToolsAvailable()
+                        && input.turnPlan() != null && input.turnPlan().needsTools();
         var personaSignals = adaptivePersonaService == null
                 ? com.minikun.personality.signal.PersonaSelectionSignals.EMPTY
                 : adaptivePersonaService.evaluate(
                         input.ownerId(), userMessage.content(), promptSearchSignals.searchRequested(),
-                        configuration.nativeToolsAvailable() || input.verifiedToolResult() != null,
+                        currentTurnUsesTools,
                         false, conversationStyle.mood(), userModel).signals();
         PersonalUserModel promptUserModel = leanUserModel(userModel, generation.profile());
         PromptRequest promptRequest = new PromptRequest(
@@ -313,10 +316,12 @@ final class ChatPromptFactory {
     private List<CapabilityInstruction> capabilities(
             Request input, String conversationStyleInstruction, boolean creativeRequest,
             String relationshipContext) {
+        boolean nativeToolsAvailable = configuration.nativeToolsAvailable()
+                && input.turnPlan() != null && input.turnPlan().needsTools();
         List<CapabilityInstruction> values = new ArrayList<>(capabilityFactory.create(
                 input.userMessage().content(), input.knowledgeSelection(), input.imageAwareness(),
                 input.verifiedToolResult(), input.visionInput(), input.interactionMode(),
-                conversationStyleInstruction, configuration.nativeToolsAvailable(), creativeRequest));
+                conversationStyleInstruction, nativeToolsAvailable, creativeRequest));
         ConversationContinuity continuity = continuityResolver.resolve(
                 input.userMessage().content(), continuityContext(input.history()));
         if (continuity.followUp()) {

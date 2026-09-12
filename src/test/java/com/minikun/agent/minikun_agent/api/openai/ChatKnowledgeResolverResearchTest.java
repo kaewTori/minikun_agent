@@ -83,9 +83,12 @@ class ChatKnowledgeResolverResearchTest {
         ChatKnowledgeSelection result = resolver.resolve(new ChatKnowledgeResolver.Request(
                 "ช่วยค้นหารูปที่มีสไตล์คล้าย reference นี้", "image-search", null,
                 "default", false, "", null, 0, visionInput,
-                "cinematic anime girl neon city"));
+                "cinematic anime girl neon city",
+                List.of("anime girl neon city", "cinematic neon city artwork")));
 
         assertEquals("cinematic anime girl neon city", imageSearch.get().query());
+        assertEquals(List.of("anime girl neon city", "cinematic neon city artwork"),
+                imageSearch.get().alternateQueries());
         assertEquals(SearchOptions.IMAGE_CATEGORY, imageSearch.get().options().category());
         assertTrue(result.searchContext().searchAttempted());
     }

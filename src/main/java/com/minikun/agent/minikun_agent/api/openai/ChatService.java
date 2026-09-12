@@ -439,6 +439,7 @@ public class ChatService {
             if (continued.continuationResponse() != null) {
                 usage = addModelUsage(usage, modelUsage(continued.continuationResponse()));
             }
+            content = ModelOutputSanitizer.clean(content);
             recordModelUsage(usage, generationStarted);
             recordGenerationOutcome(
                     context.generationProfile(), continued.finishReason(), continued.continuationCount());
@@ -542,6 +543,7 @@ public class ChatService {
         long modelStarted = System.nanoTime();
         String traceId = MDC.get("trace_id");
         CitationLinker.Stream citationStream = CitationLinker.stream(context.citations());
+        ModelOutputSanitizer.Stream outputSanitizer = new ModelOutputSanitizer.Stream();
         boolean toolRuntimeRequired = verifiedToolResult.isEmpty() && context.turnPlan().needsTools();
         Flux<ChatResponse> primaryResponses = verifiedToolResult.isPresent()
             ? modelGateway().stream(context.prompt(), context.reasoning(), context.conversationId())
@@ -560,9 +562,10 @@ public class ChatService {
                         context.estimatedInputTokens(), modelUsage(response).promptTokens(), promptEstimateRecorded))
                 .doOnNext(response -> recordFirstToken(
                         response, firstTokenRecorded, requestStarted, modelStarted))
-                .doOnNext(response -> appendAssistantText(assistantContent, response))
-                .map(response -> responseFactory.contentChunk(
-                        citationStream.accept(response.getResult().getOutput().getText()), id, created, model))
+                .map(response -> outputSanitizer.accept(response.getResult().getOutput().getText()))
+                .doOnNext(assistantContent::append)
+                .map(content -> responseFactory.contentChunk(
+                        citationStream.accept(content), id, created, model))
                 .filter(chunk -> !chunk.isBlank());
         Flux<String> chunks = Flux.concat(modelChunks, Flux.defer(() -> {
                     String tail = citationStream.finish();
@@ -664,11 +667,11 @@ public class ChatService {
         TurnPlan turnPlan = turnPlanner.plan(userMessage.content(), classifierContext, interactionMode,
                 visionInput != null && visionInput.hasImages(), verifiedToolResult,
                 toolsEnabled && toolCallingRuntime != null);
-        String visionSearchQuery = searchEnabled
+        VisionSearchQueryService.Result visionSearchResult = searchEnabled
                 ? visionSearchQueryService.resolve(
                         true, userMessage.content(), visionInput, modelGateway(), effectiveConfiguredChatModel(),
                         transaction.requestId(), conversationId, requestContext)
-                : "";
+                : VisionSearchQueryService.Result.EMPTY;
         requestContext.requireRemaining("knowledge");
         int recentMessageLimit = conversationSummary.isBlank() || conversationSummaryService == null
                 ? Integer.MAX_VALUE : conversationSummaryService.recentMessageLimit();
@@ -676,7 +679,7 @@ public class ChatService {
                 new ChatKnowledgeResolver.Request(
                         userMessage.content(), transaction.requestId(), conversationId, ownerId,
                         hasConversationContext(history, request), classifierContext, turnPlan, contextDeadline,
-                        visionInput, visionSearchQuery));
+                        visionInput, visionSearchResult.query(), visionSearchResult.alternateQueries()));
         turnPlan = turnPlan.refine(knowledgeSelection);
         if (performanceMetrics != null) performanceMetrics.turnPlan(turnPlan);
         requestContext.requireRemaining("prompt");
@@ -938,10 +941,6 @@ public class ChatService {
             : chatModel;
     }
 
-    private void appendAssistantText(StringBuilder content, ChatResponse response) {
-        String text = response.getResult().getOutput().getText();
-        if (text != null) content.append(text);
-    }
 
     private boolean shouldIllustrate(TurnPlan turnPlan) {
         return storyIllustrationService != null && turnPlan != null && turnPlan.imageOutput();

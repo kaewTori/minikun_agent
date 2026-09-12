@@ -800,7 +800,9 @@ class ChatServiceChatOrchestrationTest {
         service.chatCompletionStream(request(), new ConversationId("general-direct-stream"))
                 .collectList().block();
 
-        verify(chatModel).stream(any(Prompt.class));
+        ArgumentCaptor<Prompt> prompt = ArgumentCaptor.forClass(Prompt.class);
+        verify(chatModel).stream(prompt.capture());
+        assertFalse(promptText(prompt.getValue()).contains("Native tools"));
         verify(toolRuntime, never()).call(any(Prompt.class), any(ConversationId.class), any(String.class));
     }
 

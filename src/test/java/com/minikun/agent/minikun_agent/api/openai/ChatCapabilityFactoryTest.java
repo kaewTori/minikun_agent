@@ -158,5 +158,8 @@ class ChatCapabilityFactoryTest {
         assertTrue(text.contains("Image retrieval outcome"));
         assertTrue(text.contains("supports returning search-result images"));
         assertTrue(text.contains("Never claim categorically"));
+        assertTrue(text.contains("Do not call or simulate"));
+        assertTrue(text.contains("never output tool markup"));
+        assertTrue(!text.contains("If a native web-search tool is available"));
     }
 }
