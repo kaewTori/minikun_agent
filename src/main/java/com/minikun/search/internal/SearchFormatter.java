@@ -92,10 +92,6 @@ final class SearchFormatter {
         return formatImages(results, resultLimit, query, false);
     }
 
-    KnowledgeContext formatImagesByImage(List<ImageSearchResult> results, int resultLimit) {
-        return formatImages(results, resultLimit, "", true);
-    }
-
     private KnowledgeContext formatImages(
             List<ImageSearchResult> results,
             int resultLimit,

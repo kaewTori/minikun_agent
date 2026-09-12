@@ -2,15 +2,15 @@
 
 Minikun can return a visual gallery for image-search requests while retrieving normal web evidence for the answer in parallel.
 
-## Reverse-image search
+## Vision-to-text image search
 
-The Cockpit action `หารูปคล้ายกัน` sends the already validated attached image through the chat pipeline. When
-`MINIKUN_SEARCH_BY_IMAGE_ENABLED=true` and `MINIKUN_SEARCH_BY_IMAGE_URL` is configured, Minikun posts a bounded
-JPEG/PNG/WebP multipart part named `image` plus `limit` to that endpoint. The provider response is intentionally small
-and vendor-neutral: `{"results":[{"image_url":"https://…","title":"…","source_url":"https://…",
-"description":"…","thumbnail_url":"https://…","provider":"…","license":"…"}]}`. Returned entries
-reuse the existing image gallery, source links, and evidence selection. The feature is fail-open and disabled by
-default; no provider means Minikun keeps the vision answer and reports that no matching image was retrieved.
+The Cockpit action `หารูปคล้ายกัน` keeps the validated image in the multimodal chat request. For an explicit visual-search
+request, Minikun first asks the active vision model for one concise English query describing only visible subject, style,
+composition, palette, lighting, mood, and setting. That query is then sent to the existing text image-search path
+(SearXNG/Tavily failover), so results use the same gallery, source links, and evidence selection as ordinary image search.
+
+The generated description is a search hint, not proof of identity or origin. Minikun does not claim an exact source match,
+and if the vision step fails it falls back to the user's text query instead of uploading the image to a separate provider.
 
 ## Image Studio
 

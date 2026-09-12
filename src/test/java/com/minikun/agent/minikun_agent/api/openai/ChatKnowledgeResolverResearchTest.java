@@ -16,14 +16,13 @@ import com.minikun.pcs.KnowledgeCandidate;
 import com.minikun.pcs.KnowledgeSource;
 import com.minikun.pcs.model.KnowledgeContext;
 import com.minikun.search.SearchSelectionSignalMapper;
-import com.minikun.search.internal.DefaultImageSearchService;
 import com.minikun.search.internal.DefaultSearchContextAwarenessService;
 import com.minikun.search.internal.DefaultSearchQueryPlanningService;
-import com.minikun.search.model.ImageSearchResult;
 import com.minikun.search.model.SearchDecision;
 import com.minikun.search.model.SearchDecisionReason;
+import com.minikun.search.model.SearchOptions;
 import com.minikun.search.model.SearchPlanHints;
-import com.minikun.search.model.SearchProviderResponse;
+import com.minikun.search.model.SearchRequest;
 import com.minikun.research.AutonomousResearchResult;
 import com.minikun.research.ResearchStopReason;
 import com.minikun.research.ResearchTrace;
@@ -59,23 +58,21 @@ class ChatKnowledgeResolverResearchTest {
     }
 
     @Test
-    void routesAnAttachedSimilarImageRequestToReverseImageSearch() {
-        AtomicInteger reverseSearches = new AtomicInteger();
-        DefaultImageSearchService imageSearch = new DefaultImageSearchService(request -> {
-            reverseSearches.incrementAndGet();
-            assertEquals("image/png", request.mimeType());
-            return new SearchProviderResponse(List.of(), List.of(new ImageSearchResult(
-                    "https://images.example/match.png", "Match", "https://source.example/page",
-                    "same subject")));
-        });
+    void routesAnAttachedImageRequestThroughVisionToTextSearch() {
+        java.util.concurrent.atomic.AtomicReference<SearchRequest> imageSearch = new java.util.concurrent.atomic.AtomicReference<>();
         ObjectProvider<MemoryRecallService> memory = mock(ObjectProvider.class);
         ChatKnowledgeResolver resolver = new ChatKnowledgeResolver(
                 memory, null, null,
-                request -> { throw new AssertionError("text search must not run"); },
+                request -> {
+                    if (SearchOptions.IMAGE_CATEGORY.equals(request.options().category())) {
+                        imageSearch.set(request);
+                    }
+                    return KnowledgeContext.empty();
+                },
                 query -> new SearchDecision(false, query),
                 new DefaultSearchQueryPlanningService(), new DefaultSearchContextAwarenessService(),
                 new DefaultKnowledgeSelectionService(), new DefaultKnowledgeConsolidationService(),
-                new SearchSelectionSignalMapper(), null, null, null, imageSearch,
+                new SearchSelectionSignalMapper(), null, null, null,
                 new ChatKnowledgeResolver.Configuration(
                         true, Duration.ofSeconds(5), true, true, 8, 5, 5, 3,
                         Duration.ofSeconds(30)));
@@ -85,13 +82,12 @@ class ChatKnowledgeResolverResearchTest {
 
         ChatKnowledgeSelection result = resolver.resolve(new ChatKnowledgeResolver.Request(
                 "ช่วยค้นหารูปที่มีสไตล์คล้าย reference นี้", "image-search", null,
-                "default", false, "", null, 0, visionInput));
+                "default", false, "", null, 0, visionInput,
+                "cinematic anime girl neon city"));
 
-        assertEquals(1, reverseSearches.get());
+        assertEquals("cinematic anime girl neon city", imageSearch.get().query());
+        assertEquals(SearchOptions.IMAGE_CATEGORY, imageSearch.get().options().category());
         assertTrue(result.searchContext().searchAttempted());
-        assertEquals("https://source.example/page", result.selection().selectedCandidates().stream()
-                .filter(candidate -> candidate.source() == KnowledgeSource.SEARCH)
-                .findFirst().orElseThrow().provenance());
     }
 
     @Test

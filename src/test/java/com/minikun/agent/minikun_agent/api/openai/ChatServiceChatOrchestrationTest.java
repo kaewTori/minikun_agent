@@ -279,6 +279,57 @@ class ChatServiceChatOrchestrationTest {
     }
 
     @Test
+    void describesAttachedImageBeforeSearchingTextImageResults() throws Exception {
+        ChatModel chatModel = mock(ChatModel.class);
+        ConversationMemoryService conversation = mock(ConversationMemoryService.class);
+        SearchService searchService = mock(SearchService.class);
+        SearchDecisionService decisionService = mock(SearchDecisionService.class);
+        when(conversation.load(any())).thenReturn(List.of());
+        when(chatModel.call(any(Prompt.class))).thenReturn(
+                response("cinematic black cat neon observatory"), response("image search answer"));
+        when(decisionService.decide(any())).thenReturn(new SearchDecision(false, "image request"));
+        ImageSource image = new ImageSource(
+                "https://example.com/cat.jpg", "Cat", "https://source.example/cat", "black cat");
+        when(searchService.search(any())).thenAnswer(invocation -> {
+            SearchRequest searchRequest = invocation.getArgument(0);
+            return SearchOptions.IMAGE_CATEGORY.equals(searchRequest.options().category())
+                    ? new KnowledgeContext("", List.of(), List.of(image)) : KnowledgeContext.empty();
+        });
+
+        ChatService service = service(chatModel, conversation, searchService, decisionService);
+        setField(service, "visionInputService", new VisionInputService(
+                true, 3, 1024, true, false, Duration.ofSeconds(1), Duration.ofSeconds(1),
+                new GeneratedImageStore(temporaryDirectory, 1024, Clock.systemUTC())));
+        setField(service, "searchEnabled", true);
+        setField(service, "searchTimeout", Duration.ofSeconds(10));
+        setField(service, "searchQueryPlanningEnabled", false);
+
+        ChatCompletionRequest request = new ObjectMapper().readValue("""
+                {"model":"mini-kun","conversation_id":"vision-search","stream":false,"messages":[
+                  {"role":"user","content":[
+                    {"type":"text","text":"ช่วยค้นหารูปที่มีสไตล์หรือบรรยากาศคล้าย reference นี้"},
+                    {"type":"image_url","image_url":{"url":"data:image/png;base64,iVBORw0KGgo="}}
+                  ]}
+                ]}
+                """, ChatCompletionRequest.class);
+
+        service.chatCompletion(request, new ConversationId("vision-search"));
+
+        ArgumentCaptor<SearchRequest> searchRequest = ArgumentCaptor.forClass(SearchRequest.class);
+        verify(searchService, org.mockito.Mockito.atLeastOnce()).search(searchRequest.capture());
+        SearchRequest imageRequest = searchRequest.getAllValues().stream()
+                .filter(value -> SearchOptions.IMAGE_CATEGORY.equals(value.options().category()))
+                .findFirst().orElseThrow();
+        assertEquals("cinematic black cat neon observatory", imageRequest.query());
+
+        ArgumentCaptor<Prompt> prompts = ArgumentCaptor.forClass(Prompt.class);
+        verify(chatModel, org.mockito.Mockito.times(2)).call(prompts.capture());
+        assertTrue(promptText(prompts.getAllValues().get(0)).contains("visual search query writer"));
+        assertEquals(1, prompts.getAllValues().get(0).getUserMessage().getMedia().size());
+        assertTrue(promptText(prompts.getAllValues().get(1)).contains("Retrieved Images"));
+    }
+
+    @Test
     void includesVisualHandoffWhenGeneratingFromAReferenceImage() throws Exception {
         ChatModel chatModel = mock(ChatModel.class);
         ConversationMemoryService conversation = mock(ConversationMemoryService.class);

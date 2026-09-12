@@ -34,7 +34,7 @@ public final class ImageIntentDetector {
             "\\bwhat\\s+does\\s+.+\\s+look\\s+like\\b");
     private static final Pattern STRUCTURAL_IMAGE_TERM = Pattern.compile(
             "(?:รูปแบบ|ภาพรวม|\\bdesign\\s+pattern\\b|\\barchitecture\\s+(?:explanation|discussion)\\b)");
-    private static final Pattern IMAGE_TO_IMAGE_SEARCH_REQUEST = Pattern.compile(
+    private static final Pattern VISUAL_SEARCH_REQUEST = Pattern.compile(
             "(?:reverse\\s+image|search\\s+by\\s+image|"
                     + "(?:search|find|look\\s+up)\\b.*(?:this\\s+(?:image|picture|photo)|"
                     + "similar|matching)|"
@@ -74,11 +74,11 @@ public final class ImageIntentDetector {
                 || ENGLISH_ARTWORK_FOLLOW_UP.matcher(normalized).find();
     }
 
-    /** Detects a request to use an attached image as the search query. */
+    /** Detects a request to use an attached image for vision-to-text image search. */
     public boolean detectsByImage(String query) {
         if (query == null || query.isBlank()) {
             return false;
         }
-        return IMAGE_TO_IMAGE_SEARCH_REQUEST.matcher(query.trim().toLowerCase(Locale.ROOT)).find();
+        return VISUAL_SEARCH_REQUEST.matcher(query.trim().toLowerCase(Locale.ROOT)).find();
     }
 }

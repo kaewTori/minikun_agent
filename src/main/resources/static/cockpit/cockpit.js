@@ -281,10 +281,10 @@
   function findSimilarVisual(visual) {
     attachVisualReference(visual);
     const composer = $("#chat-composer");
-    composer.value = `ช่วยค้นหารูปที่มีสไตล์หรือบรรยากาศคล้าย reference นี้ พร้อมบอกแหล่งที่มาของแต่ละรูปครับ: `;
+    composer.value = `ช่วยสรุปรายละเอียดจากภาพ reference นี้เป็นคำค้น แล้วค้นหารูปที่มีสไตล์หรือบรรยากาศใกล้เคียง พร้อมบอกแหล่งที่มาของแต่ละรูปครับ: `;
     autoGrowComposer();
     composer.focus();
-    toast("แนบรูปต้นแบบสำหรับค้นหาภาพคล้ายกันแล้วครับ");
+    toast("แนบภาพให้ AI สรุปคำค้นเพื่อค้นหารูปคล้ายกันแล้วครับ");
   }
 
   async function defaultInspirationBoard() {
@@ -2013,12 +2013,16 @@
       };
       // ponytail: all Cockpit turns use durable polling; reintroduce foreground streaming only with reconnect/resume.
       const useBackground = true;
+      let backgroundResult = null;
       if (!useBackground) {
         await streamChatCompletion(task, requestBody);
       } else if (!task.jobId) {
         const started = await api("/v1/chat/background", {
           method: "POST",
-          headers: { "X-Conversation-Id": conversationId },
+          headers: {
+            "X-Conversation-Id": conversationId,
+            "X-Idempotency-Key": String(userMessage.id || uniqueId("background-"))
+          },
           signal: task.controller.signal,
           body: JSON.stringify({ ...requestBody, stream: false })
         });
@@ -2028,30 +2032,48 @@
       }
       if (useBackground) {
         let result;
+        let lastRenderedCompletion = "";
         while (!task.controller.signal.aborted) {
           result = await api(`/v1/chat/background/${encodeURIComponent(task.jobId)}`, {
             signal: task.controller.signal
           });
-          if (result.status !== "running") break;
+          const imageStatus = String(result.imageStatus || result.image_status || "not_requested").toLowerCase();
+          if (result.response) {
+            const completion = result.response;
+            const choice = completion.choices?.[0] || {};
+            const content = String(choice.message?.content || "");
+            const attachments = (completion.attachments || []).map(normalizeVisual).filter((image) => image.url);
+            const signature = `${content}|${attachments.map((image) => image.url).join(",")}|${imageStatus}`;
+            assistant.responseId = String(completion.id || assistant.responseId || "");
+            assistant.content = content;
+            assistant.finishReason = String(choice.finish_reason || "");
+            assistant.attachments = attachments;
+            if (completion.usage) {
+              assistant.usage = {
+                promptTokens: Number(completion.usage.prompt_tokens) || 0,
+                completionTokens: Number(completion.usage.completion_tokens) || 0,
+                totalTokens: Number(completion.usage.total_tokens) || 0
+              };
+            }
+            if (signature !== lastRenderedCompletion) {
+              lastRenderedCompletion = signature;
+              if (imageStatus === "queued" || imageStatus === "running") {
+                updatePendingProgress(task, "กำลังสร้างภาพประกอบ…");
+              }
+              if (state.currentConversationId === conversationId) renderChat();
+            }
+          }
+          const imageFinished = !["queued", "running"].includes(imageStatus);
+          const chatStatus = String(result.status || "").toLowerCase();
+          const chatFinished = !["queued", "running"].includes(chatStatus);
+          if (chatFinished && imageFinished) break;
           await new Promise((resolve) => window.setTimeout(resolve, 1500));
         }
         if (task.controller.signal.aborted || result?.status === "cancelled") {
           throw new DOMException("ยกเลิกคำตอบแล้ว", "AbortError");
         }
         if (result?.status !== "completed") throw new Error(result?.error || "มินิคุงตอบไม่สำเร็จ");
-        const completion = result.response || {};
-        assistant.responseId = String(completion.id || assistant.responseId || "");
-        const choice = completion.choices?.[0] || {};
-        assistant.content = String(choice.message?.content || "");
-        assistant.finishReason = String(choice.finish_reason || "");
-        assistant.attachments = (completion.attachments || []).map(normalizeVisual).filter((image) => image.url);
-        if (completion.usage) {
-          assistant.usage = {
-            promptTokens: Number(completion.usage.prompt_tokens) || 0,
-            completionTokens: Number(completion.usage.completion_tokens) || 0,
-            totalTokens: Number(completion.usage.total_tokens) || 0
-          };
-        }
+        backgroundResult = result;
       }
       assistant.timing.totalMs = Date.now() - assistant.timing.startedAt;
       if (!assistant.content && !assistant.attachments.length) assistant.content = "ได้รับข้อความแล้วครับ แต่ยังไม่มีคำตอบกลับมา";
@@ -2060,7 +2082,10 @@
       userMessage.backgroundJobId = "";
       messages.push(assistant);
       saveConversation(seed || userMessage.content, conversationId, messages);
-      if (task.jobId) api(`/v1/chat/background/${encodeURIComponent(task.jobId)}`, { method: "DELETE" }).catch(() => {});
+      const finalImageStatus = String(backgroundResult?.imageStatus || backgroundResult?.image_status || "not_requested").toLowerCase();
+      if (task.jobId && !["queued", "running"].includes(finalImageStatus)) {
+        api(`/v1/chat/background/${encodeURIComponent(task.jobId)}`, { method: "DELETE" }).catch(() => {});
+      }
       if (state.currentConversationId === conversationId) {
         renderChat();
         if (state.voiceOutput && assistant.content) speak(assistant.content);

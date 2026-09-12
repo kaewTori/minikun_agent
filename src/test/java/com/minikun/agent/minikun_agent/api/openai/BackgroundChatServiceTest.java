@@ -4,6 +4,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.util.List;
@@ -18,6 +20,7 @@ import org.junit.jupiter.api.Test;
 
 import com.minikun.agent.minikun_agent.api.openai.dto.ChatCompletionRequest;
 import com.minikun.agent.minikun_agent.api.openai.dto.ChatCompletionResponse;
+import com.minikun.agent.minikun_agent.api.openai.dto.ChatAttachment;
 import com.minikun.agent.minikun_agent.api.openai.dto.Message;
 import com.minikun.agent.minikun_agent.conversation.ConversationId;
 import com.minikun.notification.NotificationRequest;
@@ -176,6 +179,119 @@ class BackgroundChatServiceTest {
             assertEquals("failed", result.status());
             assertTrue(result.error().contains("เวลานานเกินไป"));
             assertTrue(interrupted.await(2, TimeUnit.SECONDS));
+        }
+    }
+
+    @Test
+    void repeatedIdempotencyKeyReturnsTheOriginalJob() throws Exception {
+        ChatService chat = mock(ChatService.class);
+        ChatCompletionResponse response = new ChatCompletionResponse(
+                "chatcmpl-idempotent", "chat.completion", 1, "mini-kun",
+                List.of(new ChatCompletionResponse.Choice(0, new Message("assistant", "ครั้งเดียว"), "stop")),
+                new ChatCompletionResponse.Usage(1, 1, 2));
+        when(chat.chatCompletionInBackground(any(), any(), any()))
+                .thenReturn(new ChatService.ChatCompletionOutcome(response, null));
+        BackgroundChatStore store = new BackgroundChatStore((org.springframework.jdbc.core.JdbcTemplate) null,
+                new ObjectMapper());
+
+        try (BackgroundChatService service = new BackgroundChatService(chat, ignored -> { }, store)) {
+            ChatCompletionRequest request = new ChatCompletionRequest("mini-kun",
+                    List.of(new Message("user", "ทำครั้งเดียว")), "idempotent", false,
+                    null, null, null, null, "owner");
+            UUID first = service.submit(request, new ConversationId("idempotent"), "message-1");
+            UUID second = service.submit(request, new ConversationId("idempotent"), "message-1");
+
+            assertEquals(first, second);
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
+            while (!"completed".equals(service.find(first).orElseThrow().status())
+                    && System.nanoTime() < deadline) Thread.onSpinWait();
+            verify(chat, times(1)).chatCompletionInBackground(any(), any(), any());
+        }
+    }
+
+    @Test
+    void textCompletesBeforeTheIllustrationAndTheAttachmentIsAddedLater() throws Exception {
+        ChatService chat = mock(ChatService.class);
+        ChatCompletionResponse response = new ChatCompletionResponse(
+                "chatcmpl-image", "chat.completion", 1, "mini-kun",
+                List.of(new ChatCompletionResponse.Choice(0, new Message("assistant", "ข้อความก่อนภาพ"), "stop")),
+                new ChatCompletionResponse.Usage(1, 1, 2));
+        ChatService.IllustrationTask task = new ChatService.IllustrationTask(
+                "owner", "image-job", "ช่วยวาดภาพ", "ข้อความก่อนภาพ", true,
+                "chatcmpl-image", java.time.Instant.now().plusSeconds(10));
+        CountDownLatch imageStarted = new CountDownLatch(1);
+        CountDownLatch releaseImage = new CountDownLatch(1);
+        ChatAttachment attachment = new ChatAttachment("image", "/v1/images/generated/test.png", "ภาพประกอบ");
+        when(chat.chatCompletionInBackground(any(), any(), any()))
+                .thenReturn(new ChatService.ChatCompletionOutcome(response, task));
+        when(chat.completeIllustration(any())).thenAnswer(ignored -> {
+            imageStarted.countDown();
+            releaseImage.await(2, TimeUnit.SECONDS);
+            return new com.minikun.visual.StoryIllustrationService.IllustrationResult(List.of(attachment), "");
+        });
+
+        try (BackgroundChatService service = new BackgroundChatService(
+                chat, ignored -> { }, (BackgroundChatStore) null, Duration.ofSeconds(10), 2, 1)) {
+            UUID id = service.submit(new ChatCompletionRequest("mini-kun",
+                    List.of(new Message("user", "ช่วยวาดภาพ")), "image-job", false,
+                    null, null, null), new ConversationId("image-job"));
+            assertTrue(imageStarted.await(2, TimeUnit.SECONDS));
+            var textReady = service.find(id).orElseThrow();
+            assertEquals("completed", textReady.status());
+            assertEquals("running", textReady.imageStatus());
+            assertEquals("ข้อความก่อนภาพ", textReady.response().choices().getFirst().message().content());
+
+            releaseImage.countDown();
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
+            while (!"completed".equals(service.find(id).orElseThrow().imageStatus())
+                    && System.nanoTime() < deadline) Thread.onSpinWait();
+            var finished = service.find(id).orElseThrow();
+            assertEquals("completed", finished.imageStatus());
+            assertEquals(1, finished.response().attachments().size());
+        }
+    }
+
+    @Test
+    void capsWaitingBackgroundJobsWithoutBlockingTheActiveWorker() throws Exception {
+        ChatService chat = mock(ChatService.class);
+        ChatCompletionResponse response = new ChatCompletionResponse(
+                "chatcmpl-queue", "chat.completion", 1, "mini-kun",
+                List.of(new ChatCompletionResponse.Choice(0, new Message("assistant", "พร้อม"), "stop")),
+                new ChatCompletionResponse.Usage(1, 1, 2));
+        CountDownLatch firstStarted = new CountDownLatch(1);
+        CountDownLatch releaseFirst = new CountDownLatch(1);
+        var calls = new java.util.concurrent.atomic.AtomicInteger();
+        when(chat.chatCompletionInBackground(any(), any(), any())).thenAnswer(ignored -> {
+            if (calls.incrementAndGet() == 1) {
+                firstStarted.countDown();
+                releaseFirst.await(2, TimeUnit.SECONDS);
+            }
+            return new ChatService.ChatCompletionOutcome(response, null);
+        });
+
+        try (BackgroundChatService service = new BackgroundChatService(
+                chat, ignored -> { }, (BackgroundChatStore) null, Duration.ofSeconds(5), 1, 1, 2, 1,
+                (ChatPerformanceMetrics) null)) {
+            UUID first = service.submit(new ChatCompletionRequest("mini-kun",
+                    List.of(new Message("user", "หนึ่ง")), "queue", false, null, null, null),
+                    new ConversationId("queue"));
+            assertTrue(firstStarted.await(2, TimeUnit.SECONDS));
+            UUID second = service.submit(new ChatCompletionRequest("mini-kun",
+                    List.of(new Message("user", "สอง")), "queue", false, null, null, null),
+                    new ConversationId("queue"));
+            UUID third = service.submit(new ChatCompletionRequest("mini-kun",
+                    List.of(new Message("user", "สาม")), "queue", false, null, null, null),
+                    new ConversationId("queue"));
+
+            assertEquals("queued", service.find(second).orElseThrow().status());
+            assertEquals("failed", service.find(third).orElseThrow().status());
+            assertTrue(service.find(third).orElseThrow().error().contains("คิวงานเบื้องหลังเต็ม"));
+
+            releaseFirst.countDown();
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
+            while (!"completed".equals(service.find(second).orElseThrow().status())
+                    && System.nanoTime() < deadline) Thread.onSpinWait();
+            assertEquals("completed", service.find(second).orElseThrow().status());
         }
     }
 }

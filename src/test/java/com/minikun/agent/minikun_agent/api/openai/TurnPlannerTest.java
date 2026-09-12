@@ -9,9 +9,12 @@ import com.minikun.model.CooperationRouter;
 import com.minikun.model.task.TaskModelId;
 import com.minikun.model.task.TaskModelProvider;
 import com.minikun.tools.ToolEvidence;
+import com.minikun.tools.ToolRequestRouter;
 import com.minikun.model.task.TaskModelRegistry;
 import java.time.Duration;
 import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
 
@@ -61,6 +64,27 @@ class TurnPlannerTest {
 
         assertEquals("deterministic_tool", plan.routeSource());
         assertFalse(plan.needsTools());
+    }
+
+    @Test
+    void plannerOwnsOrderedDeterministicRouting() {
+        AtomicInteger calls = new AtomicInteger();
+        ToolRequestRouter router = new ToolRequestRouter() {
+            @Override
+            public Optional<ToolEvidence> route(String text, com.minikun.agent.minikun_agent.conversation.ConversationId conversationId) {
+                calls.incrementAndGet();
+                return Optional.of(ToolEvidence.finalVerified("test.route", "done"));
+            }
+        };
+        TurnPlanner planner = new TurnPlanner(new CooperationRouter(), null, null,
+                java.util.List.of(router), true);
+
+        Optional<ToolEvidence> result = planner.route("ทำเลย", new com.minikun.agent.minikun_agent.conversation.ConversationId("route"),
+                "owner", true);
+
+        assertTrue(result.isPresent());
+        assertEquals("test.route", result.get().toolName());
+        assertEquals(1, calls.get());
     }
 
     @Test

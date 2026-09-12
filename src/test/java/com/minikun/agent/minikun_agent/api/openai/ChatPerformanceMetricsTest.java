@@ -12,6 +12,10 @@ class ChatPerformanceMetricsTest {
         SimpleMeterRegistry registry = new SimpleMeterRegistry();
         ChatPerformanceMetrics metrics = new ChatPerformanceMetrics(registry);
 
+        metrics.backgroundQueue(2, 1);
+        metrics.imageQueue(3, 1);
+        metrics.backgroundOutcome("completed");
+        metrics.imageOutcome("completed");
         metrics.record("search", System.nanoTime() - 1_000_000, "skipped");
         metrics.fastPath("no_search");
         metrics.generationProfile("companion", 384);
@@ -42,5 +46,13 @@ class ChatPerformanceMetricsTest {
                 .tags("profile", "search", "reason", "length", "continued", "true").counter().count());
         assertEquals(1.0, registry.get(ChatPerformanceMetrics.TRUNCATED)
                 .tag("profile", "search").counter().count());
+        assertEquals(2.0, registry.get("minikun.chat.background.queue.depth").gauge().value());
+        assertEquals(1.0, registry.get("minikun.chat.background.active").gauge().value());
+        assertEquals(1.0, registry.get("minikun.chat.background.requests")
+                .tag("result", "completed").counter().count());
+        assertEquals(3.0, registry.get("minikun.chat.image.queue.depth").gauge().value());
+        assertEquals(1.0, registry.get("minikun.chat.image.active").gauge().value());
+        assertEquals(1.0, registry.get("minikun.chat.image.requests")
+                .tag("result", "completed").counter().count());
     }
 }

@@ -171,10 +171,6 @@ Actuator ที่เปิดให้เข้าถึงคือ `/actuator
 | `MINIKUN_MODEL_TASK_OLLAMA_MODEL` | `hf.co/mradermacher/llama3.2-typhoon2-3b-GGUF:Q4_K_M` | task model สำหรับ reflection, preference extraction และ planner; ใช้ native `/api/chat` |
 | `VALKEY_URL` | `redis://127.0.0.1:6379` | Valkey/Redis endpoint |
 | `MINIKUN_SEARCH_SEARXNG_URL` | `http://127.0.0.1:8888` | SearXNG endpoint |
-| `MINIKUN_SEARCH_BY_IMAGE_ENABLED` | `false` | เปิด reverse-image search สำหรับรูปที่แนบ |
-| `MINIKUN_SEARCH_BY_IMAGE_URL` | ว่าง | multipart endpoint ที่รับ field `image` และคืน JSON `results` |
-| `MINIKUN_SEARCH_BY_IMAGE_TOKEN` | ว่าง | Bearer token ของ reverse-image provider (เก็บใน environment เท่านั้น) |
-| `MINIKUN_SEARCH_BY_IMAGE_TIMEOUT` | `15s` | timeout ของ reverse-image provider |
 | `MINIKUN_SEARCH_TAVILY_ENABLED` | `true` | เปิด/ปิด Tavily provider |
 | `MINIKUN_SEARCH_TAVILY_API_KEY` | ว่าง | Tavily API key (เก็บใน environment เท่านั้น) |
 | `MINIKUN_SEARCH_TAVILY_URL` | `https://api.tavily.com` | Tavily endpoint |
@@ -186,6 +182,9 @@ Actuator ที่เปิดให้เข้าถึงคือ `/actuator
 | `MINIKUN_SEARCH_ENABLED` | `true` | เปิด/ปิด web search |
 | `MINIKUN_SEARCH_DECISION_MODE` | `llm` | ใช้ task model ตัดสินใจและวาง query plan; fast path ใช้เฉพาะ intent ที่ชัด และ local discovery ผ่าน model |
 | `MINIKUN_SEARCH_DECISION_TIMEOUT` | `PT2S` | เวลาสูงสุดของ LLM classifier ก่อน fallback อย่างปลอดภัย |
+| `MINIKUN_CHAT_BACKGROUND_TIMEOUT` | `15m` | deadline รวมของ background chat และงานภาพต่อเนื่อง |
+| `MINIKUN_CHAT_BACKGROUND_MAX_QUEUED` | `32` | จำนวน background chat ที่รอ worker ได้พร้อมกัน |
+| `MINIKUN_CHAT_BACKGROUND_MAX_ACTIVE` | `8` | จำนวน background chat ที่ประมวลผลพร้อมกัน |
 
 ตั้ง key ก่อนรันแอป โดยไม่ต้องใส่ใน `application.properties`, source code หรือ commit:
 
@@ -210,6 +209,8 @@ export NVIDIA_API_KEY='nvapi-ใส่คีย์ของเราแทนต
 | `MINIKUN_VISUAL_TINYGRAD_TIMEOUT` | `PT10M` | timeout สำหรับ SDXL generation รวม first-run compile |
 | `MINIKUN_VISUAL_AUTO_ILLUSTRATE_STORIES` | `true` | สร้างภาพหนึ่งภาพอัตโนมัติสำหรับ creative story; คำขอสร้างภาพโดยตรงยังตรวจพบได้เสมอเมื่อระบบเปิด |
 | `MINIKUN_VISUAL_GENERATION_OUTPUT_DIRECTORY` | `${user.home}/.minikun/generated-images` | ที่เก็บ image bytes; conversation จะเก็บเฉพาะ local URL |
+| `MINIKUN_VISUAL_ASYNC_MAX_QUEUED` | `8` | จำนวนงานภาพประกอบที่รอ TinyGrad ได้พร้อมกัน |
+| `MINIKUN_VISUAL_ASYNC_MAX_ACTIVE` | `1` | จำนวนงานภาพประกอบที่ใช้ TinyGrad พร้อมกัน |
 | `MINIKUN_WEATHER_ENABLED` | `true` | เปิด/ปิด weather capability |
 | `MINIKUN_WEATHER_GEOCODING_URL` | `https://geocoding-api.open-meteo.com` | endpoint สำหรับ resolve สถานที่ |
 | `MINIKUN_WEATHER_FORECAST_URL` | `https://api.open-meteo.com` | endpoint สำหรับ forecast |
@@ -870,6 +871,10 @@ model, memory, search, vision, native tools และ confirmation policy ชุ
 หน้า Chat จะรับผลกลับอัตโนมัติเมื่อเปิดค้างไว้หรือกลับมาอีกครั้ง
 สถานะและ payload ของงานเก็บใน PostgreSQL เป็นเวลา 24 ชั่วโมง งานที่ค้างระหว่าง restart จะทำต่ออัตโนมัติ
 และงานที่ failed/cancelled เริ่มใหม่ได้ด้วย `POST /v1/chat/background/{jobId}/resume`
+งานตอบเริ่มที่สถานะ `queued` แล้วเข้าสู่ worker ตาม `MINIKUN_CHAT_BACKGROUND_MAX_ACTIVE`;
+งานเกิน `MINIKUN_CHAT_BACKGROUND_MAX_QUEUED` จะถูกปฏิเสธอย่างปลอดภัยแทนการกอง virtual thread ไม่จำกัด
+การส่งซ้ำจาก network retry ใช้ `X-Idempotency-Key` เดิมเพื่อคืน job เดิม และคำตอบข้อความจะถูกส่งกลับก่อน
+งานภาพประกอบที่วางแผนไว้จะเข้า image queue แยกต่างหาก จึงไม่ทำให้ผู้ใช้รอ TinyGrad ก่อนเห็นข้อความ
 ถ้าต้องการ fallback บนมือถือ ให้ติดตั้งแอป ntfy และ subscribe topic จาก `MINIKUN_NTFY_REMINDER_TOPIC`
 รองรับการแนบ JPEG/PNG/WebP, ไฟล์ข้อความ, การถอดเสียงผ่าน `/v1/audio/transcriptions`
 และอ่านคำตอบผ่าน `/v1/audio/speech`

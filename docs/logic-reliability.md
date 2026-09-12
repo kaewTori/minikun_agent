@@ -10,6 +10,7 @@ This change tightens the existing agent loop; it does not add another model, dat
 - Recovered writes return `REVIEW_REQUIRED`; background jobs expose `review_required` and notify the user to inspect the existing result. Review the original task/reminder/file before submitting a new write in its original conversation.
 - Cancellation is checked against job state as well as thread interruption. A cancelled worker must finish before the job can resume. A tool already executing cannot be rolled back by cancellation.
 - The scope follows the current synchronous tool-calling worker. If tool execution is later moved to a separate thread pool, explicitly propagate this scope before enabling that change. Resume locking is for the current single-server deployment.
+- Background chat starts as `QUEUED`, is bounded by active/waiting worker limits, and carries one deadline plus `job_id`/`trace_id` through chat and illustration work. Repeated `X-Idempotency-Key` submissions return the original job, while text completion and a pending illustration are persisted as separate states.
 
 This deliberately prevents replayed writes instead of claiming exactly-once execution against arbitrary external systems. Read-only recovery restarts reasoning from the saved request; it does not restore the model's hidden state.
 
@@ -28,6 +29,7 @@ The query-time lexical scan has an O(owner memory count) ceiling and cannot disc
 `MINIKUN_CHAT_CONTEXT_TIMEOUT` defaults to `3s`, shared across optional summary, long-term memory and personal knowledge waits in one turn. Ready results survive a slow sibling; timeout cancels the worker and falls back to available context. Client libraries must honor interruption or their own I/O timeouts for cancellation to release resources promptly. This budget does not cap model generation, required actions, explicit web evidence, or deep research.
 
 Timers `minikun.chat.stage.duration` with stages `summary_wait`, `memory_wait`, and `personal_wait` distinguish `success`, `timeout`, `fallback`, and `cancelled`. Plain greetings bypass retrieval and the search-decision model.
+Queue gauges expose `minikun.chat.background.queue.depth`, `minikun.chat.background.active`, `minikun.chat.image.queue.depth`, and `minikun.chat.image.active`; result counters distinguish rejected, timeout, failed, and completed work.
 
 ## Repeatable checks
 

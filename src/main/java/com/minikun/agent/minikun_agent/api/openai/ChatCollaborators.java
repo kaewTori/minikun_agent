@@ -18,7 +18,6 @@ import com.minikun.personality.runtime.AdaptivePersonaService;
 import com.minikun.research.AutonomousResearchService;
 import com.minikun.relationship.ConversationThreadService;
 import com.minikun.context.runtime.PersonalContextRuntime;
-import com.minikun.search.internal.DefaultImageSearchService;
 import com.minikun.tokenbudget.config.TokenBudgetProperties;
 import com.minikun.tokenbudget.runtime.DynamicGenerationOptionsFactory;
 import com.minikun.tools.ToolRequestRouter;
@@ -44,7 +43,6 @@ final class ChatCollaborators {
     private final ChatGenerationProfileSelector generationProfileSelector;
     private final BrowserContentService browserContentService;
     private final VisionInputService visionInputService;
-    private final DefaultImageSearchService imageSearchService;
     private final PersonalKnowledgeService personalKnowledgeService;
     private final AcquiredKnowledgeIndex acquiredKnowledgeIndex;
     private final ConversationSummaryService conversationSummaryService;
@@ -71,7 +69,6 @@ final class ChatCollaborators {
             ObjectProvider<ChatGenerationProfileSelector> generationProfileSelector,
             BrowserContentService browserContentService,
             ObjectProvider<VisionInputService> visionInputService,
-            ObjectProvider<DefaultImageSearchService> imageSearchService,
             ObjectProvider<PersonalKnowledgeService> personalKnowledgeService,
             ObjectProvider<AcquiredKnowledgeIndex> acquiredKnowledgeIndex,
             ObjectProvider<ConversationSummaryService> conversationSummaryService,
@@ -96,7 +93,6 @@ final class ChatCollaborators {
         this.generationProfileSelector = generationProfileSelector.getIfAvailable();
         this.browserContentService = browserContentService;
         this.visionInputService = visionInputService.getIfAvailable();
-        this.imageSearchService = imageSearchService.getIfAvailable();
         this.personalKnowledgeService = personalKnowledgeService.getIfAvailable();
         this.acquiredKnowledgeIndex = acquiredKnowledgeIndex.getIfAvailable();
         this.conversationSummaryService = conversationSummaryService.getIfAvailable();
@@ -123,7 +119,6 @@ final class ChatCollaborators {
     ChatGenerationProfileSelector generationProfileSelector() { return generationProfileSelector; }
     BrowserContentService browserContentService() { return browserContentService; }
     VisionInputService visionInputService() { return visionInputService; }
-    DefaultImageSearchService imageSearchService() { return imageSearchService; }
     PersonalKnowledgeService personalKnowledgeService() { return personalKnowledgeService; }
     AcquiredKnowledgeIndex acquiredKnowledgeIndex() { return acquiredKnowledgeIndex; }
     ConversationSummaryService conversationSummaryService() { return conversationSummaryService; }

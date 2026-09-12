@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -67,15 +68,17 @@ public class OpenAIController {
     @PostMapping("/chat/background")
     public ResponseEntity<Map<String, Object>> startBackgroundChat(
             @RequestBody ChatCompletionRequest request,
-            HttpServletRequest httpRequest) {
+            HttpServletRequest httpRequest,
+            @RequestHeader(value = "X-Idempotency-Key", required = false) String idempotencyKey) {
         ConversationIdResolver.Resolution resolution =
                 conversationIdResolver.resolveDetails(request, httpRequest);
-        UUID jobId = backgroundChatService.submit(request, resolution.conversationId());
+        UUID jobId = backgroundChatService.submit(request, resolution.conversationId(), idempotencyKey);
+        String status = backgroundChatService.find(jobId).map(BackgroundChatService.View::status).orElse("queued");
         return ResponseEntity.accepted()
                 .header(CONVERSATION_HEADER, resolution.conversationId().value())
                 .header(CONVERSATION_SOURCE_HEADER, resolution.source().name().toLowerCase(Locale.ROOT))
                 .header("Access-Control-Expose-Headers", EXPOSED_HEADERS)
-                .body(Map.of("id", jobId, "status", "running"));
+                .body(Map.of("id", jobId, "status", status));
     }
 
     @GetMapping("/chat/background/{jobId}")

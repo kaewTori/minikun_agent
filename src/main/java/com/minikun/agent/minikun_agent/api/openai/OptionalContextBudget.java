@@ -1,17 +1,28 @@
 package com.minikun.agent.minikun_agent.api.openai;
 
+import java.util.Map;
 import java.util.concurrent.Future;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Supplier;
+import org.slf4j.MDC;
 
 /** One deadline for optional context; blocking I/O never occupies the common pool. */
 final class OptionalContextBudget {
     private OptionalContextBudget() { }
 
     static <T> Future<T> start(Supplier<T> supplier) {
-        FutureTask<T> task = new FutureTask<>(supplier::get);
+        Map<String, String> context = MDC.getCopyOfContextMap();
+        FutureTask<T> task = new FutureTask<>(() -> {
+            Map<String, String> previous = MDC.getCopyOfContextMap();
+            try {
+                if (context == null) MDC.clear(); else MDC.setContextMap(context);
+                return supplier.get();
+            } finally {
+                if (previous == null) MDC.clear(); else MDC.setContextMap(previous);
+            }
+        });
         Thread.ofVirtual().name("minikun-optional-context").start(task);
         return task;
     }

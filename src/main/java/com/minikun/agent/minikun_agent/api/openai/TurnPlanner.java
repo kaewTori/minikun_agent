@@ -6,8 +6,11 @@ import com.minikun.personality.companion.CompanionMode;
 import com.minikun.personality.companion.CompanionModeContext;
 import com.minikun.research.ResearchIntentDetector;
 import com.minikun.tools.ToolEvidence;
+import com.minikun.tools.ToolRequestRouter;
 import com.minikun.visual.StoryIllustrationIntent;
 import com.minikun.visual.StoryIllustrationIntentDetector;
+import com.minikun.agent.minikun_agent.conversation.ConversationId;
+import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.regex.Pattern;
@@ -35,6 +38,7 @@ final class TurnPlanner {
     private final TurnAmbiguityResolver ambiguityResolver;
     private final StoryIllustrationIntentDetector illustrationIntentDetector;
     private final boolean autoIllustrateCreativeStories;
+    private final List<ToolRequestRouter> toolRequestRouters;
     private final ToolRuntimeIntentDetector toolIntent = new ToolRuntimeIntentDetector();
     private final ResearchIntentDetector researchIntent = new ResearchIntentDetector();
 
@@ -43,11 +47,24 @@ final class TurnPlanner {
             CooperationRouter cooperationRouter,
             ObjectProvider<TurnAmbiguityResolver> ambiguityResolver,
             ObjectProvider<StoryIllustrationIntentDetector> illustrationIntentDetector,
+            ObjectProvider<ToolRequestRouter> toolRequestRouters,
             @Value("${minikun.visual.generation.auto-illustrate-stories:true}") boolean autoIllustrateCreativeStories) {
         this(cooperationRouter,
                 ambiguityResolver == null ? null : ambiguityResolver.getIfAvailable(),
                 illustrationIntentDetector == null ? null : illustrationIntentDetector.getIfAvailable(),
+                toolRequestRouters == null ? List.of() : toolRequestRouters.orderedStream().toList(),
                 autoIllustrateCreativeStories);
+    }
+
+    TurnPlanner(
+            CooperationRouter cooperationRouter,
+            ObjectProvider<TurnAmbiguityResolver> ambiguityResolver,
+            ObjectProvider<StoryIllustrationIntentDetector> illustrationIntentDetector,
+            boolean autoIllustrateCreativeStories) {
+        this(cooperationRouter,
+                ambiguityResolver == null ? null : ambiguityResolver.getIfAvailable(),
+                illustrationIntentDetector == null ? null : illustrationIntentDetector.getIfAvailable(),
+                List.of(), autoIllustrateCreativeStories);
     }
 
     TurnPlanner(CooperationRouter cooperationRouter, TurnAmbiguityResolver ambiguityResolver) {
@@ -59,12 +76,47 @@ final class TurnPlanner {
             TurnAmbiguityResolver ambiguityResolver,
             StoryIllustrationIntentDetector illustrationIntentDetector,
             boolean autoIllustrateCreativeStories) {
+        this(cooperationRouter, ambiguityResolver, illustrationIntentDetector, List.of(),
+                autoIllustrateCreativeStories);
+    }
+
+    TurnPlanner(
+            CooperationRouter cooperationRouter,
+            TurnAmbiguityResolver ambiguityResolver,
+            StoryIllustrationIntentDetector illustrationIntentDetector,
+            List<ToolRequestRouter> toolRequestRouters,
+            boolean autoIllustrateCreativeStories) {
         this.cooperationRouter = cooperationRouter == null ? new CooperationRouter() : cooperationRouter;
         this.ambiguityResolver = ambiguityResolver;
         this.illustrationIntentDetector = illustrationIntentDetector == null
                 ? new StoryIllustrationIntentDetector(this.cooperationRouter)
                 : illustrationIntentDetector;
         this.autoIllustrateCreativeStories = autoIllustrateCreativeStories;
+        this.toolRequestRouters = toolRequestRouters == null ? List.of() : List.copyOf(toolRequestRouters);
+    }
+
+    /** Owns ordered deterministic routing so ChatService and planning use one route owner. */
+    Optional<ToolEvidence> route(String userText, ConversationId conversationId, String ownerId,
+            boolean toolsEnabled) {
+        return route(userText, conversationId, ownerId, toolsEnabled, toolRequestRouters);
+    }
+
+    Optional<ToolEvidence> route(String userText, ConversationId conversationId, String ownerId,
+            boolean toolsEnabled, List<ToolRequestRouter> fallbackRouters) {
+        List<ToolRequestRouter> routers = toolRequestRouters.isEmpty() && fallbackRouters != null
+                && !fallbackRouters.isEmpty() ? fallbackRouters : toolRequestRouters;
+        if (!toolsEnabled || routers.isEmpty()) return Optional.empty();
+        for (ToolRequestRouter router : routers) {
+            Optional<ToolEvidence> result = router.route(
+                    userText == null ? "" : userText, conversationId, ownerId);
+            if (result.isPresent()) {
+                ToolEvidence evidence = result.get();
+                log.info("process=tool_route event=completed tool={} success={} route_owner=turn_planner",
+                        evidence.toolName(), evidence.success());
+                return result;
+            }
+        }
+        return Optional.empty();
     }
 
     TurnPlan plan(String message, String conversationContext, CompanionModeContext mode,
