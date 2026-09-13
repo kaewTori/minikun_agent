@@ -53,10 +53,16 @@
       pairingUrl: "",
       refreshing: false,
       remoteDirty: false
+    },
+    dashboard: {
+      loading: new Map(),
+      loadedAt: new Map(),
+      scroll: new Map()
     }
   };
 
   const $ = (selector) => document.querySelector(selector);
+  const Core = globalThis.MinikunCore;
   const settingsDialog = $("#settings-dialog");
   const mobileMenuDialog = $("#mobile-menu-dialog");
   const experimentDialog = $("#experiment-dialog");
@@ -65,41 +71,19 @@
   const clearHistoryDialog = $("#clear-history-dialog");
   const visualLightboxDialog = $("#visual-lightbox-dialog");
   const inspirationBoardsDialog = $("#inspiration-boards-dialog");
+  const confirmDialog = $("#confirm-dialog");
+  const feedbackDialog = $("#feedback-dialog");
+  const editMessageDialog = $("#edit-message-dialog");
+  let confirmationResolve = null;
+  let feedbackResolve = null;
+  let editMessageResolve = null;
 
   function headers(json = false) {
-    const value = {};
-    if (json) value["Content-Type"] = "application/json";
-    if (state.token) {
-      value["X-Minikun-Personal-Token"] = state.token;
-      value["X-Minikun-Task-Token"] = state.token;
-      value["X-Minikun-Goal-Token"] = state.token;
-      value["X-Minikun-Agent-Token"] = state.token;
-      value["X-Minikun-Memory-Token"] = state.token;
-      value["X-Minikun-Knowledge-Token"] = state.token;
-      value["X-Minikun-System-Token"] = state.token;
-      value["X-Minikun-Model-Token"] = state.token;
-    }
-    return value;
+    return Core.authHeaders(state.token, json);
   }
 
   async function api(path, options = {}) {
-    const separator = path.includes("?") ? "&" : "?";
-    const owner = encodeURIComponent(state.ownerId);
-    const response = await fetch(`${path}${separator}ownerId=${owner}&owner_id=${owner}`, {
-      ...options,
-      headers: { ...headers(Boolean(options.body)), ...(options.headers || {}) }
-    });
-    if (!response.ok) {
-      let message = `เชื่อมต่อไม่สำเร็จ (${response.status})`;
-      try {
-        const body = await response.json();
-        message = body.error?.message || body.message || (typeof body.error === "string" ? body.error : message);
-      } catch (_) { /* keep the status-based message */ }
-      const error = new Error(message);
-      error.status = response.status;
-      throw error;
-    }
-    return response.status === 204 ? null : response.json();
+    return Core.request(path, options, { ownerId: state.ownerId, token: state.token });
   }
 
   function showActiveModel(model) {
@@ -324,9 +308,16 @@
         const removeBoard = element("button", "", "ลบบอร์ด");
         removeBoard.type = "button";
         removeBoard.addEventListener("click", async () => {
-          if (!window.confirm(`ลบบอร์ด “${board.title}” และ reference ทั้งหมดใช่ไหมครับ?`)) return;
-          await api(`/v1/personal/inspiration-boards/${board.id}`, { method: "DELETE" });
-          await loadInspirationBoards();
+          inspirationBoardsDialog.close();
+          if (!await requestConfirmation("ลบบอร์ดนี้?", `ลบบอร์ด “${board.title}” และ reference ทั้งหมดใช่ไหมครับ?`, "ลบบอร์ด")) {
+            inspirationBoardsDialog.showModal();
+            return;
+          }
+          try {
+            await api(`/v1/personal/inspiration-boards/${board.id}`, { method: "DELETE" });
+            await loadInspirationBoards();
+          } catch (error) { toast(error.message, true); }
+          finally { if (!inspirationBoardsDialog.open) inspirationBoardsDialog.showModal(); }
         });
         heading.append(removeBoard); section.append(heading);
         const grid = element("div", "inspiration-items");
@@ -383,17 +374,62 @@
     setTimeout(() => node.remove(), action ? 7200 : 3800);
   }
 
+  function requestConfirmation(title, copy, confirmLabel = "ยืนยัน") {
+    return new Promise((resolve) => {
+      confirmationResolve = resolve;
+      $("#confirm-title").textContent = title;
+      $("#confirm-copy").textContent = copy;
+      $("#confirm-action").textContent = confirmLabel;
+      confirmDialog.showModal();
+    });
+  }
+
+  function finishConfirmation(value) {
+    const resolve = confirmationResolve;
+    confirmationResolve = null;
+    if (confirmDialog.open) confirmDialog.close(value ? "confirm" : "cancel");
+    resolve?.(value);
+  }
+
+  function requestFeedback() {
+    return new Promise((resolve) => {
+      feedbackResolve = resolve;
+      $("#feedback-reason").value = "";
+      feedbackDialog.showModal();
+      requestAnimationFrame(() => $("#feedback-reason").focus());
+    });
+  }
+
+  function finishFeedback(value) {
+    const resolve = feedbackResolve;
+    feedbackResolve = null;
+    if (feedbackDialog.open) feedbackDialog.close(value ? "submit" : "cancel");
+    resolve?.(value);
+  }
+
+  function requestEditedMessage(value) {
+    return new Promise((resolve) => {
+      editMessageResolve = resolve;
+      $("#edit-message-input").value = value;
+      editMessageDialog.showModal();
+      requestAnimationFrame(() => {
+        const input = $("#edit-message-input");
+        input.focus();
+        input.setSelectionRange(input.value.length, input.value.length);
+      });
+    });
+  }
+
+  function finishEditedMessage(value) {
+    const resolve = editMessageResolve;
+    editMessageResolve = null;
+    if (editMessageDialog.open) editMessageDialog.close(value ? "submit" : "cancel");
+    resolve?.(value);
+  }
+
   /* Chat --------------------------------------------------------------- */
   function uniqueId(prefix = "") {
-    try {
-      if (globalThis.crypto?.randomUUID) return `${prefix}${globalThis.crypto.randomUUID()}`;
-      if (globalThis.crypto?.getRandomValues) {
-        const bytes = new Uint8Array(16);
-        globalThis.crypto.getRandomValues(bytes);
-        return `${prefix}${Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("")}`;
-      }
-    } catch (_) { /* fall through for older Safari and non-secure LAN origins */ }
-    return `${prefix}${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+    return Core.uniqueId(prefix);
   }
 
   function chatId() {
@@ -401,10 +437,7 @@
   }
 
   function safeConversationList() {
-    try {
-      const parsed = JSON.parse(localStorage.getItem("minikun.conversations") || "[]");
-      return Array.isArray(parsed) ? normalizeConversations(parsed) : [];
-    } catch (_) { return []; }
+    return Core.loadConversations();
   }
 
   function persistConversations() {
@@ -416,133 +449,23 @@
   }
 
   function compactMessages(messages) {
-    return messages.slice(-80).map((message) => ({
-      id: message.id || uniqueId("message-"),
-      responseId: message.responseId || "",
-      role: message.role,
-      content: message.content,
-      localOnly: Boolean(message.localOnly),
-      parentId: message.parentId || "",
-      branchId: message.branchId || "",
-      status: message.status || "complete",
-      finishReason: message.finishReason || "",
-      feedback: message.feedback || "",
-      feedbackReason: message.feedbackReason || "",
-      backgroundJobId: message.backgroundJobId || "",
-      sources: (message.sources || []).slice(0, 12),
-      createdAt: message.createdAt,
-      files: (message.files || []).slice(0, 12),
-      usage: message.usage,
-      timing: message.timing ? {
-        firstTokenMs: message.timing.firstTokenMs,
-        totalMs: message.timing.totalMs
-      } : undefined,
-      attachments: (message.attachments || [])
-        .map((attachment) => ({
-          title: attachment.title || attachment.name || "ไฟล์แนบ",
-          url: attachment.url && !attachment.url.startsWith("data:") ? attachment.url : "",
-          originalUrl: attachment.originalUrl || attachment.original_url || attachment.remoteUrl || "",
-          sourceUrl: attachment.sourceUrl || attachment.source_url || "",
-          description: attachment.description || "",
-          origin: attachment.origin || "",
-          provider: attachment.provider || "",
-          license: attachment.license || "",
-          prompt: attachment.prompt || "",
-          negativePrompt: attachment.negativePrompt || attachment.negative_prompt || "",
-          seed: attachment.seed ?? null,
-          generationId: attachment.generationId || attachment.generation_id || "",
-          assetId: attachment.assetId || "",
-          kind: attachment.kind || "image",
-          type: attachment.type || ""
-        }))
-        .filter((attachment) => attachment.url || attachment.assetId)
-        .slice(0, 6)
-    }));
+    return Core.compactMessages(messages);
   }
 
   function normalizeConversations(values) {
-    return values.slice(0, 40).filter((value) => value?.id).map((value) => ({
-      id: String(value.id),
-      title: String(value.title || "แชตใหม่"),
-      updatedAt: Number(value.updatedAt) || Date.parse(value.updatedAt) || Date.now(),
-      pinned: Boolean(value.pinned),
-      archived: Boolean(value.archived),
-      messages: (Array.isArray(value.messages) ? value.messages : []).slice(-80).map((message) => ({
-        ...message,
-        id: message.id || uniqueId("message-"),
-        responseId: message.responseId || message.metadata?.responseId || "",
-        role: message.role || "user",
-        content: String(message.content || ""),
-        parentId: message.parentId || message.metadata?.parentId || "",
-        branchId: message.branchId || message.metadata?.branchId || "",
-        status: message.status || message.metadata?.status || "complete",
-        finishReason: message.finishReason || message.metadata?.finishReason || "",
-        feedback: message.feedback || message.metadata?.feedback || "",
-        feedbackReason: message.feedbackReason || message.metadata?.feedbackReason || "",
-        backgroundJobId: message.backgroundJobId || message.metadata?.backgroundJobId || "",
-        sources: Array.isArray(message.sources) ? message.sources
-          : Array.isArray(message.metadata?.sources) ? message.metadata.sources : [],
-        createdAt: Number(message.createdAt) || Date.parse(message.createdAt) || Date.now(),
-        files: Array.isArray(message.files) ? message.files : [],
-        attachments: Array.isArray(message.attachments) ? message.attachments : []
-      }))
-    })).sort((a, b) => b.updatedAt - a.updatedAt);
+    return Core.normalizeConversations(values);
   }
 
   function syncPayload(conversation) {
-    return {
-      id: conversation.id,
-      title: conversation.title,
-      pinned: Boolean(conversation.pinned),
-      archived: Boolean(conversation.archived),
-      updatedAt: new Date(conversation.updatedAt || Date.now()).toISOString(),
-      messages: (conversation.messages || []).filter((message) => !message.localOnly).map((message) => ({
-        id: message.id,
-        role: message.role,
-        content: message.content,
-        files: message.files,
-        usage: message.usage,
-        timing: message.timing,
-        attachments: message.attachments,
-        metadata: {
-          parentId: message.parentId || "",
-          responseId: message.responseId || "",
-          branchId: message.branchId || "",
-          status: message.status || "complete",
-          finishReason: message.finishReason || "",
-          feedback: message.feedback || "",
-          feedbackReason: message.feedbackReason || "",
-          backgroundJobId: message.backgroundJobId || "",
-          sources: (message.sources || []).slice(0, 12)
-        },
-        createdAt: new Date(message.createdAt || Date.now()).toISOString()
-      }))
-    };
+    return Core.syncPayload(conversation);
   }
 
   function defaultDeviceName() {
-    if (/iPhone/i.test(navigator.userAgent)) return "iPhone";
-    if (/iPad/i.test(navigator.userAgent)) return "iPad";
-    if (/Mac/i.test(navigator.platform || navigator.userAgent)) return "Mac เครื่องหลัก";
-    return "Browser เครื่องนี้";
+    return Core.defaultDeviceName();
   }
 
   async function syncFetch(path, options = {}) {
-    const response = await fetch(path, {
-      ...options,
-      headers: { ...(options.body ? { "Content-Type": "application/json" } : {}), ...(options.headers || {}) }
-    });
-    if (!response.ok) {
-      let message = `ซิงก์ไม่สำเร็จ (${response.status})`;
-      try {
-        const body = await response.json();
-        message = body.detail || body.message || message;
-      } catch (_) { /* keep status message */ }
-      const error = new Error(message);
-      error.status = response.status;
-      throw error;
-    }
-    return response.status === 204 ? null : response.json();
+    return Core.syncRequest(path, options, { token: state.token });
   }
 
   function renderSyncState(label, stateName = "") {
@@ -726,12 +649,17 @@
           const revoke = element("button", "", "ถอนสิทธิ์");
           revoke.type = "button";
           revoke.addEventListener("click", async () => {
-            if (!window.confirm(`ถอนสิทธิ์ ${device.name}?`)) return;
+            settingsDialog.close();
+            if (!await requestConfirmation("ถอนสิทธิ์อุปกรณ์?", `ถอนสิทธิ์ ${device.name}?`, "ถอนสิทธิ์")) {
+              settingsDialog.showModal();
+              return;
+            }
             try {
               await syncFetch(`/v1/sync/devices/${encodeURIComponent(device.id)}`, { method: "DELETE" });
               await loadPairedDevices();
               toast("ถอนสิทธิ์อุปกรณ์แล้วครับ");
             } catch (error) { toast(error.message, true); }
+            finally { if (!settingsDialog.open) settingsDialog.showModal(); }
           });
           row.append(revoke);
         }
@@ -760,8 +688,7 @@
   }
 
   function conversationTitle(text) {
-    const clean = String(text || "แชตใหม่").replace(/\s+/g, " ").trim();
-    return clean.length > 42 ? `${clean.slice(0, 42)}…` : clean || "แชตใหม่";
+    return Core.conversationTitle(text);
   }
 
   function saveConversation(seed = "", conversationId = state.currentConversationId, messages = state.chatMessages) {
@@ -936,21 +863,27 @@
   }
 
   async function deleteConversation(conversation) {
-    if (!conversation || !window.confirm(`ลบ “${conversation.title}” และบริบทระยะสั้นของแชตนี้?`)) return;
-    await api(`/v1/conversations/${encodeURIComponent(conversation.id)}`, { method: "DELETE" });
-    if (state.sync.paired) {
-      await syncFetch(`/v1/sync/conversations/${encodeURIComponent(conversation.id)}`, { method: "DELETE" });
-    }
-    state.conversations = state.conversations.filter((item) => item.id !== conversation.id);
-    persistConversations();
+    if (!conversation) return;
     $("#conversation-actions-dialog").close();
-    if (state.currentConversationId === conversation.id) {
-      const next = state.conversations.find((item) => !item.archived);
-      if (next) switchConversation(next.id); else startNewChat();
-    } else {
-      renderConversationList();
+    if (!await requestConfirmation("ลบบทสนทนา?", `ลบ “${conversation.title}” และบริบทระยะสั้นของแชตนี้?`, "ลบบทสนทนา")) {
+      openConversationActions(conversation.id);
+      return;
     }
-    toast("ลบบทสนทนาและ short-term memory แล้วครับ");
+    try {
+      await api(`/v1/conversations/${encodeURIComponent(conversation.id)}`, { method: "DELETE" });
+      if (state.sync.paired) {
+        await syncFetch(`/v1/sync/conversations/${encodeURIComponent(conversation.id)}`, { method: "DELETE" });
+      }
+      state.conversations = state.conversations.filter((item) => item.id !== conversation.id);
+      persistConversations();
+      if (state.currentConversationId === conversation.id) {
+        const next = state.conversations.find((item) => !item.archived);
+        if (next) switchConversation(next.id); else startNewChat();
+      } else {
+        renderConversationList();
+      }
+      toast("ลบบทสนทนาและ short-term memory แล้วครับ");
+    } catch (error) { toast(error.message, true); }
   }
 
   function updateViewUrl(view, section = "", replace = false) {
@@ -970,7 +903,7 @@
     document.querySelectorAll("[data-view]").forEach((node) => node.classList.toggle("hidden", node.dataset.view !== view));
     document.querySelectorAll("[data-view-target]").forEach((node) => {
       const matchesView = node.dataset.viewTarget === view;
-      const matchesSection = section ? node.dataset.section === section : !node.dataset.section;
+      const matchesSection = !node.dataset.section || !section || node.dataset.section === section;
       const active = matchesView && matchesSection;
       node.classList.toggle("active", active);
       if (active) node.setAttribute("aria-current", "page");
@@ -978,24 +911,27 @@
     });
     if (view === "cockpit") {
       const cockpitPages = new Set(["today", "agent", "memory", "system"]);
-      const page = { experiments: "today", inbox: "today", "permission-center": "system" }[section]
+      const page = { experiments: "agent", inbox: "today", "conversation-threads": "agent", "permission-center": "system" }[section]
         || (cockpitPages.has(section) ? section : state.cockpitPage || "today");
       switchCockpitPage(page, section);
-      loadDashboard();
+      loadDashboard(state.cockpitPage, { force: false }).catch((error) => toast(error.message, true));
     }
     if (view === "studio") updateStudioPrompt();
     updateStudioRuntimePolling(view);
     if (options.updateHistory) updateViewUrl(view, section);
+    if (options.focus) requestAnimationFrame(() => $("#main-content")?.focus({ preventScroll: true }));
   }
 
   function switchCockpitPage(page = "today", focusId = "") {
     const legacyPages = {
-      overview: "today", work: "today", experiments: "today",
+      overview: "today", work: "today", experiments: "agent",
       tools: "agent", learning: "memory", health: "system", permissions: "system"
     };
     const requested = legacyPages[page] || page;
+    const previousPage = state.cockpitPage;
     const allowed = new Set(["today", "agent", "memory", "system"]);
     state.cockpitPage = allowed.has(requested) ? requested : "today";
+    if (previousPage !== state.cockpitPage) state.dashboard.scroll.set(previousPage, window.scrollY);
     document.querySelectorAll("[data-cockpit-page]").forEach((node) => {
       const pages = String(node.dataset.cockpitPage || "").split(/\s+/);
       node.classList.toggle("cockpit-page-hidden", !pages.includes(state.cockpitPage));
@@ -1016,14 +952,10 @@
     });
     requestAnimationFrame(() => {
       if (focusId) document.getElementById(focusId)?.scrollIntoView({ behavior: "smooth", block: "start" });
-      else window.scrollTo(0, 0);
+      else if (state.dashboard.scroll.has(state.cockpitPage)) {
+        window.scrollTo({ top: state.dashboard.scroll.get(state.cockpitPage), behavior: "auto" });
+      } else if (!window.matchMedia?.("(max-width: 720px)").matches) window.scrollTo(0, 0);
     });
-  }
-
-  function escapeHtml(value) {
-    return String(value ?? "").replace(/[&<>"']/g, (character) => ({
-      "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#039;"
-    })[character]);
   }
 
   function markdown(value) {
@@ -1465,9 +1397,7 @@
       message.feedbackReason = "";
     } else {
       message.feedback = value;
-      message.feedbackReason = value === "down"
-        ? String(window.prompt("มินิคุงควรปรับอะไรในคำตอบนี้? (ไม่บังคับ)", "") || "").trim().slice(0, 500)
-        : "";
+      message.feedbackReason = value === "down" ? (await requestFeedback()).slice(0, 500) : "";
     }
     saveConversation("", state.currentConversationId, state.chatMessages);
     renderChat();
@@ -1624,7 +1554,7 @@
         regenerate.type = "button";
         regenerate.addEventListener("click", () => regenerateMessage(index));
         tools.append(regenerate);
-        for (const [value, label] of [["up", "👍"], ["down", "👎"]]) {
+        for (const [value, label] of [["up", "มีประโยชน์"], ["down", "ควรปรับ"]]) {
           const feedback = element("button", message.feedback === value ? "selected" : "", label);
           feedback.type = "button";
           feedback.setAttribute("aria-label", value === "up" ? "คำตอบมีประโยชน์" : "คำตอบควรปรับปรุง");
@@ -1640,6 +1570,10 @@
   }
 
   function renderChat() {
+    const scroll = $("#messages-scroll");
+    const distanceFromLatest = scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight;
+    const conversationChanged = scroll.dataset.conversationId !== state.currentConversationId;
+    const shouldStick = conversationChanged || distanceFromLatest < 96;
     const messages = $("#messages");
     messages.replaceChildren();
     $("#chat-welcome").classList.toggle("hidden", state.chatMessages.length > 0);
@@ -1648,7 +1582,8 @@
     if (pending && !state.chatMessages.includes(pending.assistant)) {
       messages.append(renderMessage(pending.assistant, true));
     }
-    requestAnimationFrame(scrollToLatest);
+    scroll.dataset.conversationId = state.currentConversationId;
+    requestAnimationFrame(() => { if (shouldStick) scrollToLatest(); });
   }
 
   function scrollToLatest() {
@@ -1921,8 +1856,7 @@
   }
 
   async function streamChatCompletion(task, requestBody) {
-    const owner = encodeURIComponent(state.ownerId);
-    const response = await fetch(`/v1/chat/completions?ownerId=${owner}&owner_id=${owner}`, {
+    const response = await fetch(Core.withOwner("/v1/chat/completions", state.ownerId), {
       method: "POST",
       headers: { ...headers(true), "X-Conversation-Id": task.conversationId },
       signal: task.controller.signal,
@@ -2250,7 +2184,8 @@
 
   async function editUserMessage(index) {
     const message = state.chatMessages[index];
-    const edited = window.prompt("แก้ข้อความและสร้างสาขาใหม่", message?.content || "");
+    if (!message) return;
+    const edited = await requestEditedMessage(message.content || "");
     if (edited === null || !edited.trim() || edited.trim() === message.content.trim()) return;
     await rerunFromUser(index, true, edited.trim());
   }
@@ -2358,33 +2293,7 @@
   }
 
   function wavBlob(chunks, sourceRate) {
-    const sourceLength = chunks.reduce((total, chunk) => total + chunk.length, 0);
-    const source = new Float32Array(sourceLength);
-    let sourceOffset = 0;
-    for (const chunk of chunks) { source.set(chunk, sourceOffset); sourceOffset += chunk.length; }
-    const targetRate = Math.min(16000, sourceRate);
-    const ratio = sourceRate / targetRate;
-    const sampleCount = Math.floor(source.length / ratio);
-    const samples = new Float32Array(sampleCount);
-    for (let index = 0; index < sampleCount; index++) {
-      const start = Math.floor(index * ratio);
-      const end = Math.min(source.length, Math.floor((index + 1) * ratio));
-      let total = 0;
-      for (let cursor = start; cursor < end; cursor++) total += source[cursor];
-      samples[index] = total / Math.max(1, end - start);
-    }
-    const buffer = new ArrayBuffer(44 + samples.length * 2);
-    const view = new DataView(buffer);
-    const ascii = (offset, text) => { for (let index = 0; index < text.length; index++) view.setUint8(offset + index, text.charCodeAt(index)); };
-    ascii(0, "RIFF"); view.setUint32(4, 36 + samples.length * 2, true); ascii(8, "WAVE"); ascii(12, "fmt ");
-    view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true);
-    view.setUint32(24, targetRate, true); view.setUint32(28, targetRate * 2, true); view.setUint16(32, 2, true); view.setUint16(34, 16, true);
-    ascii(36, "data"); view.setUint32(40, samples.length * 2, true);
-    samples.forEach((sample, index) => {
-      const normalized = Math.max(-1, Math.min(1, sample));
-      view.setInt16(44 + index * 2, normalized < 0 ? normalized * 0x8000 : normalized * 0x7fff, true);
-    });
-    return new Blob([buffer], { type: "audio/wav" });
+    return Core.wavBlob(chunks, sourceRate);
   }
 
   async function stopRecording() {
@@ -3151,7 +3060,7 @@
 
   async function deleteMemoryRecord(memory, button) {
     const id = memory.id?.value || memory.id;
-    if (!id || !window.confirm("ลบความจำรายการนี้ออกจากมินิคุงใช่ไหมครับ?")) return;
+    if (!id || !await requestConfirmation("ลบความจำนี้?", "ลบความจำรายการนี้ออกจากมินิคุงใช่ไหมครับ?", "ลบความจำ")) return;
     button.disabled = true;
     try {
       await api(`/v1/memory/${id}`, { method: "DELETE" });
@@ -3287,78 +3196,104 @@
     }
   }
 
-  async function loadDashboard() {
-    setSync(true, "กำลังทบทวน");
-    renderPermissions();
-    const calls = await Promise.allSettled([
-      api("/v1/personal/status"),
-      api("/v1/personal/next-actions?limit=5"),
-      api("/v1/personal/experiments?limit=20"),
-      api("/v1/personal/inbox?limit=20"),
-      api(`/v1/personal/timeline?limit=${state.timelineLimit}`),
-      api("/v1/personal/automations/runs?limit=20"),
-      api("/v1/agent/runs?limit=12"),
-      api("/v1/memory?limit=30"),
-      api("/v1/knowledge/status"),
-      api("/v1/system/health"),
-      api("/v1/personal/conversation-threads?status=OPEN&limit=20"),
-      api("/v1/knowledge/sources?limit=30"),
-      api("/v1/knowledge/acquisition/topics?limit=50"),
-      api("/v1/knowledge/acquisition/runs?limit=50"),
-      api("/v1/knowledge/acquisition/claims?status=CANDIDATE&limit=100"),
-      api("/v1/knowledge/acquisition/claims?status=PUBLISHED&limit=100"),
-      api("/v1/evals/turn-plans/baseline"),
-      api("/v1/evals/turn-plans/quality?limit=100")
-    ]);
-    const [status, actions, experiments, inbox, timeline, decisions, agentRuns, memories, knowledge, systemHealth,
-      threads, knowledgeSources, learningTopics, learningRuns, learningCandidates, learningPublished,
-      evalBaseline, evalQuality] = calls;
-    const learningClaims = [
-      ...(learningCandidates.status === "fulfilled" ? learningCandidates.value : []),
-      ...(learningPublished.status === "fulfilled" ? learningPublished.value : [])
-    ];
-    const decisionCount = renderDecisions(decisions.status === "fulfilled" ? decisions.value : []);
-    renderStatus(status.status === "fulfilled" ? status.value : {}, decisionCount);
-    renderActions(actions.status === "fulfilled" ? actions.value : []);
-    renderExperiment(experiments.status === "fulfilled" ? experiments.value : []);
-    renderInbox(inbox.status === "fulfilled" ? inbox.value : []);
-    renderTimeline(timeline.status === "fulfilled" ? timeline.value : []);
-    const runItems = agentRuns.status === "fulfilled" ? agentRuns.value : [];
-    renderAgentRuns(runItems);
-    await loadToolTimeline(runItems);
-    renderContextMemory(memories.status === "fulfilled" ? memories.value : [], knowledge.status === "fulfilled" ? knowledge.value : {});
-    renderLearning(
-      learningTopics.status === "fulfilled" ? learningTopics.value : [],
-      learningRuns.status === "fulfilled" ? learningRuns.value : [],
-      learningClaims
-    );
-    renderMemorySystem(
-      memories.status === "fulfilled" ? memories.value : [],
-      knowledge.status === "fulfilled" ? knowledge.value : {},
-      knowledgeSources.status === "fulfilled" ? knowledgeSources.value : [],
-      learningClaims
-    );
-    renderSystemHealth(systemHealth.status === "fulfilled" ? systemHealth.value : null);
-    renderEvalLab(
-      evalBaseline.status === "fulfilled" ? evalBaseline.value : null,
-      evalQuality.status === "fulfilled" ? evalQuality.value : null
-    );
-    renderConversationThreads(threads.status === "fulfilled" ? threads.value : []);
-    const failures = calls.filter((call) => call.status === "rejected");
-    setSync(failures.length === 0, failures.length ? `${failures.length} ส่วนยังไม่พร้อม` : "พร้อมดูแล");
-    if (failures.length === calls.length) {
-      setSync(false, "เชื่อมต่อไม่ได้");
-      toast("เชื่อมต่อกับมินิคุงไม่ได้ครับ เปิดการตั้งค่าเพื่อตรวจอุปกรณ์และการเชื่อมต่อได้เลย", true, {
-        label: "เปิดการตั้งค่า",
-        onClick: () => {
-          if (!settingsDialog.open) settingsDialog.showModal();
-          loadPairedDevices();
-          loadCompanionMode();
+  async function loadDashboard(page = state.cockpitPage, options = {}) {
+    const force = options.force ?? true;
+    const loadedAt = state.dashboard.loadedAt.get(page) || 0;
+    if (!force && Date.now() - loadedAt < 15_000) return;
+    const existing = state.dashboard.loading.get(page);
+    if (existing) return existing;
+
+    const requests = {
+      today: [
+        ["status", "/v1/personal/status"],
+        ["actions", "/v1/personal/next-actions?limit=5"],
+        ["inbox", "/v1/personal/inbox?limit=20"],
+        ["decisions", "/v1/personal/automations/runs?limit=20"]
+      ],
+      agent: [
+        ["timeline", `/v1/personal/timeline?limit=${state.timelineLimit}`],
+        ["experiments", "/v1/personal/experiments?limit=20"],
+        ["agentRuns", "/v1/agent/runs?limit=12"],
+        ["threads", "/v1/personal/conversation-threads?status=OPEN&limit=20"]
+      ],
+      memory: [
+        ["memories", "/v1/memory?limit=30"],
+        ["knowledge", "/v1/knowledge/status"],
+        ["knowledgeSources", "/v1/knowledge/sources?limit=30"],
+        ["learningTopics", "/v1/knowledge/acquisition/topics?limit=50"],
+        ["learningRuns", "/v1/knowledge/acquisition/runs?limit=50"],
+        ["learningCandidates", "/v1/knowledge/acquisition/claims?status=CANDIDATE&limit=100"],
+        ["learningPublished", "/v1/knowledge/acquisition/claims?status=PUBLISHED&limit=100"]
+      ],
+      system: [
+        ["systemHealth", "/v1/system/health"],
+        ["evalBaseline", "/v1/evals/turn-plans/baseline"],
+        ["evalQuality", "/v1/evals/turn-plans/quality?limit=100"]
+      ]
+    };
+
+    const operation = (async () => {
+      setSync(true, "กำลังทบทวน");
+      const entries = requests[page] || requests.today;
+      const calls = await Promise.allSettled(entries.map(([, path]) => api(path)));
+      const results = new Map(entries.map(([key], index) => [key, calls[index]]));
+      const value = (key, fallback = []) => {
+        const result = results.get(key);
+        return result?.status === "fulfilled" ? result.value : fallback;
+      };
+      const list = (key) => {
+        const result = value(key);
+        return Array.isArray(result) ? result : [];
+      };
+      const learningClaims = [...list("learningCandidates"), ...list("learningPublished")];
+
+      if (page === "today") {
+        const decisionCount = renderDecisions(value("decisions"));
+        renderStatus(value("status", {}), decisionCount);
+        renderActions(value("actions"));
+        renderInbox(value("inbox"));
+      } else if (page === "agent") {
+        renderExperiment(value("experiments"));
+        renderTimeline(value("timeline"));
+        renderConversationThreads(value("threads"));
+        const runItems = value("agentRuns");
+        renderAgentRuns(runItems);
+        await loadToolTimeline(runItems);
+      } else if (page === "memory") {
+        renderContextMemory(value("memories"), value("knowledge", {}));
+        renderLearning(value("learningTopics"), value("learningRuns"), learningClaims);
+        renderMemorySystem(value("memories"), value("knowledge", {}), value("knowledgeSources"), learningClaims);
+      } else if (page === "system") {
+        renderSystemHealth(value("systemHealth", null));
+        renderEvalLab(value("evalBaseline", null), value("evalQuality", null));
+        await renderPermissions();
+      }
+
+      state.dashboard.loadedAt.set(page, Date.now());
+      const failures = calls.filter((call) => call.status === "rejected");
+      if (state.cockpitPage === page) {
+        setSync(failures.length === 0, failures.length ? `${failures.length} ส่วนยังไม่พร้อม` : "พร้อมดูแล");
+        if (failures.length === calls.length) {
+          setSync(false, "เชื่อมต่อไม่ได้");
+          toast("เชื่อมต่อกับมินิคุงไม่ได้ครับ เปิดการตั้งค่าเพื่อตรวจอุปกรณ์และการเชื่อมต่อได้เลย", true, {
+            label: "เปิดการตั้งค่า",
+            onClick: () => {
+              if (!settingsDialog.open) settingsDialog.showModal();
+              loadPairedDevices();
+              loadCompanionMode();
+            }
+          });
         }
-      });
+      }
+    })();
+
+    state.dashboard.loading.set(page, operation);
+    try {
+      return await operation;
+    } finally {
+      if (state.dashboard.loading.get(page) === operation) state.dashboard.loading.delete(page);
     }
   }
-
   async function completeTask(id) {
     try {
       await api(`/v1/tasks/${id}/complete`, { method: "POST" });
@@ -3650,6 +3585,28 @@
       if (event.target === dialog) dialog.close("cancel");
     });
   });
+  confirmDialog.addEventListener("close", () => {
+    if (confirmationResolve) finishConfirmation(false);
+  });
+  $("#confirm-form").addEventListener("submit", (event) => {
+    event.preventDefault();
+    finishConfirmation(true);
+  });
+  $("#confirm-action").addEventListener("click", () => finishConfirmation(true));
+  feedbackDialog.addEventListener("close", () => {
+    if (feedbackResolve) finishFeedback("");
+  });
+  $("#feedback-form").addEventListener("submit", (event) => {
+    event.preventDefault();
+    finishFeedback($("#feedback-reason").value.trim());
+  });
+  editMessageDialog.addEventListener("close", () => {
+    if (editMessageResolve) finishEditedMessage(null);
+  });
+  $("#edit-message-form").addEventListener("submit", (event) => {
+    event.preventDefault();
+    finishEditedMessage($("#edit-message-input").value.trim());
+  });
   document.addEventListener("keydown", (event) => {
     if (event.key !== "Escape") return;
     const openDialogs = document.querySelectorAll("dialog[open]");
@@ -3662,10 +3619,11 @@
   document.querySelectorAll("[data-view-target]").forEach((button) => {
     button.addEventListener("click", () => {
       mobileMenuDialog?.close();
-      showView(button.dataset.viewTarget, button.dataset.section || "", { updateHistory: true });
+      showView(button.dataset.viewTarget, button.dataset.section || "", { updateHistory: true, focus: true });
     });
   });
-  $("#open-voice-room").addEventListener("click", () => {
+  $("#open-voice-room").addEventListener("click", (event) => {
+    event.preventDefault();
     const url = new URL("/cockpit/voice-room.html", window.location.origin);
     url.searchParams.set("conversation_id", state.currentConversationId);
     window.location.assign(`${url.pathname}${url.search}`);
@@ -3854,8 +3812,8 @@
       toast("คัดลอกลิงก์จับคู่แล้วครับ");
     } catch (error) { toast(error.message, true); }
   });
-  $("#refresh").addEventListener("click", loadDashboard);
-  $("#health-retry").addEventListener("click", loadDashboard);
+  $("#refresh").addEventListener("click", () => loadDashboard(state.cockpitPage, { force: true }));
+  $("#health-retry").addEventListener("click", () => loadDashboard(state.cockpitPage, { force: true }));
   document.querySelectorAll("[data-quick-action]").forEach((button) => {
     button.addEventListener("click", () => activateQuickAction(button.dataset.quickAction));
   });

@@ -272,7 +272,8 @@ export NVIDIA_API_KEY='nvapi-ใส่คีย์ของเราแทนต
 | `MINIKUN_SYNC_SESSION_TTL` | `P180D` | อายุ session ของอุปกรณ์ที่จับคู่แล้ว |
 
 Voice Companion กำหนดค่าผ่าน `minikun.voice.*` ใน `application.properties` โดยค่าเริ่มต้นใช้
-Whisper Large V3 Turbo Q4 ผ่าน MLX สำหรับถอดเสียงและเสียง `Kanya` ของ macOS สำหรับพูดภาษาไทย
+Whisper Large V3 Turbo Q4 ผ่าน MLX สำหรับถอดเสียงและ `VaniraTTS` แบบ local สำหรับพูดภาษาไทย
+(ค่าเริ่มต้นใช้เสียงผู้ชาย speaker 3)
 ไฟล์เสียงถูกจำกัดขนาด 10 MB และมีเฉพาะใน memory/temporary file ระหว่าง request เท่านั้น
 
 | `MINIKUN_SEARCH_CACHE_ENABLED` | `true` | เปิด/ปิด search cache |

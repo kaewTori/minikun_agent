@@ -27,6 +27,10 @@ final class ToolRuntimeIntentDetector {
             "(?iu)(ข่าว|market\s*news|ตลาดทุน|ตลาดหุ้น)");
     private static final Pattern INVESTMENT_MARKET_ACTION = Pattern.compile(
             "(?iu)(ราคา|มูลค่า|ราคาปัจจุบัน|ราคาล่าสุด|price|quote|valuation|market\\s*value)");
+    private static final Pattern INVESTMENT_PORTFOLIO_FACT = Pattern.compile(
+            "(?iu)(?:(?:พอร์ต|port(?:folio)?).*(?:มี.*(?:หุ้น|อะไร)|ถือ(?:หุ้น)?(?:อะไร|บ้าง)|ประกอบด้วย|รายการ)|"
+                    + "รายการหุ้น|หุ้นที่(?:เรา|ฉัน)?ถือ|ถือหุ้น|"
+                    + "(?:what|which).*(?:stocks?|shares?|positions?|hold|own|portfolio))");
     private static final Pattern INVESTMENT_MARKET_TARGET = Pattern.compile(
             "(?iu)(พอร์ต|หุ้น|การลงทุน|portfolio|holdings?|investment|market|quote)");
     private static final Pattern INVESTMENT_SYMBOL = Pattern.compile("\\b[A-Z][A-Z0-9.-]{0,7}\\b");
@@ -37,6 +41,7 @@ final class ToolRuntimeIntentDetector {
         if (EXPLICIT_TOOL.matcher(value).find()) return true;
         if (INVESTMENT_MARKET_ACTION.matcher(value).find()
                 && (INVESTMENT_MARKET_TARGET.matcher(value).find() || INVESTMENT_SYMBOL.matcher(message).find())) return true;
+        if (INVESTMENT_PORTFOLIO_FACT.matcher(value).find()) return true;
         if (INVESTMENT_MONITOR_TARGET.matcher(value).find()
                 && INVESTMENT_ACTION.matcher(value).find()) return true;
         if (INVESTMENT_ACTION.matcher(value).find() && INVESTMENT_TARGET.matcher(value).find()) return true;

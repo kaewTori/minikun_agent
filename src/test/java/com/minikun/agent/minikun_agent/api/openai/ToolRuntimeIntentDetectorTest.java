@@ -37,4 +37,11 @@ class ToolRuntimeIntentDetectorTest {
         assertTrue(detector.requiresTools("ดูราคาปัจจุบันของ AMZN"));
         assertTrue(detector.requiresTools("ช่วยประเมินมูลค่าพอร์ตจากราคาตลาด"));
     }
+
+    @Test
+    void routesPlainPortfolioInventoryQuestionsToTools() {
+        assertTrue(detector.requiresTools("พอร์ตเรามีอะไรบ้าง"));
+        assertTrue(detector.requiresTools("port เรามีหุ้นอะไรบ้าง"));
+        assertTrue(detector.requiresTools("what stocks do I hold"));
+    }
 }
