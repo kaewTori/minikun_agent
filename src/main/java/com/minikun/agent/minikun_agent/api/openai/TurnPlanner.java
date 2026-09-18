@@ -121,6 +121,11 @@ final class TurnPlanner {
 
     TurnPlan plan(String message, String conversationContext, CompanionModeContext mode,
             boolean hasVision, ToolEvidence verifiedTool, boolean toolsAvailable) {
+        return plan(message, conversationContext, mode, hasVision, verifiedTool, toolsAvailable, false);
+    }
+
+    TurnPlan plan(String message, String conversationContext, CompanionModeContext mode,
+            boolean hasVision, ToolEvidence verifiedTool, boolean toolsAvailable, boolean voiceMode) {
         String text = message == null ? "" : message.strip();
         CooperationRoutingDecision cooperation = cooperationRouter.decide(text);
         boolean contextualRoute = text.length() <= 160 && FOLLOW_UP.matcher(text).find()
@@ -131,7 +136,7 @@ final class TurnPlanner {
             if (previous.needsExpert() || "creative_request".equals(previous.reason())) cooperation = previous;
         }
         boolean creative = "creative_request".equals(cooperation.reason());
-        boolean imageOutput = illustrationIntentDetector
+        boolean imageOutput = !voiceMode && illustrationIntentDetector
                 .detect(text, autoIllustrateCreativeStories) != StoryIllustrationIntent.NONE;
         boolean research = researchIntent.detect(text).deepResearch();
         boolean tools = toolsAvailable && verifiedTool == null && toolIntent.requiresTools(text);
@@ -172,6 +177,10 @@ final class TurnPlanner {
                 plan.intent(), plan.execution(), plan.needsTools(), plan.imageOutput(), plan.routeSource(),
                 plan.ambiguous(), plan.confidence(), plan.reason());
         return plan;
+    }
+
+    boolean visualOutputRequested(String message) {
+        return illustrationIntentDetector.detect(message, false) != StoryIllustrationIntent.NONE;
     }
 
     private String routeSource(ToolEvidence verifiedTool, boolean tools) {

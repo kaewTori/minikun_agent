@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.minikun.database-recovery</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/kaewtori/Library/Application Support/Minikun/java/script/minikun-db-recovery-watchdog.sh</string>
+    </array>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>MINIKUN_DATABASE_VOLUME_PATH</key>
+        <string>/Volumes/minikun_data</string>
+        <key>MINIKUN_DB_RECOVERY_STATE_DIR</key>
+        <string>/Users/kaewtori/Library/Application Support/Minikun/state</string>
+    </dict>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>StartInterval</key>
+    <integer>30</integer>
+
+    <key>ProcessType</key>
+    <string>Background</string>
+
+    <key>StandardOutPath</key>
+    <string>/Users/kaewtori/Library/Logs/Minikun/database-recovery.out.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/kaewtori/Library/Logs/Minikun/database-recovery.err.log</string>
+</dict>
+</plist>

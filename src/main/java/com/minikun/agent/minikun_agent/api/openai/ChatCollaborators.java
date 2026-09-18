@@ -24,6 +24,7 @@ import com.minikun.tools.ToolRequestRouter;
 import com.minikun.tools.springai.SpringAiToolCallingRuntime;
 import com.minikun.vision.VisionInputService;
 import com.minikun.visual.StoryIllustrationService;
+import com.minikun.weather.ReverseGeocodingService;
 
 /** Resolves optional chat capabilities once at the composition boundary. */
 @Component
@@ -51,7 +52,9 @@ final class ChatCollaborators {
     private final ConversationThreadService conversationThreadService;
     private final StoryIllustrationService storyIllustrationService;
     private final TurnPlanner turnPlanner;
+    private final ChatGptReasoningClient chatGptReasoningClient;
     private final KimiK3ReasoningClient kimiK3ReasoningClient;
+    private final ReverseGeocodingService reverseGeocodingService;
 
     ChatCollaborators(
             ObjectProvider<SpringAiToolCallingRuntime> toolCallingRuntime,
@@ -77,7 +80,9 @@ final class ChatCollaborators {
             ObjectProvider<ConversationThreadService> conversationThreadService,
             ObjectProvider<StoryIllustrationService> storyIllustrationService,
             ObjectProvider<TurnPlanner> turnPlanner,
-            ObjectProvider<KimiK3ReasoningClient> kimiK3ReasoningClient) {
+            ObjectProvider<ChatGptReasoningClient> chatGptReasoningClient,
+            ObjectProvider<KimiK3ReasoningClient> kimiK3ReasoningClient,
+            ObjectProvider<ReverseGeocodingService> reverseGeocodingService) {
         this.toolCallingRuntime = toolCallingRuntime.getIfAvailable();
         this.toolRequestRouters = toolRequestRouters.orderedStream().toList();
         this.dynamicGenerationOptionsFactory = dynamicGenerationOptionsFactory.getIfAvailable();
@@ -101,7 +106,9 @@ final class ChatCollaborators {
         this.conversationThreadService = conversationThreadService.getIfAvailable();
         this.storyIllustrationService = storyIllustrationService.getIfAvailable();
         this.turnPlanner = turnPlanner.getIfAvailable();
+        this.chatGptReasoningClient = chatGptReasoningClient.getIfAvailable();
         this.kimiK3ReasoningClient = kimiK3ReasoningClient.getIfAvailable();
+        this.reverseGeocodingService = reverseGeocodingService.getIfAvailable();
     }
 
     SpringAiToolCallingRuntime toolCallingRuntime() { return toolCallingRuntime; }
@@ -127,5 +134,7 @@ final class ChatCollaborators {
     ConversationThreadService conversationThreadService() { return conversationThreadService; }
     StoryIllustrationService storyIllustrationService() { return storyIllustrationService; }
     TurnPlanner turnPlanner() { return turnPlanner; }
+    ChatGptReasoningClient chatGptReasoningClient() { return chatGptReasoningClient; }
     KimiK3ReasoningClient kimiK3ReasoningClient() { return kimiK3ReasoningClient; }
+    ReverseGeocodingService reverseGeocodingService() { return reverseGeocodingService; }
 }

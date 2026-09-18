@@ -27,6 +27,21 @@ public class InvestmentService {
     private static final MathContext MATH = MathContext.DECIMAL128;
     private static final BigDecimal HUNDRED = new BigDecimal("100");
 
+    public record TransactionInput(
+            String account,
+            String type,
+            String symbol,
+            String instrumentName,
+            String assetClass,
+            String currency,
+            BigDecimal quantity,
+            BigDecimal unitPrice,
+            BigDecimal amount,
+            BigDecimal fee,
+            Instant occurredAt,
+            String note) {
+    }
+
     private final InvestmentStore store;
     private final Clock clock;
     private final String defaultBaseCurrency;
@@ -126,6 +141,42 @@ public class InvestmentService {
             }
         }
         return store.addTransaction(transaction);
+    }
+
+    /** Persists a reported group of transactions as one ledger operation. */
+    @Transactional
+    public List<InvestmentTransaction> addTransactions(
+            String ownerId, String conversationId, List<TransactionInput> inputs) {
+        return addTransactions(ownerId, conversationId, inputs, null);
+    }
+
+    @Transactional
+    public List<InvestmentTransaction> addTransactions(
+            String ownerId,
+            String conversationId,
+            List<TransactionInput> inputs,
+            String sourceFingerprint) {
+        String owner = InvestmentPolicy.requireOwner(ownerId);
+        if (inputs == null || inputs.isEmpty()) {
+            throw new IllegalArgumentException("at least one investment transaction is required");
+        }
+        // ponytail: note scan keeps this migration-free; add an indexed fingerprint column if ledger volume demands it.
+        if (sourceFingerprint != null && !sourceFingerprint.isBlank()
+                && store.listTransactions(owner).stream()
+                        .filter(InvestmentTransaction::active)
+                        .anyMatch(transaction -> transaction.note().contains(
+                                "report_fingerprint=" + sourceFingerprint))) {
+            throw new IllegalArgumentException("รายการรายงานนี้ถูกบันทึกไปแล้วใน ledger");
+        }
+        List<InvestmentTransaction> saved = new ArrayList<>();
+        for (TransactionInput input : inputs) {
+            if (input == null) throw new IllegalArgumentException("investment transaction must not be null");
+            saved.add(addTransaction(
+                    owner, conversationId, input.account(), input.type(), input.symbol(), input.instrumentName(),
+                    input.assetClass(), input.currency(), input.quantity(), input.unitPrice(), input.amount(),
+                    input.fee(), input.occurredAt(), input.note()));
+        }
+        return List.copyOf(saved);
     }
 
     @Transactional

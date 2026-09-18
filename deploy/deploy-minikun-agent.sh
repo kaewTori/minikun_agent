@@ -86,6 +86,8 @@ trap 'rm -f "$staged_launcher"' EXIT HUP INT TERM
 mv "$staged_launcher" "$local_script/minikun-agent.sh"
 trap - EXIT HUP INT TERM
 chmod 700 "$local_script/minikun-agent.sh"
+cp "$app_root/deploy/minikun-db-recovery-watchdog.sh" "$local_script/minikun-db-recovery-watchdog.sh"
+chmod 700 "$local_script/minikun-db-recovery-watchdog.sh"
 cp "$app_root/voice/whisper_transcribe.py" "$local_voice/whisper_transcribe.py"
 chmod 700 "$local_voice/whisper_transcribe.py"
 ditto "$workspace_root/config/minikun-agent/mcs" "$local_root/config/minikun-agent/mcs"
@@ -194,3 +196,28 @@ curl --fail --silent --show-error \
   --cacert "$local_root/tls/minikun-local-ca.pem" \
   https://127.0.0.1:8443/actuator/health/readiness
 printf '\n'
+
+recovery_label="com.minikun.database-recovery"
+recovery_plist="$app_root/deploy/$recovery_label.plist"
+installed_recovery_plist="$HOME/Library/LaunchAgents/$recovery_label.plist"
+recovery_service="$launch_domain/$recovery_label"
+cp "$recovery_plist" "$installed_recovery_plist"
+launchctl bootout "$recovery_service" 2>/dev/null || true
+recovery_attempt=0
+recovery_error=''
+until recovery_error="$(launchctl bootstrap "$launch_domain" "$installed_recovery_plist" 2>&1)"; do
+  if launchctl print "$recovery_service" >/dev/null 2>&1; then
+    break
+  fi
+  recovery_attempt=$((recovery_attempt + 1))
+  if [ "$recovery_attempt" -ge 15 ]; then
+    echo "Unable to bootstrap $recovery_label" >&2
+    if [ -n "$recovery_error" ]; then
+      printf '%s\n' "$recovery_error" >&2
+    fi
+    plutil -lint "$installed_recovery_plist" >&2 || true
+    exit 1
+  fi
+  sleep 2
+done
+launchctl kickstart "$recovery_service"

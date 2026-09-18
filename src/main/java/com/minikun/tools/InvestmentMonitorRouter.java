@@ -26,10 +26,26 @@ public final class InvestmentMonitorRouter implements ToolRequestRouter {
             "(?iu)(พอร์ต|หุ้น|การลงทุน|ตลาดทุน|ตลาดหุ้น|portfolio|holdings?|investment|market)");
     private static final Pattern ACTION = Pattern.compile(
             "(?iu)(ข่าว|วันนี้|ล่าสุด|ติดตาม|แนะนำ|มุมมอง|สรุป|แผน|monitor|news|latest|today|advice|brief|plan)");
-    private static final Pattern PORTFOLIO_FACT = Pattern.compile(
-            "(?iu)(?:(?:พอร์ต|port(?:folio)?).*(?:มี.*(?:หุ้น|อะไร)|ถือ(?:หุ้น)?(?:อะไร|บ้าง)|ประกอบด้วย|รายการ)|"
-                    + "รายการหุ้น|หุ้นที่(?:เรา|ฉัน)?ถือ|ถือหุ้น|"
-                    + "(?:what|which).*(?:stocks?|shares?|positions?|hold|own|portfolio))");
+    private static final Pattern MARKET_ANALYSIS = Pattern.compile(
+            "(?iu)(?:(?:วิเคราะห์|ประเมิน|ศึกษา|research|analy[sz]e|analysis)\\s*(?:the\\s+)?"
+                    + "(?:ตลาด(?:หุ้น|ทุน)?|stock\\s*market|market)|"
+                    + "(?:ตลาดหุ้น|ตลาดทุน|stock\\s*market|market)\\s*(?:วิเคราะห์|analysis|research|analy[sz]e))");
+    private static final Pattern PORTFOLIO_TARGET = Pattern.compile(
+            "(?iu)(?:พอร์ต|\\bport(?:folio)?\\b|\\bholdings?\\b|\\bpositions?\\b|"
+                    + "หุ้นที่(?:เรา|ฉัน|ผม)?(?:กำลัง)?ถือ|หุ้นในพอร์ต|รายการ(?:หุ้น|ลงทุน)|"
+                    + "(?:ข้อมูล|รายละเอียด|สถานะ|ภาพรวม)\\s*(?:ของ\\s*)?(?:พอร์ต|การลงทุน)|"
+                    + "(?:portfolio|holdings?|positions?)\\s*(?:ของ|ของฉัน|ของเรา)?)");
+    private static final Pattern PORTFOLIO_OWNERSHIP = Pattern.compile(
+            "(?iu)(?:เราถือ|ฉันถือ|ผมถือ|ในพอร์ต|\\bmy\\b|"
+                    + "\\b(?:i|we)\\s+(?:hold|own)\\b)");
+    private static final Pattern PORTFOLIO_INVENTORY = Pattern.compile(
+            "(?iu)(?:มี|ถือ|อยู่|อะไร|ไหน|บ้าง|รายการ|ตัวไหน|ตัวใด|ประกอบ(?:ด้วย)?|แสดง|ดู|"
+                    + "เช็ก|เช็ค|ตรวจสอบ|ข้อมูล|รายละเอียด|สถานะ|ภาพรวม|สรุป|เป็นยังไง|เป็นอย่างไร|"
+                    + "ตอนนี้|ปัจจุบัน|what|which|show|list|have|hold|own|currently|current|overview|status|details?)");
+    private static final Pattern PORTFOLIO_ANALYSIS_SIGNAL = Pattern.compile(
+            "(?iu)(วิเคราะห์|ทบทวน|แนะนำ|มุมมอง|ความเสี่ยง|ผลตอบแทน|กำไร|ขาดทุน|สัดส่วน|"
+                    + "ซื้อ|ขาย|ควร|ข่าว|ราคา|มูลค่า|review|analy[sz]e|recommend|risk|performance|"
+                    + "return|profit|loss|allocation|buy|sell|price|quote|valuation|news)");
     private static final Pattern FRESH_MONITOR_SIGNAL = Pattern.compile(
             "(?iu)(ข่าว|วันนี้|ล่าสุด|ติดตาม|แนะนำ|มุมมอง|monitor|news|latest|today|advice|brief)");
     private static final Pattern PRICE_ONLY = Pattern.compile(
@@ -41,7 +57,8 @@ public final class InvestmentMonitorRouter implements ToolRequestRouter {
 
     public InvestmentMonitorRouter(ToolExecutor executor, ObjectMapper objectMapper) {
         this.executor = Objects.requireNonNull(executor, "tool executor must not be null");
-        this.objectMapper = Objects.requireNonNull(objectMapper, "object mapper must not be null");
+        this.objectMapper = Objects.requireNonNull(objectMapper, "object mapper must not be null")
+                .copy().findAndRegisterModules();
     }
 
     @Override
@@ -54,8 +71,10 @@ public final class InvestmentMonitorRouter implements ToolRequestRouter {
         if (userText == null || userText.isBlank() || conversationId == null || !isMonitorRequest(userText)) {
             return Optional.empty();
         }
+        boolean marketAnalysis = isMarketAnalysis(userText);
         boolean portfolioFact = isPortfolioFactRequest(userText);
-        boolean refresh = !portfolioFact && userText.matches("(?is).*?(วันนี้|ล่าสุด|latest|today|refresh).*?");
+        boolean refresh = !portfolioFact && (marketAnalysis
+                || userText.matches("(?is).*?(วันนี้|ล่าสุด|latest|today|refresh).*?"));
         String action = portfolioFact ? "plan" : "daily_brief";
         String callId = "investment-monitor-" + UUID.randomUUID();
         ToolResult result = executor.execute(
@@ -74,7 +93,8 @@ public final class InvestmentMonitorRouter implements ToolRequestRouter {
                 return Optional.of(ToolEvidence.finalVerified(TOOL_NAME, formatPortfolio(result.value(), ownerId)));
             }
             return Optional.of(ToolEvidence.verified(TOOL_NAME,
-                    "ข้อมูลแผนลงทุน ข่าว และพอร์ตที่ตรวจสอบได้:\n"
+                    (marketAnalysis ? "ข้อมูลพอร์ตของผู้ใช้และตลาดล่าสุดสำหรับวิเคราะห์:\n"
+                            : "ข้อมูลแผนลงทุน ข่าว และพอร์ตที่ตรวจสอบได้:\n")
                             + objectMapper.writeValueAsString(result.value())));
         } catch (JsonProcessingException exception) {
             return Optional.of(ToolEvidence.failed(TOOL_NAME,
@@ -111,15 +131,24 @@ public final class InvestmentMonitorRouter implements ToolRequestRouter {
 
     private boolean isMonitorRequest(String text) {
         String normalized = text.toLowerCase(Locale.ROOT).strip();
+        boolean marketAnalysis = isMarketAnalysis(normalized);
         boolean portfolioFact = isPortfolioFactRequest(normalized);
-        return (TARGET.matcher(normalized).find() || portfolioFact)
-                && (ACTION.matcher(normalized).find() || portfolioFact)
+        return (TARGET.matcher(normalized).find() || portfolioFact || marketAnalysis)
+                && (ACTION.matcher(normalized).find() || portfolioFact || marketAnalysis)
                 && !PRICE_ONLY.matcher(normalized).matches();
+    }
+
+    private boolean isMarketAnalysis(String text) {
+        return MARKET_ANALYSIS.matcher(text.toLowerCase(Locale.ROOT)).find();
     }
 
     private boolean isPortfolioFactRequest(String text) {
         String normalized = text.toLowerCase(Locale.ROOT).strip();
-        return PORTFOLIO_FACT.matcher(normalized).find()
-                && !FRESH_MONITOR_SIGNAL.matcher(normalized).find();
+        boolean target = PORTFOLIO_TARGET.matcher(normalized).find();
+        boolean ownership = PORTFOLIO_OWNERSHIP.matcher(normalized).find();
+        return PORTFOLIO_INVENTORY.matcher(normalized).find()
+                && (target || ownership)
+                && !FRESH_MONITOR_SIGNAL.matcher(normalized).find()
+                && !PORTFOLIO_ANALYSIS_SIGNAL.matcher(normalized).find();
     }
 }

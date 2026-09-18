@@ -41,11 +41,11 @@ public final class InvestmentConfirmationRouter implements ToolRequestRouter {
                 new ToolCallContext(conversationId, callId, ownerId),
                 new ToolCall(callId, TOOL_NAME, confirmations.confirmedArguments(pending.get())));
         if (!result.success()) {
-            return Optional.of(ToolEvidence.failed(TOOL_NAME,
+            return Optional.of(ToolEvidence.finalFailed(TOOL_NAME,
                     "ขออภัยครับ ดำเนินการกับข้อมูลการลงทุนไม่สำเร็จ: " + result.error()));
         }
         confirmations.clear(conversationId);
-        return Optional.of(ToolEvidence.verified(TOOL_NAME,
+        return Optional.of(ToolEvidence.finalVerified(TOOL_NAME,
                 "ยืนยันแล้วครับ ข้อมูลการลงทุนถูกอัปเดตเรียบร้อยแล้ว\n" + result.value()));
     }
 

@@ -2,6 +2,7 @@ package com.minikun.voice;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.io.File;
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -13,9 +14,12 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-/** TTS bridge for the external Python VaniraTTS server. */
+/** TTS bridge for the external Python mixed-language TTS server. */
 public final class PythonVaniraTextToSpeechProvider implements TextToSpeechProvider, AutoCloseable {
+    private static final Logger LOG = LoggerFactory.getLogger(PythonVaniraTextToSpeechProvider.class);
     private final HttpClient client;
     private final URI baseUri;
     private final ObjectMapper objectMapper;
@@ -23,10 +27,13 @@ public final class PythonVaniraTextToSpeechProvider implements TextToSpeechProvi
     private final Path serverScript;
     private final Path workingDirectory;
     private final Path modelDirectory;
+    private final Path kokoroModelDirectory;
+    private final Path kokoroVoiceFile;
     private final Path logFile;
     private final String host;
     private final int port;
     private final boolean autoStart;
+    private final boolean warmupEnabled;
     private final Duration startupTimeout;
     private final Duration requestTimeout;
     private final Object lifecycleLock = new Object();
@@ -41,10 +48,13 @@ public final class PythonVaniraTextToSpeechProvider implements TextToSpeechProvi
             Path serverScript,
             Path workingDirectory,
             Path modelDirectory,
+            Path kokoroModelDirectory,
+            Path kokoroVoiceFile,
             Path logFile,
             String host,
             int port,
             boolean autoStart,
+            boolean warmupEnabled,
             Duration startupTimeout,
             Duration requestTimeout) {
         this.client = Objects.requireNonNull(client, "TTS client must not be null");
@@ -54,12 +64,15 @@ public final class PythonVaniraTextToSpeechProvider implements TextToSpeechProvi
         this.serverScript = absolute(serverScript, "VaniraTTS server script");
         this.workingDirectory = absolute(workingDirectory, "TTS working directory");
         this.modelDirectory = absolute(modelDirectory, "VaniraTTS model path");
+        this.kokoroModelDirectory = absolute(kokoroModelDirectory, "Kokoro model path");
+        this.kokoroVoiceFile = absolute(kokoroVoiceFile, "Kokoro voice path");
         this.logFile = absolute(logFile, "TTS log path");
         this.host = Objects.requireNonNullElse(host, "127.0.0.1").trim();
         if (this.host.isBlank()) throw new IllegalArgumentException("TTS host must not be blank");
         if (port < 1 || port > 65535) throw new IllegalArgumentException("TTS port is invalid");
         this.port = port;
         this.autoStart = autoStart;
+        this.warmupEnabled = warmupEnabled;
         if (startupTimeout == null || startupTimeout.isZero() || startupTimeout.isNegative()) {
             throw new IllegalArgumentException("TTS startup timeout must be positive");
         }
@@ -76,7 +89,7 @@ public final class PythonVaniraTextToSpeechProvider implements TextToSpeechProvi
                 .toLowerCase(java.util.Locale.ROOT);
         if (!"wav".equals(normalizedFormat)) {
             throw new VoiceException(VoiceErrorCode.INVALID_REQUEST,
-                    "VaniraTTS speech synthesis currently supports wav only");
+                    "local speech synthesis currently supports wav only");
         }
         ensureReady();
         try {
@@ -99,11 +112,11 @@ public final class PythonVaniraTextToSpeechProvider implements TextToSpeechProvi
             throw exception;
         } catch (IOException exception) {
             throw new VoiceException(VoiceErrorCode.PROCESSING_FAILED,
-                    "VaniraTTS speech synthesis failed");
+                    "local speech synthesis failed");
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
             throw new VoiceException(VoiceErrorCode.UNAVAILABLE,
-                    "VaniraTTS speech synthesis was interrupted");
+                    "local speech synthesis was interrupted");
         }
     }
 
@@ -112,12 +125,30 @@ public final class PythonVaniraTextToSpeechProvider implements TextToSpeechProvi
         return configured() && (autoStart || healthy());
     }
 
+    /** Starts the local server and warms both language paths without delaying app startup. */
+    public void warmup() {
+        if (!warmupEnabled || !autoStart || !configured()) return;
+        Thread thread = new Thread(() -> {
+            try {
+                synthesize("Mini-kun is ready to speak พร้อมแล้วครับ", "3", "wav", 1.0);
+                LOG.info("process=voice_warmup event=completed engines=vaniratts,kokoro");
+            } catch (VoiceException exception) {
+                LOG.warn("process=voice_warmup event=failed reason={}", exception.getMessage());
+            }
+        }, "minikun-voice-warmup");
+        thread.setDaemon(true);
+        thread.start();
+    }
+
     private boolean configured() {
         return Files.isExecutable(python)
                 && Files.isRegularFile(serverScript)
                 && Files.isDirectory(workingDirectory)
                 && Files.isRegularFile(modelDirectory.resolve("tts.onnx"))
-                && Files.isRegularFile(modelDirectory.resolve("vocab.json"));
+                && Files.isRegularFile(modelDirectory.resolve("vocab.json"))
+                && Files.isRegularFile(kokoroModelDirectory.resolve("config.json"))
+                && Files.isRegularFile(kokoroModelDirectory.resolve("kokoro-v1_0.pth"))
+                && Files.isRegularFile(kokoroVoiceFile);
     }
 
     private boolean healthy() {
@@ -139,13 +170,13 @@ public final class PythonVaniraTextToSpeechProvider implements TextToSpeechProvi
     private void ensureReady() {
         if (healthy()) return;
         if (!autoStart) throw new VoiceException(VoiceErrorCode.UNAVAILABLE,
-                "VaniraTTS speech server is not running");
+                "local speech server is not running");
         synchronized (lifecycleLock) {
             if (healthy()) return;
             if (closed) throw new VoiceException(VoiceErrorCode.UNAVAILABLE,
-                    "VaniraTTS speech provider is closed");
+                    "local speech provider is closed");
             if (!configured()) throw new VoiceException(VoiceErrorCode.UNAVAILABLE,
-                    "VaniraTTS Python runtime or model is not installed");
+                    "local TTS Python runtime or model is not installed");
             if (managedProcess == null || !managedProcess.isAlive()) startServer();
             long deadline = System.nanoTime() + startupTimeout.toNanos();
             while (System.nanoTime() < deadline) {
@@ -156,13 +187,13 @@ public final class PythonVaniraTextToSpeechProvider implements TextToSpeechProvi
                 } catch (InterruptedException exception) {
                     Thread.currentThread().interrupt();
                     throw new VoiceException(VoiceErrorCode.UNAVAILABLE,
-                            "VaniraTTS speech server startup was interrupted");
+                            "local speech server startup was interrupted");
                 }
             }
         }
         stopServer();
         throw new VoiceException(VoiceErrorCode.TIMEOUT,
-                "VaniraTTS speech server did not become ready before the startup timeout");
+                "local speech server did not become ready before the startup timeout");
     }
 
     private void startServer() {
@@ -172,16 +203,24 @@ public final class PythonVaniraTextToSpeechProvider implements TextToSpeechProvi
             ProcessBuilder builder = new ProcessBuilder(List.of(
                     python.toString(), serverScript.toString(),
                     "--host", host, "--port", Integer.toString(port),
-                    "--model-dir", modelDirectory.toString()));
+                    "--model-dir", modelDirectory.toString(),
+                    "--kokoro-model-dir", kokoroModelDirectory.toString(),
+                    "--kokoro-voice", kokoroVoiceFile.toString()));
             builder.directory(workingDirectory.toFile());
             builder.redirectErrorStream(true);
             builder.redirectOutput(ProcessBuilder.Redirect.appendTo(logFile.toFile()));
             Map<String, String> environment = builder.environment();
             environment.put("PYTHONUNBUFFERED", "1");
+            Path pythonBin = python.getParent();
+            if (pythonBin != null && pythonBin.getParent() != null) {
+                environment.put("VIRTUAL_ENV", pythonBin.getParent().toString());
+                environment.put("PATH", pythonBin + File.pathSeparator
+                        + environment.getOrDefault("PATH", ""));
+            }
             managedProcess = builder.start();
         } catch (IOException exception) {
             throw new VoiceException(VoiceErrorCode.UNAVAILABLE,
-                    "VaniraTTS Python server could not be started");
+                    "local TTS Python server could not be started");
         }
     }
 

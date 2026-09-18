@@ -92,6 +92,23 @@ class FastPathSearchDecisionServiceTest {
     }
 
     @Test
+    void localMuseumRecommendationAlwaysSearches() {
+        java.util.concurrent.atomic.AtomicBoolean delegated = new java.util.concurrent.atomic.AtomicBoolean();
+        SearchDecisionService service = new FastPathSearchDecisionService(
+                query -> {
+                    delegated.set(true);
+                    return new com.minikun.search.model.SearchDecision(false, query);
+                },
+                new RuleBasedSearchDecisionService(null));
+
+        var decision = service.decide("สนใจพิพิธภัณฑ์เงียบ ๆ แถวเชียงใหม่");
+
+        assertTrue(decision.shouldSearch());
+        assertTrue(delegated.get());
+        assertEquals(SearchDecisionReason.EXTERNAL_RESOURCE, decision.reason());
+    }
+
+    @Test
     void sendsHighRiskConversationToTheConfiguredDecisionProvider() {
         java.util.concurrent.atomic.AtomicBoolean delegated = new java.util.concurrent.atomic.AtomicBoolean();
         SearchDecisionService service = new FastPathSearchDecisionService(

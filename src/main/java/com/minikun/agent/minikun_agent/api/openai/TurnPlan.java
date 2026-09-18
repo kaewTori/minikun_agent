@@ -60,6 +60,15 @@ record TurnPlan(
     String intentTag() { return intent.name().toLowerCase(Locale.ROOT); }
     String executionTag() { return execution.name().toLowerCase(Locale.ROOT); }
 
+    boolean externalPeersAllowed() {
+        return cooperation.risk() != com.minikun.model.CooperationRisk.HIGH;
+    }
+
+    boolean peerMeetingRequired() {
+        return externalPeersAllowed() && cooperation.needsExpert()
+                && (ambiguous || confidence < 0.7 || deepResearch);
+    }
+
     enum Intent { COMPANION, GENERAL, WORK, ACTION, SEARCH, RESEARCH, TECHNICAL, CREATIVE, VISION }
     enum Execution { DIRECT_STREAM, TOOL_LOOP, BACKGROUND }
 }

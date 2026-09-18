@@ -3,6 +3,7 @@ package com.minikun.tools;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.minikun.agent.minikun_agent.conversation.ConversationId;
 import com.minikun.investment.InvestmentPolicy;
 import com.minikun.investment.InvestmentQuotePriority;
@@ -54,10 +55,184 @@ class InvestmentConfirmationRouterTest {
 
         assertTrue(evidence.isPresent());
         assertTrue(evidence.get().success());
+        assertTrue(evidence.get().finalResponse());
         assertEquals(1, investments.transactions.size());
         assertEquals("owner-a", investments.transactions.getFirst().ownerId());
         assertEquals("AAA", investments.transactions.getFirst().symbol());
         assertTrue(confirmations.find(conversation, "owner-a").isEmpty());
+    }
+
+    @Test
+    void rejectsIncompleteTradeBeforeCreatingPendingConfirmation() {
+        InMemoryInvestmentStore investments = new InMemoryInvestmentStore();
+        InMemoryConfirmationStore pending = new InMemoryConfirmationStore();
+        Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
+        PlannerConfirmationService confirmations = new PlannerConfirmationService(pending, clock);
+        InvestmentManageTool tool = new InvestmentManageTool(
+                new InvestmentService(investments, clock, "USD"), confirmations);
+
+        ToolResult result = tool.execute(new ToolCallContext(
+                new ConversationId("incomplete-trade"), "proposal", "owner-a"), Map.of(
+                        "action", "add_transaction", "type", "SELL", "symbol", "WHR",
+                        "currency", "USD", "quantity", 1, "unit_price", 35.13));
+
+        assertTrue(!result.success());
+        assertTrue(result.error().contains("account"));
+        assertTrue(confirmations.find(new ConversationId("incomplete-trade"), "owner-a").isEmpty());
+    }
+
+    @Test
+    void derivesSellFeeFromNetProceeds() {
+        InMemoryInvestmentStore investments = new InMemoryInvestmentStore();
+        InMemoryConfirmationStore pending = new InMemoryConfirmationStore();
+        Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
+        InvestmentService service = new InvestmentService(investments, clock, "USD");
+        service.addTransaction("owner-a", "opening", "broker", "BUY", "AAA", "Alpha",
+                "EQUITY", "USD", BigDecimal.TEN, BigDecimal.valueOf(100), null, null, NOW, "");
+        PlannerConfirmationService confirmations = new PlannerConfirmationService(pending, clock);
+        InvestmentManageTool tool = new InvestmentManageTool(service, confirmations);
+        InvestmentConfirmationRouter router = new InvestmentConfirmationRouter(
+                new DefaultToolExecutor(new DefaultToolRegistry(List.of(tool))), confirmations);
+        ConversationId conversation = new ConversationId("net-proceeds");
+
+        ToolResult proposal = tool.execute(new ToolCallContext(conversation, "proposal", "owner-a"), Map.of(
+                "action", "add_transaction", "account", "broker", "type", "SELL", "symbol", "AAA",
+                "currency", "USD", "quantity", 10, "unit_price", 50, "net_proceeds", 490));
+
+        assertTrue(proposal.success());
+        assertTrue(router.route("ยืนยัน", conversation, "owner-a").isPresent());
+        assertEquals(0, BigDecimal.TEN.compareTo(investments.transactions.getLast().fee()));
+    }
+
+    @Test
+    void fillsLegacyMissingAccountFromTheOnlyExistingLedgerAccount() {
+        InMemoryInvestmentStore investments = new InMemoryInvestmentStore();
+        InMemoryConfirmationStore pending = new InMemoryConfirmationStore();
+        Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
+        InvestmentService service = new InvestmentService(investments, clock, "USD");
+        service.addTransaction("owner-a", "opening", "us-long-term", "BUY", "WHR", "Whirlpool",
+                "EQUITY", "USD", BigDecimal.valueOf(0.0277945), BigDecimal.valueOf(132.76), null, null,
+                NOW, "");
+        PlannerConfirmationService confirmations = new PlannerConfirmationService(pending, clock);
+        ConversationId conversation = new ConversationId("legacy-confirmation");
+        confirmations.save(conversation, "owner-a", "investment.add_transaction", Map.of(
+                "action", "add_transaction", "type", "SELL", "symbol", "WHR", "currency", "USD",
+                "quantity", BigDecimal.valueOf(0.0277945), "unit_price", BigDecimal.valueOf(35.13)));
+        InvestmentManageTool tool = new InvestmentManageTool(service, confirmations);
+        InvestmentConfirmationRouter router = new InvestmentConfirmationRouter(
+                new DefaultToolExecutor(new DefaultToolRegistry(List.of(tool))), confirmations);
+
+        Optional<ToolEvidence> evidence = router.route("ยืนยัน", conversation, "owner-a");
+
+        assertTrue(evidence.isPresent());
+        assertTrue(evidence.get().success());
+        assertEquals("us-long-term", investments.transactions.getLast().account());
+    }
+
+    @Test
+    void turnsFailedConfirmationIntoFinalEvidence() {
+        InMemoryConfirmationStore pending = new InMemoryConfirmationStore();
+        Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
+        PlannerConfirmationService confirmations = new PlannerConfirmationService(pending, clock);
+        ConversationId conversation = new ConversationId("failed-confirmation");
+        confirmations.save(conversation, "owner-a", "investment.add_transaction", Map.of(
+                "action", "add_transaction", "account", "broker", "type", "SELL", "symbol", "WHR"));
+        ToolExecutor executor = (context, call) -> ToolResult.failure(
+                ToolErrorCode.INVALID_ARGUMENTS, "account is required for add_transaction");
+        InvestmentConfirmationRouter router = new InvestmentConfirmationRouter(executor, confirmations);
+
+        Optional<ToolEvidence> evidence = router.route("ยืนยัน", conversation, "owner-a");
+
+        assertTrue(evidence.isPresent());
+        assertTrue(!evidence.get().success());
+        assertTrue(evidence.get().finalResponse());
+        assertTrue(evidence.get().content().contains("account is required"));
+        assertTrue(confirmations.find(conversation, "owner-a").isPresent());
+    }
+
+    @Test
+    void recordsAllOwnerReportedSalesUsingCurrentLedgerQuantities() {
+        InMemoryInvestmentStore investments = new InMemoryInvestmentStore();
+        InMemoryConfirmationStore pending = new InMemoryConfirmationStore();
+        Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
+        InvestmentService service = new InvestmentService(investments, clock, "USD");
+        service.addTransaction("owner-a", "opening", "us-long-term", "BUY", "WHR", "Whirlpool",
+                "EQUITY", "USD", BigDecimal.valueOf(0.0277945), BigDecimal.valueOf(132.76), null, null,
+                NOW.minusSeconds(10), "");
+        service.addTransaction("owner-a", "opening", "us-long-term", "BUY", "SPOT", "Spotify",
+                "EQUITY", "USD", BigDecimal.valueOf(0.0019670), BigDecimal.valueOf(721.8980), null, null,
+                NOW.minusSeconds(10), "");
+        PlannerConfirmationService confirmations = new PlannerConfirmationService(pending, clock);
+        ConversationId conversation = new ConversationId("reported-sales");
+        InvestmentTradeReportRouter router = new InvestmentTradeReportRouter(
+                service, confirmations, new ObjectMapper(), clock);
+
+        Optional<ToolEvidence> proposal = router.route("""
+                WHR 35.13USD หลังหักค่าธรรมเนียมแล้วได้มา 0.95 USD
+                SPOT 523.37 หลังหักค่าธรรมเนียมได้มา 1.01 USD
+                """, conversation, "owner-a");
+
+        assertTrue(proposal.isPresent());
+        assertTrue(proposal.get().requiresConfirmation(), proposal.get().content());
+        assertEquals(2, ((List<?>) pending.value.arguments().get("transactions")).size());
+        assertEquals(2, service.summary("owner-a").positions().size());
+
+        Optional<ToolEvidence> result = router.route("ยืนยัน", conversation, "owner-a");
+
+        assertTrue(result.isPresent());
+        assertTrue(result.get().success(), result.get().content());
+        assertTrue(result.get().finalResponse());
+        assertEquals(4, investments.transactions.size());
+        assertEquals("WHR", investments.transactions.get(2).symbol());
+        assertEquals(0, BigDecimal.valueOf(0.0277945).compareTo(investments.transactions.get(2).quantity()));
+        assertEquals(0, BigDecimal.valueOf(0.0277945).multiply(BigDecimal.valueOf(35.13))
+                .subtract(BigDecimal.valueOf(0.95)).compareTo(investments.transactions.get(2).fee()));
+        assertEquals("SPOT", investments.transactions.get(3).symbol());
+        assertEquals(0, BigDecimal.valueOf(0.0019670).compareTo(investments.transactions.get(3).quantity()));
+        assertTrue(service.summary("owner-a").positions().isEmpty());
+    }
+
+    @Test
+    void recordsPartialSaleOnReportedDateAndRejectsDuplicateReport() {
+        InMemoryInvestmentStore investments = new InMemoryInvestmentStore();
+        InMemoryConfirmationStore pending = new InMemoryConfirmationStore();
+        Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
+        InvestmentService service = new InvestmentService(investments, clock, "USD");
+        service.addTransaction("owner-a", "opening", "us-long-term", "BUY", "AAA", "Alpha",
+                "EQUITY", "USD", BigDecimal.TEN, BigDecimal.valueOf(100), null, null,
+                Instant.parse("2026-08-21T10:00:00Z"), "");
+        PlannerConfirmationService confirmations = new PlannerConfirmationService(pending, clock);
+        ConversationId conversation = new ConversationId("partial-sale");
+        InvestmentTradeReportRouter router = new InvestmentTradeReportRouter(
+                service, confirmations, new ObjectMapper(), clock);
+        String report = """
+                วันที่ 2026-08-22
+                AAA 2 หุ้น @ 35.13 USD หลังหักค่าธรรมเนียมแล้วได้มา 69 USD
+                """;
+
+        Optional<ToolEvidence> proposal = router.route(report, conversation, "owner-a");
+
+        assertTrue(proposal.isPresent());
+        assertTrue(proposal.get().requiresConfirmation());
+        Map<?, ?> row = (Map<?, ?>) ((List<?>) pending.value.arguments().get("transactions")).getFirst();
+        assertEquals(0, BigDecimal.valueOf(2).compareTo((BigDecimal) row.get("quantity")));
+        assertEquals("2026-08-22T23:59:59Z", row.get("occurred_at"));
+
+        Optional<ToolEvidence> result = router.route("ยืนยัน", conversation, "owner-a");
+
+        assertTrue(result.isPresent());
+        assertTrue(result.get().success(), result.get().content());
+        assertEquals(2, investments.transactions.size());
+        assertEquals(0, BigDecimal.valueOf(2).compareTo(investments.transactions.getLast().quantity()));
+        assertEquals(0, new BigDecimal("1.26").compareTo(investments.transactions.getLast().fee()));
+        assertEquals(0, BigDecimal.valueOf(8).compareTo(service.summary("owner-a").positions().getFirst().quantity()));
+
+        Optional<ToolEvidence> duplicate = router.route(report, new ConversationId("duplicate"), "owner-a");
+
+        assertTrue(duplicate.isPresent());
+        assertTrue(!duplicate.get().success());
+        assertTrue(duplicate.get().content().contains("บันทึกไปแล้ว"));
+        assertEquals(2, investments.transactions.size());
     }
 
     @Test

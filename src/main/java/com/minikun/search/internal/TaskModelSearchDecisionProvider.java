@@ -34,7 +34,7 @@ final class TaskModelSearchDecisionProvider implements SearchDecisionProvider {
             "local_discovery", "current_information", "fact_lookup", "research", "comparison", "images", "general");
     private static final Set<String> EVIDENCE_NEEDS = Set.of(
             "opening_hours", "rating", "location", "price", "availability", "transit_access",
-            "official_source", "freshness");
+            "official_source", "freshness", "atmosphere");
     private final TaskModelProvider taskModelProvider;
     private final ObjectMapper objectMapper;
     private final Duration timeout;

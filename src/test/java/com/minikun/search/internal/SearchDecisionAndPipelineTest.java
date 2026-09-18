@@ -9,6 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.minikun.pcs.model.KnowledgeContext;
 import com.minikun.search.model.SearchMetadata;
 import com.minikun.search.model.SearchResponse;
+import com.minikun.search.model.SearchDecisionReason;
 import com.minikun.search.model.SearchResult;
 import com.minikun.search.model.SearchSource;
 import com.minikun.search.model.SearchStatus;
@@ -36,6 +37,21 @@ class SearchDecisionAndPipelineTest {
         assertFalse(service.decide(" ").shouldSearch());
         assertEquals("latest Java", service.decide("  latest Java  ").query());
         assertEquals(7, registry.get("minikun.search.decision.duration").timer().count());
+    }
+
+    @Test
+    void ruleBasedDecisionRecognizesNonRestaurantPlaceDiscovery() {
+        RuleBasedSearchDecisionService service = new RuleBasedSearchDecisionService(null);
+
+        var discovery = service.decide("สนใจพิพิธภัณฑ์เงียบ ๆ ในเชียงใหม่");
+        var travel = service.decide("ไปไหนดีในเชียงใหม่");
+        var factual = service.decide("พิพิธภัณฑ์คืออะไร");
+
+        assertTrue(discovery.shouldSearch());
+        assertEquals(SearchDecisionReason.EXTERNAL_RESOURCE, discovery.reason());
+        assertTrue(travel.shouldSearch());
+        assertEquals(SearchDecisionReason.EXTERNAL_RESOURCE, travel.reason());
+        assertFalse(factual.shouldSearch());
     }
 
     @Test

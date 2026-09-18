@@ -13,13 +13,15 @@ record ChatKnowledgeSelection(
         SearchSelectionSignals searchSignals,
         SearchContext searchContext,
         ResearchTrace researchTrace,
-        SearchDecision searchDecision) {
+        SearchDecision searchDecision,
+        DeviceLocationContext deviceLocationContext) {
     ChatKnowledgeSelection(
             KnowledgeSelection selection,
             KnowledgeConsolidation consolidation,
             SearchSelectionSignals searchSignals,
             SearchContext searchContext) {
-        this(selection, consolidation, searchSignals, searchContext, ResearchTrace.EMPTY, null);
+        this(selection, consolidation, searchSignals, searchContext, ResearchTrace.EMPTY, null,
+                DeviceLocationContext.EMPTY);
     }
 
     ChatKnowledgeSelection(
@@ -28,10 +30,24 @@ record ChatKnowledgeSelection(
             SearchSelectionSignals searchSignals,
             SearchContext searchContext,
             ResearchTrace researchTrace) {
-        this(selection, consolidation, searchSignals, searchContext, researchTrace, null);
+        this(selection, consolidation, searchSignals, searchContext, researchTrace, null,
+                DeviceLocationContext.EMPTY);
+    }
+
+    ChatKnowledgeSelection(
+            KnowledgeSelection selection,
+            KnowledgeConsolidation consolidation,
+            SearchSelectionSignals searchSignals,
+            SearchContext searchContext,
+            ResearchTrace researchTrace,
+            SearchDecision searchDecision) {
+        this(selection, consolidation, searchSignals, searchContext, researchTrace, searchDecision,
+                DeviceLocationContext.EMPTY);
     }
 
     ChatKnowledgeSelection {
         researchTrace = researchTrace == null ? ResearchTrace.EMPTY : researchTrace;
+        deviceLocationContext = deviceLocationContext == null
+                ? DeviceLocationContext.EMPTY : deviceLocationContext;
     }
 }

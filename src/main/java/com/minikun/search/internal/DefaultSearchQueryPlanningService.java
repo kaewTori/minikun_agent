@@ -253,6 +253,10 @@ public final class DefaultSearchQueryPlanningService implements SearchQueryPlann
             return "images";
         }
         String lower = value.toLowerCase(Locale.ROOT);
+        if (decision.reason() == SearchDecisionReason.EXTERNAL_RESOURCE
+                && RuleBasedSearchDecisionService.isLocalDiscovery(value)) {
+            return "recommendation";
+        }
         if (!timeRange.isBlank() || lower.contains("ข่าว") || lower.contains("news")) {
             return "current_information";
         }
@@ -297,6 +301,11 @@ public final class DefaultSearchQueryPlanningService implements SearchQueryPlann
         if (lower.contains("mrt") || lower.contains("bts") || lower.contains("สถานี")
                 || lower.contains("เดินทาง") || lower.contains("transit")) {
             evidence.add("transit_access");
+        }
+        if (List.of("บรรยากาศ", "เงียบ", "ชิล", "ถ่ายรูป", "วิว", "โรแมนติก",
+                "atmosphere", "quiet", "cozy", "vibe", "scenic", "photogenic", "romantic")
+                .stream().anyMatch(lower::contains)) {
+            evidence.add("atmosphere");
         }
         return List.copyOf(evidence);
     }

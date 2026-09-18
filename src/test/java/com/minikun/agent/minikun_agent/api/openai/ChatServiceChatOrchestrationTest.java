@@ -135,6 +135,36 @@ class ChatServiceChatOrchestrationTest {
     }
 
     @Test
+    void voiceTurnsSkipIllustrationsAndAddSpokenResponseGuidance() throws Exception {
+        ChatModel chatModel = mock(ChatModel.class);
+        ConversationMemoryService conversation = mock(ConversationMemoryService.class);
+        when(conversation.load(any())).thenReturn(List.of());
+        when(chatModel.call(any(Prompt.class))).thenReturn(response("สรุปให้สั้น ๆ ครับ"));
+        ChatService service = service(chatModel, conversation);
+        AtomicBoolean imageGenerated = new AtomicBoolean();
+        var imageTool = new ImageGenerationTool(prompt -> {
+            imageGenerated.set(true);
+            return new GeneratedImage(new byte[] {1}, "test-image-model");
+        }, new GeneratedImageStore(temporaryDirectory, 1024, Clock.systemUTC()), 8000, 4_194_304L);
+        setField(service, "storyIllustrationService", new StoryIllustrationService(
+                imageTool, true, 2000, visualPlan(),
+                new InMemoryCharacterVisualMemory(), 3));
+
+        ChatCompletionResponse result = service.chatCompletion(new ChatCompletionRequest(
+                "mini-kun", List.of(new Message("user", "ช่วยสร้างภาพเมืองลอยฟ้าให้หน่อย")),
+                "voice-image", false, null, null, null, null, "owner", "voice"),
+                new ConversationId("voice-image"));
+
+        assertTrue(result.attachments().isEmpty());
+        assertFalse(imageGenerated.get());
+        ArgumentCaptor<Prompt> prompt = ArgumentCaptor.forClass(Prompt.class);
+        verify(chatModel).call(prompt.capture());
+        String text = promptText(prompt.getValue());
+        assertTrue(text.contains("Voice response"));
+        assertFalse(text.contains("Generated story illustration"));
+    }
+
+    @Test
     void streamingBlankImageResponseStillPreparesIllustrationOffTheReactorThread() throws Exception {
         ChatModel chatModel = mock(ChatModel.class);
         ConversationMemoryService conversation = mock(ConversationMemoryService.class);

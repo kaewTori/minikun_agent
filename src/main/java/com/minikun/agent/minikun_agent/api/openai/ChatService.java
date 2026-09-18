@@ -78,6 +78,7 @@ import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
 import reactor.core.scheduler.Schedulers;
 import org.slf4j.MDC;
+import com.minikun.weather.ReverseGeocodingService;
 
 @Service
 @RequiredArgsConstructor(onConstructor_ = @Autowired)
@@ -119,6 +120,7 @@ public class ChatService {
     private final ChatRequestInspector requestInspector = new ChatRequestInspector();
     private final VisionSearchQueryService visionSearchQueryService = new VisionSearchQueryService();
     private SpringAiToolCallingRuntime toolCallingRuntime;
+    private ChatGptReasoningClient chatGptReasoningClient;
     private KimiK3ReasoningClient kimiK3ReasoningClient;
     private List<ToolRequestRouter> toolRequestRouters = List.of();
     private DynamicGenerationOptionsFactory dynamicGenerationOptionsFactory;
@@ -141,6 +143,7 @@ public class ChatService {
     private ConversationThreadService conversationThreadService;
     private AutonomousResearchService autonomousResearchService;
     private StoryIllustrationService storyIllustrationService;
+    private ReverseGeocodingService reverseGeocodingService;
 
     private ChatExplainabilityRecorder explainabilityRecorder = new ChatExplainabilityRecorder(null);
     private TurnPlanner turnPlanner = new TurnPlanner(
@@ -149,7 +152,7 @@ public class ChatService {
     @Autowired
     void configureCollaborators(ChatCollaborators collaborators) {
         toolCallingRuntime = collaborators.toolCallingRuntime();
-        kimiK3ReasoningClient = collaborators.kimiK3ReasoningClient();
+        chatGptReasoningClient = collaborators.chatGptReasoningClient(); kimiK3ReasoningClient = collaborators.kimiK3ReasoningClient();
         toolRequestRouters = collaborators.toolRequestRouters();
         dynamicGenerationOptionsFactory = collaborators.dynamicGenerationOptionsFactory();
         modelCapabilityRegistry = collaborators.modelCapabilityRegistry();
@@ -170,6 +173,7 @@ public class ChatService {
         conversationThreadService = collaborators.conversationThreadService();
         autonomousResearchService = collaborators.autonomousResearchService();
         storyIllustrationService = collaborators.storyIllustrationService();
+        reverseGeocodingService = collaborators.reverseGeocodingService();
         if (collaborators.turnPlanner() != null) turnPlanner = collaborators.turnPlanner();
         explainabilityRecorder = new ChatExplainabilityRecorder(collaborators.explainabilitySink());
     }
@@ -379,7 +383,7 @@ public class ChatService {
         try {
             requestContext.requireRemaining("route");
             Optional<ToolEvidence> verifiedToolResult = routeTool(
-                    userMessage, conversationId, memoryOwnerId(request, conversationId));
+                    userMessage, conversationId, memoryOwnerId(request, conversationId), request.voiceMode());
             if (verifiedToolResult.map(ToolEvidence::finalResponse).orElse(false)) {
                 String content = verifiedToolResult.get().content();
                 String ownerId = memoryOwnerId(request, conversationId);
@@ -422,18 +426,19 @@ public class ChatService {
             // answer from the MCS/PCS prompt, without invoking that tool twice.
             requestContext.requireRemaining("model");
             long generationStarted = System.nanoTime();
+            ChatModelGateway generationGateway = modelGateway(context.turnPlan());
             boolean toolRuntimeRequired = verifiedToolResult.isEmpty() && context.turnPlan().needsTools();
             var response = verifiedToolResult.isPresent() || !toolRuntimeRequired
-                    ? modelGateway().chat(
+                    ? generationGateway.chat(
                             context.prompt(), context.reasoning(), "chat_model", transaction.requestId(), context.conversationId())
-                    : modelGateway().chatWithTools(
+                    : generationGateway.chatWithTools(
                             context.prompt(), context.reasoning(), context.conversationId(), context.ownerId(), transaction.requestId());
             ModelUsage usage = modelUsage(response);
             recordPromptTokenEstimate(context.estimatedInputTokens(), usage.promptTokens());
             String content = response.getResult().getOutput().getText();
             var continued = responseContinuationCoordinator().complete(
                     response, content, context.prompt(), context.generationProfile(), transaction.requestId(),
-                    prompt -> modelGateway().chat(prompt, "response_continuation",
+                    prompt -> generationGateway.chat(prompt, "response_continuation",
                             transaction.requestId(), context.conversationId()));
             content = continued.content();
             if (continued.continuationResponse() != null) {
@@ -502,7 +507,7 @@ public class ChatService {
         AtomicBoolean firstTokenRecorded = new AtomicBoolean();
         AtomicBoolean promptEstimateRecorded = new AtomicBoolean();
         Optional<ToolEvidence> verifiedToolResult = routeTool(
-                userMessage, conversationId, memoryOwnerId(request, conversationId));
+                userMessage, conversationId, memoryOwnerId(request, conversationId), request.voiceMode());
         if (verifiedToolResult.map(ToolEvidence::finalResponse).orElse(false)) {
             String content = verifiedToolResult.get().content();
             String ownerId = memoryOwnerId(request, conversationId);
@@ -541,19 +546,20 @@ public class ChatService {
             return commandStream(content, request);
         }
         long modelStarted = System.nanoTime();
+        ChatModelGateway generationGateway = modelGateway(context.turnPlan());
         String traceId = MDC.get("trace_id");
         CitationLinker.Stream citationStream = CitationLinker.stream(context.citations());
         ModelOutputSanitizer.Stream outputSanitizer = new ModelOutputSanitizer.Stream();
         boolean toolRuntimeRequired = verifiedToolResult.isEmpty() && context.turnPlan().needsTools();
         Flux<ChatResponse> primaryResponses = verifiedToolResult.isPresent()
-            ? modelGateway().stream(context.prompt(), context.reasoning(), context.conversationId())
+            ? generationGateway.stream(context.prompt(), context.reasoning(), context.conversationId())
             : toolsEnabled && toolCallingRuntime != null && toolRuntimeRequired
-            ? Flux.defer(() -> Flux.just(modelGateway().reviewToolRuntimeDraft(
+            ? Flux.defer(() -> Flux.just(generationGateway.reviewToolRuntimeDraft(
                     context.prompt(), context.reasoning(), context.conversationId(), context.ownerId(), requestId)))
-            : modelGateway().stream(context.prompt(), context.reasoning(), context.conversationId());
+            : generationGateway.stream(context.prompt(), context.reasoning(), context.conversationId());
         var continued = responseContinuationCoordinator().stream(
                 primaryResponses, assistantContent, context.prompt(), context.generationProfile(), requestId,
-                prompt -> modelGateway().stream(prompt, context.conversationId()),
+                prompt -> generationGateway.stream(prompt, context.conversationId()),
                 response -> captureModelUsage(modelUsage, response),
                 response -> modelUsage.set(addModelUsage(modelUsage.get(), modelUsage(response))));
         Flux<ChatResponse> modelResponses = continued.responses();
@@ -666,7 +672,7 @@ public class ChatService {
         String classifierContext = classifierContext(history);
         TurnPlan turnPlan = turnPlanner.plan(userMessage.content(), classifierContext, interactionMode,
                 visionInput != null && visionInput.hasImages(), verifiedToolResult,
-                toolsEnabled && toolCallingRuntime != null);
+                toolsEnabled && toolCallingRuntime != null, request.voiceMode());
         VisionSearchQueryService.Result visionSearchResult = searchEnabled
                 ? visionSearchQueryService.resolve(
                         true, userMessage.content(), visionInput, modelGateway(), effectiveConfiguredChatModel(),
@@ -679,7 +685,7 @@ public class ChatService {
                 new ChatKnowledgeResolver.Request(
                         userMessage.content(), transaction.requestId(), conversationId, ownerId,
                         hasConversationContext(history, request), classifierContext, turnPlan, contextDeadline,
-                        visionInput, visionSearchResult.query(), visionSearchResult.alternateQueries()));
+                        visionInput, visionSearchResult.query(), visionSearchResult.alternateQueries(), request.deviceLocation()));
         turnPlan = turnPlan.refine(knowledgeSelection);
         if (performanceMetrics != null) performanceMetrics.turnPlan(turnPlan);
         requestContext.requireRemaining("prompt");
@@ -737,7 +743,8 @@ public class ChatService {
                 responseFactory);
     }
     private Optional<ToolEvidence> routeTool(
-            ChatMessage userMessage, ConversationId conversationId, String ownerId) {
+            ChatMessage userMessage, ConversationId conversationId, String ownerId, boolean voiceMode) {
+        if (voiceMode && turnPlanner.visualOutputRequested(userMessage.content())) return Optional.empty();
         return turnPlanner.route(userMessage.content(), conversationId, ownerId, toolsEnabled, toolRequestRouters);
     }
     private ChatTurnFinalizer turnFinalizer() {
@@ -751,9 +758,12 @@ public class ChatService {
                 reflectionEnabled);
     }
     private ChatModelGateway modelGateway() {
+        return modelGateway(null);
+    }
+    private ChatModelGateway modelGateway(TurnPlan plan) {
         return new ChatModelGateway(activeChatModelProvider, toolCallingRuntime, performanceMetrics,
-                toolsEnabled, kimiK3ReasoningClient,
-                effectiveConfiguredChatModel());
+                toolsEnabled, plan == null || plan.externalPeersAllowed(), plan != null && plan.peerMeetingRequired(),
+                chatGptReasoningClient, kimiK3ReasoningClient, effectiveConfiguredChatModel());
     }
     private ChatCompletionResponse responseForContent(ChatCompletionRequest request, String content) {
         String model = requestInspector.publicModelName();
@@ -836,6 +846,7 @@ public class ChatService {
                 browserContentService,
                 autonomousResearchService,
                 performanceMetrics,
+                reverseGeocodingService,
                 new ChatKnowledgeResolver.Configuration(
                         searchEnabled,
                         searchTimeout,

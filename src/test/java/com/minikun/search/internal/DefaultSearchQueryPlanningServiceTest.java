@@ -45,6 +45,23 @@ class DefaultSearchQueryPlanningServiceTest {
     }
 
     @Test
+    void plansPlaceDiscoveryWithBudgetTransportAndAtmosphereConstraints() {
+        String query = "อยากไปพิพิธภัณฑ์เงียบ ๆ แถวเชียงใหม่ งบ 500 บาท เดินทางด้วยรถไฟ";
+
+        SearchQueryPlan plan = planner.plan(
+                query, new SearchDecision(true, query, SearchDecisionReason.EXTERNAL_RESOURCE));
+
+        assertEquals("recommendation", plan.intent());
+        assertTrue(plan.primaryQuery().contains("พิพิธภัณฑ์"));
+        assertTrue(plan.primaryQuery().contains("เชียงใหม่"));
+        assertTrue(plan.primaryQuery().contains("500"));
+        assertTrue(plan.primaryQuery().contains("รถไฟ"));
+        assertTrue(plan.evidenceNeeds().contains("price"));
+        assertTrue(plan.evidenceNeeds().contains("transit_access"));
+        assertTrue(plan.evidenceNeeds().contains("atmosphere"));
+    }
+
+    @Test
     void prefersBoundedSemanticPlanOverConversationalText() {
         String query = "ช่วยแนะนำร้านข้าวย่านบางขุนนนท์ ที่เราจะลง MRT ไฟฉายหน่อยสิ";
         SearchPlanHints hints = new SearchPlanHints(

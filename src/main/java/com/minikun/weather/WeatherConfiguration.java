@@ -44,6 +44,21 @@ public class WeatherConfiguration {
         };
     }
 
+    @Bean
+    ReverseGeocodingService reverseGeocodingService(
+            ObjectMapper objectMapper,
+            Clock memoryClock,
+            @Value("${minikun.location.reverse-geocoding.enabled:true}") boolean enabled,
+            @Value("${minikun.location.reverse-geocoding.url:https://nominatim.openstreetmap.org}") String baseUrl,
+            @Value("${minikun.location.reverse-geocoding.timeout:PT3S}") Duration timeout,
+            @Value("${minikun.location.reverse-geocoding.max-age:PT10M}") Duration maximumAge,
+            @Value("${minikun.location.reverse-geocoding.max-accuracy:250}") double maximumAccuracy,
+            @Value("${minikun.location.reverse-geocoding.user-agent:MinikunAgent/1.0}") String userAgent) {
+        return new ReverseGeocodingService(
+                restClient(baseUrl, timeout), objectMapper, memoryClock,
+                maximumAge, maximumAccuracy, userAgent, enabled);
+    }
+
     private RestClient restClient(String baseUrl, Duration timeout) {
         HttpClient httpClient = HttpClient.newBuilder().connectTimeout(timeout).build();
         JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(httpClient);

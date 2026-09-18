@@ -18,19 +18,23 @@ final class SearchDecisionPromptBuilder {
             Use one intent value: local_discovery, current_information, fact_lookup, research, comparison, images,
             general.
             Use only these evidenceNeeds values: opening_hours, rating, location, price, availability,
-            transit_access, official_source, freshness. Use at most 2 alternateQueries. Use [] when none and ""
+            transit_access, official_source, freshness, atmosphere. Use at most 2 alternateQueries. Use [] when none and ""
             when no location. Request transit_access when the user names a station or asks how to get there.
             searchQuery must be concise and preserve named people, products, neighborhoods, landmarks, and transit
-            stations verbatim. Do not invent a budget, distance, rating threshold, dietary need, or other constraint.
+            stations verbatim. Preserve explicit area, date/time, budget, transport, companions, atmosphere, and
+            accessibility constraints. Do not invent a budget, distance, rating threshold, dietary need, or other
+            constraint.
             For shouldSearch=false, use intent=general, searchQuery="", alternateQueries=[], evidenceNeeds=[], location="".
             CURRENT_INFORMATION, FACT_LOOKUP, EXTERNAL_RESOURCE, and IMAGE_REQUEST always require shouldSearch=true.
             GENERAL_KNOWLEDGE always requires shouldSearch=false.
             Thai requests containing explicit freshness or lookup intent such as ล่าสุด, ตอนนี้, ปัจจุบัน,
             ค้นหา, ค้นข้อมูล, เช็กข้อมูล, or ตรวจสอบข้อเท็จจริง require search.
-            Recommendations for real-world businesses, restaurants, shops, venues, or services near a named
-            neighborhood, landmark, or transit station require search and use EXTERNAL_RESOURCE, even when the
-            user says "recommend" rather than "search". Use intent=local_discovery and request relevant evidence
-            such as opening_hours, rating, location, and price because these facts can change.
+            Recommendations for real-world businesses, restaurants, shops, venues, services, attractions, museums,
+            parks, markets, galleries, landmarks, or activities near a named neighborhood, landmark, or transit station
+            require search and use EXTERNAL_RESOURCE, even when the user says "recommend" rather than
+            "search". Requests such as อยากไป, สนใจ, ไปไหนดี, "want to visit", or "interested in" count as
+            recommendations. Use intent=local_discovery and request relevant evidence such as opening_hours, rating,
+            location, price, transit_access, or atmosphere because these facts can change.
             Use IMAGE_REQUEST when the user wants you to find, show, provide, or display images, photos, pictures,
             or visual references, including indirect or colloquial wording in any language. For IMAGE_REQUEST use
             intent=images, set shouldSearch=true, and make searchQuery contain only the visual subject after

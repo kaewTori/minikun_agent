@@ -10,6 +10,9 @@ import com.minikun.pcs.SearchContext;
 import com.minikun.pcs.SearchSelectionSignals;
 import com.minikun.research.ResearchStopReason;
 import com.minikun.research.ResearchTrace;
+import com.minikun.search.model.SearchDecision;
+import com.minikun.search.model.SearchDecisionReason;
+import com.minikun.search.model.SearchPlanHints;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -120,6 +123,48 @@ class ChatCapabilityFactoryTest {
         assertTrue(normalizedText.contains("Do not say information was unavailable"));
         assertTrue(normalizedText.contains("Concrete search evidence"));
         assertTrue(normalizedText.contains("https://www.pixiv.net/en/users/24515230"));
+    }
+
+    @Test
+    void localDiscoveryAddsPracticalGuideInstructions() {
+        KnowledgeCandidate source = new KnowledgeCandidate(
+                "search-0", KnowledgeSource.SEARCH,
+                "Museum (https://example.org/museum): quiet place", 0, "https://example.org/museum");
+        String query = "สนใจพิพิธภัณฑ์เงียบ ๆ ในเชียงใหม่";
+        ChatKnowledgeSelection knowledge = new ChatKnowledgeSelection(
+                new KnowledgeSelection(List.of(source), false), KnowledgeConsolidation.EMPTY,
+                new SearchSelectionSignals(true), SearchContext.EMPTY, ResearchTrace.EMPTY,
+                new SearchDecision(true, query, SearchDecisionReason.EXTERNAL_RESOURCE,
+                        new SearchPlanHints("local_discovery", 0.96, "พิพิธภัณฑ์ เชียงใหม่ เงียบ", List.of(),
+                                List.of("opening_hours", "location", "price", "atmosphere"), "เชียงใหม่")));
+
+        var capabilities = new ChatCapabilityFactory().create(
+                query, knowledge, null, null, null, null, "", false);
+        String text = capabilities.stream().map(capability -> capability.name() + "\n" + capability.content())
+                .reduce((left, right) -> left + "\n" + right).orElse("");
+
+        assertTrue(text.contains("Local guide"));
+        assertTrue(text.contains("3 to 5"));
+        assertTrue(text.contains("area, budget"));
+        assertTrue(text.contains("opening hours"));
+        assertTrue(text.contains("real source URL"));
+        assertTrue(text.contains("at most one concise"));
+    }
+
+    @Test
+    void nearbyRequestWithoutVerifiedAreaForbidsInventingCurrentPlace() {
+        ChatKnowledgeSelection knowledge = new ChatKnowledgeSelection(
+                KnowledgeSelection.EMPTY, KnowledgeConsolidation.EMPTY,
+                new SearchSelectionSignals(true), SearchContext.EMPTY,
+                ResearchTrace.EMPTY, null, DeviceLocationContext.unavailable());
+
+        var capabilities = new ChatCapabilityFactory().create(
+                "แนะนำร้านอาหารแถวนี้", knowledge, null, null, null, null, "", false);
+        String text = capabilities.stream().map(capability -> capability.name() + "\n" + capability.content())
+                .reduce((left, right) -> left + "\n" + right).orElse("");
+
+        assertTrue(text.contains("Device location"));
+        assertTrue(text.contains("Do not guess or state the user's current place"));
     }
 
     @Test

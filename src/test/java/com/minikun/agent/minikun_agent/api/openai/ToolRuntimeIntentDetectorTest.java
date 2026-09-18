@@ -3,6 +3,7 @@ package com.minikun.agent.minikun_agent.api.openai;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class ToolRuntimeIntentDetectorTest {
@@ -33,6 +34,15 @@ class ToolRuntimeIntentDetectorTest {
     }
 
     @Test
+    void keepsStockMarketAnalysisOnTheResearchRoute() {
+        assertFalse(detector.requiresTools("ช่วยวิเคราะห์ตลาดหุ้น"));
+        assertFalse(detector.requiresTools("ช่วยวิเคราะห์ตลาด"));
+        assertFalse(detector.requiresTools("analyze the stock market"));
+        assertFalse(detector.requiresTools("market analysis"));
+        assertTrue(detector.requiresTools("สรุปข่าวตลาดหุ้นวันนี้"));
+    }
+
+    @Test
     void routesNaturalInvestmentPriceQuestionsToTools() {
         assertTrue(detector.requiresTools("ดูราคาปัจจุบันของ AMZN"));
         assertTrue(detector.requiresTools("ช่วยประเมินมูลค่าพอร์ตจากราคาตลาด"));
@@ -40,8 +50,32 @@ class ToolRuntimeIntentDetectorTest {
 
     @Test
     void routesPlainPortfolioInventoryQuestionsToTools() {
-        assertTrue(detector.requiresTools("พอร์ตเรามีอะไรบ้าง"));
-        assertTrue(detector.requiresTools("port เรามีหุ้นอะไรบ้าง"));
-        assertTrue(detector.requiresTools("what stocks do I hold"));
+        List.of(
+                "พอร์ตเรามีอะไรบ้าง",
+                "port เรามีหุ้นอะไรบ้าง",
+                "what stocks do I hold",
+                "ช่วยดูพอร์ตของเรา",
+                "มีอะไรอยู่ใน port",
+                "ตอนนี้ฉันถืออะไรอยู่",
+                "แสดงรายการลงทุนของฉัน",
+                "what's in my portfolio",
+                "list my positions").forEach(text -> assertTrue(detector.requiresTools(text), text));
+        assertFalse(detector.requiresTools(
+                "ถ้าเรายังต้องไปเป็น bare metal แต่ว่าเรามีเครื่องอยู่ 4 เครื่องแบบนี้เราก็ทำแผน horizontal scale ก็ได้ถูกไหม"));
+    }
+
+    @Test
+    void routesCompletedInvestmentTradesToToolsButKeepsAdviceAsDirectGeneration() {
+        List.of(
+                "เราขายหุ้น GIL ไปแล้ว",
+                "ขาย GIL ไปแล้ว",
+                "I sold GIL yesterday",
+                "ช่วยบันทึกธุรกรรมขาย WHR",
+                "record my AMZN buy",
+                "AAA 2 หุ้น @ 35.13 USD หลังหักค่าธรรมเนียมแล้วได้มา 69 USD",
+                "WHR 35.13USD หลังหักค่าธรรมเนียมแล้วได้มา 0.95 USD\n"
+                        + "SPOT 523.37 หลังหักค่าธรรมเนียมได้มา 1.01 USD")
+                .forEach(text -> assertTrue(detector.requiresTools(text), text));
+        assertFalse(detector.requiresTools("ควรขายหุ้น GIL ไหม"));
     }
 }

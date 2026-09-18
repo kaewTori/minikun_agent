@@ -91,15 +91,15 @@ public final class InvestmentExternalDataService {
         List<String> requested = normalizeSymbols(symbols);
         if (requested.isEmpty()) return Map.of();
         requireConfigured(marketDataConfigured(), "Twelve Data API key is not configured");
-        URI uri = UriComponentsBuilder.fromPath("/price")
+        URI uri = UriComponentsBuilder.fromPath("/quote")
                 .queryParam("symbol", String.join(",", requested))
                 .build().toUri();
         String response = get(twelveData, uri, Map.of("Authorization", "apikey " + twelveDataApiKey));
         try {
             JsonNode root = objectMapper.readTree(response);
             Map<String, MarketQuote> quotes = new LinkedHashMap<>();
-            if (root.isObject() && root.has("price")) {
-                addQuote(quotes, requested.getFirst(), root);
+            if (root.isObject() && (root.has("price") || root.has("close"))) {
+                addQuote(quotes, root.path("symbol").asText(requested.getFirst()), root);
             } else if (root.isObject()) {
                 root.fields().forEachRemaining(entry -> addQuote(quotes, entry.getKey(), entry.getValue()));
             } else if (root.isArray()) {
@@ -237,7 +237,7 @@ public final class InvestmentExternalDataService {
         if (priceNode == null || priceNode.isNull() || priceNode.asText().isBlank()) return;
         try {
             BigDecimal price = new BigDecimal(priceNode.asText());
-            String currency = value.path("currency").asText("USD").toUpperCase(Locale.ROOT);
+            String currency = value.path("currency").asText("").toUpperCase(Locale.ROOT);
             quotes.put(symbol, new MarketQuote(symbol, price, currency, clock.instant(), "twelve-data"));
         } catch (NumberFormatException ignored) {
             // A per-symbol error in a batch response should not discard usable symbols.

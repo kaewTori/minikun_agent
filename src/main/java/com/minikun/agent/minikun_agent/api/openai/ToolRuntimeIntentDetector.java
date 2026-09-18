@@ -25,26 +25,77 @@ final class ToolRuntimeIntentDetector {
             "(?iu)(พอร์ต|หุ้นที่ถือ|การลงทุน|ตลาดทุน|ตลาดหุ้น|thesis|portfolio|holdings?|investment|market)");
     private static final Pattern INVESTMENT_MONITOR_TARGET = Pattern.compile(
             "(?iu)(ข่าว|market\s*news|ตลาดทุน|ตลาดหุ้น)");
+    private static final Pattern INVESTMENT_MARKET_ANALYSIS = Pattern.compile(
+            "(?iu)(?:(?:วิเคราะห์|ประเมิน|ศึกษา|research|analy[sz]e|analysis)\\s*(?:the\\s+)?"
+                    + "(?:ตลาด(?:หุ้น|ทุน)?|หุ้น|stock\\s*market|stocks?|market)|"
+                    + "(?:ตลาดหุ้น|ตลาดทุน|stock\\s*market|stocks?|market)\\s*(?:วิเคราะห์|analysis|research|analy[sz]e))");
     private static final Pattern INVESTMENT_MARKET_ACTION = Pattern.compile(
             "(?iu)(ราคา|มูลค่า|ราคาปัจจุบัน|ราคาล่าสุด|price|quote|valuation|market\\s*value)");
-    private static final Pattern INVESTMENT_PORTFOLIO_FACT = Pattern.compile(
-            "(?iu)(?:(?:พอร์ต|port(?:folio)?).*(?:มี.*(?:หุ้น|อะไร)|ถือ(?:หุ้น)?(?:อะไร|บ้าง)|ประกอบด้วย|รายการ)|"
-                    + "รายการหุ้น|หุ้นที่(?:เรา|ฉัน)?ถือ|ถือหุ้น|"
-                    + "(?:what|which).*(?:stocks?|shares?|positions?|hold|own|portfolio))");
+    private static final Pattern INVESTMENT_PORTFOLIO_TARGET = Pattern.compile(
+            "(?iu)(?:พอร์ต|\\bport(?:folio)?\\b|\\bholdings?\\b|\\bpositions?\\b|"
+                    + "หุ้นที่(?:เรา|ฉัน|ผม)?(?:กำลัง)?ถือ|หุ้นในพอร์ต|รายการ(?:หุ้น|ลงทุน)|"
+                    + "(?:ข้อมูล|รายละเอียด|สถานะ|ภาพรวม)\\s*(?:ของ\\s*)?(?:พอร์ต|การลงทุน)|"
+                    + "(?:portfolio|holdings?|positions?)\\s*(?:ของ|ของฉัน|ของเรา)?)");
+    private static final Pattern INVESTMENT_PORTFOLIO_OWNERSHIP = Pattern.compile(
+            "(?iu)(?:เราถือ|ฉันถือ|ผมถือ|ในพอร์ต|\\bmy\\b|"
+                    + "\\b(?:i|we)\\s+(?:hold|own)\\b)");
+    private static final Pattern INVESTMENT_PORTFOLIO_INVENTORY = Pattern.compile(
+            "(?iu)(?:มี|ถือ|อยู่|อะไร|ไหน|บ้าง|รายการ|ตัวไหน|ตัวใด|ประกอบ(?:ด้วย)?|แสดง|ดู|"
+                    + "เช็ก|เช็ค|ตรวจสอบ|ข้อมูล|รายละเอียด|สถานะ|ภาพรวม|สรุป|เป็นยังไง|เป็นอย่างไร|"
+                    + "ตอนนี้|ปัจจุบัน|what|which|show|list|have|hold|own|currently|current|overview|status|details?)");
+    private static final Pattern INVESTMENT_PORTFOLIO_ANALYSIS = Pattern.compile(
+            "(?iu)(วิเคราะห์|ทบทวน|แนะนำ|มุมมอง|ความเสี่ยง|ผลตอบแทน|กำไร|ขาดทุน|สัดส่วน|"
+                    + "ซื้อ|ขาย|ควร|ข่าว|ราคา|มูลค่า|review|analy[sz]e|recommend|risk|performance|"
+                    + "return|profit|loss|allocation|buy|sell|price|quote|valuation|news)");
     private static final Pattern INVESTMENT_MARKET_TARGET = Pattern.compile(
             "(?iu)(พอร์ต|หุ้น|การลงทุน|portfolio|holdings?|investment|market|quote)");
     private static final Pattern INVESTMENT_SYMBOL = Pattern.compile("\\b[A-Z][A-Z0-9.-]{0,7}\\b");
+    private static final Pattern INVESTMENT_TRADE_ACTION = Pattern.compile(
+            "(?iu)(ซื้อ|ขาย|buy|sell|bought|sold)");
+    private static final Pattern INVESTMENT_TRADE_COMPLETED = Pattern.compile(
+            "(?iu)(แล้ว|ไปแล้ว|เรียบร้อย|สำเร็จ|เพิ่ง|เมื่อวาน|วันนี้|already|recently|yesterday|today)");
+    private static final Pattern INVESTMENT_LEDGER_ACTION = Pattern.compile(
+            "(?iu)(บันทึก|เพิ่มรายการ|เพิ่มธุรกรรม|record|log|register)");
+    private static final Pattern INVESTMENT_TRADE_REPORT = Pattern.compile(
+            "(?ium)^\\s*(?:[-*•]\\s*)?[A-Z][A-Z0-9.-]{0,7}\\s+"
+                    + "(?:(?:ขาย\\s*)?[0-9]+(?:\\.[0-9]+)?\\s*"
+                    + "(?:(?:หุ้น|shares?|units?)\\s*(?:(?:@|at|ราคา|price)\\s*)?|"
+                    + "(?:@|at|ราคา|price)\\s*))?"
+                    + "[0-9]+(?:\\.[0-9]+)?\\s*(?:[A-Z]{3})?.*?"
+                    + "(?:ได้มา|ได้รับ|net\\s*(?:proceeds?)?|received|got)\\s+"
+                    + "[0-9]+(?:\\.[0-9]+)?\\s*(?:[A-Z]{3})?\\s*$");
 
     boolean requiresTools(String message) {
         String value = message == null ? "" : message.toLowerCase(Locale.ROOT).trim();
         if (value.isBlank()) return false;
         if (EXPLICIT_TOOL.matcher(value).find()) return true;
+        if (INVESTMENT_TRADE_REPORT.matcher(message == null ? "" : message).find()) return true;
+        if (INVESTMENT_MARKET_ANALYSIS.matcher(value).find()) return false;
         if (INVESTMENT_MARKET_ACTION.matcher(value).find()
                 && (INVESTMENT_MARKET_TARGET.matcher(value).find() || INVESTMENT_SYMBOL.matcher(message).find())) return true;
-        if (INVESTMENT_PORTFOLIO_FACT.matcher(value).find()) return true;
+        if (investmentTransactionRequiresTools(message, value)) return true;
+        if (portfolioInventoryRequiresTools(value)) return true;
         if (INVESTMENT_MONITOR_TARGET.matcher(value).find()
                 && INVESTMENT_ACTION.matcher(value).find()) return true;
         if (INVESTMENT_ACTION.matcher(value).find() && INVESTMENT_TARGET.matcher(value).find()) return true;
         return ACTION.matcher(value).find() && (TARGET.matcher(value).find() || SEQUENCE.matcher(value).find());
+    }
+
+    private boolean investmentTransactionRequiresTools(String message, String value) {
+        boolean target = INVESTMENT_TARGET.matcher(value).find()
+                || INVESTMENT_MARKET_TARGET.matcher(value).find()
+                || INVESTMENT_SYMBOL.matcher(message).find();
+        return target && (INVESTMENT_LEDGER_ACTION.matcher(value).find()
+                || INVESTMENT_TRADE_ACTION.matcher(value).find()
+                        && INVESTMENT_TRADE_COMPLETED.matcher(value).find());
+    }
+
+    private boolean portfolioInventoryRequiresTools(String value) {
+        boolean target = INVESTMENT_PORTFOLIO_TARGET.matcher(value).find();
+        boolean ownership = INVESTMENT_PORTFOLIO_OWNERSHIP.matcher(value).find();
+        return INVESTMENT_PORTFOLIO_INVENTORY.matcher(value).find()
+                && (target || ownership)
+                && !INVESTMENT_PORTFOLIO_ANALYSIS.matcher(value).find()
+                && !INVESTMENT_MONITOR_TARGET.matcher(value).find();
     }
 }

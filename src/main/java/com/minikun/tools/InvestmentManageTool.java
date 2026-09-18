@@ -3,6 +3,7 @@ package com.minikun.tools;
 import com.minikun.investment.InvestmentService;
 import com.minikun.investment.InvestmentThesisStatus;
 import com.minikun.investment.InvestmentQuotePriority;
+import com.minikun.investment.InvestmentTransactionType;
 import com.minikun.planner.PlannerConfirmationService;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -24,7 +25,10 @@ public final class InvestmentManageTool implements Tool {
             "Manage an owner-scoped investment policy (goal, time horizon, risk tolerance), immutable transaction ledger, and decision-journal theses. "
                     + "Read with get_policy, list_transactions, or list_theses. Writes are set_policy, "
                     + "set_quote_priority, add_transaction, void_transaction, save_thesis, and close_thesis, and always require explicit "
-                    + "confirmation. This tool never fetches market prices or submits brokerage orders.",
+                    + "confirmation. Use add_transaction to record exactly one completed past BUY or SELL; it updates the ledger only and never "
+                    + "submits a brokerage order. If multiple trades are reported, handle them one at a time and never claim an unlisted symbol was saved. "
+                    + "For add_transaction, collect the type, symbol, quantity, and unit price before calling the tool; use an existing account only when exactly one is known. "
+                    + "Ask for missing trade details instead of guessing. This tool never fetches market prices.",
             parameters());
 
     private final InvestmentService investments;
@@ -78,52 +82,131 @@ public final class InvestmentManageTool implements Tool {
 
     private ToolResult write(
             ToolCallContext context, String action, Map<String, Object> arguments, boolean confirmed) {
+        Map<String, Object> normalized = normalizeArguments(context, action, arguments);
+        validateWriteArguments(action, normalized);
         if (!confirmed) {
-            confirmations.save(context.conversationId(), context.ownerId(), "investment." + action, arguments);
+            confirmations.save(context.conversationId(), context.ownerId(), "investment." + action, normalized);
             return ToolResult.success(Map.of(
                     "requires_confirmation", true,
                     "message", confirmationMessage(action),
-                    "proposed", proposal(action, arguments)));
+                    "proposed", proposal(action, normalized)));
         }
         var pending = confirmations.find(context.conversationId(), context.ownerId())
                 .filter(value -> value.action().equals("investment." + action))
                 .orElseThrow(() -> new IllegalArgumentException(
                         "no matching owner-confirmed investment proposal is pending"));
-        Map<String, Object> submitted = new LinkedHashMap<>();
-        if (arguments != null) {
-            arguments.forEach((key, value) -> {
-                if (key != null && !"confirmed".equals(key) && value != null) submitted.put(key, value);
-            });
+        Map<String, Object> expected = new LinkedHashMap<>(pending.arguments());
+        Object pendingAccount = expected.get("account");
+        if ((!expected.containsKey("account") || pendingAccount == null || pendingAccount.toString().isBlank())
+                && normalized.containsKey("account")) {
+            expected.put("account", normalized.get("account"));
         }
-        if (!pending.arguments().equals(submitted)) {
+        if (!expected.equals(normalized)) {
             throw new IllegalArgumentException("confirmed investment arguments do not match the pending proposal");
         }
         Object result = switch (action) {
             case "set_policy" -> investments.setPolicy(
-                    context.ownerId(), text(arguments, "base_currency"), nullable(arguments, "benchmark"),
-                    decimal(arguments, "max_single_position_percent"), nullable(arguments, "goal"),
-                    nullable(arguments, "time_horizon"), nullable(arguments, "risk_tolerance"));
+                    context.ownerId(), text(normalized, "base_currency"), nullable(normalized, "benchmark"),
+                    decimal(normalized, "max_single_position_percent"), nullable(normalized, "goal"),
+                    nullable(normalized, "time_horizon"), nullable(normalized, "risk_tolerance"));
             case "set_quote_priority" -> investments.setQuotePriorities(
-                    context.ownerId(), symbols(arguments), InvestmentQuotePriority.parse(text(arguments, "priority")));
+                    context.ownerId(), symbols(normalized), InvestmentQuotePriority.parse(text(normalized, "priority")));
             case "add_transaction" -> investments.addTransaction(
-                    context.ownerId(), context.conversationId().value(), text(arguments, "account"),
-                    text(arguments, "type"), text(arguments, "symbol"), text(arguments, "instrument_name"),
-                    textOr(arguments, "asset_class", "OTHER"), text(arguments, "currency"),
-                    decimal(arguments, "quantity"), decimal(arguments, "unit_price"), decimal(arguments, "amount"),
-                    decimal(arguments, "fee"), instant(arguments, "occurred_at"), text(arguments, "note"));
+                    context.ownerId(), context.conversationId().value(), text(normalized, "account"),
+                    text(normalized, "type"), text(normalized, "symbol"), text(normalized, "instrument_name"),
+                    textOr(normalized, "asset_class", "OTHER"), text(normalized, "currency"),
+                    decimal(normalized, "quantity"), decimal(normalized, "unit_price"), decimal(normalized, "amount"),
+                    transactionFee(normalized), instant(normalized, "occurred_at"), text(normalized, "note"));
             case "void_transaction" -> Map.of(
-                    "voided", investments.voidTransaction(context.ownerId(), uuid(arguments, "transaction_id")),
-                    "transaction_id", text(arguments, "transaction_id"));
+                    "voided", investments.voidTransaction(context.ownerId(), uuid(normalized, "transaction_id")),
+                    "transaction_id", text(normalized, "transaction_id"));
             case "save_thesis" -> investments.saveThesis(
-                    context.ownerId(), context.conversationId().value(), optionalUuid(arguments, "thesis_id"),
-                    text(arguments, "symbol"), text(arguments, "summary"), nullable(arguments, "invalidation"),
-                    instant(arguments, "next_review_at"));
+                    context.ownerId(), context.conversationId().value(), optionalUuid(normalized, "thesis_id"),
+                    text(normalized, "symbol"), text(normalized, "summary"), nullable(normalized, "invalidation"),
+                    instant(normalized, "next_review_at"));
             case "close_thesis" -> investments.closeThesis(
-                    context.ownerId(), uuid(arguments, "thesis_id"));
+                    context.ownerId(), uuid(normalized, "thesis_id"));
             default -> throw new IllegalArgumentException("unsupported investment write action");
         };
         confirmations.clear(context.conversationId());
         return ToolResult.success(Map.of("saved", true, "action", action, "result", result));
+    }
+
+    private Map<String, Object> normalizeArguments(
+            ToolCallContext context, String action, Map<String, Object> arguments) {
+        Map<String, Object> normalized = new LinkedHashMap<>();
+        if (arguments != null) {
+            arguments.forEach((key, value) -> {
+                if (key != null && !"confirmed".equals(key) && value != null) normalized.put(key, value);
+            });
+        }
+        if ("add_transaction".equals(action) && text(normalized, "account").isBlank()) {
+            String account = investments.transactions(context.ownerId()).stream()
+                    .map(value -> value.account()).filter(value -> !value.isBlank()).distinct().toList()
+                    .stream().reduce((first, second) -> "").orElse("");
+            if (!account.isBlank()) normalized.put("account", account);
+        }
+        return normalized;
+    }
+
+    private void validateWriteArguments(String action, Map<String, Object> arguments) {
+        if (!"add_transaction".equals(action)) return;
+        if (text(arguments, "account").isBlank()) {
+            throw new IllegalArgumentException("account is required for add_transaction");
+        }
+        InvestmentTransactionType type = InvestmentTransactionType.parse(text(arguments, "type"));
+        if (type.securityTrade()) {
+            requireText(arguments, "symbol");
+            requirePositive(arguments, "quantity");
+            requireNonNegative(arguments, "unit_price");
+            BigDecimal net = decimal(arguments, "net_proceeds");
+            if (net != null && net.signum() < 0) {
+                throw new IllegalArgumentException("net_proceeds must not be negative");
+            }
+            BigDecimal fee = decimal(arguments, "fee");
+            if (fee != null && fee.signum() < 0) {
+                throw new IllegalArgumentException("fee must not be negative");
+            }
+            if (net != null && type != InvestmentTransactionType.SELL) {
+                throw new IllegalArgumentException("net_proceeds is only valid for SELL transactions");
+            }
+            return;
+        }
+        requirePositive(arguments, "amount");
+        if (type == InvestmentTransactionType.DIVIDEND) requireText(arguments, "symbol");
+    }
+
+    private BigDecimal transactionFee(Map<String, Object> arguments) {
+        BigDecimal fee = decimal(arguments, "fee");
+        BigDecimal net = decimal(arguments, "net_proceeds");
+        if (net == null) return fee;
+        BigDecimal gross = decimal(arguments, "quantity").multiply(decimal(arguments, "unit_price"));
+        BigDecimal derived = gross.subtract(net);
+        if (derived.signum() < 0) {
+            throw new IllegalArgumentException("net_proceeds cannot exceed quantity multiplied by unit_price");
+        }
+        if (fee != null && fee.compareTo(derived) != 0) {
+            throw new IllegalArgumentException("fee and net_proceeds do not describe the same transaction");
+        }
+        return derived;
+    }
+
+    private void requireText(Map<String, Object> arguments, String key) {
+        if (text(arguments, key).isBlank()) throw new IllegalArgumentException(key + " is required for add_transaction");
+    }
+
+    private void requirePositive(Map<String, Object> arguments, String key) {
+        BigDecimal value = decimal(arguments, key);
+        if (value == null || value.signum() <= 0) {
+            throw new IllegalArgumentException(key + " must be greater than zero");
+        }
+    }
+
+    private void requireNonNegative(Map<String, Object> arguments, String key) {
+        BigDecimal value = decimal(arguments, key);
+        if (value == null || value.signum() < 0) {
+            throw new IllegalArgumentException(key + " must not be negative");
+        }
     }
 
     private String confirmationMessage(String action) {
@@ -148,7 +231,7 @@ public final class InvestmentManageTool implements Tool {
             case "set_quote_priority" -> java.util.List.of("symbols", "priority");
             case "add_transaction" -> java.util.List.of(
                     "account", "type", "symbol", "currency", "quantity", "unit_price", "amount", "fee",
-                    "occurred_at");
+                    "net_proceeds", "occurred_at");
             case "void_transaction" -> java.util.List.of("transaction_id");
             case "save_thesis" -> java.util.List.of(
                     "thesis_id", "symbol", "summary", "invalidation", "next_review_at");
@@ -201,6 +284,8 @@ public final class InvestmentManageTool implements Tool {
                 "Non-negative unit price for BUY or SELL."));
         values.put("amount", parameter("amount", ToolParameterType.NUMBER, false,
                 "Positive cash amount for non-trade transaction types."));
+        values.put("net_proceeds", parameter("net_proceeds", ToolParameterType.NUMBER, false,
+                "Net cash received for a SELL; the tool derives the fee from quantity times unit price minus this amount."));
         values.put("fee", parameter("fee", ToolParameterType.NUMBER, false,
                 "Non-negative trade fee; defaults to zero."));
         values.put("occurred_at", parameter("occurred_at", ToolParameterType.STRING, false,

@@ -316,7 +316,7 @@ final class BackgroundChatStore {
                     image_updated_at = EXCLUDED.image_updated_at, idempotency_key = EXCLUDED.idempotency_key,
                     owner_id = EXCLUDED.owner_id, deadline_at = EXCLUDED.deadline_at,
                     created_at = EXCLUDED.created_at, updated_at = EXCLUDED.updated_at
-                """, job.id(), job.conversationId(), write(job.request()), job.status(),
+                """, job.id(), job.conversationId(), write(persistedRequest(job.request())), job.status(),
                 job.response() == null ? null : write(job.response()), job.error(), job.imageStatus(), job.imageError(),
                 Timestamp.from(job.updatedAt()), job.idempotencyKey(), job.ownerId(), timestamp(job.deadlineAt()),
                 Timestamp.from(job.createdAt()), Timestamp.from(job.updatedAt()));
@@ -397,6 +397,10 @@ final class BackgroundChatStore {
     private String write(Object value) {
         try { return json.writeValueAsString(value); }
         catch (JsonProcessingException exception) { throw new IllegalStateException("could not serialize background chat", exception); }
+    }
+
+    private ChatCompletionRequest persistedRequest(ChatCompletionRequest request) {
+        return request == null ? null : request.withoutDeviceLocation();
     }
 
     private <T> T read(String value, Class<T> type) {

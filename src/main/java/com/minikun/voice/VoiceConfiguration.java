@@ -40,7 +40,7 @@ public class VoiceConfiguration {
         return new MacOsSayTextToSpeechProvider(runner, Path.of(say), timeout, maxOutputBytes);
     }
 
-    @Bean(destroyMethod = "close")
+    @Bean(initMethod = "warmup", destroyMethod = "close")
     @ConditionalOnProperty(name = "minikun.voice.tts.provider", havingValue = "voxcpm")
     PythonVoxCpmTextToSpeechProvider voxcpmTextToSpeechProvider(
             ObjectMapper objectMapper,
@@ -68,7 +68,7 @@ public class VoiceConfiguration {
                 host, port, autoStart, device, startupTimeout, requestTimeout, cfgValue, timesteps);
     }
 
-    @Bean(destroyMethod = "close")
+    @Bean(initMethod = "warmup", destroyMethod = "close")
     @ConditionalOnProperty(name = "minikun.voice.tts.provider", havingValue = "vaniratts")
     PythonVaniraTextToSpeechProvider vaniraTextToSpeechProvider(
             ObjectMapper objectMapper,
@@ -78,8 +78,11 @@ public class VoiceConfiguration {
             @Value("${minikun.voice.tts.vanira.server-script:${user.dir}/src/main/python/vanira_server.py}") String serverScript,
             @Value("${minikun.voice.tts.vanira.working-directory:/Volumes/minikun/homelab/tts}") String workingDirectory,
             @Value("${minikun.voice.tts.vanira.model-path:/Volumes/minikun/homelab/tts/models/VaniraTTS}") String modelPath,
+            @Value("${minikun.voice.tts.kokoro.model-path:/Volumes/minikun/homelab/tts/models/Kokoro-82M}") String kokoroModelPath,
+            @Value("${minikun.voice.tts.kokoro.voice:/Volumes/minikun/homelab/tts/models/Kokoro-82M/voices/am_michael.pt}") String kokoroVoice,
             @Value("${minikun.voice.tts.vanira.log:/Volumes/minikun/homelab/tts/logs/vaniratts.log}") String logFile,
             @Value("${minikun.voice.tts.vanira.auto-start:true}") boolean autoStart,
+            @Value("${minikun.voice.tts.vanira.warmup:false}") boolean warmup,
             @Value("${minikun.voice.tts.vanira.startup-timeout:60s}") Duration startupTimeout,
             @Value("${minikun.voice.tts.vanira.timeout:60s}") Duration requestTimeout) {
         HttpClient httpClient = HttpClient.newBuilder()
@@ -87,7 +90,8 @@ public class VoiceConfiguration {
                 .connectTimeout(Duration.ofSeconds(2)).build();
         return new PythonVaniraTextToSpeechProvider(httpClient, URI.create("http://" + host + ":" + port),
                 objectMapper, Path.of(python), Path.of(serverScript), Path.of(workingDirectory), Path.of(modelPath),
-                Path.of(logFile), host, port, autoStart, startupTimeout, requestTimeout);
+                Path.of(kokoroModelPath), Path.of(kokoroVoice),
+                Path.of(logFile), host, port, autoStart, warmup, startupTimeout, requestTimeout);
     }
 
     @Bean

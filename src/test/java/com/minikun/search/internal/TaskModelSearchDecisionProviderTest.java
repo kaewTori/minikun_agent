@@ -85,4 +85,20 @@ class TaskModelSearchDecisionProviderTest {
         assertEquals(4, decision.planHints().evidenceNeeds().size());
         assertEquals(0.96, decision.planHints().confidence());
     }
+
+    @Test
+    void acceptsAtmosphereEvidenceNeedForPlaceDiscovery() {
+        TaskModelProvider model = request -> """
+                {"shouldSearch":true,"reason":"EXTERNAL_RESOURCE","intent":"local_discovery",
+                 "confidence":0.94,"searchQuery":"พิพิธภัณฑ์ เชียงใหม่ เงียบ",
+                 "alternateQueries":[],"evidenceNeeds":["opening_hours","location","atmosphere"],
+                 "location":"เชียงใหม่"}
+                """;
+        var provider = new TaskModelSearchDecisionProvider(
+                model, new ObjectMapper(), Duration.ofSeconds(1));
+
+        var decision = provider.classify(PROMPT);
+
+        assertTrue(decision.planHints().evidenceNeeds().contains("atmosphere"));
+    }
 }

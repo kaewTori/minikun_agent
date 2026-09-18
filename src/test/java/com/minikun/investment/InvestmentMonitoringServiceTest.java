@@ -1,6 +1,7 @@
 package com.minikun.investment;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -47,7 +48,7 @@ class InvestmentMonitoringServiceTest {
         SearchService search = mock(SearchService.class);
         when(search.search(any())).thenReturn(new KnowledgeContext("news", List.of(new KnowledgeCandidate(
                 "search-0", KnowledgeSource.SEARCH,
-                "Amazon reports earnings guidance surprise (https://news.test/amzn-1): revenue and guidance changed",
+                "Amazon (AMZN) reports earnings guidance surprise (https://news.test/amzn-1): revenue and guidance changed",
                 0, "https://news.test/amzn-1"))));
         InMemoryMonitorStore store = new InMemoryMonitorStore();
         InvestmentMonitoringService monitoring = new InvestmentMonitoringService(
@@ -59,6 +60,8 @@ class InvestmentMonitoringServiceTest {
         Map<?, ?> news = (Map<?, ?>) first.get("news");
         assertEquals(1, news.get("new_event_count"));
         assertEquals("HIGH", ((InvestmentNewsEvent) store.events.getFirst()).materiality());
+        assertEquals("Amazon (AMZN) reports earnings guidance surprise", store.events.getFirst().title());
+        assertEquals("revenue and guidance changed", store.events.getFirst().summary());
 
         Map<String, Object> second = monitoring.refresh("owner-a");
         assertEquals(0, ((Map<?, ?>) second.get("news")).get("new_event_count"));
@@ -139,6 +142,40 @@ class InvestmentMonitoringServiceTest {
         assertTrue(secondFresh.subList(0, 5).stream().noneMatch(
                 List.of("S01", "S02", "S03")::contains));
         assertEquals(5, firstFresh.stream().filter(secondFresh::contains).count());
+    }
+
+    @Test
+    void formatsTheTypedPortfolioAndNewsAsAMinikunSummary() {
+        Instant now = NOW;
+        InvestmentPolicy policy = new InvestmentPolicy(
+                "owner-a", "USD", "VTI", BigDecimal.valueOf(20), "long-term wealth", "10 years", "moderate",
+                now, now);
+        PortfolioSummary portfolio = new PortfolioSummary(
+                "owner-a", "USD", "AVERAGE_COST", BigDecimal.valueOf(100), BigDecimal.ZERO,
+                BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.valueOf(100),
+                List.of(new PortfolioPosition("AMZN", "Amazon", "EQUITY", "USD", BigDecimal.ONE,
+                        BigDecimal.valueOf(100), BigDecimal.valueOf(100), BigDecimal.valueOf(100),
+                        BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO)), policy, List.of());
+        InvestmentMonitoringService monitoring = new InvestmentMonitoringService(
+                mock(InvestmentService.class), externalWithoutMarketKey(), new InMemoryMonitorStore(),
+                mock(SearchService.class), new ObjectMapper(), Clock.fixed(now, ZoneOffset.UTC),
+                java.time.Duration.ofSeconds(1), 1, 8, 48, "UTC", 8, 3, java.time.Duration.ofHours(72));
+        String url = "https://news.test/amzn-1";
+        String message = monitoring.formatBrief(Map.of(
+                "report_date", "2026-09-11",
+                "portfolio", portfolio,
+                "market_snapshot", Map.of(
+                        "status", "ok", "base_currency", "USD", "total_market_value", BigDecimal.valueOf(120),
+                        "unrealized_profit_loss", BigDecimal.valueOf(20), "cached_symbols", List.of()),
+                "news", Map.of("events", List.of(Map.of(
+                        "symbol", "AMZN", "title", "Amazon earnings", "summary", "Revenue grew 12% year over year.",
+                        "url", url, "materiality", "HIGH"))),
+                "recommendations", List.of()));
+
+        assertTrue(message.contains("พอร์ต: 1 สินทรัพย์"));
+        assertTrue(message.contains("ต้นทุนคงค้าง 100 USD"));
+        assertTrue(message.contains("สรุป: Revenue grew 12% year over year."));
+        assertFalse(message.contains(url));
     }
 
     private InvestmentExternalDataService externalWithoutMarketKey() {

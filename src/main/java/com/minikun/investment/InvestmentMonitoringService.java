@@ -196,14 +196,22 @@ public final class InvestmentMonitoringService {
         Objects.requireNonNull(report, "investment report must not be null");
         StringBuilder message = new StringBuilder("📈 สรุปการลงทุนประจำวัน ")
                 .append(value(report, "report_date", "วันนี้"));
-        Map<?, ?> portfolio = map(report.get("portfolio"));
-        Object positions = portfolio.get("positions");
-        int positionCount = positions instanceof List<?> list ? list.size() : 0;
+        Object portfolioValue = report.get("portfolio");
+        Map<?, ?> portfolio = map(portfolioValue);
+        int positionCount = portfolioValue instanceof PortfolioSummary summary
+                ? summary.positions().size()
+                : portfolio.get("positions") instanceof List<?> list ? list.size() : 0;
         message.append("\n\nพอร์ต: ").append(positionCount).append(" สินทรัพย์");
-        Object costBasis = portfolio.get("total_open_cost_basis");
+        Object costBasis = portfolioValue instanceof PortfolioSummary summary
+                ? summary.totalOpenCostBasis()
+                : portfolio.get("total_open_cost_basis");
+        if (costBasis == null) costBasis = portfolio.get("totalOpenCostBasis");
+        String baseCurrency = portfolioValue instanceof PortfolioSummary summary
+                ? summary.baseCurrency()
+                : value(portfolio, "base_currency", value(portfolio, "baseCurrency", ""));
         if (costBasis != null) {
             message.append(" | ต้นทุนคงค้าง ").append(costBasis).append(" ")
-                    .append(value(portfolio, "base_currency", ""));
+                    .append(baseCurrency);
         }
         Map<?, ?> valuation = map(report.get("market_snapshot"));
         String valuationStatus = value(valuation, "status", "");
@@ -226,11 +234,14 @@ public final class InvestmentMonitoringService {
         } else {
             events.stream().limit(8).forEach(item -> {
                 Map<?, ?> event = map(item);
+                String title = displayText(value(event, "title", ""), "ข่าวใหม่", 500);
+                String summary = displayText(value(event, "summary", ""), "", 360);
                 message.append("\n• [").append(value(event, "symbol", "MARKET")).append("] ")
-                        .append(value(event, "title", "ข่าวใหม่"))
+                        .append(title)
                         .append(" — ").append(value(event, "materiality", "LOW"));
-                String url = value(event, "url", "");
-                if (!url.isBlank()) message.append("\n  ").append(url);
+                if (!summary.isBlank() && !summary.equalsIgnoreCase(title)) {
+                    message.append("\n  สรุป: ").append(summary);
+                }
             });
         }
 
@@ -567,12 +578,25 @@ public final class InvestmentMonitoringService {
 
     private String title(KnowledgeCandidate candidate) {
         String content = candidate.content().strip();
+        String provenance = candidate.provenance().strip();
+        int urlStart = provenance.isBlank() ? -1 : content.indexOf(provenance);
+        if (urlStart > 0) {
+            String title = content.substring(0, urlStart).replaceFirst("\\s*\\($", "").strip();
+            if (!title.isBlank()) return truncate(title, 500);
+        }
         int marker = content.indexOf(" (");
         return truncate(marker > 0 ? content.substring(0, marker) : content, 500);
     }
 
     private String summary(KnowledgeCandidate candidate) {
         String content = candidate.content().strip();
+        String provenance = candidate.provenance().strip();
+        int urlStart = provenance.isBlank() ? -1 : content.indexOf(provenance);
+        if (urlStart >= 0) {
+            String summary = content.substring(urlStart + provenance.length())
+                    .replaceFirst("^\\s*\\)\\s*:\\s*", "").strip();
+            if (!summary.isBlank()) return truncate(summary, 4_000);
+        }
         int marker = content.indexOf("): ");
         return truncate(marker >= 0 ? content.substring(marker + 3) : content, 4_000);
     }
@@ -646,6 +670,13 @@ public final class InvestmentMonitoringService {
     private String truncate(String value, int limit) {
         if (value == null || value.length() <= limit) return Objects.requireNonNullElse(value, "");
         return value.substring(0, Math.max(0, limit - 1)).stripTrailing() + "…";
+    }
+
+    private String displayText(String value, String fallback, int limit) {
+        String normalized = Objects.requireNonNullElse(value, "")
+                .replaceAll("(?i)https?://\\S+", "")
+                .replaceAll("\\s+", " ").strip();
+        return normalized.isBlank() ? fallback : truncate(normalized, limit);
     }
 
     private Map<?, ?> map(Object value) {

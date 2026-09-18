@@ -93,7 +93,7 @@ public final class VoiceController {
         VoiceTranscription transcription = transcribe(file, language, "");
         ChatCompletionResponse chatResponse = chat.chatCompletion(new ChatCompletionRequest(
                 "mini-kun", List.of(new Message("user", transcription.text())), selectedConversation,
-                false, null, null, null, null, ownerId), new ConversationId(selectedConversation));
+                false, null, null, null, null, ownerId, "voice"), new ConversationId(selectedConversation));
         if (chatResponse.choices().isEmpty()) throw new VoiceException(VoiceErrorCode.PROCESSING_FAILED,
                 "chat model returned no response");
         String answer = chatResponse.choices().getFirst().message().content();

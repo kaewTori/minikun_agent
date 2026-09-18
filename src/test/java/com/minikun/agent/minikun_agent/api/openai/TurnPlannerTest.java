@@ -58,6 +58,14 @@ class TurnPlannerTest {
     }
 
     @Test
+    void voiceModeKeepsVisualWorkOutOfTheTurnPlan() {
+        TurnPlan plan = planner(null).plan("ช่วยสร้างภาพเมืองลอยฟ้ายามค่ำคืน", "", null,
+                false, null, true, true);
+
+        assertFalse(plan.imageOutput());
+    }
+
+    @Test
     void deterministicToolEvidenceIsRecordedAsTheRouteSource() {
         TurnPlan plan = planner(null).plan("อากาศวันนี้เป็นอย่างไร", "", null, false,
                 ToolEvidence.verified("weather.get_forecast", "clear"), true);
@@ -115,6 +123,18 @@ class TurnPlannerTest {
         assertTrue(plan.needsTools());
         assertTrue(plan.ambiguous());
         assertEquals(0.88, plan.confidence());
+    }
+
+    @Test
+    void peerPolicyKeepsHighRiskLocalAndRequestsASecondOpinionForAmbiguousExpertWork() {
+        TurnPlan medical = planner(null).plan("ยานี้ใช้รักษาอะไร", "", null, false, null, true);
+        TurnPlan ambiguousTechnical = planner(null).plan("ต่อ", "assistant: ช่วย debug code", null,
+                false, null, true);
+
+        assertFalse(medical.externalPeersAllowed());
+        assertFalse(medical.peerMeetingRequired());
+        assertTrue(ambiguousTechnical.externalPeersAllowed());
+        assertTrue(ambiguousTechnical.peerMeetingRequired());
     }
 
     private TurnPlanner planner(TurnAmbiguityResolver resolver) {

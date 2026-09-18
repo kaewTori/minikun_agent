@@ -112,6 +112,8 @@ final class ChatCapabilityFactory {
                 .anyMatch(candidate -> candidate.source() == KnowledgeSource.SEARCH);
         boolean imageRequested = selection.searchContext().searchDecisionReason()
                 == SearchDecisionReason.IMAGE_REQUEST;
+        addDeviceLocationCapability(capabilities, selection.deviceLocationContext());
+        addLocalGuideCapability(capabilities, selection);
         if (hasSearchContent) {
             String concreteEvidence = selection.selection().selectedCandidates().stream()
                     .filter(candidate -> candidate.source() == KnowledgeSource.SEARCH)
@@ -182,6 +184,44 @@ final class ChatCapabilityFactory {
                     search or image-generation tool, and never output tool markup, JSON, XML, or provider protocol.
                     """.strip(), true));
         }
+    }
+
+    private void addDeviceLocationCapability(
+            List<CapabilityInstruction> capabilities,
+            DeviceLocationContext location) {
+        if (location == null || !location.requested()) {
+            return;
+        }
+        String instruction = location.available()
+                ? "The browser supplied a fresh device location that was reverse-geocoded to the area '"
+                        + location.area() + "'. Use this area only for this turn when the user says near here or near me. "
+                        + "Do not infer a more precise building, street, distance, or travel time from it."
+                : "The user asked about a nearby place, but no verified named area is available from the device location. "
+                        + "Do not guess or state the user's current place; ask for an area or say that nearby results "
+                        + "cannot be verified yet.";
+        capabilities.add(new CapabilityInstruction("Device location", instruction, true));
+    }
+
+    private void addLocalGuideCapability(
+            List<CapabilityInstruction> capabilities,
+            ChatKnowledgeSelection selection) {
+        if (selection.searchDecision() == null) {
+            return;
+        }
+        String intent = selection.searchDecision().planHints().intent();
+        if (!"local_discovery".equals(intent) && !"recommendation".equals(intent)) {
+            return;
+        }
+        capabilities.add(new CapabilityInstruction("Local guide", """
+                Act as a practical local guide for this turn. Recommend 3 to 5 distinct real-world places that fit
+                the user's stated area, budget, time, transport, companions, and atmosphere. Use only facts supported
+                by the retrieved evidence. Give a brief reason each place fits, then include location or access,
+                price, and opening hours when supported. Mark unknown or conflicting details instead of guessing. Cite
+                the real source URL next to factual claims; never cite internal candidate IDs. Ask at most one concise
+                clarification only when missing information would materially change the recommendations. Do not imply
+                a reservation, availability, exact distance, or travel time unless the evidence says so. End with a
+                practical next step or a small choice.
+                """.strip(), true));
     }
 
     private String truncate(String value, int limit) {

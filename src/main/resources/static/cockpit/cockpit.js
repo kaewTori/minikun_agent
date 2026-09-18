@@ -1727,10 +1727,6 @@
     for (const document of documents) {
       combined += `\n\n[ไฟล์แนบ: ${document.name}]\n\`\`\`text\n${document.text}\n\`\`\``;
     }
-    if (state.currentLocation) {
-      const { latitude, longitude, accuracy } = state.currentLocation;
-      combined += `\n\n[ตำแหน่งจากอุปกรณ์ขณะนี้: latitude ${latitude}, longitude ${longitude}, accuracy ${accuracy} เมตร]`;
-    }
     if (!images.length) return combined;
     return [
       { type: "text", text: combined || "ช่วยดูภาพที่แนบมานี้ให้หน่อยครับ" },
@@ -1945,7 +1941,8 @@
         model: state.model,
         messages: await promptMessages(messages, userMessage, currentContent),
         conversation_id: conversationId,
-        owner_id: state.ownerId
+        owner_id: state.ownerId,
+        device_location: state.currentLocation ? { ...state.currentLocation } : null
       };
       // ponytail: all Cockpit turns use durable polling; reintroduce foreground streaming only with reconnect/resume.
       const useBackground = true;
@@ -3140,7 +3137,8 @@
       state.currentLocation = {
         latitude: Number(position.coords.latitude.toFixed(6)),
         longitude: Number(position.coords.longitude.toFixed(6)),
-        accuracy: Math.round(position.coords.accuracy)
+        accuracy: Math.round(position.coords.accuracy),
+        captured_at: Number(position.timestamp) || Date.now()
       };
       setPermissionUi("location", "granted", `ใช้กับแชตนี้ · แม่นยำประมาณ ${state.currentLocation.accuracy} ม.`);
       toast("เปิดตำแหน่งให้แชตนี้แล้วครับ");
@@ -3148,7 +3146,7 @@
       setPermissionUi("location", error.code === 1 ? "denied" : "prompt");
       if (error.code === 1) showPermissionHelp("location");
       else toast("อ่านตำแหน่งไม่สำเร็จ ลองอีกครั้งได้ครับ", true);
-    }, { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 });
+    }, { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 });
   }
 
   async function requestMicrophonePermission() {

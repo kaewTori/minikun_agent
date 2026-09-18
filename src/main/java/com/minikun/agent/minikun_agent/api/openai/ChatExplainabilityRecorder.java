@@ -42,6 +42,8 @@ final class ChatExplainabilityRecorder {
             decisions.put("turn_ambiguous", turnPlan.ambiguous());
             decisions.put("turn_reason", turnPlan.reason());
             decisions.put("technical_route", turnPlan.cooperation().needsExpert());
+            decisions.put("external_peers_allowed", turnPlan.externalPeersAllowed());
+            decisions.put("peer_meeting_required", turnPlan.peerMeetingRequired());
             decisions.put("route_source", turnPlan.routeSource());
             decisions.put("image_output", turnPlan.imageOutput());
         }

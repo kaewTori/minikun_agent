@@ -168,6 +168,10 @@ Actuator ที่เปิดให้เข้าถึงคือ `/actuator
 | `MINIKUN_KIMI_MODEL` | `moonshotai/kimi-k3` | โมเดล reasoning บน NVIDIA Build |
 | `MINIKUN_KIMI_BASE_URL` | `https://integrate.api.nvidia.com/v1` | NVIDIA OpenAI-compatible endpoint |
 | `MINIKUN_KIMI_TIMEOUT` | `PT120S` | timeout ของ reasoning request |
+| `MINIKUN_CHATGPT_REASONING_ENABLED` | `true` | เปิด ChatGPT ผ่าน Codex App Server เป็นเพื่อน reasoning หลัก |
+| `MINIKUN_CHATGPT_COMMAND` | `codex` | executable ของ Codex CLI ที่ login ด้วย ChatGPT แล้ว |
+| `MINIKUN_CHATGPT_MODEL` | ว่าง | บังคับ model ของ ChatGPT/Codex; ว่าง = ใช้ค่าเริ่มต้นของบัญชี |
+| `MINIKUN_CHATGPT_TIMEOUT` | `PT120S` | timeout ของ peer review จาก ChatGPT |
 | `MINIKUN_MODEL_TASK_OLLAMA_MODEL` | `hf.co/mradermacher/llama3.2-typhoon2-3b-GGUF:Q4_K_M` | task model สำหรับ reflection, preference extraction และ planner; ใช้ native `/api/chat` |
 | `VALKEY_URL` | `redis://127.0.0.1:6379` | Valkey/Redis endpoint |
 | `MINIKUN_SEARCH_SEARXNG_URL` | `http://127.0.0.1:8888` | SearXNG endpoint |
@@ -196,8 +200,10 @@ export NVIDIA_API_KEY='nvapi-ใส่คีย์ของเราแทนต
 ถ้าใช้ตัวติดตั้ง launchd ของ homelab ให้เพิ่ม `export NVIDIA_API_KEY='...'` ในไฟล์ส่วนตัว
 `/Volumes/minikun/homelab/java/script/minikun-agent.sh` ใกล้กลุ่ม credential แล้วรัน `deploy/deploy-minikun-agent.sh` ใหม่
 
-งานปกติยังใช้ Ollama; เมื่อ classifier หรือ `reasoning_effort` เลือก reasoning ระบบจะส่งงานไป Kimi K3 แล้วให้ Ollama เขียนคำตอบสุดท้าย
-ถ้า Kimi K3 เรียกไม่สำเร็จหรือ timeout ระบบจะข้าม reasoning และใช้ Ollama หลักตอบต่อใน request เดิมทันที
+งานปกติยังใช้ Ollama; เมื่อ classifier หรือ `reasoning_effort` เลือก reasoning ระบบจะส่งบริบทที่ผ่านการกรองไป ChatGPT ผ่าน Codex App Server เป็นความเห็นหลัก แล้วให้ Ollama เขียนคำตอบสุดท้าย
+ถ้า ChatGPT ปฏิเสธหรือเรียกไม่สำเร็จ ระบบจะใช้ Kimi K3 เป็นความเห็นสำรอง; สำหรับงานกำกวม/เชิงผู้เชี่ยวชาญอาจเรียก ChatGPT และ Kimi แบบ parallel opinion พร้อมกัน
+คำถามความเสี่ยงสูง เช่น สุขภาพ การเงิน กฎหมาย และ credential จะไม่ส่ง peer ภายนอกโดยอัตโนมัติ
+ก่อนใช้งานให้ตรวจว่า `codex login status` แสดงว่า login ด้วย ChatGPT แล้ว; ดู protocol ได้ที่ [Codex App Server documentation](https://learn.chatgpt.com/docs/app-server)
 | `MINIKUN_VISUAL_GENERATION_ENABLED` | `true` | เปิดการสร้างภาพจากเรื่องและ Image Studio |
 | `MINIKUN_VISUAL_TINYGRAD_BASE_URL` | `http://127.0.0.1:8002` | TinyGrad SDXL service ที่มี `/generate` และ `/health` |
 | `MINIKUN_VISUAL_TINYGRAD_TOKEN` | ว่าง | Bearer token หากตั้ง `SDXL_SERVER_TOKEN` ฝั่ง TinyGrad |
@@ -272,8 +278,9 @@ export NVIDIA_API_KEY='nvapi-ใส่คีย์ของเราแทนต
 | `MINIKUN_SYNC_SESSION_TTL` | `P180D` | อายุ session ของอุปกรณ์ที่จับคู่แล้ว |
 
 Voice Companion กำหนดค่าผ่าน `minikun.voice.*` ใน `application.properties` โดยค่าเริ่มต้นใช้
-Whisper Large V3 Turbo Q4 ผ่าน MLX สำหรับถอดเสียงและ `VaniraTTS` แบบ local สำหรับพูดภาษาไทย
-(ค่าเริ่มต้นใช้เสียงผู้ชาย speaker 3)
+Whisper Large V3 Turbo Q4 ผ่าน MLX สำหรับถอดเสียง และ TTS แบบ local บน external drive:
+`VaniraTTS` สำหรับภาษาไทย/คำอังกฤษสั้น ๆ และ `Kokoro-82M` สำหรับวลีภาษาอังกฤษต่อเนื่อง
+(ค่าเริ่มต้นใช้เสียงผู้ชาย Vanira speaker 3 และ Kokoro `am_michael`)
 ไฟล์เสียงถูกจำกัดขนาด 10 MB และมีเฉพาะใน memory/temporary file ระหว่าง request เท่านั้น
 
 | `MINIKUN_SEARCH_CACHE_ENABLED` | `true` | เปิด/ปิด search cache |

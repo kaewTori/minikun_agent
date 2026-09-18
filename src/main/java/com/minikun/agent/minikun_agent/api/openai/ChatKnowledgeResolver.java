@@ -3,6 +3,7 @@ package com.minikun.agent.minikun_agent.api.openai;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -49,6 +50,9 @@ import com.minikun.search.model.SearchPlanHints;
 import com.minikun.search.model.SearchQueryPlan;
 import com.minikun.search.model.SearchRequest;
 import com.minikun.vision.VisionInput;
+import com.minikun.weather.DeviceLocation;
+import com.minikun.weather.LocationResult;
+import com.minikun.weather.ReverseGeocodingService;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -68,6 +72,7 @@ final class ChatKnowledgeResolver {
     private final BrowserContentService browserContentService;
     private final AutonomousResearchService autonomousResearchService;
     private final ChatPerformanceMetrics performanceMetrics;
+    private final ReverseGeocodingService reverseGeocodingService;
     private final Configuration configuration;
     private final ExternalContextPlanner externalContextPlanner = new ExternalContextPlanner();
     private final ResearchIntentDetector researchIntentDetector = new ResearchIntentDetector();
@@ -90,7 +95,7 @@ final class ChatKnowledgeResolver {
         this(memoryRecallService, personalKnowledgeService, null, searchService, searchDecisionService,
                 searchQueryPlanningService, searchContextAwarenessService, knowledgeSelectionService,
                 knowledgeConsolidationService, searchSelectionSignalMapper, browserContentService,
-                autonomousResearchService, performanceMetrics, configuration);
+                autonomousResearchService, performanceMetrics, null, configuration);
     }
 
     ChatKnowledgeResolver(
@@ -108,6 +113,28 @@ final class ChatKnowledgeResolver {
             AutonomousResearchService autonomousResearchService,
             ChatPerformanceMetrics performanceMetrics,
             Configuration configuration) {
+        this(memoryRecallService, personalKnowledgeService, acquiredKnowledgeIndex, searchService,
+                searchDecisionService, searchQueryPlanningService, searchContextAwarenessService,
+                knowledgeSelectionService, knowledgeConsolidationService, searchSelectionSignalMapper,
+                browserContentService, autonomousResearchService, performanceMetrics, null, configuration);
+    }
+
+    ChatKnowledgeResolver(
+            ObjectProvider<MemoryRecallService> memoryRecallService,
+            PersonalKnowledgeService personalKnowledgeService,
+            AcquiredKnowledgeIndex acquiredKnowledgeIndex,
+            SearchService searchService,
+            SearchDecisionService searchDecisionService,
+            SearchQueryPlanningService searchQueryPlanningService,
+            SearchContextAwarenessService searchContextAwarenessService,
+            KnowledgeSelectionService knowledgeSelectionService,
+            KnowledgeConsolidationService knowledgeConsolidationService,
+            SearchSelectionSignalMapper searchSelectionSignalMapper,
+            BrowserContentService browserContentService,
+            AutonomousResearchService autonomousResearchService,
+            ChatPerformanceMetrics performanceMetrics,
+            ReverseGeocodingService reverseGeocodingService,
+            Configuration configuration) {
         this.memoryRecallService = memoryRecallService;
         this.personalKnowledgeService = personalKnowledgeService;
         this.acquiredKnowledgeIndex = acquiredKnowledgeIndex;
@@ -121,6 +148,7 @@ final class ChatKnowledgeResolver {
         this.browserContentService = browserContentService;
         this.autonomousResearchService = autonomousResearchService;
         this.performanceMetrics = performanceMetrics;
+        this.reverseGeocodingService = reverseGeocodingService;
         this.configuration = configuration;
     }
 
@@ -163,19 +191,33 @@ final class ChatKnowledgeResolver {
                 ? memoryStarted + configuration.contextTimeout().toNanos() : request.contextDeadline();
         boolean exhausted = contextDeadline <= System.nanoTime();
         if (exhausted) fastPath("context_budget_exhausted");
+        boolean nearbyQuery = isNearbyQuery(query);
+        Request requestForTasks = request;
+        DeviceLocation deviceLocation = requestForTasks.deviceLocation();
+        java.util.concurrent.Future<DeviceLocationContext> locationFuture = exhausted || !nearbyQuery
+                ? CompletableFuture.completedFuture(nearbyQuery
+                        ? DeviceLocationContext.unavailable() : DeviceLocationContext.EMPTY)
+                : OptionalContextBudget.start(() -> resolveDeviceLocation(deviceLocation));
         java.util.concurrent.Future<KnowledgeContext> memoryFuture =
                 exhausted || request.turnPlan() != null && !request.turnPlan().needsMemory()
                         ? CompletableFuture.completedFuture(KnowledgeContext.empty())
                         : OptionalContextBudget.start(() -> recallMemory(
-                                query, request.conversationId(), request.ownerId()));
+                                query, requestForTasks.conversationId(), requestForTasks.ownerId()));
         java.util.concurrent.Future<KnowledgeContext> personalFuture =
                 exhausted || request.turnPlan() != null && !request.turnPlan().needsPersonalKnowledge()
                         ? CompletableFuture.completedFuture(KnowledgeContext.empty())
-                        : OptionalContextBudget.start(() -> recallPersonal(query, request.ownerId()));
+                        : OptionalContextBudget.start(() -> recallPersonal(query, requestForTasks.ownerId()));
         CompletableFuture<SearchDecision> decisionFuture = configuration.searchEnabled()
                 && !isInternalTitleRequest(query)
-                ? CompletableFuture.supplyAsync(() -> decideSearch(query, request.classifierContext()))
+                ? CompletableFuture.supplyAsync(() -> decideSearch(query, requestForTasks.classifierContext()))
                 : null;
+        DeviceLocationContext locationContext = OptionalContextBudget.await(
+                locationFuture,
+                contextDeadline,
+                nearbyQuery ? DeviceLocationContext.unavailable() : DeviceLocationContext.EMPTY,
+                "location_wait", performanceMetrics);
+        locationFuture.cancel(true);
+        request = request.withDeviceLocationContext(locationContext);
         KnowledgeContext memoryKnowledge;
         KnowledgeContext personalKnowledge;
         try {
@@ -238,6 +280,7 @@ final class ChatKnowledgeResolver {
                 : new SearchQueryPlan(
                         decision.shouldSearch(), searchQuery, decision.shouldSearch() ? decision.query() : "",
                         List.of(), List.of(), "all", "general", "", 1.0, "query_planning_disabled");
+        plan = applyDeviceLocation(plan, locationContext);
         SearchDecision plannedDecision = plan.shouldSearch()
                 ? new SearchDecision(true, plan.primaryQuery(), decision.reason(),
                         new com.minikun.search.model.SearchPlanHints(
@@ -290,6 +333,7 @@ final class ChatKnowledgeResolver {
         }
 
         List<KnowledgeCandidate> browserCandidates = List.of();
+        SearchQueryPlan effectivePlan = plan;
         try {
             boolean imageRequest = SearchOptions.IMAGE_CATEGORY.equals(
                     categoryFor(plannedDecision, plan.intent()));
@@ -307,11 +351,12 @@ final class ChatKnowledgeResolver {
                             .orTimeout(searchTimeoutMillis(), TimeUnit.MILLISECONDS);
             CompletableFuture<KnowledgeContext> evidenceFuture = imageRequest
                     ? CompletableFuture.supplyAsync(() -> searchService.search(new SearchRequest(
-                            UUID.randomUUID(), plan.primaryQuery(),
+                            UUID.randomUUID(), effectivePlan.primaryQuery(),
                             Math.max(1, Math.min(100, configuration.searchResultLimit())),
                             Instant.now().plus(configuration.searchTimeout()),
-                            new SearchOptions(plan.language(), "", plan.timeRange(), configuration.safeSearch()),
-                            plan.alternateQueries())))
+                            new SearchOptions(effectivePlan.language(), "", effectivePlan.timeRange(),
+                                    configuration.safeSearch()),
+                            effectivePlan.alternateQueries())))
                             .orTimeout(searchTimeoutMillis(), TimeUnit.MILLISECONDS)
                     : CompletableFuture.completedFuture(KnowledgeContext.empty());
             browserCandidates = joinBrowser(browserFuture);
@@ -342,6 +387,51 @@ final class ChatKnowledgeResolver {
         SearchDecision decision = searchDecisionService.decide(query, classifierContext);
         if (decision == null) decision = searchDecisionService.decide(query);
         return decision == null ? new SearchDecision(false, query) : decision;
+    }
+
+    private DeviceLocationContext resolveDeviceLocation(DeviceLocation location) {
+        if (reverseGeocodingService == null) {
+            return DeviceLocationContext.unavailable();
+        }
+        try {
+            return reverseGeocodingService.resolve(location)
+                    .map(LocationResult::name)
+                    .filter(value -> value != null && !value.isBlank())
+                    .map(value -> new DeviceLocationContext(true, value))
+                    .orElseGet(DeviceLocationContext::unavailable);
+        } catch (RuntimeException exception) {
+            log.debug("process=location event=reverse_geocode_unavailable reason={}",
+                    exception.getClass().getSimpleName());
+            return DeviceLocationContext.unavailable();
+        }
+    }
+
+    private boolean isNearbyQuery(String query) {
+        String lower = query == null ? "" : query.toLowerCase(Locale.ROOT);
+        return List.of(
+                "แถวนี้", "แถว ๆ นี้", "แถวๆนี้", "ย่านนี้", "บริเวณนี้", "ตรงนี้", "ใกล้ฉัน", "ใกล้ผม",
+                "ใกล้เรา", "รอบ ๆ นี้", "รอบๆนี้", "รอบตัว", "near me", "nearby", "around here",
+                "in this area", "close by", "around me").stream().anyMatch(lower::contains);
+    }
+
+    private SearchQueryPlan applyDeviceLocation(SearchQueryPlan plan, DeviceLocationContext location) {
+        if (plan == null || !plan.shouldSearch() || location == null || !location.available()) {
+            return plan;
+        }
+        String area = location.area();
+        String primary = containsIgnoreCase(plan.primaryQuery(), area)
+                ? plan.primaryQuery() : plan.primaryQuery() + " " + area;
+        List<String> alternates = plan.alternateQueries().stream()
+                .map(value -> containsIgnoreCase(value, area) ? value : value + " " + area)
+                .toList();
+        String plannedLocation = plan.location().isBlank() ? area : plan.location();
+        return new SearchQueryPlan(plan.shouldSearch(), plan.originalQuery(), primary, alternates,
+                plan.coreTerms(), plan.language(), plan.intent(), plan.timeRange(), plan.confidence(),
+                plan.reason(), plan.evidenceNeeds(), plannedLocation);
+    }
+
+    private boolean containsIgnoreCase(String value, String fragment) {
+        return value.toLowerCase(Locale.ROOT).contains(fragment.toLowerCase(Locale.ROOT));
     }
 
     private SearchDecision joinSearchDecision(
@@ -436,7 +526,8 @@ final class ChatKnowledgeResolver {
                         combine(memoryKnowledge, personalKnowledge), decision,
                         searchAttempted, searchKnowledge),
                 researchTrace,
-                decision == null ? new SearchDecision(false, request.query()) : decision);
+                decision == null ? new SearchDecision(false, request.query()) : decision,
+                request.deviceLocationContext());
     }
 
     private KnowledgeConsolidation consolidate(KnowledgeSelection selection) {
@@ -584,6 +675,9 @@ final class ChatKnowledgeResolver {
             case "price" -> containsAny(content, "ราคา", "บาท", "฿", "price");
             case "availability" -> containsAny(content, "ว่าง", "พร้อม", "available", "availability");
             case "transit_access" -> containsAny(content, "เดิน", "รถ", "mrt", "bts", "สถานี", "transit");
+            // ponytail: lexical atmosphere gate; add semantic extraction only if false negatives justify latency.
+            case "atmosphere" -> containsAny(content, "บรรยากาศ", "เงียบ", "ชิล", "ถ่ายรูป", "วิว", "โรแมนติก",
+                    "atmosphere", "quiet", "cozy", "vibe", "scenic", "photogenic", "romantic");
             case "official_source" -> containsAny(content, "เว็บไซต์ทางการ", "official");
             case "freshness" -> containsAny(content, "ล่าสุด", "วันนี้", "updated", "latest");
             default -> false;
@@ -599,6 +693,7 @@ final class ChatKnowledgeResolver {
             case "price" -> thai ? "ราคา" : "price";
             case "availability" -> thai ? "เปิดให้บริการ" : "availability";
             case "transit_access" -> thai ? "การเดินทางจากสถานี" : "transit access from station";
+            case "atmosphere" -> thai ? "บรรยากาศ" : "atmosphere vibe";
             case "official_source" -> thai ? "เว็บไซต์ทางการ" : "official website";
             case "freshness" -> thai ? "ข้อมูลล่าสุด" : "latest information";
             default -> "";
@@ -703,7 +798,9 @@ final class ChatKnowledgeResolver {
             long contextDeadline,
             VisionInput visionInput,
             String visionSearchQuery,
-            List<String> visionSearchAlternates) {
+            List<String> visionSearchAlternates,
+            DeviceLocation deviceLocation,
+            DeviceLocationContext deviceLocationContext) {
 
         Request {
             visionInput = visionInput == null ? VisionInput.EMPTY : visionInput;
@@ -716,38 +813,66 @@ final class ChatKnowledgeResolver {
                     .distinct()
                     .limit(2)
                     .toList();
+            deviceLocationContext = deviceLocationContext == null
+                    ? DeviceLocationContext.EMPTY : deviceLocationContext;
+        }
+
+        Request(String query, String requestId, ConversationId conversationId, String ownerId,
+                boolean conversationContextAvailable, String classifierContext, TurnPlan turnPlan,
+                long contextDeadline, VisionInput visionInput, String visionSearchQuery,
+                List<String> visionSearchAlternates) {
+            this(query, requestId, conversationId, ownerId, conversationContextAvailable, classifierContext,
+                    turnPlan, contextDeadline, visionInput, visionSearchQuery, visionSearchAlternates,
+                    null, DeviceLocationContext.EMPTY);
+        }
+
+        Request(String query, String requestId, ConversationId conversationId, String ownerId,
+                boolean conversationContextAvailable, String classifierContext, TurnPlan turnPlan,
+                long contextDeadline, VisionInput visionInput, String visionSearchQuery,
+                List<String> visionSearchAlternates, DeviceLocation deviceLocation) {
+            this(query, requestId, conversationId, ownerId, conversationContextAvailable, classifierContext,
+                    turnPlan, contextDeadline, visionInput, visionSearchQuery, visionSearchAlternates,
+                    deviceLocation, DeviceLocationContext.EMPTY);
         }
 
         Request(String query, String requestId, ConversationId conversationId, String ownerId,
                 boolean conversationContextAvailable, String classifierContext, TurnPlan turnPlan,
                 long contextDeadline, VisionInput visionInput) {
             this(query, requestId, conversationId, ownerId, conversationContextAvailable, classifierContext,
-                    turnPlan, contextDeadline, visionInput, "", List.of());
+                    turnPlan, contextDeadline, visionInput, "", List.of(), null, DeviceLocationContext.EMPTY);
         }
 
         Request(String query, String requestId, ConversationId conversationId, String ownerId,
                 boolean conversationContextAvailable, String classifierContext, TurnPlan turnPlan,
                 long contextDeadline, VisionInput visionInput, String visionSearchQuery) {
             this(query, requestId, conversationId, ownerId, conversationContextAvailable, classifierContext,
-                    turnPlan, contextDeadline, visionInput, visionSearchQuery, List.of());
+                    turnPlan, contextDeadline, visionInput, visionSearchQuery, List.of(), null,
+                    DeviceLocationContext.EMPTY);
         }
 
         Request(String query, String requestId, ConversationId conversationId, String ownerId,
                 boolean conversationContextAvailable, String classifierContext, TurnPlan turnPlan) {
             this(query, requestId, conversationId, ownerId, conversationContextAvailable, classifierContext,
-                    turnPlan, 0, VisionInput.EMPTY, "", List.of());
+                    turnPlan, 0, VisionInput.EMPTY, "", List.of(), null, DeviceLocationContext.EMPTY);
         }
 
         Request(String query, String requestId, ConversationId conversationId, String ownerId,
                 boolean conversationContextAvailable, String classifierContext, TurnPlan turnPlan,
                 long contextDeadline) {
             this(query, requestId, conversationId, ownerId, conversationContextAvailable, classifierContext,
-                    turnPlan, contextDeadline, VisionInput.EMPTY, "", List.of());
+                    turnPlan, contextDeadline, VisionInput.EMPTY, "", List.of(), null,
+                    DeviceLocationContext.EMPTY);
         }
 
         Request(String query, String requestId, ConversationId conversationId, String ownerId,
                 boolean conversationContextAvailable, String classifierContext) {
             this(query, requestId, conversationId, ownerId, conversationContextAvailable, classifierContext, null);
+        }
+
+        Request withDeviceLocationContext(DeviceLocationContext context) {
+            return new Request(query, requestId, conversationId, ownerId, conversationContextAvailable,
+                    classifierContext, turnPlan, contextDeadline, visionInput, visionSearchQuery,
+                    visionSearchAlternates, deviceLocation, context);
         }
     }
 

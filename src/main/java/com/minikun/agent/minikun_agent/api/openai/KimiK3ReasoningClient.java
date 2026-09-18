@@ -10,7 +10,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.minikun.model.GenerationOptions;
 
-import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -66,6 +65,10 @@ public final class KimiK3ReasoningClient {
 
     String handoff(Prompt prompt, GenerationOptions.Reasoning reasoning) {
         Objects.requireNonNull(prompt, "prompt must not be null");
+        return handoff(PeerContextFirewall.render(prompt), reasoning);
+    }
+
+    String handoff(String sanitizedPrompt, GenerationOptions.Reasoning reasoning) {
         if (!configured()) {
             throw new IllegalStateException(
                     "Kimi K3 reasoning is selected but NVIDIA_API_KEY is not configured");
@@ -76,12 +79,11 @@ public final class KimiK3ReasoningClient {
             throw new IllegalArgumentException("Kimi K3 reasoning requires reasoning to be enabled");
         }
 
-        Prompt reasoningPrompt = prompt.augmentSystemMessage(REASONING_INSTRUCTION);
         Map<String, Object> request = new LinkedHashMap<>();
         request.put("model", model);
-        request.put("messages", messages(reasoningPrompt));
+        request.put("messages", messages(sanitizedPrompt));
         request.put("stream", false);
-        request.put("max_tokens", maxTokens(prompt));
+        request.put("max_tokens", 4096);
         request.put("temperature", 1.0);
         request.put("reasoning_effort", wireEffort(effort));
 
@@ -103,16 +105,10 @@ public final class KimiK3ReasoningClient {
         }
     }
 
-    private List<Map<String, String>> messages(Prompt prompt) {
-        return prompt.getInstructions().stream()
-                .map(this::message)
-                .toList();
-    }
-
-    private Map<String, String> message(Message message) {
-        return Map.of(
-                "role", message.getMessageType().getValue(),
-                "content", message.getText() == null ? "" : message.getText());
+    private List<Map<String, String>> messages(String sanitizedPrompt) {
+        return List.of(
+                Map.of("role", "system", "content", REASONING_INSTRUCTION),
+                Map.of("role", "user", "content", Objects.requireNonNullElse(sanitizedPrompt, "")));
     }
 
     private String responseText(JsonNode response) {
@@ -124,10 +120,6 @@ public final class KimiK3ReasoningClient {
         return content.asText().strip();
     }
 
-    private int maxTokens(Prompt prompt) {
-        Integer maxTokens = prompt.getOptions() == null ? null : prompt.getOptions().getMaxTokens();
-        return maxTokens == null ? 4096 : Math.max(1, maxTokens);
-    }
 
     private String wireEffort(GenerationOptions.Reasoning effort) {
         return switch (effort) {

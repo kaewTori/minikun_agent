@@ -16,6 +16,8 @@
 
     <key>EnvironmentVariables</key>
     <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
         <key>JAVA_BIN</key>
         <string>/usr/bin/java</string>
         <key>JDK_JAVA_OPTIONS</key>
@@ -26,6 +28,8 @@
         <string>true</string>
         <key>MINIKUN_HTTPS_PORT</key>
         <string>8443</string>
+        <key>MINIKUN_VOICE_TTS_WARMUP</key>
+        <string>true</string>
     </dict>
 
     <key>RunAtLoad</key>

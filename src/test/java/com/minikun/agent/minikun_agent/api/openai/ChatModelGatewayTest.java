@@ -5,13 +5,17 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.minikun.agent.minikun_agent.conversation.ConversationId;
 import com.minikun.model.ActiveChatModelProvider;
 import com.minikun.model.ChatModelProvider;
+import com.minikun.model.FriendCards;
 import com.minikun.model.GenerationOptions;
+import com.minikun.model.PeerResult;
+import com.minikun.model.PeerStatus;
 import com.minikun.tools.springai.SpringAiToolCallingRuntime;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -82,6 +86,54 @@ class ChatModelGatewayTest {
                 prompt, GenerationOptions.Reasoning.HIGH, "chat_model", "request", new ConversationId("fallback"))
                 .getResult().getOutput().getText());
         verify(provider).chat(prompt);
+    }
+
+    @Test
+    void prefersChatGptAndLeavesKimiAsTheSecondOpinion() {
+        ActiveChatModelProvider active = mock(ActiveChatModelProvider.class);
+        ChatModelProvider provider = mock(ChatModelProvider.class);
+        when(active.get()).thenReturn(provider);
+        when(provider.chat(any(Prompt.class))).thenReturn(response("final answer"));
+
+        ChatGptReasoningClient chatGpt = mock(ChatGptReasoningClient.class);
+        when(chatGpt.configured()).thenReturn(true);
+        when(chatGpt.consult(any(String.class), eq(GenerationOptions.Reasoning.HIGH)))
+                .thenReturn(new PeerResult(FriendCards.CHATGPT, PeerStatus.COMPLETE, "ChatGPT handoff", ""));
+        KimiK3ReasoningClient kimi = mock(KimiK3ReasoningClient.class);
+        when(kimi.configured()).thenReturn(true);
+
+        ChatModelGateway gateway = new ChatModelGateway(
+                active, null, null, false, chatGpt, kimi, "main-model");
+        ChatResponse result = gateway.chat(
+                new Prompt("solve"), GenerationOptions.Reasoning.HIGH, "chat_model", "request",
+                new ConversationId("chatgpt-primary"));
+
+        assertEquals("final answer", result.getResult().getOutput().getText());
+        verify(kimi, never()).handoff(any(Prompt.class), eq(GenerationOptions.Reasoning.HIGH));
+    }
+
+    @Test
+    void fallsBackToKimiWhenChatGptRefuses() {
+        ActiveChatModelProvider active = mock(ActiveChatModelProvider.class);
+        ChatModelProvider provider = mock(ChatModelProvider.class);
+        when(active.get()).thenReturn(provider);
+        when(provider.chat(any(Prompt.class))).thenReturn(response("final answer"));
+
+        ChatGptReasoningClient chatGpt = mock(ChatGptReasoningClient.class);
+        when(chatGpt.configured()).thenReturn(true);
+        when(chatGpt.consult(any(String.class), eq(GenerationOptions.Reasoning.HIGH)))
+                .thenReturn(new PeerResult(FriendCards.CHATGPT, PeerStatus.REFUSED, "I cannot assist with that", "policy_refusal"));
+        KimiK3ReasoningClient kimi = mock(KimiK3ReasoningClient.class);
+        when(kimi.configured()).thenReturn(true);
+        when(kimi.handoff(any(Prompt.class), eq(GenerationOptions.Reasoning.HIGH)))
+                .thenReturn("Kimi handoff");
+
+        ChatModelGateway gateway = new ChatModelGateway(
+                active, null, null, false, chatGpt, kimi, "main-model");
+        gateway.chat(new Prompt("solve"), GenerationOptions.Reasoning.HIGH, "chat_model", "request",
+                new ConversationId("kimi-fallback"));
+
+        verify(kimi).handoff(any(Prompt.class), eq(GenerationOptions.Reasoning.HIGH));
     }
 
     private ChatResponse response(String text) {

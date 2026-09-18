@@ -359,6 +359,16 @@ final class ChatPromptFactory {
                         """.strip(), true));
             }
         }
+        if (input.request().voiceMode()) {
+            values.add(new CapabilityInstruction("Voice response", """
+                    This is a live voice turn. Lead with the answer and normally use one to three short spoken
+                    sentences. Use plain natural language: no headings, Markdown tables, code blocks, raw URLs,
+                    tool markup, or long lists. For a long answer, give the useful summary first and ask whether the
+                    user wants the rest. Do not generate or attach images in this turn; if the user asks for a
+                    visual, acknowledge it briefly and offer to hand it off to Image Studio. Keep all safety checks
+                    and confirmations required for actions.
+                    """.strip(), true));
+        }
         return List.copyOf(values);
     }
 

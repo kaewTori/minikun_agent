@@ -72,6 +72,77 @@ class InvestmentMonitorRouterTest {
         when(executor.execute(any(), any())).thenReturn(ToolResult.success(Map.of("portfolio", "verified")));
         InvestmentMonitorRouter router = new InvestmentMonitorRouter(executor, new ObjectMapper());
 
-        assertTrue(router.route("port เรามีหุ้นอะไรบ้าง", new ConversationId("mixed"), "owner-a").isPresent());
+        List.of(
+                "ช่วยดูพอร์ตของเรา",
+                "มีอะไรอยู่ใน port",
+                "ตอนนี้ฉันถืออะไรอยู่",
+                "แสดงรายการลงทุนของฉัน",
+                "what's in my portfolio",
+                "list my positions",
+                "show my holdings").forEach(text ->
+                        assertTrue(router.route(text, new ConversationId("mixed-" + text.hashCode()), "owner-a")
+                                .isPresent(), text));
+    }
+
+    @Test
+    void ignoresBareMetalScalingQuestions() {
+        InvestmentMonitorRouter router = new InvestmentMonitorRouter(mock(ToolExecutor.class), new ObjectMapper());
+
+        assertTrue(router.route(
+                "ถ้าเรายังต้องไปเป็น bare metal แต่ว่าเรามีเครื่องอยู่ 4 เครื่องแบบนี้เราก็ทำแผน horizontal scale ก็ได้ถูกไหม",
+                new ConversationId("bare-metal"), "owner-a").isEmpty());
+    }
+
+    @Test
+    void keepsNewsAndMarketQuestionsOnTheirDedicatedRoutes() {
+        ToolExecutor executor = mock(ToolExecutor.class);
+        when(executor.execute(any(), any())).thenReturn(ToolResult.success(Map.of("status", "ok")));
+        InvestmentMonitorRouter router = new InvestmentMonitorRouter(executor, new ObjectMapper());
+
+        var news = router.route("ข่าวในพอร์ตวันนี้", new ConversationId("news-in-portfolio"), "owner-a");
+        assertTrue(news.isPresent());
+        assertTrue(!news.get().finalResponse());
+        var marketAnalysis = router.route("วิเคราะห์ตลาดหุ้น", new ConversationId("market-analysis"), "owner-a");
+        assertTrue(marketAnalysis.isPresent());
+        assertTrue(!marketAnalysis.get().finalResponse());
+        assertTrue(router.route("วิเคราะห์พอร์ตของเรา", new ConversationId("analysis"), "owner-a").isEmpty());
+        assertTrue(router.route("ราคาหุ้นในพอร์ต", new ConversationId("market"), "owner-a").isEmpty());
+    }
+
+    @Test
+    void refreshesMarketAnalysisSoTheModelReceivesPortfolioAndMarketContext() {
+        ToolExecutor executor = mock(ToolExecutor.class);
+        when(executor.execute(any(), any())).thenReturn(ToolResult.success(Map.of(
+                "portfolio", Map.of("symbols", List.of("GIL")),
+                "market_snapshot", Map.of("status", "ok"))));
+        InvestmentMonitorRouter router = new InvestmentMonitorRouter(executor, new ObjectMapper());
+
+        var evidence = router.route("วิเคราะห์ตลาดหุ้น", new ConversationId("market-context"), "owner-a");
+
+        assertTrue(evidence.isPresent());
+        assertTrue(!evidence.get().finalResponse());
+        assertTrue(evidence.get().content().contains("GIL"));
+
+        ArgumentCaptor<ToolCall> call = ArgumentCaptor.forClass(ToolCall.class);
+        verify(executor).execute(any(), call.capture());
+        assertEquals("daily_brief", call.getValue().arguments().get("action"));
+        assertEquals(true, call.getValue().arguments().get("refresh"));
+    }
+
+    @Test
+    void keepsMarketEvidenceWhenTheReportContainsTimestamps() {
+        ToolExecutor executor = mock(ToolExecutor.class);
+        Instant generatedAt = Instant.parse("2026-09-18T00:00:00Z");
+        when(executor.execute(any(), any())).thenReturn(ToolResult.success(Map.of(
+                "portfolio", Map.of("symbols", List.of("GIL")),
+                "generated_at", generatedAt,
+                "market_snapshot", Map.of("as_of", generatedAt))));
+        InvestmentMonitorRouter router = new InvestmentMonitorRouter(executor, new ObjectMapper());
+
+        var evidence = router.route("วิเคราะห์ตลาดหุ้น", new ConversationId("market-timestamps"), "owner-a");
+
+        assertTrue(evidence.isPresent());
+        assertTrue(evidence.get().success());
+        assertTrue(evidence.get().content().contains("GIL"));
     }
 }

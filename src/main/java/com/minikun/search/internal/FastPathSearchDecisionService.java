@@ -35,11 +35,6 @@ public final class FastPathSearchDecisionService implements SearchDecisionServic
             "^(?:(?:อธิบาย|ช่วยอธิบาย|คืออะไร|ทำไม|อย่างไร|แปล|สรุป).*|"
                     + "(?:explain|what is|how does|why does|translate|summarize)\\b.*)$",
             Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
-    private static final Pattern LOCAL_DISCOVERY = Pattern.compile(
-            "(?s)(?=.*(?:ร้าน|คาเฟ่|ที่พัก|โรงแรม|restaurant|cafe|hotel|shop|venue))"
-                    + "(?=.*(?:แนะนำ|ช่วยหา|หาร้าน|ใกล้|แถว|ย่าน|เปิด|ปิด|เวลา|รีวิว|"
-                    + "recommend|suggest|near|open|hours|review)).*",
-            Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
     private final SearchDecisionService delegate;
     private final SearchDecisionService rules;
     private final ConversationContinuityResolver continuityResolver;
@@ -125,7 +120,7 @@ public final class FastPathSearchDecisionService implements SearchDecisionServic
     }
 
     private boolean dynamicLocalDiscovery(String query) {
-        return enabled && query != null && LOCAL_DISCOVERY.matcher(query).find();
+        return enabled && RuleBasedSearchDecisionService.isLocalDiscovery(query);
     }
 
     private SearchDecision requireLocalSearch(String query, SearchDecision decision) {

@@ -99,6 +99,7 @@ import com.minikun.tools.InvestmentManageTool;
 import com.minikun.tools.InvestmentMonitorRouter;
 import com.minikun.tools.InvestmentMonitorTool;
 import com.minikun.tools.InvestmentReviewRouter;
+import com.minikun.tools.InvestmentTradeReportRouter;
 import com.minikun.tools.QuantDingerConfirmationRouter;
 import com.minikun.tools.QuantDingerTool;
 import com.minikun.tools.LocalComputerRouter;
@@ -180,7 +181,7 @@ import com.minikun.relationship.RelationshipConfiguration;
         InvestmentExternalDataConfiguration.class, QuantDingerConfiguration.class,
         InvestmentDataTool.class, InvestmentAnalyzeTool.class, InvestmentMonitorTool.class, QuantDingerTool.class,
         InvestmentReviewRouter.class, InvestmentMarketRouter.class, InvestmentMonitorRouter.class,
-        InvestmentConfirmationRouter.class, QuantDingerConfirmationRouter.class,
+        InvestmentTradeReportRouter.class, InvestmentConfirmationRouter.class, QuantDingerConfirmationRouter.class,
         AlpacaPaperConfirmationRouter.class,
         SpringAiToolCallingRuntime.class
 })

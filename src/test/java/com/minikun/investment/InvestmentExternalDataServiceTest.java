@@ -24,10 +24,10 @@ class InvestmentExternalDataServiceTest {
     void readsBatchQuotesWithoutPuttingTheApiKeyInTheUrl() {
         RestClient.Builder twelve = RestClient.builder().baseUrl("https://twelve.test");
         MockRestServiceServer server = MockRestServiceServer.bindTo(twelve).build();
-        server.expect(requestTo("https://twelve.test/price?symbol=AMZN,GIL"))
+        server.expect(requestTo("https://twelve.test/quote?symbol=AMZN,GIL"))
                 .andExpect(method(HttpMethod.GET))
                 .andExpect(header("Authorization", "apikey twelve-secret"))
-                .andRespond(withSuccess("{\"AMZN\":{\"price\":\"220.50\"},\"GIL\":{\"price\":\"54.80\"}}",
+                .andRespond(withSuccess("{\"AMZN\":{\"close\":\"220.50\",\"currency\":\"USD\"},\"GIL\":{\"close\":\"54.80\",\"currency\":\"THB\"}}",
                         MediaType.APPLICATION_JSON));
 
         InvestmentExternalDataService service = new InvestmentExternalDataService(
@@ -38,6 +38,25 @@ class InvestmentExternalDataServiceTest {
 
         assertEquals("220.50", quotes.get("AMZN").price().toPlainString());
         assertEquals("54.80", quotes.get("GIL").price().toPlainString());
+        assertEquals("USD", quotes.get("AMZN").currency());
+        assertEquals("THB", quotes.get("GIL").currency());
+        server.verify();
+    }
+
+    @Test
+    void readsSingleQuoteResponses() {
+        RestClient.Builder twelve = RestClient.builder().baseUrl("https://twelve.test");
+        MockRestServiceServer server = MockRestServiceServer.bindTo(twelve).build();
+        server.expect(requestTo("https://twelve.test/quote?symbol=AMZN"))
+                .andRespond(withSuccess(
+                        "{\"symbol\":\"AMZN\",\"close\":\"220.50\",\"currency\":\"USD\"}",
+                        MediaType.APPLICATION_JSON));
+
+        InvestmentExternalDataService service = new InvestmentExternalDataService(
+                twelve.build(), RestClient.create(), RestClient.create(), RestClient.create(),
+                new ObjectMapper(), CLOCK, "twelve-secret", "MinikunAgent/1.0", "", "");
+
+        assertEquals("220.50", service.latestQuotes(java.util.List.of("AMZN")).get("AMZN").price().toPlainString());
         server.verify();
     }
 

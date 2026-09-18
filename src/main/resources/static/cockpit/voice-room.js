@@ -24,16 +24,29 @@
   const syncTurns = $('#sync-turns');
   const queueCount = $('#queue-count');
   const queueList = $('.queue-list');
+  const stageControls = $('.stage-controls');
   const input = $('#message-input');
   const messageForm = $('#message-form');
   const sendButton = $('.send-button', messageForm);
   const quickTalk = $('#quick-talk');
   const micButton = $('#mic-button');
+  const conversationMode = $('#conversation-mode');
+  const conversationModeLabel = $('#conversation-mode-label');
+  const conversationModeHint = $('#conversation-mode-hint');
   const speed = $('#speed');
   const speedValue = $('#speed-value');
   const naturalPause = $('#natural-pause');
   const stopSpeaking = $('#stop-speaking');
+  const cancelTurnButton = $('#cancel-turn');
   const toast = $('#toast');
+
+  const recordingPolicy = Object.freeze({
+    silenceMs: 850,
+    minSpeechMs: 180,
+    maxSeconds: 90,
+    noiseFloorWindowMs: 350,
+    minimumLevel: 0.018
+  });
 
   const state = {
     ownerId: sessionStorage.getItem('minikun.owner') || 'default',
@@ -44,6 +57,7 @@
     paired: false,
     busy: false,
     transcribing: false,
+    transcriptionController: null,
     activeRequest: null,
     activeAudio: null,
     activeAudioUrl: '',
@@ -52,6 +66,10 @@
     speechClock: null,
     recordingStartedAt: 0,
     recordingTimer: null,
+    recordingHasSpeech: false,
+    recordingLastSpeechAt: 0,
+    recordingNoiseFloor: 0,
+    recordingStopping: false,
     audioContext: null,
     audioSource: null,
     audioProcessor: null,
@@ -73,7 +91,9 @@
     speechAnalyserData: null,
     speechAnalyserConnected: false,
     speechMetrics: null,
-    lastSpeechMetrics: null
+    lastSpeechMetrics: null,
+    turnSerial: 0,
+    activeTurnSerial: 0
   };
 
   const defaultBubble = 'พร้อมคุยครับพี่สาว วันนี้อยากให้มินิคุงช่วยคิด วางแผน หรืออยู่เป็นเพื่อนแบบไหนก่อนดี?';
@@ -308,6 +328,7 @@
       }[nextState] || 'IDLE RIG';
     }
     stage.setAttribute('aria-busy', String(['listening', 'thinking', 'speaking'].includes(nextState)));
+    updateControls();
   }
 
   function setBubble(text) {
@@ -324,10 +345,34 @@
     input.style.overflowY = input.scrollHeight > height ? 'auto' : 'hidden';
   }
 
+  function liveConversationEnabled() {
+    return conversationMode?.getAttribute('aria-pressed') === 'true';
+  }
+
+  function setConversationMode(enabled, announce = false) {
+    const value = Boolean(enabled);
+    conversationMode.setAttribute('aria-pressed', String(value));
+    conversationModeLabel.textContent = value ? 'คุยสด' : 'พูดเพื่อพิมพ์';
+    conversationModeHint.textContent = value
+      ? 'พูดจบแล้วส่งให้อัตโนมัติ'
+      : 'พูดจบแล้วตรวจข้อความก่อนส่ง';
+    input.placeholder = value ? 'หรือพิมพ์เพื่อส่ง…' : 'พูดอะไรกับมินิคุงก็ได้…';
+    localStorage.setItem('minikun.voice-mode', value ? 'conversation' : 'dictation');
+    if (announce) showToast(value ? 'เปิดโหมดคุยสดแล้วครับ' : 'เปลี่ยนเป็นโหมดพูดเพื่อพิมพ์แล้วครับ');
+  }
+
   function updateControls() {
     sendButton.disabled = state.busy || state.transcribing;
     quickTalk.disabled = state.busy || state.transcribing;
     micButton.disabled = state.transcribing;
+    stopSpeaking.disabled = !state.speechCurrent;
+    const cancellable = state.busy || state.transcribing;
+    stageControls.classList.toggle('has-cancel', cancellable);
+    cancelTurnButton.hidden = !cancellable;
+    cancelTurnButton.disabled = !cancellable;
+    cancelTurnButton.setAttribute('aria-label', state.transcribing ? 'ยกเลิกการถอดเสียง' : 'ยกเลิก turn');
+    const label = $('span:last-child', cancelTurnButton);
+    if (label) label.textContent = state.transcribing ? 'ยกเลิกการถอดเสียง' : 'ยกเลิก turn';
   }
 
   function updateConversationCount() {
@@ -909,7 +954,7 @@
       signal: controller.signal,
       body: JSON.stringify({
         model: state.model, messages, conversation_id: state.conversationId,
-        owner_id: state.ownerId, stream: true
+        owner_id: state.ownerId, stream: true, response_mode: 'voice'
       })
     });
     if (!response.ok) {
@@ -954,12 +999,15 @@
     }
     if (buffer.trim()) consume(buffer);
     if (!content.trim()) throw new Error('มินิคุงยังไม่มีข้อความตอบกลับครับ');
+    if (state.activeRequest === controller) state.activeRequest = null;
     return { content, responseId, firstTokenMs, totalMs: Date.now() - startedAt };
   }
 
   async function sendMessage(rawText) {
     const text = String(rawText || '').trim();
     if (!text || state.busy || state.transcribing) return;
+    const turnSerial = ++state.turnSerial;
+    state.activeTurnSerial = turnSerial;
     input.value = '';
     resizeInput();
     stopSpeech('ready');
@@ -990,6 +1038,7 @@
     } catch (error) {
       finishSpeechQueue(speechToken);
       await waitForSpeechRun(speechToken);
+      if (state.activeTurnSerial !== turnSerial) return;
       if (error.name === 'AbortError') {
         setBubble('หยุดคำตอบไว้ก่อนแล้วครับ');
         setStage('ready', 'พร้อมคุยต่อเมื่อพี่สาวต้องการครับ');
@@ -999,21 +1048,39 @@
         showToast(error.message, true);
       }
     } finally {
-      state.activeRequest = null;
-      state.busy = false;
-      updateControls();
+      if (state.activeTurnSerial === turnSerial) {
+        state.activeRequest = null;
+        state.busy = false;
+        updateControls();
+      }
     }
   }
 
   function stopCurrent() {
+    if (!state.speechCurrent) return;
+    stopSpeech('ready', 'หยุดเสียงแล้วครับ — คำตอบยังอยู่บนหน้าจอ');
+    updateControls();
+  }
+
+  function cancelTurn() {
+    if (!state.busy && !state.transcribing) return;
+    state.activeTurnSerial = ++state.turnSerial;
     state.activeRequest?.abort();
-    stopSpeech('ready', 'หยุดเสียงแล้วครับ — bubble text ยังอยู่ครบ');
+    state.transcriptionController?.abort();
+    state.activeRequest = null;
+    state.transcriptionController = null;
+    stopSpeech('ready', 'ยกเลิก turn แล้วครับ พร้อมคุยต่อได้เลย');
+    state.busy = false;
+    state.transcribing = false;
+    updateControls();
   }
 
   function wavBlob(chunks, sourceRate) { return Core.wavBlob(chunks, sourceRate); }
 
   async function transcribeAudio(blob) {
+    const controller = new AbortController();
     state.transcribing = true;
+    state.transcriptionController = controller;
     updateControls();
     setStage('thinking', 'กำลังถอดเสียงจากไมค์ครับ');
     setBubble('กำลังถอดเสียงอยู่ครับ…');
@@ -1021,25 +1088,39 @@
       const form = new FormData();
       form.append('file', new File([blob], 'minikun-recording.wav', { type: 'audio/wav' }));
       form.append('language', 'auto');
-      const result = await api('/v1/audio/transcriptions', { method: 'POST', body: form });
+      const result = await api('/v1/audio/transcriptions', {
+        method: 'POST', body: form, signal: controller.signal
+      });
       const transcript = String(result?.text || result || '').trim();
       if (!transcript) throw new Error('ยังจับข้อความจากเสียงไม่ได้ครับ');
-      input.value = `${input.value}${input.value ? ' ' : ''}${transcript}`;
-      resizeInput();
-      input.focus();
-      setBubble('ได้ยินแล้วครับ แก้ข้อความก่อนส่งได้เลย');
-      setStage('ready', 'เติมข้อความจากไมค์ให้แล้ว แก้ก่อนส่งได้เลยครับ');
+      if (liveConversationEnabled()) {
+        state.transcribing = false;
+        updateControls();
+        setBubble('ได้ยินแล้วครับ กำลังตอบกลับให้ฟัง…');
+        await sendMessage(transcript);
+      } else {
+        input.value = `${input.value}${input.value ? ' ' : ''}${transcript}`;
+        resizeInput();
+        input.focus();
+        setBubble('ได้ยินแล้วครับ แก้ข้อความก่อนส่งได้เลย');
+        setStage('ready', 'เติมข้อความจากไมค์ให้แล้ว แก้ก่อนส่งได้เลยครับ');
+      }
     } catch (error) {
+      if (error.name === 'AbortError') return;
       setStage('error', 'ตรวจไมโครโฟนหรือระบบถอดเสียงแล้วลองใหม่ครับ');
       showToast(error.message, true);
     } finally {
+      if (state.transcriptionController === controller) state.transcriptionController = null;
       state.transcribing = false;
       updateControls();
     }
   }
 
   async function stopRecording() {
+    if (state.recordingStopping) return;
+    state.recordingStopping = true;
     clearInterval(state.recordingTimer);
+    state.recordingTimer = null;
     micButton.classList.remove('is-recording');
     micButton.setAttribute('aria-pressed', 'false');
     micButton.setAttribute('aria-label', 'เปิดไมโครโฟน');
@@ -1053,15 +1134,34 @@
     state.mediaStream = null;
     state.audioContext = null;
     state.recordingChunks = [];
-    if (context) await context.close();
-    if (chunks.length) await transcribeAudio(wavBlob(chunks, context?.sampleRate || 16000));
+    state.recordingHasSpeech = false;
+    state.recordingLastSpeechAt = 0;
+    state.recordingNoiseFloor = 0;
+    try {
+      if (context) await context.close();
+      if (chunks.length) await transcribeAudio(wavBlob(chunks, context?.sampleRate || 16000));
+    } finally {
+      state.recordingStopping = false;
+      updateControls();
+    }
+  }
+
+  function interruptForInput() {
+    if (!state.busy && !state.speechCurrent) return;
+    if (state.busy) {
+      state.activeTurnSerial = ++state.turnSerial;
+      state.activeRequest?.abort();
+      state.activeRequest = null;
+      state.busy = false;
+    }
+    stopSpeech('ready', 'หยุดเสียงแล้วครับ พูดแทรกได้เลย');
+    updateControls();
   }
 
   async function toggleRecording() {
     if (state.audioContext) { await stopRecording(); return; }
-    if (state.transcribing) return;
-    state.activeRequest?.abort();
-    stopSpeech('ready');
+    if (state.transcribing || state.recordingStopping) return;
+    interruptForInput();
     if (!window.isSecureContext && !['localhost', '127.0.0.1'].includes(window.location.hostname)) {
       showToast('ต้องเปิดหน้าเว็บผ่าน HTTPS เพื่อใช้ไมโครโฟนครับ', true);
       return;
@@ -1079,8 +1179,28 @@
       state.audioProcessor = state.audioContext.createScriptProcessor(4096, 1, 1);
       state.recordingChunks = [];
       state.audioProcessor.onaudioprocess = (event) => {
-        state.recordingChunks.push(new Float32Array(event.inputBuffer.getChannelData(0)));
+        const samples = event.inputBuffer.getChannelData(0);
+        state.recordingChunks.push(new Float32Array(samples));
         event.outputBuffer.getChannelData(0).fill(0);
+        let total = 0;
+        for (const sample of samples) total += sample * sample;
+        const level = Math.sqrt(total / samples.length);
+        const now = Date.now();
+        const elapsed = now - state.recordingStartedAt;
+        if (elapsed <= recordingPolicy.noiseFloorWindowMs) {
+          state.recordingNoiseFloor = state.recordingNoiseFloor
+            ? state.recordingNoiseFloor * .8 + level * .2 : level;
+        }
+        const threshold = Math.max(recordingPolicy.minimumLevel, state.recordingNoiseFloor * 2.4);
+        if (elapsed > recordingPolicy.noiseFloorWindowMs && level > threshold) {
+          state.recordingHasSpeech = true;
+          state.recordingLastSpeechAt = now;
+        }
+        if (liveConversationEnabled() && state.recordingHasSpeech
+            && elapsed >= recordingPolicy.minSpeechMs
+            && now - state.recordingLastSpeechAt >= recordingPolicy.silenceMs) {
+          stopRecording();
+        }
       };
       state.audioSource.connect(state.audioProcessor);
       state.audioProcessor.connect(state.audioContext.destination);
@@ -1088,13 +1208,14 @@
       micButton.classList.add('is-recording');
       micButton.setAttribute('aria-pressed', 'true');
       micButton.setAttribute('aria-label', 'หยุดบันทึกเสียง');
-      setStage('listening', 'กำลังฟังอยู่ครับ กดไมค์อีกครั้งเมื่อพูดจบ');
+      setStage('listening', liveConversationEnabled()
+        ? 'กำลังฟังอยู่ครับ พูดจบแล้วหยุดเอง' : 'กำลังฟังอยู่ครับ กดไมค์อีกครั้งเมื่อพูดจบ');
       setBubble('กำลังฟังอยู่ครับ เล่ามาได้เลย…');
       state.recordingTimer = setInterval(() => {
         const elapsed = Math.floor((Date.now() - state.recordingStartedAt) / 1000);
         waveTime.textContent = `00:${String(elapsed).padStart(2, '0')}`;
-        if (elapsed >= 90) stopRecording();
-      }, 500);
+        if (elapsed >= recordingPolicy.maxSeconds) stopRecording();
+      }, 250);
     } catch (_) {
       state.mediaStream?.getTracks().forEach((track) => track.stop());
       state.mediaStream = null;
@@ -1135,6 +1256,13 @@
     naturalPause.setAttribute('aria-pressed', String(pauseEnabled));
     naturalPause.setAttribute('aria-label', `${pauseEnabled ? 'ปิด' : 'เปิด'} natural pause`);
     $$('.preset').forEach((button) => button.classList.toggle('active', button.dataset.preset === state.selectedPreset));
+    setConversationMode(localStorage.getItem('minikun.voice-mode') !== 'dictation');
+  }
+
+  function openVoiceSettings() {
+    const deck = $('#voice-deck');
+    if (deck) deck.open = true;
+    deck?.scrollIntoView({ behavior: reducedMotion() ? 'auto' : 'smooth', block: 'center' });
   }
 
   selectConversation();
@@ -1159,9 +1287,10 @@
   });
   quickTalk.addEventListener('click', () => sendMessage('คืนนี้ช่วยวางแผนให้หน่อยนะ'));
   stopSpeaking.addEventListener('click', stopCurrent);
+  cancelTurnButton.addEventListener('click', cancelTurn);
   $('#replay-current').addEventListener('click', () => speak(lastSpeech));
-  $('#top-settings').addEventListener('click', () => $('#voice-deck').scrollIntoView({ behavior: 'smooth', block: 'center' }));
-  $('#rail-settings').addEventListener('click', () => $('#voice-deck').scrollIntoView({ behavior: 'smooth', block: 'center' }));
+  $('#top-settings').addEventListener('click', openVoiceSettings);
+  $('#rail-settings').addEventListener('click', openVoiceSettings);
   $('#new-room').addEventListener('click', createNewRoom);
   $('#open-chat-history').addEventListener('click', () => openMain('chat'));
   $('.brand').addEventListener('click', (event) => { event.preventDefault(); openMain('chat'); });
@@ -1174,6 +1303,9 @@
     input.focus();
     resizeInput();
   }));
+  conversationMode.addEventListener('click', () => {
+    setConversationMode(!liveConversationEnabled(), true);
+  });
   $$('.preset').forEach((button) => button.addEventListener('click', () => {
     $$('.preset').forEach((item) => item.classList.remove('active'));
     button.classList.add('active');
