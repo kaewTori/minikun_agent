@@ -3,11 +3,11 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#07110f">
+  <meta name="theme-color" content="#0b100e">
   <meta name="description" content="Minikun Voice Room — ห้องคุยสดกับมินิคุง">
   <title>Minikun Voice Room</title>
   <link rel="icon" href="/cockpit/minikun-avatar.jpg">
-  <link rel="stylesheet" href="/cockpit/voice-room.css?v=20260913-redesign9">
+  <link rel="stylesheet" href="/cockpit/voice-room.css?v=20260919-typescale1">
 </head>
 <body>
   <a class="skip-link" href="#main-content">ข้ามไปยังเนื้อหาหลัก</a>
@@ -17,17 +17,24 @@
         <img src="/cockpit/minikun-avatar.jpg" alt="" width="42" height="42">
         <span><strong>MINIKUN</strong><small>PERSONAL AGENT</small></span>
       </a>
-      <button class="new-room" type="button" id="new-room">
+      <button class="new-chat-button new-room" type="button" id="new-room">
         <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>
-        ห้องคุยใหม่
+        แชตใหม่
       </button>
       <nav class="nav-list" aria-label="พื้นที่ของ Minikun">
-        <button class="nav-item" type="button" data-view="chat"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 17.5 3.5 21l4.2-1.4c1.3.6 2.7.9 4.3.9 5.2 0 9.5-3.8 9.5-8.5S17.2 3.5 12 3.5 2.5 7.3 2.5 12c0 2.1.9 4 2.5 5.5Z"></path><path d="M8 12h.01M12 12h.01M16 12h.01"></path></svg><b>แชต</b></button>
-        <button class="nav-item active" type="button" aria-current="page" data-view="voice"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10.5a5 5 0 0 1 10 0v4a5 5 0 0 1-10 0Z"></path><path d="M4.5 12v2.5M19.5 12v2.5M12 5.5v2"></path><path d="M9.5 19.2c.8.5 1.7.8 2.5.8 2.1 0 3.8-.9 4.8-2.4"></path></svg><b>เสียง</b></button>
-        <button class="nav-item" type="button" data-view="cockpit"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19v-7a8 8 0 0 1 16 0v7"></path><path d="M7 19v-2a5 5 0 0 1 10 0v2M12 9v3l2 1"></path></svg><b>วันนี้</b></button>
+        <button class="nav-item" type="button" data-view="chat"><svg class="icon nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 17.5 3.5 21l4.2-1.4c1.3.6 2.7.9 4.3.9 5.2 0 9.5-3.8 9.5-8.5S17.2 3.5 12 3.5 2.5 7.3 2.5 12c0 2.1.9 4 2.5 5.5Z"></path><path d="M8 12h.01M12 12h.01M16 12h.01"></path></svg><b>แชต</b></button>
+        <button class="nav-item active" type="button" aria-current="page" data-view="voice"><svg class="icon nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10.5a5 5 0 0 1 10 0v4a5 5 0 0 1-10 0Z"></path><path d="M4.5 12v2.5M19.5 12v2.5M12 5.5v2"></path><path d="M9.5 19.2c.8.5 1.7.8 2.5.8 2.1 0 3.8-.9 4.8-2.4"></path></svg><b>เสียง</b></button>
+        <button class="nav-item" type="button" data-view="studio"><svg class="icon nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7.5h4l1.4-2h5.2l1.4 2h4v11H4Z"></path><circle cx="12" cy="13" r="3.5"></circle><path d="m18 3 .5 1.5L20 5l-1.5.5L18 7l-.5-1.5L16 5l1.5-.5Z"></path></svg><b>สร้างภาพ</b></button>
+        <button class="nav-item" type="button" data-view="cockpit"><svg class="icon nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19v-7a8 8 0 0 1 16 0v7"></path><path d="M7 19v-2a5 5 0 0 1 10 0v2M12 9v3l2 1"></path></svg><b>วันนี้</b></button>
       </nav>
-      <div class="rail-spacer"></div>
-      <div class="rail-footer">
+      <section class="conversation-panel" aria-labelledby="conversation-heading">
+        <div class="conversation-heading"><span id="conversation-heading">บทสนทนา</span><button id="clear-chat-list" type="button" aria-label="ล้างรายการบทสนทนา"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1"></circle><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle></svg></button></div>
+        <label class="conversation-search"><span class="sr-only">ค้นหาบทสนทนา</span><input data-conversation-search type="search" placeholder="ค้นหาแชต…"></label>
+        <button class="archive-toggle" data-archive-toggle type="button">ดูคลังแชต</button>
+        <ol id="conversation-list" class="conversation-list" data-conversation-list></ol>
+        <p class="conversation-empty" data-conversation-empty>บทสนทนาจะซิงก์ข้ามอุปกรณ์ครับ</p>
+      </section>
+      <div class="rail-bottom">
         <div class="local-status"><span class="local-dot"></span><span>LOCAL FIRST<small>ข้อมูลอยู่กับเรา</small></span></div>
         <button class="rail-settings" type="button" id="rail-settings"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 1.1 2.3 2.5.7.7 2.5L18.5 10l-1.8 1.9.4 2.5-2.3 1.1-.8 2.4H11l-.8-2.4-2.3-1.1.4-2.5L6.5 10l2.2-1.5.7-2.5 2.5-.7Z"></path><circle cx="12" cy="11.5" r="2.4"></circle></svg><b>ตั้งค่าเสียง</b></button>
       </div>
@@ -36,9 +43,11 @@
     <main class="workspace" id="main-content" tabindex="-1">
       <header class="topbar">
         <div class="topbar-heading">
-          <div><p class="eyebrow">MINIKUN · VOICE ROOM</p><h1>คุยกับมินิคุง</h1></div>
+          <img class="voice-top-avatar" src="/cockpit/minikun-avatar.jpg" alt="มินิคุง">
+          <div><h1>มินิคุง</h1><span class="voice-top-status"><i class="local-dot"></i>พร้อมฟังครับ</span></div>
         </div>
         <div class="topbar-actions">
+          <span class="model-pill">VOICE</span>
           <button class="top-action" id="top-settings" type="button" aria-label="เลื่อนไปที่แผงตั้งค่าเสียง"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"></path><circle cx="16" cy="7" r="2"></circle><circle cx="8" cy="17" r="2"></circle></svg><span>จังหวะเสียง</span></button>
         </div>
       </header>
@@ -71,7 +80,7 @@
             </div>
 
             <div class="stage-copy">
-              <p class="eyebrow">LIVE AVATAR · VOICE ROOM</p>
+              <p class="eyebrow">VOICE MODE</p>
               <h2 id="stage-title">พร้อมฟังครับ</h2>
               <p id="stage-caption">พิมพ์หรือกดไมค์ แล้วมินิคุงจะตอบกลับด้วยเสียง</p>
             </div>
