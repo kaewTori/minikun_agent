@@ -42,6 +42,7 @@ import org.springframework.stereotype.Service;
 @ConditionalOnProperty(name = "minikun.investment.enabled", havingValue = "true", matchIfMissing = true)
 public final class InvestmentMonitoringService {
     private static final Logger LOGGER = LoggerFactory.getLogger(InvestmentMonitoringService.class);
+    private static final int MAX_REMINDER_BYTES = 3_500;
     private static final TypeReference<Map<String, Object>> MAP = new TypeReference<>() { };
     private static final MathContext MATH = MathContext.DECIMAL128;
     private static final BigDecimal HUNDRED = new BigDecimal("100");
@@ -232,10 +233,10 @@ public final class InvestmentMonitoringService {
         if (events.isEmpty()) {
             message.append("\n• ยังไม่พบข่าวใหม่ที่จับคู่กับสินทรัพย์ในแผน");
         } else {
-            events.stream().limit(8).forEach(item -> {
+            events.stream().limit(4).forEach(item -> {
                 Map<?, ?> event = map(item);
-                String title = displayText(value(event, "title", ""), "ข่าวใหม่", 500);
-                String summary = displayText(value(event, "summary", ""), "", 360);
+                String title = displayText(value(event, "title", ""), "ข่าวใหม่", 180);
+                String summary = displayText(value(event, "summary", ""), "", 220);
                 message.append("\n• [").append(value(event, "symbol", "MARKET")).append("] ")
                         .append(title)
                         .append(" — ").append(value(event, "materiality", "LOW"));
@@ -259,7 +260,7 @@ public final class InvestmentMonitoringService {
         if ("partial".equals(value(report, "status", ""))) {
             message.append("\n\n⚠️ รายงานนี้มีข้อมูลบางส่วนที่ดึงไม่ได้ โปรดดู source และเวลาอัปเดตก่อนตัดสินใจ");
         }
-        return message.toString();
+        return limitUtf8(message.toString(), MAX_REMINDER_BYTES);
     }
 
     private Map<String, Object> buildReport(String ownerId) {
@@ -670,6 +671,23 @@ public final class InvestmentMonitoringService {
     private String truncate(String value, int limit) {
         if (value == null || value.length() <= limit) return Objects.requireNonNullElse(value, "");
         return value.substring(0, Math.max(0, limit - 1)).stripTrailing() + "…";
+    }
+
+    private String limitUtf8(String value, int maxBytes) {
+        if (value.getBytes(StandardCharsets.UTF_8).length <= maxBytes) return value;
+        String suffix = "\n\n… (ย่อเพื่อส่งเป็นข้อความแจ้งเตือน)";
+        int suffixBytes = suffix.getBytes(StandardCharsets.UTF_8).length;
+        StringBuilder result = new StringBuilder();
+        int bytes = 0;
+        for (int offset = 0; offset < value.length();) {
+            int codePoint = value.codePointAt(offset);
+            int codePointBytes = new String(Character.toChars(codePoint)).getBytes(StandardCharsets.UTF_8).length;
+            if (bytes + codePointBytes + suffixBytes > maxBytes) break;
+            result.appendCodePoint(codePoint);
+            bytes += codePointBytes;
+            offset += Character.charCount(codePoint);
+        }
+        return result.toString().stripTrailing() + suffix;
     }
 
     private String displayText(String value, String fallback, int limit) {

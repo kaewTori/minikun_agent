@@ -13,6 +13,7 @@ import com.minikun.pcs.KnowledgeSource;
 import com.minikun.pcs.model.KnowledgeContext;
 import com.minikun.search.SearchService;
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -176,6 +177,29 @@ class InvestmentMonitoringServiceTest {
         assertTrue(message.contains("ต้นทุนคงค้าง 100 USD"));
         assertTrue(message.contains("สรุป: Revenue grew 12% year over year."));
         assertFalse(message.contains(url));
+    }
+
+    @Test
+    void keepsTheReminderWithinThePushMessageLimit() {
+        InvestmentMonitoringService monitoring = new InvestmentMonitoringService(
+                mock(InvestmentService.class), externalWithoutMarketKey(), new InMemoryMonitorStore(),
+                mock(SearchService.class), new ObjectMapper(), Clock.fixed(NOW, ZoneOffset.UTC),
+                java.time.Duration.ofSeconds(1), 1, 8, 48, "UTC", 8, 3, java.time.Duration.ofHours(72));
+        List<Map<String, Object>> events = java.util.stream.IntStream.range(0, 8)
+                .mapToObj(index -> Map.<String, Object>of(
+                        "symbol", "AMZN", "title", "ข่าวสำคัญ ".repeat(80),
+                        "summary", "สรุปข้อมูลตลาด ".repeat(80), "materiality", "HIGH"))
+                .toList();
+
+        String message = monitoring.formatBrief(Map.of(
+                "report_date", "2026-09-11",
+                "portfolio", Map.of("positions", List.of()),
+                "market_snapshot", Map.of("status", "empty"),
+                "news", Map.of("events", events),
+                "recommendations", List.of()));
+
+        assertTrue(message.getBytes(StandardCharsets.UTF_8).length <= 3_500);
+        assertTrue(message.endsWith("… (ย่อเพื่อส่งเป็นข้อความแจ้งเตือน)"));
     }
 
     private InvestmentExternalDataService externalWithoutMarketKey() {

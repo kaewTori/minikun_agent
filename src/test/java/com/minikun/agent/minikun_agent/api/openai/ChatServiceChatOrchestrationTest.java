@@ -296,6 +296,7 @@ class ChatServiceChatOrchestrationTest {
         assertEquals(1, prompt.getValue().getUserMessage().getMedia().size());
         assertEquals("image/png", prompt.getValue().getUserMessage().getMedia().getFirst()
                 .getMimeType().toString());
+        assertEquals("chat", prompt.getValue().getOptions().getModel());
         assertEquals(false, ((OllamaChatOptions) prompt.getValue().getOptions())
                 .getThinkOption().toJsonValue());
         assertTrue(promptText(prompt.getValue()).contains("User-provided Images"));
@@ -688,6 +689,8 @@ class ChatServiceChatOrchestrationTest {
         verify(blockingModel).call(blockingPrompt.capture());
         verify(streamingModel).stream(streamingPrompt.capture());
         assertEquals(promptText(blockingPrompt.getValue()), promptText(streamingPrompt.getValue()));
+        assertEquals("chat", blockingPrompt.getValue().getOptions().getModel());
+        assertEquals("chat", streamingPrompt.getValue().getOptions().getModel());
         assertTrue(stream.stream().anyMatch(chunk -> chunk.contains("streaming answer")));
 
         verify(blockingConversation).load(conversationId);

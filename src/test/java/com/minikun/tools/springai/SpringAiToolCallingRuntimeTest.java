@@ -74,7 +74,7 @@ class SpringAiToolCallingRuntimeTest {
                 new ObjectMapper());
 
         ChatResponse response = runtime.call(new Prompt("Add 2 and 3.",
-                OllamaChatOptions.builder().disableThinking().numCtx(16_384).build()),
+                OllamaChatOptions.builder().model("main-model").disableThinking().numCtx(16_384).build()),
                 new ConversationId("conversation"));
 
         assertEquals("The answer is 5.", response.getResult().getOutput().getText());
@@ -88,6 +88,9 @@ class SpringAiToolCallingRuntimeTest {
         assertEquals(true, prompts.getAllValues().stream()
                 .map(prompt -> (OllamaChatOptions) prompt.getOptions())
                 .allMatch(options -> Integer.valueOf(16_384).equals(options.getNumCtx())));
+        assertEquals(true, prompts.getAllValues().stream()
+                .map(prompt -> (OllamaChatOptions) prompt.getOptions())
+                .allMatch(options -> "main-model".equals(options.getModel())));
         String continuation = prompts.getAllValues().get(1).getInstructions().stream()
                 .filter(ToolResponseMessage.class::isInstance)
                 .map(ToolResponseMessage.class::cast)

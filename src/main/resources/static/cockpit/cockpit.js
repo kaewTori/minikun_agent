@@ -1583,7 +1583,13 @@
       messages.append(renderMessage(pending.assistant, true));
     }
     scroll.dataset.conversationId = state.currentConversationId;
-    requestAnimationFrame(() => { if (shouldStick) scrollToLatest(); });
+    requestAnimationFrame(() => {
+      if (!state.chatMessages.length) {
+        scroll.scrollTop = 0;
+        return;
+      }
+      if (shouldStick) scrollToLatest();
+    });
   }
 
   function scrollToLatest() {

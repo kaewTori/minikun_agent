@@ -1,6 +1,7 @@
 package com.minikun.runtime;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -39,6 +40,23 @@ class RuntimeServiceTest {
         assertEquals("new:latest", service.chatModel());
         org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
                 () -> service.activate("missing", List.of("old", "new:latest")));
+    }
+
+    @Test
+    void requiresTheConfiguredMainChatModel() {
+        ModelsService service = new ModelsService("main-model", "embedding", "memory", "");
+
+        assertEquals("main-model", service.requireChatModel());
+    }
+
+    @Test
+    void refusesAnUnconfiguredMainChatModelInsteadOfSelectingAHiddenFallback() {
+        ModelsService service = new ModelsService(" ", "embedding", "memory", "");
+
+        IllegalStateException exception = assertThrows(
+                IllegalStateException.class, service::requireChatModel);
+
+        assertEquals("main chat model is not configured", exception.getMessage());
     }
 
     @Test

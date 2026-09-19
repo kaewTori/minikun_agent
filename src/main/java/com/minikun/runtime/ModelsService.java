@@ -51,6 +51,14 @@ public final class ModelsService {
         return chatModel;
     }
 
+    public String requireChatModel() {
+        String model = chatModel;
+        if (model == null || model.isBlank()) {
+            throw new IllegalStateException("main chat model is not configured");
+        }
+        return model;
+    }
+
     public Catalog catalog() {
         List<String> models = installedChatModels();
         return new Catalog(chatModel(), models);

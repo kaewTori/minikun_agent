@@ -84,7 +84,6 @@ import com.minikun.weather.ReverseGeocodingService;
 @RequiredArgsConstructor(onConstructor_ = @Autowired)
 @Slf4j
 public class ChatService {
-    private static final String DEFAULT_CHAT_MODEL = "hf.co/HauhauCS/Gemma4-12B-QAT-Uncensored-HauhauCS-Balanced:Q4_K_M";
     private static final String BLANK_MODEL_RESPONSE = "ขออภัยครับ โมเดลยังไม่ได้ส่งคำตอบที่สมบูรณ์ กรุณาลองสั่งอีกครั้งครับ";
     private final ActiveChatModelProvider activeChatModelProvider;
     private final EmbeddingModel embeddingModel;
@@ -946,10 +945,7 @@ public class ChatService {
     }
 
     private String effectiveConfiguredChatModel() {
-        String chatModel = modelsService.chatModel();
-        return chatModel == null || chatModel.isBlank()
-                ? DEFAULT_CHAT_MODEL
-            : chatModel;
+        return modelsService.requireChatModel();
     }
 
 
