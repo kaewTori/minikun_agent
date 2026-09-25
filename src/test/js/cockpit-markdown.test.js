@@ -22,10 +22,16 @@ test("renders escaped model markdown as headings, rules, links, and a real table
   assert.match(html, /<h3>1\. ข่าวเศรษฐกิจ/);
   assert.match(html, /<hr>/);
   assert.match(html, /<a href="https:\/\/www\.vietnam\.vn\/th\/example"/);
-  assert.match(html, /<div class="markdown-table-wrap"><table>/);
+  assert.match(html, /<div class="markdown-table-wrap" data-mobile-layout="cards"><table data-mobile-layout="cards">/);
   assert.match(html, /<th>หัวข้อ<\/th>/);
-  assert.match(html, /<td>ทองคำ<\/td><td>ทรงตัว → นักลงทุนมองบวก<\/td>/);
+  assert.match(html, /<td data-label="หัวข้อ">ทองคำ<\/td><td data-label="สถานะ">ทรงตัว → นักลงทุนมองบวก<\/td>/);
   assert.doesNotMatch(html, /\\(?:###|---|\|)/);
+});
+
+test("marks wide tables for contained mobile scrolling", () => {
+  const html = markdown.render("| A | B | C | D |\n|---|---|---|---|\n| 1 | 2 | 3 | 4 |");
+
+  assert.match(html, /<div class="markdown-table-wrap" data-mobile-layout="scroll"><table data-mobile-layout="scroll">/);
 });
 
 test("escapes HTML and unsafe links", () => {

@@ -92,7 +92,7 @@ class PersonalContextRuntimeTest {
                     new ModelCapability(ChatModelId.EXISTING, ModelRole.CHAT, window, 4_096),
                     true, 200_000, 256, 4_096);
             assertEquals(4_096, result.generationOptions().maxTokens());
-            assertEquals(0, result.snapshot().recoveryAttempts());
+            assertEquals(1, result.snapshot().recoveryAttempts());
             assertTrue(result.snapshot().estimatedInputTokens() + 4_096 + 256 <= window);
             var messages = result.prompt().messages();
             assertEquals(history.getLast(), messages.get(messages.size() - 2));

@@ -11,11 +11,15 @@ import org.springframework.web.server.ResponseStatusException;
 
 class ConversationEvalControllerTest {
     @Test
-    void has123ReviewableThaiScenariosAndRequiresAnExplicitToken() throws Exception {
+    void has125ReviewableThaiScenariosAndRequiresAnExplicitToken() throws Exception {
         var controller = new ConversationEvalController(mock(ChatService.class), new ObjectMapper(), "token");
         var suite = controller.scenarios("token");
-        assertEquals(123, suite.size());
-        assertEquals(123, suite.stream().map(ConversationEvalController.Scenario::id).distinct().count());
+        assertEquals(125, suite.size());
+        assertEquals(125, suite.stream().map(ConversationEvalController.Scenario::id).distinct().count());
+        assertEquals(7, suite.stream().filter(row -> row.id().equals("thai-summary-lag-recall"))
+                .findFirst().orElseThrow().turns().size());
+        assertEquals(10, suite.stream().filter(row -> row.id().equals("thai-long-window-recall"))
+                .findFirst().orElseThrow().turns().size());
         assertTrue(suite.stream().allMatch(row -> !row.turns().isEmpty() && !row.rubric().isBlank()));
         assertThrows(ResponseStatusException.class, () -> controller.evaluate(suite.getFirst().id(), "wrong"));
         assertThrows(ResponseStatusException.class,

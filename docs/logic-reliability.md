@@ -41,7 +41,7 @@ MINIKUN_EVAL_JDBC_USER=minikun \
 ./mvnw -Dtest=JdbcMemoryRecallIntegrationTest test
 ```
 
-The live answer suite contains 24 conversation scenarios plus 96 Thai/temporal/reasoning scenarios in `src/main/resources/evals/`: contextual references, corrections, constraints, uncertainty, evidence, temporal updates and bounded reasoning. The controller exposes all 120 with the same isolated-owner guard. Operational recovery, confirmation stops, persistence checks, old-memory retrieval and timeouts are covered separately by automated Java tests.
+The live answer suite contains 29 conversation scenarios plus 96 Thai/temporal/reasoning scenarios in `src/main/resources/evals/`: contextual references, corrections, constraints, uncertainty, evidence, temporal updates and bounded reasoning. The controller exposes all 125 with the same isolated-owner guard. The conversation scenarios include a seven-turn rolling-summary recall check and a ten-turn long-window recall check. Operational recovery, confirmation stops, persistence checks, old-memory retrieval and timeouts are covered separately by automated Java tests.
 
 Run live evaluation against a **test deployment of this revision** with `MINIKUN_EVAL_MANAGEMENT_TOKEN` configured on both the server and shell:
 

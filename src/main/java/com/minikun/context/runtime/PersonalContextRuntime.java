@@ -94,16 +94,17 @@ public final class PersonalContextRuntime {
         Timer.Sample timer = meterRegistry == null ? null : Timer.start(meterRegistry);
         try {
             long effectiveContextCharacters = contextBudgetCharacters;
+            long maximumInputTokens = 0;
             if (dynamicTokenBudgetEnabled) {
                 TokenBudget tokenBudget = new TokenBudget(capability.contextWindowTokens(),
                         reservedOutputTokens, configuredGenerationMaxTokens);
                 long desiredOutput = dynamicGenerationOptionsFactory.desiredOutputTokens(
                         requestedOptions, capability, tokenBudget);
-                long inputTokens = Math.max(0, capability.contextWindowTokens()
+                maximumInputTokens = Math.max(0, capability.contextWindowTokens()
                         - Math.min(reservedOutputTokens, capability.contextWindowTokens()) - desiredOutput);
-                // ponytail: matches the current chars/4 counter; use a model tokenizer if measured error requires it.
+                // The measured prompt drives recovery when this ASCII pre-cap is too generous.
                 effectiveContextCharacters = Math.min(contextBudgetCharacters,
-                        inputTokens > Long.MAX_VALUE / 4 ? Long.MAX_VALUE : inputTokens * 4);
+                        maximumInputTokens > Long.MAX_VALUE / 4 ? Long.MAX_VALUE : maximumInputTokens * 4);
             }
             PromptRequest budgetedRequest = withContextBudget(request, effectiveContextCharacters);
             Prompt prompt = promptComposer.compose(budgetedRequest);
@@ -124,7 +125,13 @@ public final class PersonalContextRuntime {
                 if (recovery.required()) {
                     recoveryAttempts++;
                     recordRecovery();
-                    budgetedRequest = withContextBudget(request, recovery.targetContextCharacters());
+                    long measuredInputTokens = budgetResult.tokenBudgetDecision().inputTokens();
+                    long proportionalTarget = measuredInputTokens == 0
+                            ? recovery.targetContextCharacters()
+                            : (long) (effectiveContextCharacters
+                                    * Math.min(1.0, (double) maximumInputTokens / measuredInputTokens));
+                    budgetedRequest = withContextBudget(request,
+                            Math.min(recovery.targetContextCharacters(), proportionalTarget));
                     prompt = promptComposer.compose(budgetedRequest);
                     recordPrompt(prompt);
                     budgetResult = budget(

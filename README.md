@@ -172,7 +172,7 @@ Actuator ที่เปิดให้เข้าถึงคือ `/actuator
 | `MINIKUN_CHATGPT_COMMAND` | `codex` | executable ของ Codex CLI ที่ login ด้วย ChatGPT แล้ว |
 | `MINIKUN_CHATGPT_MODEL` | ว่าง | บังคับ model ของ ChatGPT/Codex; ว่าง = ใช้ค่าเริ่มต้นของบัญชี |
 | `MINIKUN_CHATGPT_TIMEOUT` | `PT120S` | timeout ของ peer review จาก ChatGPT |
-| `MINIKUN_MODEL_TASK_OLLAMA_MODEL` | `hf.co/mradermacher/llama3.2-typhoon2-3b-GGUF:Q4_K_M` | task model สำหรับ reflection, preference extraction และ planner; ใช้ native `/api/chat` |
+| `MINIKUN_MODEL_TASK_OLLAMA_MODEL` | `hf.co/mradermacher/llama3.2-typhoon2-3b-GGUF:Q4_K_M` | task model สำหรับ reflection, preference extraction, planner และ search decision; ใช้ native `/api/chat` |
 | `VALKEY_URL` | `redis://127.0.0.1:6379` | Valkey/Redis endpoint |
 | `MINIKUN_SEARCH_SEARXNG_URL` | `http://127.0.0.1:8888` | SearXNG endpoint |
 | `MINIKUN_SEARCH_TAVILY_ENABLED` | `true` | เปิด/ปิด Tavily provider |
@@ -292,8 +292,6 @@ Whisper Large V3 Turbo Q4 ผ่าน MLX สำหรับถอดเสี�
 | `MINIKUN_SEARCH_CACHE_PROVIDER_VERSION` | `v3` | version ของ provider ที่รวมใน cache key |
 | `MINIKUN_SEARCH_PARALLEL_QUERIES_ENABLED` | `true` | ทำ expanded search queries แบบ parallel |
 | `MINIKUN_SEARCH_PARALLEL_QUERIES_MAX_CONCURRENCY` | `3` | จำนวน search query สูงสุดที่ทำพร้อมกัน |
-| `MINIKUN_SEARCH_DECISION_OLLAMA_BASE_URL` | `http://127.0.0.1:11434` | Ollama endpoint เฉพาะ search classifier |
-| `MINIKUN_SEARCH_DECISION_OLLAMA_MODEL` | `hf.co/mradermacher/llama3.2-typhoon2-3b-GGUF:Q4_K_M` | โมเดลตัดสิน intent ที่ไม่เข้า fast path แบบชัดเจน |
 | `MINIKUN_SEARCH_DECISION_TIMEOUT` | `PT2S` | timeout เฉพาะ search classifier ก่อนใช้ rule fallback |
 | `MINIKUN_BROWSER_ENABLED` | `true` | เปิด/ปิดการอ่าน URL ผ่าน Crawl4AI |
 | `MINIKUN_CRAWL4AI_BASE_URL` | `http://127.0.0.1:11235` | endpoint ของ Crawl4AI |

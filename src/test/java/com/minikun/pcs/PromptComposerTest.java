@@ -106,6 +106,47 @@ class PromptComposerTest {
     }
 
     @Test
+    void requiredPersonaUsesFreeCapacityWithoutEvictingMemoryOrSearch() {
+        ContextBudget budget = new DefaultContextBudgetPolicy().allocate(24_000);
+        PromptRequest request = new PromptRequest(character(), new RuntimeContext("now"), null,
+                null, List.of(), new UserMessage("question"),
+                SearchSelectionSignals.EMPTY, SearchContext.EMPTY,
+                new KnowledgeSelection(List.of(
+                        new KnowledgeCandidate("memory", KnowledgeSource.MEMORY, "remembered fact", 0),
+                        new KnowledgeCandidate("search", KnowledgeSource.SEARCH, "search fact", 1)), false),
+                KnowledgeConsolidation.EMPTY, budget);
+
+        PromptCompositionResult result = new PromptComposer().composeWithDiagnostics(request);
+
+        assertFalse(result.contextProcessingResult().orElseThrow().diagnostics().requiredOverflow());
+        assertTrue(result.contextProcessingResult().orElseThrow().selection()
+                .usage(ContextBudgetSection.CHARACTER) > budget.allocation(ContextBudgetSection.CHARACTER));
+        assertTrue(result.contextProcessingResult().orElseThrow().selectedItems().stream()
+                .mapToLong(ContextItem::size).sum() <= budget.total());
+        assertTrue(result.prompt().messages().getFirst().content().contains("remembered fact"));
+        assertTrue(result.prompt().messages().getFirst().content().contains("search fact"));
+    }
+
+    @Test
+    void finalHistoryTrimLeavesAnOmissionNoteAndKeepsTheNewestTurn() {
+        List<PromptMessage> history = java.util.stream.IntStream.range(0, 8)
+                .mapToObj(index -> new PromptMessage(index % 2 == 0 ? PromptRole.USER : PromptRole.ASSISTANT,
+                        "turn-" + index + "-" + "ก".repeat(4_000)))
+                .toList();
+        PromptRequest request = new PromptRequest(character(), new RuntimeContext("now"),
+                new ConversationContext("history", "Rolling summary", history), null,
+                List.of(), new UserMessage("continue"), SearchSelectionSignals.EMPTY,
+                SearchContext.EMPTY, KnowledgeSelection.EMPTY, KnowledgeConsolidation.EMPTY,
+                new DefaultContextBudgetPolicy().allocate(24_000));
+
+        Prompt prompt = new PromptComposer().compose(request);
+
+        assertTrue(prompt.messages().getFirst().content().contains("[Earlier conversation omitted]"));
+        assertTrue(prompt.messages().stream().anyMatch(message -> message.content().startsWith("turn-7-")));
+        assertFalse(prompt.messages().stream().anyMatch(message -> message.content().startsWith("turn-0-")));
+    }
+
+    @Test
     void rejectsInvalidRequiredInputs() {
         assertThrows(PromptException.class, () -> new PromptComposer().compose(null));
         assertThrows(PromptException.class, () -> new PromptComposer().compose(
@@ -294,7 +335,7 @@ class PromptComposerTest {
 
         PromptCompositionResult result = new PromptComposer().composeWithDiagnostics(request);
 
-        assertTrue(result.contextProcessingResult().orElseThrow().diagnostics().requiredOverflow());
+        assertFalse(result.contextProcessingResult().orElseThrow().diagnostics().requiredOverflow());
         assertTrue(result.prompt().messages().getFirst().content().contains("actual post"));
     }
 
@@ -324,13 +365,13 @@ class PromptComposerTest {
         }
 
         @Test
-    void requiredOverflowRemainsVisibleAndRequiredSectionsAreNotDropped() {
+    void requiredSectionsBorrowFreeCapacityAndRemainVisible() {
         ContextBudget budget = budgetWithAllocations(1, 100_000, 100_000, 100_000, 100_000, 100_000, 100_000);
         PromptCompositionResult result = new PromptComposer().composeWithDiagnostics(requestWithBudget(
             new RuntimeContext("now"), null, new UserMessage("hello"), budget));
 
         ContextProcessingResult processing = result.contextProcessingResult().orElseThrow();
-        assertTrue(processing.diagnostics().requiredOverflow());
+        assertFalse(processing.diagnostics().requiredOverflow());
         assertTrue(result.prompt().messages().get(0).content().contains("[Character]"));
         assertEquals("hello", result.prompt().messages().get(1).content());
         }

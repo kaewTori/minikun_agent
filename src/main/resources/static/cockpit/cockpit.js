@@ -55,6 +55,7 @@
       remoteDirty: false
     },
     dashboard: {
+      timer: null,
       loading: new Map(),
       loadedAt: new Map(),
       scroll: new Map()
@@ -914,10 +915,10 @@
       const page = { experiments: "agent", inbox: "today", "conversation-threads": "agent", "permission-center": "system" }[section]
         || (cockpitPages.has(section) ? section : state.cockpitPage || "today");
       switchCockpitPage(page, section);
-      loadDashboard(state.cockpitPage, { force: false }).catch((error) => toast(error.message, true));
     }
     if (view === "studio") updateStudioPrompt();
     updateStudioRuntimePolling(view);
+    updateSystemPolling();
     if (options.updateHistory) updateViewUrl(view, section);
     if (options.focus) requestAnimationFrame(() => $("#main-content")?.focus({ preventScroll: true }));
   }
@@ -931,6 +932,8 @@
     const previousPage = state.cockpitPage;
     const allowed = new Set(["today", "agent", "memory", "system"]);
     state.cockpitPage = allowed.has(requested) ? requested : "today";
+    loadDashboard(state.cockpitPage, { force: state.cockpitPage === "system" }).catch((error) => toast(error.message, true));
+    updateSystemPolling();
     if (previousPage !== state.cockpitPage) state.dashboard.scroll.set(previousPage, window.scrollY);
     document.querySelectorAll("[data-cockpit-page]").forEach((node) => {
       const pages = String(node.dataset.cockpitPage || "").split(/\s+/);
@@ -1845,8 +1848,12 @@
   }
 
   function requiresDurableBackground(prompt) {
-    return /(deep\s*research|วิจัยเชิงลึก|ค้นคว้า(?:แบบ)?ละเอียด|(?:สร้าง|วาด|เจน|เจเนอเรต|ทำ|ออกแบบ|gen(?:erate)?|create|draw|make|design).{0,40}(?:รูป|ภาพ|images?|pictures?|illustrations?|artwork)|ทำงานเบื้องหลัง|background\s+(?:job|task))/i
+    return /(deep\s*research|วิจัยเชิงลึก|ค้นคว้า(?:แบบ)?ละเอียด|(?:สร้าง|วาด|เจน|เจเนอเรต|ทำ|ออกแบบ|gen(?:erate)?|create|draw|make|design).{0,40}(?:รูป|ภาพ|images?|pictures?|illustrations?|artwork)|(?:ช่วย(?:จด|จำ|บันทึก)|ฝาก(?:จด|จำ|บันทึก)|อย่าลืม|เพิ่ม|สร้าง|บันทึก|แก้ไข|อัปเดต|ลบ|ย้าย|ส่ง|ตั้ง|รัน|เปิด|ตรวจ|เช็ก|เช็ค|ดำเนินการ|create|add|save|update|delete|remove|move|send|schedule|run|open|check|execute).{0,40}(?:งาน|เตือน|ปฏิทิน|เป้าหมาย|ไฟล์|โฟลเดอร์|คอมพิวเตอร์|เซิร์ฟเวอร์|โฮมแล็บ|ระบบ|เว็บ|เว็บไซต์|ลิงก์|ความจำ|ข้อความ|task|reminder|calendar|goal|file|folder|computer|server|homelab|system|website|url|link|memory|message|email|portfolio|investment)|todo\s*:|ทำงานเบื้องหลัง|background\s+(?:job|task))/i
       .test(String(prompt || ""));
+  }
+
+  function shouldUseBackgroundChat(prompt, backgroundJobId = "") {
+    return Boolean(backgroundJobId) || requiresDurableBackground(prompt);
   }
 
   function updateStreamingMessage(task) {
@@ -1950,8 +1957,7 @@
         owner_id: state.ownerId,
         device_location: state.currentLocation ? { ...state.currentLocation } : null
       };
-      // ponytail: all Cockpit turns use durable polling; reintroduce foreground streaming only with reconnect/resume.
-      const useBackground = true;
+      const useBackground = shouldUseBackgroundChat(userMessage.content, backgroundJobId);
       let backgroundResult = null;
       if (!useBackground) {
         await streamChatCompletion(task, requestBody);
@@ -3200,6 +3206,15 @@
     }
   }
 
+  function updateSystemPolling() {
+    clearInterval(state.dashboard.timer);
+    state.dashboard.timer = null;
+    if (document.hidden || state.cockpitPage !== "system" || $("#cockpit-view").classList.contains("hidden")) return;
+    state.dashboard.timer = setInterval(() => {
+      return loadDashboard("system", { force: true, healthOnly: true }).catch(() => {});
+    }, 5_000);
+  }
+
   async function loadDashboard(page = state.cockpitPage, options = {}) {
     const force = options.force ?? true;
     const loadedAt = state.dashboard.loadedAt.get(page) || 0;
@@ -3237,8 +3252,8 @@
     };
 
     const operation = (async () => {
-      setSync(true, "กำลังทบทวน");
-      const entries = requests[page] || requests.today;
+      if (!options.healthOnly) setSync(true, "กำลังทบทวน");
+      const entries = options.healthOnly ? requests.system.slice(0, 1) : requests[page] || requests.today;
       const calls = await Promise.allSettled(entries.map(([, path]) => api(path)));
       const results = new Map(entries.map(([key], index) => [key, calls[index]]));
       const value = (key, fallback = []) => {
@@ -3269,15 +3284,17 @@
         renderMemorySystem(value("memories"), value("knowledge", {}), value("knowledgeSources"), learningClaims);
       } else if (page === "system") {
         renderSystemHealth(value("systemHealth", null));
-        renderEvalLab(value("evalBaseline", null), value("evalQuality", null));
-        await renderPermissions();
+        if (!options.healthOnly) {
+          renderEvalLab(value("evalBaseline", null), value("evalQuality", null));
+          await renderPermissions();
+        }
       }
 
-      state.dashboard.loadedAt.set(page, Date.now());
+      if (!options.healthOnly) state.dashboard.loadedAt.set(page, Date.now());
       const failures = calls.filter((call) => call.status === "rejected");
       if (state.cockpitPage === page) {
         setSync(failures.length === 0, failures.length ? `${failures.length} ส่วนยังไม่พร้อม` : "พร้อมดูแล");
-        if (failures.length === calls.length) {
+        if (failures.length === calls.length && !options.healthOnly) {
           setSync(false, "เชื่อมต่อไม่ได้");
           toast("เชื่อมต่อกับมินิคุงไม่ได้ครับ เปิดการตั้งค่าเพื่อตรวจอุปกรณ์และการเชื่อมต่อได้เลย", true, {
             label: "เปิดการตั้งค่า",
@@ -3790,10 +3807,13 @@
     state.audioContext?.close();
     state.sync.eventSource?.close();
     if (state.studio.runtimeTimer) clearInterval(state.studio.runtimeTimer);
+    clearInterval(state.dashboard.timer);
     stopSpeech();
   });
   document.addEventListener("visibilitychange", () => {
     updateStudioRuntimePolling($("#studio-view")?.classList.contains("hidden") ? "" : "studio");
+    updateSystemPolling();
+    if (state.dashboard.timer) loadDashboard("system", { force: true, healthOnly: true }).catch(() => {});
   });
 
   $("#open-settings").addEventListener("click", () => {

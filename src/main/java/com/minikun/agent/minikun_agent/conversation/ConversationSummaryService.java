@@ -102,14 +102,17 @@ public final class ConversationSummaryService implements AutoCloseable {
     }
 
     public Optional<String> summary(String ownerId, ConversationId conversationId) {
+        return snapshot(ownerId, conversationId).map(ConversationSummary::content);
+    }
+
+    public Optional<ConversationSummary> snapshot(String ownerId, ConversationId conversationId) {
         if (!enabled) {
             return Optional.empty();
         }
         try {
             return store.find(required(ownerId, "owner id"),
                             Objects.requireNonNull(conversationId, "conversation id must not be null"))
-                    .map(ConversationSummary::content)
-                    .filter(content -> !content.isBlank());
+                    .filter(summary -> !summary.content().isBlank());
         } catch (RuntimeException exception) {
             log.warn("process=conversation_summary event=load_failed conversation_id={}",
                     conversationId == null ? "-" : conversationId.value(), exception);
@@ -117,8 +120,15 @@ public final class ConversationSummaryService implements AutoCloseable {
         }
     }
 
-    public int recentMessageLimit() {
-        return retainedRecentMessages;
+    public int recentMessageLimit(ConversationSummary summary, List<ChatMessage> history) {
+        List<ChatMessage> messages = usable(history);
+        Set<String> covered = Set.copyOf(summary.coveredFingerprints());
+        int coveredPrefix = 0;
+        while (coveredPrefix < messages.size()
+                && covered.contains(fingerprint(messages.get(coveredPrefix)))) {
+            coveredPrefix++;
+        }
+        return Math.max(retainedRecentMessages, messages.size() - coveredPrefix);
     }
 
     /** Coalesces repeated completion events for one conversation and loads history only in the worker. */

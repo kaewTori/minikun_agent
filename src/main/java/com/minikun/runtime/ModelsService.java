@@ -20,9 +20,9 @@ public final class ModelsService {
             @Value("${spring.ai.ollama.chat.options.model:}") String chatModel,
             @Value("${spring.ai.ollama.embedding.options.model:}") String embeddingModel,
             @Value("${minikun.memory.model:}") String memoryModel,
-            @Value("${minikun.search.decision.ollama.model:}") String searchDecisionModel,
+            @Value("${minikun.model.task.ollama.model:}") String taskModel,
             @Value("${spring.ai.ollama.base-url:http://127.0.0.1:11434}") String ollamaBaseUrl) {
-        this(chatModel, embeddingModel, memoryModel, searchDecisionModel,
+        this(chatModel, embeddingModel, memoryModel, taskModel,
                 RestClient.create(ollamaBaseUrl.replaceAll("/+$", "")));
     }
 

@@ -61,7 +61,23 @@ class ConversationSummaryServiceTest {
                 (existing, messages) -> "ส".repeat(500), 120)) {
             assertTrue(service.updateNow("owner", CONVERSATION, history(5)));
             assertEquals(120, service.summary("owner", CONVERSATION).orElseThrow().length());
-            assertEquals(8, service.recentMessageLimit());
+            assertEquals(8, service.recentMessageLimit(
+                    service.snapshot("owner", CONVERSATION).orElseThrow(), history(5)));
+        }
+    }
+
+    @Test
+    void keepsTurnsThatAnAsyncSummaryHasNotCoveredYet() {
+        InMemoryStore store = new InMemoryStore();
+        try (ConversationSummaryService service = service(store,
+                (existing, messages) -> "summary", 1_800)) {
+            assertTrue(service.updateNow("owner", CONVERSATION, history(5)));
+            ConversationSummary stale = service.snapshot("owner", CONVERSATION).orElseThrow();
+            assertEquals(10, service.recentMessageLimit(stale, history(6)));
+
+            assertTrue(service.updateNow("owner", CONVERSATION, history(6)));
+            assertEquals(8, service.recentMessageLimit(
+                    service.snapshot("owner", CONVERSATION).orElseThrow(), history(6)));
         }
     }
 

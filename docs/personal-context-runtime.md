@@ -13,8 +13,13 @@ PromptRequest
 ```
 
 The runtime currently performs one bounded recovery pass. It reduces the
-character context budget to 75% when the token-pressure analyzer reports a
-warning or critical state, then composes the prompt and token options again.
+character context budget to 75% or the measured token-fit ratio, whichever is
+smaller, when the token-pressure analyzer reports a warning or critical state.
+Token estimates give non-ASCII text a larger allowance than ASCII and account
+for code/JSON punctuation, calibrated against the configured local model.
+Required prompt sections can borrow unused character quotas before optional
+memory or knowledge is evicted. Recent role messages use remaining total prompt
+space after rendered system context and the current user message.
 
 Future context sources such as memory, search, browser, and tools should enter
 through `PromptRequest`/context items rather than adding orchestration branches

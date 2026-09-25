@@ -87,6 +87,15 @@ final class PromptRenderer {
                     remaining -= size;
                     start--;
                 }
+                if (start > 0 && !system.contains("[Earlier conversation omitted]")) {
+                    String omission = "\n\n[Earlier conversation omitted]";
+                    while (start < history.size() && remaining < omission.length()) {
+                        remaining += history.get(start++).content().length() + 1L;
+                    }
+                    if (remaining >= omission.length()) {
+                        messages.set(0, new PromptMessage(PromptRole.SYSTEM, system + omission));
+                    }
+                }
             }
             messages.addAll(history.subList(start, history.size()));
         }

@@ -11,6 +11,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.minikun.pcs.KnowledgeCandidate;
 import com.minikun.pcs.KnowledgeSource;
 import com.minikun.pcs.model.KnowledgeContext;
+import com.minikun.model.task.TaskModelProvider;
 import com.minikun.search.SearchService;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
@@ -53,7 +54,7 @@ class InvestmentMonitoringServiceTest {
                 0, "https://news.test/amzn-1"))));
         InMemoryMonitorStore store = new InMemoryMonitorStore();
         InvestmentMonitoringService monitoring = new InvestmentMonitoringService(
-                investments, externalWithoutMarketKey(), store, search, new ObjectMapper(),
+                investments, externalWithoutMarketKey(), store, search, mock(TaskModelProvider.class), new ObjectMapper(),
                 Clock.fixed(NOW, ZoneOffset.UTC), java.time.Duration.ofSeconds(1), 3, 8, 48, "UTC",
                 8, 3, java.time.Duration.ofHours(72));
 
@@ -76,7 +77,7 @@ class InvestmentMonitoringServiceTest {
         store.deliveredDate = LocalDate.of(2026, 9, 11);
         InvestmentMonitoringService monitoring = new InvestmentMonitoringService(
                 mock(InvestmentService.class), externalWithoutMarketKey(), store, mock(SearchService.class),
-                new ObjectMapper(), Clock.fixed(NOW, ZoneOffset.UTC), java.time.Duration.ofSeconds(1),
+                mock(TaskModelProvider.class), new ObjectMapper(), Clock.fixed(NOW, ZoneOffset.UTC), java.time.Duration.ofSeconds(1),
                 1, 8, 48, "UTC", 8, 3, java.time.Duration.ofHours(72));
 
         assertTrue(monitoring.prepareDaily("owner-a").isEmpty());
@@ -119,13 +120,13 @@ class InvestmentMonitoringServiceTest {
 
         InMemoryMonitorStore store = new InMemoryMonitorStore();
         InvestmentMonitoringService firstDay = new InvestmentMonitoringService(
-                investments, external, store, mock(SearchService.class), new ObjectMapper(),
+                investments, external, store, mock(SearchService.class), mock(TaskModelProvider.class), new ObjectMapper(),
                 Clock.fixed(NOW, ZoneOffset.UTC), java.time.Duration.ofSeconds(1), 1, 8, 48, "UTC",
                 8, 3, java.time.Duration.ofHours(72));
         Map<?, ?> firstSnapshot = (Map<?, ?>) firstDay.refresh("owner-a").get("market_snapshot");
 
         InvestmentMonitoringService secondDay = new InvestmentMonitoringService(
-                investments, external, store, mock(SearchService.class), new ObjectMapper(),
+                investments, external, store, mock(SearchService.class), mock(TaskModelProvider.class), new ObjectMapper(),
                 Clock.fixed(NOW.plus(java.time.Duration.ofDays(1)), ZoneOffset.UTC), java.time.Duration.ofSeconds(1),
                 1, 8, 48, "UTC", 8, 3, java.time.Duration.ofHours(72));
         Map<?, ?> secondSnapshot = (Map<?, ?>) secondDay.refresh("owner-a").get("market_snapshot");
@@ -157,9 +158,11 @@ class InvestmentMonitoringServiceTest {
                 List.of(new PortfolioPosition("AMZN", "Amazon", "EQUITY", "USD", BigDecimal.ONE,
                         BigDecimal.valueOf(100), BigDecimal.valueOf(100), BigDecimal.valueOf(100),
                         BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO)), policy, List.of());
+        TaskModelProvider summarizer = mock(TaskModelProvider.class);
+        when(summarizer.generate(any())).thenReturn("{\"summary\":\"รายได้เติบโต 12% เมื่อเทียบกับปีก่อน สะท้อนผลประกอบการที่ดีขึ้นของ AMZN\"}");
         InvestmentMonitoringService monitoring = new InvestmentMonitoringService(
                 mock(InvestmentService.class), externalWithoutMarketKey(), new InMemoryMonitorStore(),
-                mock(SearchService.class), new ObjectMapper(), Clock.fixed(now, ZoneOffset.UTC),
+                mock(SearchService.class), summarizer, new ObjectMapper(), Clock.fixed(now, ZoneOffset.UTC),
                 java.time.Duration.ofSeconds(1), 1, 8, 48, "UTC", 8, 3, java.time.Duration.ofHours(72));
         String url = "https://news.test/amzn-1";
         String message = monitoring.formatBrief(Map.of(
@@ -175,7 +178,8 @@ class InvestmentMonitoringServiceTest {
 
         assertTrue(message.contains("พอร์ต: 1 สินทรัพย์"));
         assertTrue(message.contains("ต้นทุนคงค้าง 100 USD"));
-        assertTrue(message.contains("สรุป: Revenue grew 12% year over year."));
+        assertTrue(message.contains("สรุป: รายได้เติบโต 12% เมื่อเทียบกับปีก่อน สะท้อนผลประกอบการที่ดีขึ้นของ AMZN"));
+        assertFalse(message.contains("Revenue grew 12% year over year."));
         assertFalse(message.contains(url));
     }
 
@@ -183,12 +187,13 @@ class InvestmentMonitoringServiceTest {
     void keepsTheReminderWithinThePushMessageLimit() {
         InvestmentMonitoringService monitoring = new InvestmentMonitoringService(
                 mock(InvestmentService.class), externalWithoutMarketKey(), new InMemoryMonitorStore(),
-                mock(SearchService.class), new ObjectMapper(), Clock.fixed(NOW, ZoneOffset.UTC),
+                mock(SearchService.class), mock(TaskModelProvider.class), new ObjectMapper(), Clock.fixed(NOW, ZoneOffset.UTC),
                 java.time.Duration.ofSeconds(1), 1, 8, 48, "UTC", 8, 3, java.time.Duration.ofHours(72));
         List<Map<String, Object>> events = java.util.stream.IntStream.range(0, 8)
                 .mapToObj(index -> Map.<String, Object>of(
                         "symbol", "AMZN", "title", "ข่าวสำคัญ ".repeat(80),
-                        "summary", "สรุปข้อมูลตลาด ".repeat(80), "materiality", "HIGH"))
+                        "summary", "สรุปข้อมูลตลาด ".repeat(80),
+                        "brief_summary", "สรุปข้อมูลตลาด ".repeat(80), "materiality", "HIGH"))
                 .toList();
 
         String message = monitoring.formatBrief(Map.of(

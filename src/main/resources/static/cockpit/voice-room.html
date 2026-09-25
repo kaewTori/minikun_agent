@@ -7,8 +7,9 @@
   <meta name="description" content="Minikun Voice Room — ห้องคุยสดกับมินิคุง">
   <title>Minikun Voice Room</title>
   <link rel="icon" href="/cockpit/minikun-avatar.jpg">
-  <link rel="stylesheet" href="/cockpit/minikun-system.css?v=20260919-system2">
-  <link rel="stylesheet" href="/cockpit/voice-room.css?v=20260919-redesign2">
+  <link rel="stylesheet" href="/cockpit/minikun-system.css?v=20260922-minimal">
+  <link rel="stylesheet" href="/cockpit/voice-room.css?v=20260922-minimal">
+  <link rel="stylesheet" href="/cockpit/minikun-minimal.css?v=20260924-settings">
 </head>
 <body>
   <a class="skip-link" href="#main-content">ข้ามไปยังเนื้อหาหลัก</a>
@@ -87,9 +88,9 @@
             </div>
 
             <div class="stage-controls">
-              <button class="primary-action" id="quick-talk" type="button"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10.5a5 5 0 0 1 10 0v4a5 5 0 0 1-10 0Z"></path><path d="M4.5 12v2.5M19.5 12v2.5M12 5.5v2"></path></svg>ลองคุยหนึ่ง turn</button>
+              <button class="primary-action" id="quick-talk" type="button"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10.5a5 5 0 0 1 10 0v4a5 5 0 0 1-10 0Z"></path><path d="M4.5 12v2.5M19.5 12v2.5M12 5.5v2"></path></svg>ลองคุยกัน</button>
               <button class="secondary-action" id="stop-speaking" type="button" disabled><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="2"></rect></svg><span>หยุดเสียง</span></button>
-              <button class="secondary-action cancel-action" id="cancel-turn" type="button" hidden><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m7 7 10 10M17 7 7 17"></path></svg><span>ยกเลิก turn</span></button>
+              <button class="secondary-action cancel-action" id="cancel-turn" type="button" hidden><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m7 7 10 10M17 7 7 17"></path></svg><span>ยกเลิกคำตอบ</span></button>
             </div>
             <form class="message-composer" id="message-form">
               <label for="message-input">คุยกับมินิคุง</label>
@@ -100,13 +101,13 @@
               </div>
               <div class="composer-meta"><div class="prompt-chips"><button class="prompt-chip" type="button" data-prompt="ช่วยจัดลำดับสิ่งที่ควรทำคืนนี้">จัดลำดับคืนนี้</button><button class="prompt-chip" type="button" data-prompt="เล่าเรื่องสั้น ๆ ให้ฟังหน่อย">เล่าเรื่องให้ฟัง</button></div><button class="mode-toggle" id="conversation-mode" type="button" aria-pressed="true"><span class="mode-dot"></span><span id="conversation-mode-label">คุยสด</span></button><span id="conversation-mode-hint">พูดจบแล้วส่งให้อัตโนมัติ</span><span>Enter ส่ง · Shift+Enter ขึ้นบรรทัดใหม่</span></div>
             </form>
-            <p class="stage-footnote">ทุก turn จะซิงก์กลับไปที่หน้าแชตหลักให้เปิดดูย้อนหลังได้</p>
+            <p class="stage-footnote">กลับมาอ่านบทสนทนานี้ต่อได้ที่หน้าแชต</p>
           </section>
 
           <div class="side-stack">
             <details class="voice-deck" id="voice-deck">
               <summary class="panel-header voice-deck-summary">
-                <div><div class="panel-kicker">TTS CONTROL DECK</div><h2 id="voice-deck-title">จังหวะเสียง</h2></div>
+                <div><div class="panel-kicker">ปรับเสียงให้ถูกใจ</div><h2 id="voice-deck-title">จังหวะเสียง</h2></div>
                 <div class="summary-actions"><span class="deck-status" id="deck-status">READY</span><span class="summary-chevron" aria-hidden="true">⌄</span></div>
               </summary>
 
@@ -133,7 +134,7 @@
                 <div><div class="panel-kicker">CHAT SYNC <span class="live-dot"></span></div><h2 id="sync-title">ประวัติอยู่ที่หน้าแชต</h2></div>
                 <span class="deck-status" id="sync-status">LOCAL</span>
               </header>
-              <p class="sync-copy">ห้องเสียงเน้นการคุยสดกับ avatar ทุก turn จะ sync กลับไปที่บทสนทนาหลักโดยอัตโนมัติ ไม่ต้องยัด history ไว้ในหน้านี้</p>
+              <p class="sync-copy">คุยแล้วกลับมาอ่านต่อได้ บทสนทนาเสียงจะบันทึกไว้ในแชตเดียวกันครับ</p>
               <div class="sync-summary"><span class="sync-orb"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 0 1 13.7-5.6M20 12a8 8 0 0 1-13.7 5.6"></path><path d="M17 3v4h-4M7 21v-4h4"></path></svg></span><div><span>VOICE SESSION</span><strong id="sync-turns">2 turns พร้อมซิงก์</strong></div></div>
               <button class="sync-link" id="open-chat-history" type="button">เปิดประวัติในหน้าแชตหลัก<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6"></path></svg></button>
             </section>

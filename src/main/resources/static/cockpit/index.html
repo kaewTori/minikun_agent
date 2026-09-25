@@ -7,8 +7,9 @@
   <meta name="description" content="Minikun — ผู้ช่วยส่วนตัวที่คุย คิด ค้นหา และลงมือทำร่วมกับคุณ">
   <title>Minikun</title>
   <link rel="icon" href="/cockpit/minikun-avatar.jpg">
-  <link rel="stylesheet" href="/cockpit/minikun-system.css?v=20260919-system2">
-  <link rel="stylesheet" href="/cockpit/cockpit.css?v=20260919-redesign2">
+  <link rel="stylesheet" href="/cockpit/minikun-system.css?v=20260922-minimal">
+  <link rel="stylesheet" href="/cockpit/cockpit.css?v=20260922-minimal">
+  <link rel="stylesheet" href="/cockpit/minikun-minimal.css?v=20260924-settings">
 </head>
 <body>
   <a class="skip-link" href="#main-content">ข้ามไปยังเนื้อหาหลัก</a>
@@ -58,8 +59,8 @@
           <section class="chat-welcome" id="chat-welcome" aria-labelledby="welcome-title">
             <div class="hero-avatar-wrap"><img src="/cockpit/minikun-avatar.jpg" alt="มินิคุง" class="hero-avatar"><span class="hero-presence"></span></div>
             <p class="eyebrow">YOUR PERSONAL AGENT</p>
-            <h1 id="welcome-title">คุยกับมินิคุงได้ทุกเรื่องครับ</h1>
-            <p>คิด วางแผน ค้นข้อมูล ดูแล homelab จัดการงานและปฏิทิน—ถ้าต้องลงมือจริง มินิคุงจะขออนุญาตก่อนเสมอ</p>
+            <h1 id="welcome-title">วันนี้ ให้มินิคุงช่วยอะไรดีครับ</h1>
+            <p>คุยเล่น คิดงาน หรือวางแผนไปด้วยกัน เริ่มจากเรื่องที่อยู่ในใจได้เลย</p>
             <div class="starter-grid" aria-label="คำแนะนำเริ่มต้น">
               <button type="button" data-prompt="ช่วยสรุปสิ่งสำคัญที่ฉันควรโฟกัสวันนี้"><span aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg></span><strong>โฟกัสวันนี้</strong><small>งาน เป้าหมาย และเรื่องเร่งด่วน</small></button>
               <button type="button" data-prompt="ช่วยตรวจสุขภาพ homelab และสรุปเฉพาะสิ่งที่ควรรู้"><span aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24"><path d="M3 12h4l2-5 4 10 2-5h6"/></svg></span><strong>ดูแล Homelab</strong><small>ตรวจสุขภาพและอธิบายความเสี่ยง</small></button>
@@ -97,6 +98,8 @@
           <button class="secondary-button studio-board-button" id="studio-open-boards" type="button"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="m6 16 4-4 3 3 2-2 3 3"/></svg> บอร์ดแรงบันดาลใจ</button>
         </header>
 
+        <details class="studio-runtime-details">
+          <summary>สถานะระบบสร้างภาพ</summary>
         <section class="studio-runtime-tab" id="studio-runtime" data-state="loading" aria-label="สถานะ TinyGrad แบบเรียลไทม์">
           <div class="studio-runtime-identity">
             <span class="studio-runtime-dot" aria-hidden="true"><i></i></span>
@@ -118,6 +121,7 @@
           </div>
         </section>
 
+        </details>
         <div class="studio-workbench">
           <form class="prompt-lab" id="studio-form">
             <section class="studio-conversation" aria-labelledby="studio-conversation-title">
@@ -399,7 +403,7 @@
   </dialog>
   <script src="/cockpit/cockpit-core.js?v=20260913-core2" defer></script>
   <script src="/cockpit/cockpit-chat-assets.js?v=20260828-storage1" defer></script>
-  <script src="/cockpit/cockpit-markdown.js?v=20260829-markdown1" defer></script>
-  <script src="/cockpit/cockpit.js?v=20260919-redesign1" defer></script>
+  <script src="/cockpit/cockpit-markdown.js?v=20260920-markdown2" defer></script>
+  <script src="/cockpit/cockpit.js?v=20260922-system-live" defer></script>
 </body>
 </html>

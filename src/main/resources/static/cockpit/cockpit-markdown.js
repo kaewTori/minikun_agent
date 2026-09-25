@@ -110,6 +110,7 @@
   function renderTable(lines, start) {
     const headers = splitTableRow(lines[start]);
     const alignments = splitTableRow(lines[start + 1]).map(tableAlignment);
+    const mobileLayout = headers.length <= 3 ? "cards" : "scroll";
     const rows = [];
     let index = start + 2;
     while (index < lines.length && lines[index].trim() && lines[index].includes("|")) {
@@ -118,9 +119,9 @@
     }
     const cellStyle = (column) => alignments[column] ? ` style="text-align:${alignments[column]}"` : "";
     const head = headers.map((cell, column) => `<th${cellStyle(column)}>${renderInline(cell)}</th>`).join("");
-    const body = rows.map((row) => `<tr>${headers.map((_, column) => `<td${cellStyle(column)}>${renderInline(row[column] || "")}</td>`).join("")}</tr>`).join("");
+    const body = rows.map((row) => `<tr>${headers.map((header, column) => `<td${cellStyle(column)} data-label="${escapeHtml(header)}">${renderInline(row[column] || "")}</td>`).join("")}</tr>`).join("");
     return {
-      html: `<div class="markdown-table-wrap"><table><thead><tr>${head}</tr></thead>${body ? `<tbody>${body}</tbody>` : ""}</table></div>`,
+      html: `<div class="markdown-table-wrap" data-mobile-layout="${mobileLayout}"><table data-mobile-layout="${mobileLayout}"><thead><tr>${head}</tr></thead>${body ? `<tbody>${body}</tbody>` : ""}</table></div>`,
       next: index
     };
   }

@@ -24,6 +24,7 @@ import com.minikun.agent.minikun_agent.conversation.ChatMessage;
 import com.minikun.agent.minikun_agent.conversation.ConversationId;
 import com.minikun.agent.minikun_agent.conversation.ConversationMemoryService;
 import com.minikun.agent.minikun_agent.conversation.ConversationSummaryService;
+import com.minikun.agent.minikun_agent.conversation.ConversationSummary;
 import com.minikun.commands.CommandCatalog;
 import com.minikun.commands.CommandFormatter;
 import com.minikun.diagnostics.DiagnosticsFormatter;
@@ -646,7 +647,7 @@ public class ChatService {
         String ownerId = memoryOwnerId(request, conversationId);
         java.util.concurrent.Future<CompanionModeContext> interactionModeFuture = OptionalContextBudget.start(
                 () -> companionModeFor(ownerId, conversationId, userMessage.content()));
-        java.util.concurrent.Future<String> summaryFuture = OptionalContextBudget.start(
+        java.util.concurrent.Future<Optional<ConversationSummary>> summaryFuture = OptionalContextBudget.start(
                 () -> conversationSummary(ownerId, conversationId));
         long conversationStarted = System.nanoTime();
         List<ChatMessage> history;
@@ -666,8 +667,9 @@ public class ChatService {
         requestContext.requireRemaining("companion");
         CompanionModeContext interactionMode = OptionalContextBudget.await(interactionModeFuture, contextDeadline, null,
                 "companion_wait", performanceMetrics);
-        String conversationSummary = OptionalContextBudget.await(summaryFuture, contextDeadline, "",
-                "summary_wait", performanceMetrics);
+        Optional<ConversationSummary> summarySnapshot = OptionalContextBudget.await(
+                summaryFuture, contextDeadline, Optional.empty(), "summary_wait", performanceMetrics);
+        String conversationSummary = summarySnapshot.map(ConversationSummary::content).orElse("");
         String classifierContext = classifierContext(history);
         TurnPlan turnPlan = turnPlanner.plan(userMessage.content(), classifierContext, interactionMode,
                 visionInput != null && visionInput.hasImages(), verifiedToolResult,
@@ -678,8 +680,9 @@ public class ChatService {
                         transaction.requestId(), conversationId, requestContext)
                 : VisionSearchQueryService.Result.EMPTY;
         requestContext.requireRemaining("knowledge");
-        int recentMessageLimit = conversationSummary.isBlank() || conversationSummaryService == null
-                ? Integer.MAX_VALUE : conversationSummaryService.recentMessageLimit();
+        int recentMessageLimit = summarySnapshot.isEmpty() || conversationSummaryService == null
+                ? Integer.MAX_VALUE
+                : conversationSummaryService.recentMessageLimit(summarySnapshot.get(), history);
         ChatKnowledgeSelection knowledgeSelection = knowledgeResolver().resolve(
                 new ChatKnowledgeResolver.Request(
                         userMessage.content(), transaction.requestId(), conversationId, ownerId,
@@ -895,10 +898,10 @@ public class ChatService {
             return null;
         }
     }
-    private String conversationSummary(String ownerId, ConversationId conversationId) {
-        if (conversationSummaryService == null) return "";
+    private Optional<ConversationSummary> conversationSummary(String ownerId, ConversationId conversationId) {
+        if (conversationSummaryService == null) return Optional.empty();
         // OptionalContextBudget supplies fallback and records the failure at the await boundary.
-        return conversationSummaryService.summary(ownerId, conversationId).orElse("");
+        return conversationSummaryService.snapshot(ownerId, conversationId);
     }
     private void recordExplainability(String ownerId, ConversationId conversationId, String responseId,
             ChatExplainabilityRecorder.Context context) {

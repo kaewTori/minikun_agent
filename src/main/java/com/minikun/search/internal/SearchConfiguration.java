@@ -11,7 +11,6 @@ import com.minikun.search.SearchCache;
 import com.minikun.search.SearchContextAwarenessService;
 import com.minikun.search.SearchDecisionProvider;
 import com.minikun.search.SearchService;
-import com.minikun.model.task.OllamaTaskModelProvider;
 import com.minikun.model.task.TaskModelProvider;
 import java.net.http.HttpClient;
 import java.time.Clock;
@@ -171,27 +170,9 @@ public class SearchConfiguration {
 
     @Bean
     SearchDecisionProvider searchDecisionProvider(
+            TaskModelProvider taskModelProvider,
             ObjectMapper objectMapper,
-            @Value("${minikun.search.decision.ollama.base-url:http://127.0.0.1:11434}") String baseUrl,
-            @Value("${minikun.search.decision.ollama.model:hf.co/mradermacher/llama3.2-typhoon2-3b-GGUF:Q4_K_M}")
-                    String model,
-            @Value("${minikun.search.decision.connect-timeout:PT5S}") Duration connectTimeout,
-            @Value("${minikun.search.decision.read-timeout:PT120S}") Duration readTimeout,
-            @Value("${minikun.search.decision.timeout:PT15S}") Duration timeout) {
-        HttpClient httpClient = HttpClient.newBuilder()
-                .connectTimeout(connectTimeout)
-                .build();
-        JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(httpClient);
-        requestFactory.setReadTimeout(readTimeout);
-        String normalizedBaseUrl = baseUrl.endsWith("/")
-                ? baseUrl.substring(0, baseUrl.length() - 1)
-                : baseUrl;
-        RestClient restClient = RestClient.builder()
-                .baseUrl(normalizedBaseUrl + "/v1/chat/completions")
-                .requestFactory(requestFactory)
-                .build();
-        TaskModelProvider taskModelProvider = new OllamaTaskModelProvider(
-                restClient, objectMapper, model, readTimeout);
+            @Value("${minikun.search.decision.timeout:PT2S}") Duration timeout) {
         return new TaskModelSearchDecisionProvider(taskModelProvider, objectMapper, timeout);
     }
 

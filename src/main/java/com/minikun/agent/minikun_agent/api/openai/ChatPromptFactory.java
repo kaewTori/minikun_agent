@@ -160,16 +160,23 @@ final class ChatPromptFactory {
                 .filter(this::hasText)
                 .reduce((left, right) -> left + "\n\n" + right)
                 .orElse("Current date: " + LocalDate.now());
-        long conversationBudget = new DefaultContextBudgetPolicy()
-                .allocate(effectiveContextBudgetCharacters)
-                .allocation(ContextBudgetSection.CONVERSATION);
-        String summarySection = summarySection(input.conversationSummary(), conversationBudget);
-        long recentConversationBudget = Math.max(0L, conversationBudget
+        var contextBudget = new DefaultContextBudgetPolicy().allocate(effectiveContextBudgetCharacters);
+        long summaryBudget = contextBudget.allocation(ContextBudgetSection.CONVERSATION);
+        String summarySection = summarySection(input.conversationSummary(), summaryBudget);
+        // Recent role messages use the space left after the rendered system context.
+        long recentConversationBudget = Math.max(0L, effectiveContextBudgetCharacters
                 - summarySection.length()
                 - (summarySection.isBlank() ? 0 : "\n\nRecent turns:\n".length()));
         ConversationHistoryWindow.Result conversationWindow = conversationHistoryWindow.build(
                 request, input.history(), this::isCommandMessage, recentConversationBudget,
                 input.recentMessageLimit());
+        if (!summarySection.isBlank()
+                && conversationWindow.source() == ConversationHistoryWindow.Source.CLIENT) {
+            // The visible transcript may be an edited branch; its old summary is no longer trustworthy.
+            summarySection = "";
+            conversationWindow = conversationHistoryWindow.build(
+                    request, input.history(), this::isCommandMessage, effectiveContextBudgetCharacters);
+        }
         String conversation = combineConversation(summarySection, conversationWindow.content());
         String conversationSystemContent = conversationSystemContent(
                 summarySection, conversationWindow.omittedMessages());
@@ -184,7 +191,7 @@ final class ChatPromptFactory {
                         + "selected_chars={} budget_chars={}",
                 conversationWindow.source(), conversationWindow.inputMessages(),
                 conversationWindow.selectedMessages(), conversationWindow.omittedMessages(),
-                summarySection.length(), conversation.length(), conversationBudget);
+                summarySection.length(), conversation.length(), recentConversationBudget);
 
         boolean factFirstToolTurn = isVerifiedToolResult(input.verifiedToolResult());
         String conversationContent = conversation;

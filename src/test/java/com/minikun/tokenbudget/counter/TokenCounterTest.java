@@ -24,6 +24,18 @@ class TokenCounterTest {
     }
 
     @Test
+    void givesThaiTextMoreTokensThanAsciiWithoutUsingFullUtf8ByteCost() {
+        assertEquals(9, counter.count("สวัสดี".repeat(4)));
+    }
+
+    @Test
+    void accountsForCodeAndJsonSyntax() {
+        assertEquals(7, counter.count("{\"role\":\"user\"}"));
+        assertEquals(99, counter.count(("public static int sum(int[] values) { int total = 0; "
+                + "for (int value : values) total += value; return total; } ").repeat(3)));
+    }
+
+    @Test
     void roundsShortTextUpToOneToken() {
         assertEquals(1, counter.count("abc"));
     }

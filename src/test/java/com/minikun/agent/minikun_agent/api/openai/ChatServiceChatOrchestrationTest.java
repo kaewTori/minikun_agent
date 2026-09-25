@@ -22,6 +22,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.model.ChatModel;
@@ -42,6 +44,7 @@ import com.minikun.agent.minikun_agent.conversation.ChatMessage;
 import com.minikun.agent.minikun_agent.conversation.ConversationId;
 import com.minikun.agent.minikun_agent.conversation.ConversationMemoryService;
 import com.minikun.agent.minikun_agent.conversation.ConversationSummaryService;
+import com.minikun.agent.minikun_agent.conversation.ConversationSummary;
 import com.minikun.model.ChatModelProviderRegistry;
 import com.minikun.model.ActiveChatModelProvider;
 import com.minikun.model.ActiveModelConfiguration;
@@ -435,12 +438,13 @@ class ChatServiceChatOrchestrationTest {
         assertTrue(text.contains("พี่สาววางแผนจะออกจากบ้านพรุ่งนี้เช้าครับ"));
     }
 
-    @Test
-    void longConversationKeepsRecentTurnsInsteadOfDroppingAllHistory() {
+    @ParameterizedTest
+    @ValueSource(ints = {8, 16, 32})
+    void longConversationUsesAvailablePromptSpaceBeforeDroppingHistory(int turns) {
         ChatModel chatModel = mock(ChatModel.class);
         ConversationMemoryService conversation = mock(ConversationMemoryService.class);
         List<ChatMessage> history = new java.util.ArrayList<>();
-        for (int turn = 0; turn < 12; turn++) {
+        for (int turn = 0; turn < turns; turn++) {
             history.add(new ChatMessage("user", "question-" + turn + "-" + "ก".repeat(500)));
             history.add(new ChatMessage("assistant", "answer-" + turn + "-" + "ข".repeat(500)));
         }
@@ -456,11 +460,15 @@ class ChatServiceChatOrchestrationTest {
         ArgumentCaptor<Prompt> prompt = ArgumentCaptor.forClass(Prompt.class);
         verify(chatModel).call(prompt.capture());
         String text = promptText(prompt.getValue());
-        assertTrue(text.contains("[Conversation]"));
-        assertTrue(text.contains("answer-11-"));
-        assertTrue(text.contains("question-11-"));
-        assertTrue(text.contains("Earlier conversation omitted"));
-        assertFalse(text.contains("question-0-"));
+        assertTrue(text.contains("answer-" + (turns - 1) + "-"));
+        assertTrue(text.contains("question-" + (turns - 1) + "-"));
+        if (turns <= 16) {
+            assertTrue(text.contains("question-0-"));
+            assertFalse(text.contains("Earlier conversation omitted"));
+        } else {
+            assertFalse(text.contains("question-0-"));
+            assertTrue(text.contains("Earlier conversation omitted"));
+        }
     }
 
     @Test
@@ -606,9 +614,10 @@ class ChatServiceChatOrchestrationTest {
                 new ChatMessage("assistant", "old-answer"),
                 new ChatMessage("user", "recent-question"),
                 new ChatMessage("assistant", "recent-answer")));
-        when(summaries.summary("default", conversationId))
-                .thenReturn(Optional.of("- ก่อนหน้านี้พี่เลือกแนวทาง A"));
-        when(summaries.recentMessageLimit()).thenReturn(2);
+        when(summaries.snapshot("default", conversationId)).thenReturn(Optional.of(
+                new ConversationSummary("default", conversationId,
+                        "- ก่อนหน้านี้พี่เลือกแนวทาง A", List.of(), 2, java.time.Instant.now())));
+        when(summaries.recentMessageLimit(any(), anyList())).thenReturn(2);
         when(chatModel.call(any(Prompt.class))).thenReturn(response("ต่อจากแนวทาง A ครับ"));
         ChatService service = service(chatModel, conversation);
         setField(service, "conversationSummaryService", summaries);
@@ -626,6 +635,39 @@ class ChatServiceChatOrchestrationTest {
         assertTrue(text.contains("recent-answer"));
         assertFalse(text.contains("old-question"));
         verify(summaries).schedule(any(), any(), any());
+    }
+
+    @Test
+    void editedClientTranscriptDoesNotInheritStoredRollingSummary() throws Exception {
+        ChatModel chatModel = mock(ChatModel.class);
+        ConversationMemoryService conversation = mock(ConversationMemoryService.class);
+        ConversationSummaryService summaries = mock(ConversationSummaryService.class);
+        ConversationId conversationId = new ConversationId("edited-conversation");
+        when(conversation.load(any())).thenReturn(List.of(
+                new ChatMessage("user", "old path"),
+                new ChatMessage("assistant", "old choice")));
+        when(summaries.snapshot("default", conversationId)).thenReturn(Optional.of(
+                new ConversationSummary("default", conversationId,
+                        "- old choice is final", List.of(), 2, java.time.Instant.now())));
+        when(summaries.recentMessageLimit(any(), anyList())).thenReturn(2);
+        when(chatModel.call(any(Prompt.class))).thenReturn(response("new answer"));
+        ChatService service = service(chatModel, conversation);
+        setField(service, "conversationSummaryService", summaries);
+
+        service.chatCompletion(new ChatCompletionRequest(
+                "mini-kun", List.of(
+                        new Message("user", "new path"),
+                        new Message("assistant", "new choice"),
+                        new Message("user", "continue")),
+                conversationId.value(), false, null, null, null), conversationId);
+
+        ArgumentCaptor<Prompt> prompt = ArgumentCaptor.forClass(Prompt.class);
+        verify(chatModel).call(prompt.capture());
+        String text = promptText(prompt.getValue());
+        assertTrue(text.contains("new path"));
+        assertTrue(text.contains("new choice"));
+        assertFalse(text.contains("old choice"));
+        assertFalse(text.contains("Rolling summary"));
     }
 
     @Test
