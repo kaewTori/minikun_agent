@@ -418,7 +418,7 @@
         ? existing.title : conversationTitle(state.messages.find((message) => message.role === 'user')?.content),
       pinned: Boolean(existing.pinned),
       archived: Boolean(existing.archived),
-      updatedAt: Date.now(),
+      updatedAt: existing.updatedAt || Date.now(),
       messages: state.messages.slice(-80)
     };
   }
@@ -427,12 +427,25 @@
     return Core.syncPayload(localPayload());
   }
 
+  function pendingSyncIds() {
+    try {
+      const values = JSON.parse(localStorage.getItem('minikun.sync-pending') || '[]');
+      return Array.isArray(values) ? values : [];
+    } catch (_) { return []; }
+  }
+
   function saveLocal(seed = '') {
     const values = loadLocalConversations().filter((value) => value.id !== state.conversationId);
     const conversation = localPayload();
     if (seed && conversation.title === 'แชตใหม่') conversation.title = conversationTitle(seed);
+    conversation.updatedAt = Date.now();
     values.unshift(conversation);
     try { localStorage.setItem('minikun.conversations', JSON.stringify(values.slice(0, 40))); } catch (_) { /* local history is best effort */ }
+    try {
+      localStorage.setItem('minikun.sync-pending', JSON.stringify([...new Set([
+        ...pendingSyncIds(), state.conversationId
+      ])]));
+    } catch (_) { syncStatus.textContent = 'RETRY'; }
     localStorage.setItem('minikun.voice-conversation', state.conversationId);
     updateConversationCount();
     scheduleSync();
@@ -448,9 +461,16 @@
     if (!state.paired) return false;
     syncStatus.textContent = 'SYNCING';
     try {
+      const payload = syncPayload();
       await syncApi(`/v1/sync/conversations/${encodeURIComponent(state.conversationId)}`, {
-        method: 'PUT', json: syncPayload()
+        method: 'PUT', json: payload
       });
+      if (JSON.stringify(syncPayload()) !== JSON.stringify(payload)) {
+        scheduleSync();
+        return false;
+      }
+      localStorage.setItem('minikun.sync-pending', JSON.stringify(
+        pendingSyncIds().filter((id) => id !== state.conversationId)));
       syncStatus.textContent = 'SYNCED';
       return true;
     } catch (error) {
@@ -488,6 +508,7 @@
         return;
       }
       state.paired = true;
+      if (pendingSyncIds().includes(state.conversationId) && !await syncConversation()) return;
       const remote = await syncApi('/v1/sync/conversations');
       const requested = new URLSearchParams(window.location.search).get('conversation_id');
       const remoteCurrent = Array.isArray(remote) && remote.find((value) => value.id === state.conversationId);
@@ -1276,6 +1297,9 @@
   resizeInput();
   updateControls();
   initializeSync();
+  window.addEventListener('online', () => {
+    if (state.paired && pendingSyncIds().includes(state.conversationId)) syncConversation();
+  });
 
   messageForm.addEventListener('submit', (event) => { event.preventDefault(); sendMessage(input.value); });
   input.addEventListener('input', resizeInput);

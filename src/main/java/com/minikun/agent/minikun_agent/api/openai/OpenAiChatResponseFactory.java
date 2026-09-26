@@ -2,6 +2,7 @@ package com.minikun.agent.minikun_agent.api.openai;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import org.springframework.ai.chat.model.ChatResponse;
@@ -129,6 +130,11 @@ final class OpenAiChatResponseFactory {
         return List.copyOf(chunks);
     }
 
+    String imageStatusChunk(String id, long created, String model) {
+        return data(Map.of("id", id, "object", CHUNK_OBJECT, "created", created,
+                "model", model, "choices", List.of(), "image_status", "running"));
+    }
+
     String contentChunk(ChatResponse response, String id, long created, String model) {
         String content = response.getResult().getOutput().getText();
         return contentChunk(content, id, created, model);
@@ -205,7 +211,7 @@ final class OpenAiChatResponseFactory {
         return finishReason == null || finishReason.isBlank() ? "stop" : finishReason.strip();
     }
 
-    private String data(ChatCompletionResponse.StreamChunk chunk) {
+    private String data(Object chunk) {
         try {
             return objectMapper.writeValueAsString(chunk);
         } catch (JsonProcessingException exception) {

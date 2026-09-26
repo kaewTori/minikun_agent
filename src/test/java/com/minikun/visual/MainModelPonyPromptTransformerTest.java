@@ -152,6 +152,24 @@ class MainModelPonyPromptTransformerTest {
     }
 
     @Test
+    void noHumansAlsoRemovesAnInventedCharacterAndCount() {
+        MainModelPonyPromptTransformer transformer = transformer(new CapturingMainModel("""
+                {"subject_count":"1person","characters":[{"name":"observer",
+                  "identity":"person","appearance":["blonde hair"]}],
+                 "subjects":["1person","black cat"],"appearance":["black fur","red collar"],
+                 "objects":["brass telescope"],"setting":["old observatory"],
+                 "details":["no humans"]}
+                """));
+
+        String prompt = transformer.transform("แมวดำปลอกคอแดงข้างกล้องทองเหลือง ไม่มีคน");
+
+        assertTrue(prompt.contains("black cat"));
+        assertTrue(prompt.contains("red collar"));
+        assertFalse(prompt.contains("1person"));
+        assertFalse(prompt.contains("blonde hair"));
+    }
+
+    @Test
     void selectsTwoFocalCharactersAndRemovesNamesFromImagePrompts() {
         MainModelPonyPromptTransformer transformer = transformer(new CapturingMainModel("""
                 {"subject_count":"3girls","characters":[

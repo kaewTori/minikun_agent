@@ -51,11 +51,12 @@ public final class DevicePairingService {
         this.sessionTtl = positive(sessionTtl, "session ttl", Duration.ofDays(366));
     }
 
-    public SessionView openSession(HttpServletRequest request, HttpServletResponse response, String deviceName) {
+    public synchronized SessionView openSession(HttpServletRequest request, HttpServletResponse response, String deviceName) {
         requireSecure(request);
         Optional<Session> existing = resolve(request);
         if (existing.isPresent()) return view(existing.get(), false);
-        boolean canBootstrap = isLoopbackOrigin(request) && fromThisHost(request.getRemoteAddr());
+        boolean canBootstrap = isLoopbackOrigin(request) && fromThisHost(request.getRemoteAddr())
+                && devices.activeCount(clock.instant()) == 0;
         if (!canBootstrap) return new SessionView(false, false, null, "", ownerId, canonicalOrigin);
         Session created = issue(ownerId, name(deviceName, "Mac เครื่องหลัก"), response);
         return view(created, true);
@@ -105,7 +106,9 @@ public final class DevicePairingService {
     }
 
     public List<DeviceView> list(Session current) {
-        return devices.list(current.ownerId()).stream().map(device -> new DeviceView(
+        return devices.list(current.ownerId()).stream()
+                .filter(device -> device.expiresAt().isAfter(clock.instant()))
+                .map(device -> new DeviceView(
                 device.id(), device.name(), device.createdAt(), device.lastSeenAt(),
                 device.id().equals(current.deviceId()))).toList();
     }

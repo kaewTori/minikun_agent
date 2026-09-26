@@ -52,7 +52,9 @@
       eventSource: null,
       pairingUrl: "",
       refreshing: false,
-      remoteDirty: false
+      remoteDirty: false,
+      pending: new Set(),
+      revision: 0
     },
     dashboard: {
       timer: null,
@@ -140,7 +142,7 @@
   }
 
   function visualOriginLabel(origin) {
-    return origin === "generated" ? "ภาพที่สร้างโดย AI" : origin === "user" ? "ภาพของเรา" : "ภาพจากเว็บ";
+    return origin === "generated" ? "มินิคุงสร้างให้" : origin === "user" ? "ภาพของเรา" : "ภาพจากเว็บ";
   }
 
   function visualHost(visual) {
@@ -215,7 +217,7 @@
     if (visual.origin !== "generated" || (!visual.prompt && visual.seed === null)) return null;
     const panel = element("section", compact ? "generation-meta compact" : "generation-meta");
     const heading = element("div", "generation-meta-heading");
-    heading.append(element("strong", "", "Pony generation input"));
+    heading.append(element("strong", "", "ข้อมูลการสร้างภาพ"));
     if (visual.seed !== null) {
       const seed = element("span", "generation-seed", `Seed ${visual.seed}`);
       heading.append(seed, copyGenerationButton("คัดลอก seed", String(visual.seed)));
@@ -449,6 +451,29 @@
     }
   }
 
+  function markConversationDirty(conversationId) {
+    state.sync.revision += 1;
+    state.sync.pending.add(conversationId);
+    persistPendingSync();
+  }
+
+  function persistPendingSync() {
+    try { localStorage.setItem("minikun.sync-pending", JSON.stringify([...state.sync.pending])); }
+    catch (_) { toast("บันทึกคิวซิงก์ในเบราว์เซอร์ไม่สำเร็จครับ", true); }
+  }
+
+  function forgetConversationSync(conversationId) {
+    window.clearTimeout(state.sync.timers.get(conversationId));
+    state.sync.timers.delete(conversationId);
+    state.sync.pending.delete(conversationId);
+    persistPendingSync();
+  }
+
+  function retryPendingSync() {
+    if (!state.sync.paired) return Promise.resolve([]);
+    return Promise.all([...state.sync.pending].map(pushConversationSync));
+  }
+
   function compactMessages(messages) {
     return Core.compactMessages(messages);
   }
@@ -508,10 +533,11 @@
       $("#create-pairing").disabled = false;
       renderSyncState("ซิงก์แล้ว", "paired");
       const local = state.conversations.map(syncPayload);
-      if (local.length && localStorage.getItem("minikun.sync-migrated") !== "true") {
+      if (local.length && (session.bootstrapped || localStorage.getItem("minikun.sync-migrated") !== "true")) {
         await syncFetch("/v1/sync/conversations/import", { method: "POST", body: JSON.stringify(local) });
         localStorage.setItem("minikun.sync-migrated", "true");
       }
+      await retryPendingSync();
       await refreshSyncedConversations();
       await loadPairedDevices();
       connectSyncEvents();
@@ -524,22 +550,29 @@
 
   async function refreshSyncedConversations() {
     if (!state.sync.paired || state.sync.refreshing) return;
-    if (state.pendingChats.size || state.sync.timers.size || state.sync.inFlight.size) {
+    if (state.pendingChats.size || state.sync.pending.size || state.sync.timers.size || state.sync.inFlight.size) {
       state.sync.remoteDirty = true;
       return;
     }
     state.sync.refreshing = true;
     state.sync.remoteDirty = false;
+    const revision = state.sync.revision;
     try {
       const remote = normalizeConversations(await syncFetch("/v1/sync/conversations"));
+      if (revision !== state.sync.revision || state.pendingChats.size || state.sync.pending.size
+          || state.sync.timers.size || state.sync.inFlight.size) {
+        state.sync.remoteDirty = true;
+        return;
+      }
       const currentId = state.currentConversationId;
       state.conversations = remote;
       const current = remote.find((conversation) => conversation.id === currentId) || remote[0];
       if (current) {
         state.currentConversationId = current.id;
         state.chatMessages = current.messages;
-      } else if (!state.chatMessages.length) {
+      } else {
         state.currentConversationId = chatId();
+        state.chatMessages = [];
       }
       persistConversations();
       renderConversationList();
@@ -548,6 +581,10 @@
       resumeBackgroundChats();
     } finally {
       state.sync.refreshing = false;
+      if (state.sync.remoteDirty && !state.pendingChats.size && !state.sync.pending.size
+          && !state.sync.timers.size && !state.sync.inFlight.size) {
+        queueMicrotask(refreshSyncedConversations);
+      }
     }
   }
 
@@ -569,10 +606,18 @@
       const conversation = state.conversations.find((value) => value.id === conversationId);
       if (!conversation) return false;
       try {
+        const payload = JSON.stringify(syncPayload(conversation));
         await syncFetch(`/v1/sync/conversations/${encodeURIComponent(conversationId)}`, {
-          method: "PUT", body: JSON.stringify(syncPayload(conversation))
+          method: "PUT", body: payload
         });
-        renderSyncState("ซิงก์แล้ว", "paired");
+        if (JSON.stringify(syncPayload(conversation)) === payload) {
+          state.sync.pending.delete(conversationId);
+          persistPendingSync();
+        } else {
+          scheduleConversationSync(conversationId);
+        }
+        renderSyncState(state.sync.pending.size ? "รอซิงก์" : "ซิงก์แล้ว",
+          state.sync.pending.size ? "unpaired" : "paired");
         return true;
       } catch (error) {
         renderSyncState("รอซิงก์", "unpaired");
@@ -584,7 +629,7 @@
       if (state.sync.inFlight.get(conversationId) === operation) {
         state.sync.inFlight.delete(conversationId);
       }
-      if (synced && state.sync.remoteDirty && !state.pendingChats.size
+      if (synced && state.sync.remoteDirty && !state.pendingChats.size && !state.sync.pending.size
           && !state.sync.timers.size && !state.sync.inFlight.size) {
         refreshSyncedConversations();
       }
@@ -615,21 +660,24 @@
     state.sync.eventSource = source;
     source.addEventListener("notification", (event) => {
       try {
-        const update = JSON.parse(event.data);
+        JSON.parse(event.data);
         showBrowserNotification(update.payload, event.lastEventId);
       } catch (_) { /* ignore malformed notification events */ }
     });
     source.addEventListener("sync", async (event) => {
       try {
         const update = JSON.parse(event.data);
-        if (update.sourceDeviceId === state.sync.deviceId) return;
         await refreshSyncedConversations();
         await loadPairedDevices();
-        renderSyncState("อัปเดตแล้ว", "paired");
+        if (!state.sync.pending.size) renderSyncState("อัปเดตแล้ว", "paired");
       } catch (_) { /* EventSource reconnects and the next refresh repairs state */ }
     });
     source.onerror = () => renderSyncState("กำลังเชื่อมใหม่", "unpaired");
-    source.onopen = () => renderSyncState("ซิงก์แล้ว", "paired");
+    source.onopen = async () => {
+      await retryPendingSync();
+      renderSyncState(state.sync.pending.size ? "รอซิงก์" : "ซิงก์แล้ว",
+        state.sync.pending.size ? "unpaired" : "paired");
+    };
   }
 
   async function loadPairedDevices() {
@@ -706,6 +754,7 @@
     current.messages = compactMessages(messages);
     state.conversations.sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.updatedAt - a.updatedAt);
     persistConversations();
+    markConversationDirty(conversationId);
     renderConversationList();
     scheduleConversationSync(conversationId);
   }
@@ -831,6 +880,7 @@
     state.conversations.sort((left, right) => Number(right.pinned) - Number(left.pinned)
       || right.updatedAt - left.updatedAt);
     persistConversations();
+    markConversationDirty(conversation.id);
     renderConversationList();
     scheduleConversationSync(conversation.id);
   }
@@ -871,11 +921,15 @@
       return;
     }
     try {
+      window.clearTimeout(state.sync.timers.get(conversation.id));
+      state.sync.timers.delete(conversation.id);
+      await state.sync.inFlight.get(conversation.id);
       await api(`/v1/conversations/${encodeURIComponent(conversation.id)}`, { method: "DELETE" });
       if (state.sync.paired) {
         await syncFetch(`/v1/sync/conversations/${encodeURIComponent(conversation.id)}`, { method: "DELETE" });
       }
       state.conversations = state.conversations.filter((item) => item.id !== conversation.id);
+      forgetConversationSync(conversation.id);
       persistConversations();
       if (state.currentConversationId === conversation.id) {
         const next = state.conversations.find((item) => !item.archived);
@@ -912,9 +966,11 @@
     });
     if (view === "cockpit") {
       const cockpitPages = new Set(["today", "agent", "memory", "system"]);
-      const page = { experiments: "agent", inbox: "today", "conversation-threads": "agent", "permission-center": "system" }[section]
+      const permissionSection = section === "permission-center" || section === "permissions";
+      const page = { experiments: "agent", inbox: "today", "conversation-threads": "agent" }[section]
         || (cockpitPages.has(section) ? section : state.cockpitPage || "today");
-      switchCockpitPage(page, section);
+      switchCockpitPage(page, permissionSection ? "" : section);
+      if (permissionSection) openSettings();
     }
     if (view === "studio") updateStudioPrompt();
     updateStudioRuntimePolling(view);
@@ -1429,13 +1485,12 @@
 
   function renderLiveProgress(message) {
     const progress = element("div", "live-progress");
+    const label = element("span", "live-progress-label",
+      (message.progress || "กำลังทำความเข้าใจคำถาม…").replace(/…$/, ""));
     const pulse = element("span", "live-progress-pulse");
+    pulse.setAttribute("aria-hidden", "true");
     pulse.innerHTML = "<i></i><i></i><i></i>";
-    const copy = element("div");
-    copy.append(element("strong", "", message.progress || "กำลังทำความเข้าใจคำถาม…"));
-    const seconds = Math.max(0, Math.floor((Date.now() - Number(message.timing?.startedAt || Date.now())) / 1000));
-    copy.append(element("small", "", seconds ? `รอมา ${seconds} วินาที` : "เริ่มทำงานแล้วครับ"));
-    progress.append(pulse, copy);
+    progress.append(label, pulse);
     return progress;
   }
 
@@ -1452,15 +1507,17 @@
         ? `${visuals.length} ภาพ · สร้างใหม่ ${generatedCount} ภาพ`
         : `${visuals.length} ภาพ · เปิดดูต้นทางได้`;
     galleryHeading.append(
-      element("strong", "", "รูปประกอบคำตอบ"),
+      element("strong", "", generatedCount === visuals.length ? "ภาพที่มินิคุงสร้าง" : "รูปประกอบคำตอบ"),
       element("span", "", galleryMeta)
     );
     gallery.append(galleryHeading);
     const images = element("div", "message-image-grid");
     for (const visual of visuals) {
       const card = element("figure", "visual-card");
+      card.classList.toggle("is-generated", visual.origin === "generated");
       const open = element("button", "visual-card-image");
       open.type = "button";
+      open.setAttribute("aria-label", `เปิดภาพ ${visual.title}`);
       open.addEventListener("click", () => openVisualLightbox(visual));
       const image = element("img");
       image.src = visual.url || proxyImageUrl(visual.originalUrl);
@@ -1512,12 +1569,9 @@
       body.append(files);
     }
     const content = element("div", "message-content");
-    if (live && !message.content) {
-      content.append(renderLiveProgress(message));
-    } else {
-      content.innerHTML = markdown(message.content);
-    }
+    content.innerHTML = markdown(message.content);
     body.append(content);
+    if (live) body.append(renderLiveProgress(message));
     const visualGallery = renderVisualGallery(message.attachments);
     if (visualGallery) body.append(visualGallery);
     const sourceCards = renderSourceCards(message);
@@ -1613,7 +1667,7 @@
       return;
     }
     const pending = state.pendingChats.get(state.currentConversationId);
-    setChatBusy(Boolean(pending), pending?.status || "พร้อมช่วยพี่สาว");
+    setChatBusy(Boolean(pending), pending?.status || (state.chatMessages.at(-1)?.status === "failed" ? "เชื่อมต่อไม่สำเร็จ" : "พร้อมช่วยพี่สาว"));
   }
 
   function updatePendingProgress(task, label) {
@@ -1622,13 +1676,8 @@
     task.assistant.progress = label;
     if (state.currentConversationId !== task.conversationId) return;
     const row = document.querySelector(`[data-message-id="${task.assistant.id}"]`);
-    const labelNode = row?.querySelector(".live-progress strong");
-    const timeNode = row?.querySelector(".live-progress small");
-    if (labelNode) labelNode.textContent = label;
-    if (timeNode) {
-      const seconds = Math.max(0, Math.floor((Date.now() - task.assistant.timing.startedAt) / 1000));
-      timeNode.textContent = seconds ? `รอมา ${seconds} วินาที` : "เริ่มทำงานแล้วครับ";
-    }
+    const labelNode = row?.querySelector(".live-progress-label");
+    if (labelNode) labelNode.textContent = label.replace(/…$/, "");
     if (changed) syncChatState();
   }
 
@@ -1643,7 +1692,7 @@
     updatePendingProgress(task, stage(0));
     task.progressTimer = window.setInterval(() => {
       const elapsed = (Date.now() - task.assistant.timing.startedAt) / 1000;
-      updatePendingProgress(task, stage(elapsed));
+      updatePendingProgress(task, task.assistant.content ? task.status : stage(elapsed));
     }, 1000);
   }
 
@@ -1888,13 +1937,12 @@
       if (!data || data === "[DONE]" || !data.startsWith("{")) return;
       const chunk = JSON.parse(data);
       if (chunk.id) task.assistant.responseId = String(chunk.id);
+      if (chunk.image_status === "running") updatePendingProgress(task, "กำลังสร้างภาพประกอบ…");
       const choice = chunk.choices?.[0] || {};
       const delta = choice.delta || {};
       if (delta.content) {
         if (!task.assistant.timing.firstTokenMs) {
           task.assistant.timing.firstTokenMs = Date.now() - task.assistant.timing.startedAt;
-          window.clearInterval(task.progressTimer);
-          task.progressTimer = null;
           updatePendingProgress(task, "กำลังตอบ…");
         }
         task.assistant.content += delta.content;
@@ -2126,6 +2174,10 @@
     const original = source[userIndex];
     if (!original || original.role !== "user") return;
     const conversationId = branch ? chatId() : state.currentConversationId;
+    if (!branch && state.pendingChats.has(conversationId)) {
+      toast("รอให้มินิคุงตอบเสร็จก่อนครับ");
+      return;
+    }
     const messages = source.slice(0, userIndex + 1).map((message) => ({
       ...message,
       attachments: [...(message.attachments || [])],
@@ -2147,7 +2199,7 @@
       state.chatMessages = messages;
       saveConversation(`${userMessage.content} (สาขา)`, conversationId, messages);
     } else {
-      source.splice(userIndex + 1);
+      source.splice(userIndex, source.length - userIndex, userMessage);
       state.chatMessages = source;
     }
     renderChat();
@@ -2196,7 +2248,7 @@
     if (!message) return;
     const edited = await requestEditedMessage(message.content || "");
     if (edited === null || !edited.trim() || edited.trim() === message.content.trim()) return;
-    await rerunFromUser(index, true, edited.trim());
+    await rerunFromUser(index, false, edited.trim());
   }
 
   function branchFromMessage(index) {
@@ -2395,7 +2447,14 @@
     $("#sync-state").querySelector(".status-dot").style.background = ok ? "var(--green)" : "var(--danger)";
   }
 
-  function renderStatus(status = {}, decisionCount = 0) {
+  function renderStatus(status, decisionCount = 0) {
+    if (!status) {
+      for (const id of ["#due-count", "#goal-count", "#waiting-count"]) $(id).textContent = "—";
+      $("#today").dataset.state = "unavailable";
+      $("#attention-title").textContent = "ยังโหลดภาพรวมวันนี้ไม่ได้ครับ";
+      $("#attention-copy").textContent = "ลองรีเฟรชอีกครั้งเพื่อดูงานและเรื่องที่รอยืนยันครับ";
+      return;
+    }
     const due = status.due_tasks ?? "—";
     const goals = status.open_goals ?? "—";
     const waiting = (status.agent_waiting_confirmation || 0) + decisionCount;
@@ -3080,7 +3139,7 @@
 
   const permissionLabels = {
     granted: "อนุญาตแล้ว", denied: "ถูกปิด", prompt: "ยังไม่อนุญาต",
-    unsupported: "ไม่รองรับ", insecure: "ต้องใช้ HTTPS"
+    unknown: "ตรวจสอบกับเบราว์เซอร์", unsupported: "ไม่รองรับ", insecure: "ต้องใช้ HTTPS"
   };
 
   function permissionSecureContext() {
@@ -3106,13 +3165,13 @@
     button.textContent = status === "granted"
       ? (name === "location" ? "อัปเดต" : "ทดสอบ")
       : status === "denied" ? "ลองอีกครั้ง"
-        : status === "insecure" ? "ดูวิธีเปิด" : "เปิดใช้";
+        : status === "insecure" ? "ดูวิธีเปิด" : status === "unknown" ? "ทดสอบ" : "เปิดใช้";
   }
 
   async function browserPermission(name) {
-    if (!navigator.permissions?.query) return "prompt";
+    if (!navigator.permissions?.query) return "unknown";
     try { return (await navigator.permissions.query({ name })).state; }
-    catch (_) { return "prompt"; }
+    catch (_) { return "unknown"; }
   }
 
   async function renderPermissions() {
@@ -3128,7 +3187,7 @@
     setPermissionUi("microphone", microphoneState, "ใช้คุยและถอดเสียง");
     setPermissionUi("notifications", notificationState, "อนุญาตให้หน้าเว็บแสดงการแจ้งเตือน");
     $("#permission-note").textContent = secure
-      ? "มินิคุงจะขอสิทธิ์เมื่อพี่สาวแตะเท่านั้น ถ้าเคยปิด ให้แตะ aA → การตั้งค่าเว็บไซต์ แล้วกลับมาลองอีกครั้งครับ"
+      ? `เบราว์เซอร์จำสิทธิ์แยกตามที่อยู่เว็บนี้ (${window.location.origin}) เปิดผ่านที่อยู่เดิมทุกครั้งครับ`
       : "Safari บน iPhone อนุญาตตำแหน่ง ไมโครโฟน และการแจ้งเตือนเฉพาะหน้า HTTPS เท่านั้นครับ";
   }
 
@@ -3268,7 +3327,7 @@
 
       if (page === "today") {
         const decisionCount = renderDecisions(value("decisions"));
-        renderStatus(value("status", {}), decisionCount);
+        renderStatus(value("status", null), decisionCount);
         renderActions(value("actions"));
         renderInbox(value("inbox"));
       } else if (page === "agent") {
@@ -3284,10 +3343,7 @@
         renderMemorySystem(value("memories"), value("knowledge", {}), value("knowledgeSources"), learningClaims);
       } else if (page === "system") {
         renderSystemHealth(value("systemHealth", null));
-        if (!options.healthOnly) {
-          renderEvalLab(value("evalBaseline", null), value("evalQuality", null));
-          await renderPermissions();
-        }
+        if (!options.healthOnly) renderEvalLab(value("evalBaseline", null), value("evalQuality", null));
       }
 
       if (!options.healthOnly) state.dashboard.loadedAt.set(page, Date.now());
@@ -3469,7 +3525,13 @@
     $("#composer-hint").textContent = "Enter ขึ้นบรรทัดใหม่ · แตะ ↑ เพื่อส่ง";
   }
 
+  try {
+    const pending = JSON.parse(localStorage.getItem("minikun.sync-pending") || "[]");
+    if (Array.isArray(pending)) state.sync.pending = new Set(pending.filter((id) => typeof id === "string"));
+  } catch (_) { /* keep local history if the retry queue is corrupt */ }
   state.conversations = safeConversationList();
+  state.sync.pending = new Set([...state.sync.pending].filter((id) =>
+    state.conversations.some((conversation) => conversation.id === id)));
   const requestedConversationId = new URLSearchParams(window.location.search).get("conversation_id");
   const safeRequestedConversationId = /^[a-zA-Z0-9._:-]{1,200}$/.test(String(requestedConversationId || "").trim())
     ? requestedConversationId.trim() : "";
@@ -3488,6 +3550,7 @@
   }
   renderConversationList();
   renderChat();
+  syncChatState();
   restoreDraft();
   resumeBackgroundChats();
   loadRuntimeModels().catch(() => {});
@@ -3730,10 +3793,14 @@
   $("#confirm-clear-history").addEventListener("click", async (event) => {
     event.preventDefault();
     try {
+      for (const timer of state.sync.timers.values()) window.clearTimeout(timer);
+      state.sync.timers.clear();
+      await Promise.all([...state.sync.inFlight.values()]);
       await Promise.all(state.conversations.map((conversation) =>
         api(`/v1/conversations/${encodeURIComponent(conversation.id)}`, { method: "DELETE" })));
       if (state.sync.paired) await syncFetch("/v1/sync/conversations", { method: "DELETE" });
       localStorage.removeItem("minikun.conversations");
+      for (const conversationId of state.sync.pending) forgetConversationSync(conversationId);
       state.conversations = [];
       startNewChat();
       clearHistoryDialog.close("confirm");
@@ -3816,18 +3883,17 @@
     if (state.dashboard.timer) loadDashboard("system", { force: true, healthOnly: true }).catch(() => {});
   });
 
-  $("#open-settings").addEventListener("click", () => {
-    settingsDialog.showModal();
+  function openSettings() {
+    if (!settingsDialog.open) settingsDialog.showModal();
+    renderPermissions().catch((error) => toast(error.message, true));
     loadPairedDevices();
     loadCompanionMode();
     loadRuntimeModels().catch((error) => toast(error.message, true));
-  });
+  }
+  $("#open-settings").addEventListener("click", openSettings);
   $("#mobile-menu-settings").addEventListener("click", () => {
     mobileMenuDialog.close();
-    settingsDialog.showModal();
-    loadPairedDevices();
-    loadCompanionMode();
-    loadRuntimeModels().catch((error) => toast(error.message, true));
+    openSettings();
   });
   $("#create-pairing").addEventListener("click", createDevicePairing);
   $("#copy-pair-link").addEventListener("click", async () => {
@@ -3918,4 +3984,5 @@
   const requestedView = requestedParams.get("view");
   showView(new Set(["chat", "studio", "cockpit"]).has(requestedView) ? requestedView : "chat", requestedParams.get("section") || "");
   initializeSync();
+  window.addEventListener("online", retryPendingSync);
 })();

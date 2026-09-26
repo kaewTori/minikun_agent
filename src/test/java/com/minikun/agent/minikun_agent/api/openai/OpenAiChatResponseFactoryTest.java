@@ -118,4 +118,12 @@ class OpenAiChatResponseFactoryTest {
 
         assertEquals("length", chunk.at("/choices/0/finish_reason").asText());
     }
+
+    @Test
+    void announcesImageGenerationWithoutAddingStoryText() throws Exception {
+        JsonNode chunk = objectMapper.readTree(factory.imageStatusChunk("id", 123L, "mini-kun"));
+
+        assertEquals("running", chunk.path("image_status").asText());
+        assertTrue(chunk.path("choices").isEmpty());
+    }
 }

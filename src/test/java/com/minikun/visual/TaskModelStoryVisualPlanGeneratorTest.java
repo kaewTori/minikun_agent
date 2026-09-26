@@ -13,6 +13,35 @@ import org.junit.jupiter.api.Test;
 
 class TaskModelStoryVisualPlanGeneratorTest {
     @Test
+    void acceptsCompactPlanAndKeepsRequestedDetailsInImagePrompt() {
+        List<TaskModelRequest> requests = new ArrayList<>();
+        var generator = new TaskModelStoryVisualPlanGenerator(request -> {
+            requests.add(request);
+            return """
+                    {"characters":[{"name":"มะลิ","identity":"1girl",
+                    "appearance":["pink hair"],"clothing":["blue raincoat"]}],
+                    "scenes":[{"title":"Observatory","subjectCount":1,"characterNames":["มะลิ"],
+                    "action":"looking through a brass telescope","setting":"old observatory",
+                    "mustInclude":["blue star","rain on the window"],"mustNotInclude":[]}]}
+                    """;
+        }, new ObjectMapper());
+
+        StoryVisualPlan plan = generator.generate(
+                "วาดมะลิผมสีชมพู เสื้อคลุมสีน้ำเงิน หอดูดาวเก่า ดาวสีฟ้า",
+                "มะลิมองดาวผ่านกล้องทองเหลือง ฝนเกาะหน้าต่าง",
+                StoryIllustrationMode.DECISIVE_SCENE, List.of(), 3);
+        String prompt = new PonyStoryPromptCompiler().compile(
+                plan.mode(), plan.scenes().getFirst(), plan.characters()).positive();
+
+        assertEquals(1, requests.size());
+        assertTrue(requests.getFirst().messages().getFirst().content().contains("compact JSON"));
+        assertTrue(prompt.contains("pink hair"));
+        assertTrue(prompt.contains("blue raincoat"));
+        assertTrue(prompt.contains("brass telescope"));
+        assertTrue(prompt.contains("blue star"));
+    }
+
+    @Test
     void parsesAValidatedStructuredPlanAndIncludesLockedMemory() {
         List<TaskModelRequest> requests = new ArrayList<>();
         var generator = new TaskModelStoryVisualPlanGenerator(request -> {
@@ -57,36 +86,60 @@ class TaskModelStoryVisualPlanGeneratorTest {
     }
 
     @Test
-    void keepsEnglishSceneTagsWhenCharacterMetadataIsLocalized() {
+    void repairsLocalizedCharacterDetailsInsteadOfDroppingThem() {
+        java.util.concurrent.atomic.AtomicInteger calls = new java.util.concurrent.atomic.AtomicInteger();
         var generator = new TaskModelStoryVisualPlanGenerator(request -> """
-                {"characters":[
-                  {"name":"Itsuki Neko","identity":"โปรแกรมเมอร์สาว","appearance":["ผมสีชมพู"],
-                   "clothing":["ลาเท็กซ์"],"accessories":["แว่นกลม"],"canonicalTags":["female"],"negativeTags":[]},
-                  {"name":"Rena Raziel","identity":"นักวาดสาวทอมบอย","appearance":["ผมสั้น"],
-                   "clothing":["ลาเท็กซ์"],"accessories":["แว่นกลม"],"canonicalTags":["female"],"negativeTags":[]},
-                  {"name":"Natawada Rin","identity":"โปรแกรมเมอร์สาว","appearance":["brown-green hair"],
-                   "clothing":["latex"],"accessories":["round glasses"],"canonicalTags":["female"],"negativeTags":[]}],
-                "scenes":[{"title":"Slime gathering","subjectCount":3,
-                  "characterNames":["Itsuki Neko","Rena Raziel","Natawada Rin"],
-                  "action":"hugging and kissing","interaction":"close yuri interaction",
-                  "keyObjects":["black slime","latex outfits"],"setting":"private laboratory",
-                  "time":"night","weather":"","emotion":"intense","atmosphere":"mysterious",
-                  "lighting":"purple light","palette":"purple and black","composition":"circular",
-                  "cameraAngle":"eye level","shotDistance":"medium shot","focus":"the interaction",
-                  "mustInclude":["black slime","latex"],"mustNotInclude":[],"fineDetails":[]}]}
-                """, new ObjectMapper());
+                {"characters":[{"name":"Mali","identity":"1girl","appearance":["%s"],
+                  "clothing":["navy coat"],"accessories":["round glasses"],
+                  "canonicalTags":[],"negativeTags":[]}],
+                 "scenes":[{"title":"Discovery","subjectCount":1,"characterNames":["Mali"],
+                  "action":"looking through a telescope","interaction":"","keyObjects":["telescope"],
+                  "setting":"observatory","time":"night","weather":"","emotion":"wonder",
+                  "atmosphere":"quiet","lighting":"starlight","palette":"navy",
+                  "composition":"centered","cameraAngle":"eye level","shotDistance":"medium shot",
+                  "focus":"sharp","mustInclude":[],"mustNotInclude":[],"fineDetails":[]}]}
+                """.formatted(calls.getAndIncrement() == 0 ? "ผมสีชมพู" : "pink hair"),
+                new ObjectMapper());
 
         StoryVisualPlan plan = generator.generate(
-                "สามผู้หญิงในห้องทดลอง ไม่มีผู้ชาย", "ทั้งสามกอดและจูบกัน", 
+                "วาดภาพหญิงสาวมะลิผมสีชมพูในหอดูดาว", "มะลิมองดาวผ่านกล้องโทรทรรศน์",
                 StoryIllustrationMode.DECISIVE_SCENE, List.of(), 3);
         PonyStoryPromptCompiler.CompiledPrompt prompt = new PonyStoryPromptCompiler().compile(
                 plan.mode(), plan.scenes().getFirst(), plan.characters());
 
-        assertTrue(prompt.positive().contains("2girls"));
-        assertTrue(prompt.positive().contains("black slime"));
-        assertTrue(prompt.positive().contains("latex"));
-        assertFalse(prompt.positive().contains("โปรแกรมเมอร์"));
-        assertFalse(prompt.positive().contains("1boy"));
+        assertEquals(2, calls.get());
+        assertTrue(prompt.positive().contains("pink hair"));
+        assertFalse(prompt.positive().contains("ผมสีชมพู"));
+    }
+
+    @Test
+    void keepsUsablePlanWhenRepairStillHasThaiDetailsAndWrongSubjectCount() {
+        java.util.concurrent.atomic.AtomicInteger calls = new java.util.concurrent.atomic.AtomicInteger();
+        var generator = new TaskModelStoryVisualPlanGenerator(request -> {
+            calls.incrementAndGet();
+            return """
+                    {"characters":[{"name":"มะลิ","identity":"1girl","appearance":["ผมสีชมพู"],
+                    "clothing":["blue coat"]},{"name":"ริน","identity":"1girl",
+                    "appearance":["black hair"]}],"scenes":[{"title":"Observatory",
+                    "subjectCount":1,"characterNames":["มะลิ","ริน"],
+                    "action":"looking through a telescope","setting":"old observatory",
+                    "mustInclude":["blue star"]}]}
+                    """;
+        }, new ObjectMapper());
+
+        StoryVisualPlan plan = generator.generate(
+                "เล่าเรื่องผู้หญิงสองคน มะลิผมสีชมพูและรินผมดำ",
+                "มะลิและรินมองดาวสีฟ้าในหอดูดาว",
+                StoryIllustrationMode.DECISIVE_SCENE, List.of(), 3);
+        String prompt = new PonyStoryPromptCompiler().compile(
+                plan.mode(), plan.scenes().getFirst(), plan.characters()).positive();
+
+        assertEquals(2, calls.get());
+        assertEquals(2, plan.scenes().getFirst().subjectCount());
+        assertTrue(prompt.contains("2girls"));
+        assertTrue(prompt.contains("blue coat"));
+        assertTrue(prompt.contains("blue star"));
+        assertFalse(prompt.contains("ผมสีชมพู"));
     }
 
     @Test
@@ -264,10 +317,10 @@ class TaskModelStoryVisualPlanGeneratorTest {
         assertTrue(requests.getLast().messages().getFirst().content().contains("CORRECTION"));
         assertEquals(3, plan.characters().size());
         assertEquals(3, plan.scenes().getFirst().subjectCount());
-        assertTrue(prompt.positive().contains("2girls"));
+        assertTrue(prompt.positive().contains("3girls"));
         assertTrue(prompt.positive().contains("long pink hair"));
         assertTrue(prompt.positive().contains("short black hair"));
-        assertFalse(prompt.positive().contains("brown-green hair"));
+        assertTrue(prompt.positive().contains("brown-green hair"));
     }
 
     @Test
@@ -315,7 +368,7 @@ class TaskModelStoryVisualPlanGeneratorTest {
     }
 
     @Test
-    void compilerKeepsOnlyTheTwoCharactersInTheDefiningActionAndOmitsNames() {
+    void compilerKeepsEveryNamedCharacterAndOmitsNames() {
         List<CharacterVisualProfile> characters = List.of(
                 new CharacterVisualProfile("Itsuki Neko", "1girl", List.of("pink hair", "red eyes"),
                         List.of("white shirt"), List.of("round glasses"), List.of(), List.of()),
@@ -332,14 +385,14 @@ class TaskModelStoryVisualPlanGeneratorTest {
         PonyStoryPromptCompiler.CompiledPrompt prompt = new PonyStoryPromptCompiler().compile(
                 StoryIllustrationMode.DECISIVE_SCENE, scene, characters);
 
-        assertTrue(prompt.positive().contains("2girls"));
+        assertTrue(prompt.positive().contains("3girls"));
         assertTrue(prompt.positive().contains("pink hair"));
         assertTrue(prompt.positive().contains("brown-green hair"));
-        assertFalse(prompt.positive().contains("short black hair"));
+        assertTrue(prompt.positive().contains("short black hair"));
         assertFalse(prompt.positive().contains("Itsuki"));
         assertFalse(prompt.positive().contains("Rin"));
         assertTrue(prompt.positive().contains("left girl holds right girl's hand"));
-        assertEquals(2, prompt.facePrompts().size());
+        assertEquals(3, prompt.facePrompts().size());
     }
 
     @Test
@@ -418,5 +471,46 @@ class TaskModelStoryVisualPlanGeneratorTest {
 
         assertEquals(2, calls.get());
         assertEquals("gothic cathedral", plan.scenes().getFirst().setting());
+    }
+
+    @Test
+    void keepsTheMiddleOfALongStoryWhenTheUserRequestIsAlsoLong() {
+        List<TaskModelRequest> requests = new ArrayList<>();
+        var generator = new TaskModelStoryVisualPlanGenerator(request -> {
+            requests.add(request);
+            return """
+                    {"characters":[],"scenes":[{"title":"Observatory","subjectCount":0,
+                    "characterNames":[],"action":"starlight fills the room","interaction":"",
+                    "keyObjects":[],"setting":"observatory","time":"night","weather":"",
+                    "emotion":"wonder","atmosphere":"quiet","lighting":"starlight","palette":"blue",
+                    "composition":"wide","cameraAngle":"eye level","shotDistance":"wide shot",
+                    "focus":"sharp","mustInclude":[],"mustNotInclude":[],"fineDetails":[]}]}
+                    """;
+        }, new ObjectMapper());
+        String user = "u".repeat(3000) + " USER_MIDDLE " + "u".repeat(3000);
+        String story = "s".repeat(3000) + " STORY_MIDDLE " + "s".repeat(3000);
+
+        generator.generate(user, story, StoryIllustrationMode.DECISIVE_SCENE, List.of(), 3);
+
+        String input = requests.getFirst().messages().getLast().content();
+        assertTrue(input.contains("USER_MIDDLE"));
+        assertTrue(input.contains("STORY_MIDDLE"));
+        assertTrue(input.contains("ASSISTANT STORY"));
+    }
+
+    @Test
+    void rejectsMissingCharacterProfilesInsteadOfSilentlyDroppingTheCharacter() {
+        var generator = new TaskModelStoryVisualPlanGenerator(request -> """
+                {"characters":[],"scenes":[{"title":"Meeting","subjectCount":1,
+                "characterNames":["Mali"],"action":"Mali opens a door","interaction":"",
+                "keyObjects":[],"setting":"observatory","time":"night","weather":"",
+                "emotion":"wonder","atmosphere":"quiet","lighting":"starlight","palette":"blue",
+                "composition":"wide","cameraAngle":"eye level","shotDistance":"wide shot",
+                "focus":"sharp","mustInclude":[],"mustNotInclude":[],"fineDetails":[]}]}
+                """, new ObjectMapper());
+
+        assertThrows(IllegalArgumentException.class, () -> generator.generate(
+                "วาดภาพมะลิในหอดูดาว", "มะลิเปิดประตูหอดูดาว",
+                StoryIllustrationMode.DECISIVE_SCENE, List.of(), 3));
     }
 }

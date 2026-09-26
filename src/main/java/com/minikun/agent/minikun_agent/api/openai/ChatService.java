@@ -591,6 +591,7 @@ public class ChatService {
                     assistantContent.append(BLANK_MODEL_RESPONSE);
                     return Flux.just(responseFactory.contentChunk(BLANK_MODEL_RESPONSE, id, created, model));
                 }),
+                Flux.defer(() -> shouldIllustrate(context.turnPlan()) ? Flux.just(responseFactory.imageStatusChunk(id, created, model)) : Flux.empty()),
                 Flux.defer(() -> {
                     var illustration = illustrate(context, userMessage.content(), assistantContent.toString());
                     assistantContent.append(illustration.notice());

@@ -23,7 +23,7 @@ class LocalHttpsConfigurationTest {
         Path password = Files.writeString(tempDir.resolve("password.txt"), "secret");
         LocalHttpsConfiguration configuration = new LocalHttpsConfiguration();
         WebServerFactoryCustomizer<TomcatServletWebServerFactory> customizer =
-                configuration.localHttpsConnector(8443, keystore.toString(), password.toString());
+                configuration.localHttpsConnector(8443, keystore.toString(), password.toString(), true);
         TomcatServletWebServerFactory factory = new TomcatServletWebServerFactory(8080);
 
         customizer.customize(factory);
@@ -35,6 +35,7 @@ class LocalHttpsConfigurationTest {
         assertEquals("https", connector.getScheme());
         assertTrue(connector.getSecure());
         assertEquals(Boolean.TRUE, connector.getProperty("SSLEnabled"));
+        assertEquals("on", connector.getProperty("compression"));
     }
 
     @Test
@@ -42,6 +43,6 @@ class LocalHttpsConfigurationTest {
         LocalHttpsConfiguration configuration = new LocalHttpsConfiguration();
 
         assertThrows(IllegalArgumentException.class, () -> configuration.localHttpsConnector(
-                8443, tempDir.resolve("missing.p12").toString(), tempDir.resolve("missing.txt").toString()));
+                8443, tempDir.resolve("missing.p12").toString(), tempDir.resolve("missing.txt").toString(), true));
     }
 }

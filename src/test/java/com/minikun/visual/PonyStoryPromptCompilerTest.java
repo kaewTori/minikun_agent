@@ -1,5 +1,6 @@
 package com.minikun.visual;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
@@ -49,5 +50,29 @@ class PonyStoryPromptCompilerTest {
 
         assertTrue(prompt.positive().contains("1girl"));
         assertTrue(prompt.negative().contains("1boy"));
+    }
+
+    @Test
+    void sendsVisualDescriptionsWithoutOriginalCharacterNames() {
+        CharacterVisualProfile mali = new CharacterVisualProfile(
+                "Mali", "1girl", List.of("Mali's pink hair"), List.of("navy coat"),
+                List.of("Mali's silver pin"), List.of("Mali freckles"), List.of("Mali duplicate"));
+        CharacterVisualProfile rin = new CharacterVisualProfile(
+                "Rin", "1girl", List.of("short black hair"), List.of(), List.of(), List.of(), List.of());
+        StorySceneSpec scene = new StorySceneSpec(
+                "Meeting", 2, List.of("Mali", "Rin"), "Mali waves to Rin", "Rin holds Mali's hand",
+                List.of("Mali's brass telescope"), "Mali's observatory", "night", "", "", "", "", "", "", "", "", "",
+                List.of("Rin's red scarf"), List.of("Mali duplicate"), List.of("Mali's silver pin"));
+
+        PonyStoryPromptCompiler.CompiledPrompt prompt = new PonyStoryPromptCompiler().compile(
+                StoryIllustrationMode.DECISIVE_SCENE, scene, List.of(mali, rin));
+
+        assertTrue(prompt.positive().contains("left girl waves to right girl"));
+        assertTrue(prompt.positive().contains("right girl's red scarf"));
+        assertTrue(prompt.positive().contains("brass telescope"));
+        assertFalse(prompt.positive().matches("(?i).*\\b(?:mali|rin)\\b.*"));
+        assertFalse(prompt.negative().matches("(?i).*\\b(?:mali|rin)\\b.*"));
+        assertTrue(prompt.facePrompts().stream().noneMatch(value ->
+                value.matches("(?i).*\\b(?:mali|rin)\\b.*")));
     }
 }

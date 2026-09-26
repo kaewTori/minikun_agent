@@ -36,9 +36,6 @@ if [ ! -s "$minikun_password_file" ]; then
   "$minikun_openssl" rand -hex 32 > "$minikun_password_file"
 fi
 
-minikun_temp_root="$(mktemp -d "${TMPDIR:-/tmp}/minikun-https.XXXXXX")"
-trap 'rm -rf "$minikun_temp_root"' EXIT HUP INT TERM
-
 minikun_lan_ip=""
 for minikun_interface in en0 en1; do
   minikun_candidate_ip="$(/usr/sbin/ipconfig getifaddr "$minikun_interface" 2>/dev/null || true)"
@@ -60,39 +57,61 @@ if [ -n "$minikun_tailnet_ip" ] && [ "$minikun_tailnet_ip" != "$minikun_lan_ip" 
   minikun_san="$minikun_san,IP:$minikun_tailnet_ip"
 fi
 
-"$minikun_openssl" req -new -nodes -newkey rsa:2048 -sha256 \
-  -keyout "$minikun_temp_root/server.key" \
-  -out "$minikun_temp_root/server.csr" \
-  -subj "/CN=mini-kun.local/O=Minikun"
+minikun_reuse_cert=true
+if [ ! -s "$minikun_server_cert" ] || [ ! -s "$minikun_keystore" ] \
+  || ! "$minikun_openssl" verify -CAfile "$minikun_root_pem" "$minikun_server_cert" >/dev/null 2>&1 \
+  || ! "$minikun_openssl" x509 -in "$minikun_server_cert" -noout -checkend 2592000 >/dev/null 2>&1 \
+  || ! "$minikun_openssl" pkcs12 -in "$minikun_keystore" -passin "file:$minikun_password_file" -noout >/dev/null 2>&1; then
+  minikun_reuse_cert=false
+fi
+if [ "$minikun_reuse_cert" = true ]; then
+  for minikun_name in mini-kun mini-kun.local localhost; do
+    if ! "$minikun_openssl" x509 -in "$minikun_server_cert" -noout -checkhost "$minikun_name" >/dev/null 2>&1; then
+      minikun_reuse_cert=false
+    fi
+  done
+  for minikun_ip in 127.0.0.1 "$minikun_lan_ip" "$minikun_tailnet_ip"; do
+    if [ -n "$minikun_ip" ] && ! "$minikun_openssl" x509 -in "$minikun_server_cert" -noout -checkip "$minikun_ip" >/dev/null 2>&1; then
+      minikun_reuse_cert=false
+    fi
+  done
+fi
 
-{
-  printf '%s\n' 'authorityKeyIdentifier=keyid,issuer'
-  printf '%s\n' 'basicConstraints=critical,CA:FALSE'
-  printf '%s\n' 'keyUsage=critical,digitalSignature,keyEncipherment'
-  printf '%s\n' 'extendedKeyUsage=serverAuth'
-  printf 'subjectAltName=%s\n' "$minikun_san"
-} > "$minikun_temp_root/server.ext"
-
-"$minikun_openssl" x509 -req -sha256 -days 397 \
-  -in "$minikun_temp_root/server.csr" \
-  -CA "$minikun_root_pem" \
-  -CAkey "$minikun_root_key" \
-  -CAcreateserial \
-  -out "$minikun_temp_root/server.crt" \
-  -extfile "$minikun_temp_root/server.ext"
-
-"$minikun_openssl" pkcs12 -export \
-  -name minikun \
-  -inkey "$minikun_temp_root/server.key" \
-  -in "$minikun_temp_root/server.crt" \
-  -certfile "$minikun_root_pem" \
-  -out "$minikun_temp_root/minikun.p12" \
-  -passout "file:$minikun_password_file"
-
-"$minikun_openssl" x509 -in "$minikun_root_pem" -outform DER -out "$minikun_temp_root/minikun-local-ca.cer"
-mv "$minikun_temp_root/server.crt" "$minikun_server_cert"
-mv "$minikun_temp_root/minikun.p12" "$minikun_keystore"
-mv "$minikun_temp_root/minikun-local-ca.cer" "$minikun_root_cer"
+if [ "$minikun_reuse_cert" = false ]; then
+  minikun_temp_root="$(mktemp -d "${TMPDIR:-/tmp}/minikun-https.XXXXXX")"
+  trap 'rm -rf "$minikun_temp_root"' EXIT HUP INT TERM
+  "$minikun_openssl" req -new -nodes -newkey rsa:2048 -sha256 \
+    -keyout "$minikun_temp_root/server.key" \
+    -out "$minikun_temp_root/server.csr" \
+    -subj "/CN=mini-kun.local/O=Minikun"
+  {
+    printf '%s\n' 'authorityKeyIdentifier=keyid,issuer'
+    printf '%s\n' 'basicConstraints=critical,CA:FALSE'
+    printf '%s\n' 'keyUsage=critical,digitalSignature,keyEncipherment'
+    printf '%s\n' 'extendedKeyUsage=serverAuth'
+    printf 'subjectAltName=%s\n' "$minikun_san"
+  } > "$minikun_temp_root/server.ext"
+  "$minikun_openssl" x509 -req -sha256 -days 397 \
+    -in "$minikun_temp_root/server.csr" \
+    -CA "$minikun_root_pem" \
+    -CAkey "$minikun_root_key" \
+    -CAcreateserial \
+    -out "$minikun_temp_root/server.crt" \
+    -extfile "$minikun_temp_root/server.ext"
+  "$minikun_openssl" pkcs12 -export \
+    -name minikun \
+    -inkey "$minikun_temp_root/server.key" \
+    -in "$minikun_temp_root/server.crt" \
+    -certfile "$minikun_root_pem" \
+    -out "$minikun_temp_root/minikun.p12" \
+    -passout "file:$minikun_password_file"
+  "$minikun_openssl" x509 -in "$minikun_root_pem" -outform DER -out "$minikun_temp_root/minikun-local-ca.cer"
+  mv "$minikun_temp_root/server.crt" "$minikun_server_cert"
+  mv "$minikun_temp_root/minikun.p12" "$minikun_keystore"
+  mv "$minikun_temp_root/minikun-local-ca.cer" "$minikun_root_cer"
+elif [ ! -s "$minikun_root_cer" ]; then
+  "$minikun_openssl" x509 -in "$minikun_root_pem" -outform DER -out "$minikun_root_cer"
+fi
 chmod 600 "$minikun_root_key" "$minikun_root_pem" "$minikun_root_cer" \
   "$minikun_server_cert" "$minikun_keystore" "$minikun_password_file"
 
@@ -126,14 +145,17 @@ esac
 
 "$minikun_openssl" x509 -in "$minikun_server_cert" -noout -ext subjectAltName | grep -q 'DNS:mini-kun'
 
-echo "Minikun local HTTPS certificate refreshed"
-echo "  http://127.0.0.1:8080/cockpit/"
+if [ "$minikun_reuse_cert" = true ]; then
+  echo "Minikun local HTTPS certificate reused"
+else
+  echo "Minikun local HTTPS certificate refreshed"
+fi
+echo "  Mac: https://127.0.0.1:8443/cockpit/"
 if [ "$minikun_ca_trusted" = "true" ]; then
-  echo "  https://mini-kun.local:8443/cockpit/"
+  echo "  Other devices via Tailscale: https://mini-kun:8443/cockpit/"
 fi
 if [ -n "$minikun_lan_ip" ]; then
-  echo "  http://$minikun_lan_ip:8080/cockpit/"
   if [ "$minikun_ca_trusted" = "true" ]; then
-    echo "  https://$minikun_lan_ip:8443/cockpit/"
+    echo "  LAN alternative: https://$minikun_lan_ip:8443/cockpit/"
   fi
 fi

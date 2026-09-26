@@ -24,7 +24,7 @@ import org.springframework.ai.ollama.api.OllamaChatOptions;
 public final class MainModelPonyPromptTransformer implements PonyPromptTransformer {
     private static final String QUALITY_PREFIX = "score_9, score_8_up, score_7_up";
     private static final java.util.regex.Pattern HUMAN_SUBJECT = java.util.regex.Pattern.compile(
-            "(?<![a-z0-9])(?:[1-8](?:girls?|boys?)|girls?|boys?|women|woman|men|man|people|persons?|humans?)(?![a-z0-9])");
+            "(?<![a-z0-9])(?:[1-8](?:girls?|boys?|people|persons?|humans?)|girls?|boys?|women|woman|men|man|people|persons?|humans?)(?![a-z0-9])");
     private static final java.util.regex.Pattern HUMAN_EXCLUSION = java.util.regex.Pattern.compile(
             "(?<![a-z0-9])(?:no|without)\\s+(?:humans?|people|persons?)(?![a-z0-9])"
                     + "|(?:ไม่มี|ห้ามมี|ไร้)\\s*(?:คน|มนุษย์|ผู้คน)");
@@ -219,10 +219,9 @@ public final class MainModelPonyPromptTransformer implements PonyPromptTransform
             }
             if (excludesHumans) {
                 subjectCount = "";
-                characters = characters.stream()
-                        .filter(character -> !HUMAN_SUBJECT.matcher(character.identity()).find()).toList();
+                characters = List.of();
                 promptTags = promptTags.stream()
-                        .filter(tag -> !tag.group().equals("subjects")
+                        .filter(tag -> tag.value().equals("no humans")
                                 || !HUMAN_SUBJECT.matcher(tag.value()).find()).toList();
             }
             ReconciledPrompt reconciled = reconcileCharacterNames(characters, promptTags);

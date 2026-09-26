@@ -21,22 +21,24 @@ public class LocalHttpsConfiguration {
     WebServerFactoryCustomizer<TomcatServletWebServerFactory> localHttpsConnector(
             @Value("${minikun.https.port:8443}") int port,
             @Value("${minikun.https.keystore}") String keystore,
-            @Value("${minikun.https.keystore-password-file}") String passwordFile) {
+            @Value("${minikun.https.keystore-password-file}") String passwordFile,
+            @Value("${server.compression.enabled:false}") boolean compressionEnabled) {
         if (port < 1 || port > 65535) {
             throw new IllegalArgumentException("local HTTPS port must be between 1 and 65535");
         }
         Path keystorePath = requiredFile("local HTTPS keystore", keystore);
         Path passwordPath = requiredFile("local HTTPS password file", passwordFile);
         return factory -> factory.addAdditionalConnectors(
-                httpsConnector(port, keystorePath, passwordPath));
+                httpsConnector(port, keystorePath, passwordPath, compressionEnabled));
     }
 
-    private Connector httpsConnector(int port, Path keystore, Path passwordFile) {
+    private Connector httpsConnector(int port, Path keystore, Path passwordFile, boolean compressionEnabled) {
         Connector connector = new Connector("org.apache.coyote.http11.Http11NioProtocol");
         connector.setPort(port);
         connector.setScheme("https");
         connector.setSecure(true);
         connector.setProperty("SSLEnabled", "true");
+        if (compressionEnabled) connector.setProperty("compression", "on");
 
         SSLHostConfig ssl = new SSLHostConfig();
         ssl.setSslProtocol("TLS");

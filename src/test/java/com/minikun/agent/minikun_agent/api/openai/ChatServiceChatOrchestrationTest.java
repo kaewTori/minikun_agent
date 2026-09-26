@@ -195,6 +195,7 @@ class ChatServiceChatOrchestrationTest {
 
         assertTrue(transformedOffReactor.get());
         assertTrue(chunks.stream().anyMatch(chunk -> chunk.contains("โมเดลยังไม่ได้ส่งคำตอบ")));
+        assertTrue(chunks.stream().anyMatch(chunk -> chunk.contains("\"image_status\":\"running\"")));
     }
 
     @Test

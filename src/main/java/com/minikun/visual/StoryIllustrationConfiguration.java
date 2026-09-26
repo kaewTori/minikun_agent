@@ -90,9 +90,9 @@ public class StoryIllustrationConfiguration {
             ObjectMapper objectMapper,
             @Value("${minikun.visual.generation.pony-prompt.ollama.base-url:http://127.0.0.1:11434}")
                     String baseUrl,
-            @Value("${minikun.visual.generation.pony-prompt.ollama.model:hf.co/llmfan46/gemma-4-E2B-it-ultra-uncensored-heretic-GGUF:Q4_K_M}")
+            @Value("${minikun.visual.generation.pony-prompt.ollama.model:hf.co/llmfan46/gemma-4-E4B-it-ultra-uncensored-heretic-GGUF:Q6_K}")
                     String model,
-            @Value("${minikun.visual.generation.pony-prompt.ollama.timeout:PT120S}") Duration timeout) {
+            @Value("${minikun.visual.generation.pony-prompt.ollama.timeout:PT240S}") Duration timeout) {
         return new TaskModelStoryVisualPlanGenerator(
                 visualPonyTaskModelProvider(objectMapper, baseUrl, model, timeout), objectMapper);
     }
@@ -102,9 +102,9 @@ public class StoryIllustrationConfiguration {
             ObjectMapper objectMapper,
             @Value("${minikun.visual.generation.pony-prompt.ollama.base-url:http://127.0.0.1:11434}")
                     String baseUrl,
-            @Value("${minikun.visual.generation.pony-prompt.ollama.model:hf.co/llmfan46/gemma-4-E2B-it-ultra-uncensored-heretic-GGUF:Q4_K_M}")
+            @Value("${minikun.visual.generation.pony-prompt.ollama.model:hf.co/llmfan46/gemma-4-E4B-it-ultra-uncensored-heretic-GGUF:Q6_K}")
                     String model,
-            @Value("${minikun.visual.generation.pony-prompt.ollama.timeout:PT120S}") Duration timeout) {
+            @Value("${minikun.visual.generation.pony-prompt.ollama.timeout:PT240S}") Duration timeout) {
         return new MainModelPonyPromptTransformer(
                 visualPonyTaskModelProvider(objectMapper, baseUrl, model, timeout), objectMapper);
     }

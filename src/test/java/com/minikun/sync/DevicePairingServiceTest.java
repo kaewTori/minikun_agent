@@ -1,6 +1,8 @@
 package com.minikun.sync;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -48,7 +50,7 @@ class DevicePairingServiceTest {
     }
 
     @Test
-    void bootstrapsOnlyOnTheLoopbackOriginEvenWhenAnotherDeviceExists() {
+    void bootstrapsOnlyWhenNoDeviceIsPaired() {
         InMemoryDevices devices = new InMemoryDevices();
         DevicePairingService service = service(devices);
         MockHttpServletRequest tailscaleHost = secure("127.0.0.1");
@@ -62,10 +64,12 @@ class DevicePairingServiceTest {
                 secure("127.0.0.1"), new MockHttpServletResponse(), "Mac เครื่องหลัก");
         assertTrue(primary.paired());
 
-        DevicePairingService.SessionView recoveredPrimary = service.openSession(
-                secure("127.0.0.1"), new MockHttpServletResponse(), "Mac เครื่องหลักอีก session");
-        assertTrue(recoveredPrimary.paired());
-        assertTrue(recoveredPrimary.bootstrapped());
+        MockHttpServletResponse duplicateResponse = new MockHttpServletResponse();
+        DevicePairingService.SessionView duplicate = service.openSession(
+                secure("127.0.0.1"), duplicateResponse, "Mac เครื่องหลักอีก session");
+        assertFalse(duplicate.paired());
+        assertEquals(1, devices.activeCount(clock.instant()));
+        assertNull(duplicateResponse.getHeader(HttpHeaders.SET_COOKIE));
     }
 
     @Test
@@ -115,6 +119,8 @@ class DevicePairingServiceTest {
         String cleared = response.getHeader(HttpHeaders.SET_COOKIE);
         assertTrue(cleared.contains(DevicePairingService.COOKIE_NAME + "="));
         assertTrue(cleared.contains("Max-Age=0"));
+        assertTrue(service.openSession(secure("127.0.0.1"), new MockHttpServletResponse(), "Mac")
+                .bootstrapped());
     }
 
     private DevicePairingService service(InMemoryDevices devices) {

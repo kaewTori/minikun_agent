@@ -29,8 +29,7 @@ public final class PonyStoryPromptCompiler {
                 && scene.subjectCount() == characters.size()) {
             candidates = List.copyOf(characters);
         }
-        List<CharacterVisualProfile> referenced = selectCharacters(
-                candidates, scene.action() + " " + scene.interaction());
+        List<CharacterVisualProfile> referenced = candidates;
         long girls = referenced.stream().filter(profile -> female(profile.identity())).count();
         long boys = referenced.stream().filter(profile -> male(profile.identity())).count();
         if (girls > 0) add(boosters, girls + (girls == 1 ? "girl" : "girls"));
@@ -59,8 +58,8 @@ public final class PonyStoryPromptCompiler {
         addAll(negative, scene.mustNotInclude());
         List<String> sections = new ArrayList<>(List.of(QUALITY_PREFIX, rating(scene), factual, style));
         if (!boosters.isEmpty()) sections.add(join(boosters));
-        String positive = String.join(", ", sections);
-        return new CompiledPrompt(positive, join(negative), facePrompts(referenced));
+        return withoutCharacterNames(new CompiledPrompt(
+                String.join(", ", sections), join(negative), facePrompts(referenced)), referenced);
     }
 
     private String factualDescription(
@@ -175,18 +174,6 @@ public final class PonyStoryPromptCompiler {
         return "rating_safe";
     }
 
-    private List<CharacterVisualProfile> selectCharacters(
-            List<CharacterVisualProfile> characters, String action) {
-        if (characters.size() <= 2) return characters;
-        List<CharacterVisualProfile> ranked = new ArrayList<>(characters);
-        ranked.sort(java.util.Comparator
-                .comparingInt((CharacterVisualProfile profile) -> mentions(action, profile.name()) ? 1 : 0)
-                .reversed()
-                .thenComparingInt(characters::indexOf));
-        java.util.Set<CharacterVisualProfile> selected = new java.util.HashSet<>(ranked.subList(0, 2));
-        return characters.stream().filter(selected::contains).toList();
-    }
-
     private void addCharacterBlock(
             LinkedHashSet<String> target, CharacterVisualProfile character, int index, int total) {
         LinkedHashSet<String> tags = new LinkedHashSet<>();
@@ -208,9 +195,36 @@ public final class PonyStoryPromptCompiler {
         String result = value;
         for (int index = 0; index < selected.size(); index++) {
             CharacterVisualProfile character = selected.get(index);
-            result = replaceName(result, character.name(), position(character, index, selected.size()));
+            result = replaceName(result, character.name(), subjectLabel(character, index, selected.size()));
         }
         return result;
+    }
+
+    private String anonymizeNames(String value, List<CharacterVisualProfile> characters) {
+        String result = value;
+        for (int index = 0; index < characters.size(); index++) {
+            CharacterVisualProfile character = characters.get(index);
+            result = replaceName(result, character.name(), subjectLabel(character, index, characters.size()));
+        }
+        return result;
+    }
+
+    CompiledPrompt withoutCharacterNames(CompiledPrompt prompt, List<CharacterVisualProfile> characters) {
+        return new CompiledPrompt(
+                anonymizeNames(prompt.positive(), characters),
+                anonymizeNames(prompt.negative(), characters),
+                prompt.facePrompts().stream().map(face -> anonymizeNames(face, characters)).toList());
+    }
+
+    private String subjectLabel(CharacterVisualProfile character, int index, int total) {
+        String position = position(character, index, total);
+        if (!position.isBlank()) return position;
+        if (female(character.identity())) return "girl";
+        if (male(character.identity())) return "boy";
+        String identity = character.identity().toLowerCase(Locale.ROOT);
+        if (identity.matches(".*\\bcats?\\b.*")) return "cat";
+        if (identity.matches(".*\\bdogs?\\b.*")) return "dog";
+        return animal(identity) ? "animal" : "person";
     }
 
     private boolean mentions(String value, String name) {

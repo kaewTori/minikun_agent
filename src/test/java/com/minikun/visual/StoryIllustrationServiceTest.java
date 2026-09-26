@@ -52,6 +52,62 @@ class StoryIllustrationServiceTest {
     }
 
     @Test
+    void translatesLocalizedSceneInsteadOfSendingAGenericPersonPrompt() {
+        AtomicReference<ImageGenerationRequest> request = new AtomicReference<>();
+        StoryIllustrationProvider provider = new StoryIllustrationProvider() {
+            @Override public GeneratedImage generate(String prompt) { throw new AssertionError(); }
+            @Override public GeneratedImage generate(ImageGenerationRequest value) {
+                request.set(value);
+                return new GeneratedImage(GeneratedImageStoreTest.png(), "test-image-model");
+            }
+        };
+        StoryVisualPlanGenerator planner = (user, story, mode, memory, maximum) ->
+                new StoryVisualPlan(mode, List.of(), List.of(new StorySceneSpec(
+                        "หอดูดาว", 1, List.of(), "แมวดำนั่งข้างกล้องโทรทรรศน์", "", List.of(),
+                        "หอดูดาวเก่า", "", "", "", "", "", "", "", "", "", "",
+                        List.of("ปลอกคอสีแดง"), List.of(), List.of())));
+        StoryIllustrationService service = new StoryIllustrationService(
+                tool(provider), true, 4000, planner, new InMemoryCharacterVisualMemory(), 3,
+                brief -> "score_9, score_8_up, score_7_up, black cat, red collar, brass telescope, old observatory, no humans");
+
+        var result = service.illustrate("แต่งเรื่องแมวดำปลอกคอสีแดงในหอดูดาว ไม่มีคน",
+                "แมวดำนั่งข้างกล้องโทรทรรศน์ทองเหลือง");
+
+        assertEquals(1, result.attachments().size());
+        assertTrue(request.get().prompt().contains("black cat"));
+        assertFalse(request.get().prompt().contains("shows person"));
+        assertTrue(request.get().negativePrompt().contains("human"));
+    }
+
+    @Test
+    void translatedStoryPromptOmitsCharacterNamesBeforeGeneration() {
+        AtomicReference<ImageGenerationRequest> request = new AtomicReference<>();
+        StoryIllustrationProvider provider = new StoryIllustrationProvider() {
+            @Override public GeneratedImage generate(String prompt) { throw new AssertionError(); }
+            @Override public GeneratedImage generate(ImageGenerationRequest value) {
+                request.set(value);
+                return new GeneratedImage(GeneratedImageStoreTest.png(), "test-image-model");
+            }
+        };
+        CharacterVisualProfile cat = new CharacterVisualProfile(
+                "Luna", "cat", List.of("black fur"), List.of(), List.of("red collar"), List.of(), List.of());
+        StoryVisualPlanGenerator planner = (user, story, mode, memory, maximum) ->
+                new StoryVisualPlan(mode, List.of(cat), List.of(new StorySceneSpec(
+                        "หอดูดาว", 1, List.of("Luna"), "Luna มองดาว", "", List.of(),
+                        "หอดูดาวเก่า", "", "", "", "", "", "", "", "", "", "",
+                        List.of(), List.of(), List.of())));
+        StoryIllustrationService service = new StoryIllustrationService(
+                tool(provider), true, 4000, planner, new InMemoryCharacterVisualMemory(), 3,
+                brief -> "score_9, score_8_up, score_7_up, Luna the black cat, red collar, old observatory, starry sky");
+
+        var result = service.illustrate("แต่งเรื่อง Luna แมวดำปลอกคอแดง", "Luna มองดาวในหอดูดาว");
+
+        assertEquals(1, result.attachments().size());
+        assertTrue(request.get().prompt().contains("black cat"));
+        assertFalse(request.get().prompt().toLowerCase().contains("luna"));
+    }
+
+    @Test
     void doesNotRetryFailedImageGeneration() {
         AtomicInteger attempts = new AtomicInteger();
         StoryIllustrationProvider provider = new StoryIllustrationProvider() {
@@ -168,7 +224,7 @@ class StoryIllustrationServiceTest {
     }
 
     @Test
-    void plannerAndTransformerFailureUseDeterministicTinyGradFallback() {
+    void plannerFailureReportsNoImageWithoutCallingTinyGrad() {
         AtomicInteger providerCalls = new AtomicInteger();
         StoryIllustrationProvider provider = new StoryIllustrationProvider() {
             @Override public GeneratedImage generate(String prompt) { throw new AssertionError(); }
@@ -185,23 +241,21 @@ class StoryIllustrationServiceTest {
         var result = service.illustrate("owner", "story-failure",
                 "เล่าเรื่อง Itsuki กับ Rena", "Itsuki และ Rena เผชิญหน้ากันในห้องสวีทของโรงแรม");
 
-        assertEquals(1, providerCalls.get());
-        assertEquals(1, result.attachments().size());
-        assertTrue(result.notice().isEmpty());
+        assertEquals(0, providerCalls.get());
+        assertTrue(result.attachments().isEmpty());
+        assertTrue(result.notice().contains("สร้างภาพประกอบไม่สำเร็จ"));
     }
 
     @Test
-    void plannerFailureFallsBackToExistingPromptTransformerThenTinyGradProvider() {
-        AtomicReference<ImageGenerationRequest> request = new AtomicReference<>();
-        StoryIllustrationProvider provider = new StoryIllustrationProvider() {
-            @Override public GeneratedImage generate(String prompt) { throw new AssertionError(); }
-            @Override public GeneratedImage generate(ImageGenerationRequest value) {
-                request.set(value);
-                return new GeneratedImage(GeneratedImageStoreTest.png(), "tinygrad-pony");
-            }
+    void plannerFailureDoesNotCallPromptTransformer() {
+        AtomicInteger providerCalls = new AtomicInteger();
+        AtomicInteger transformerCalls = new AtomicInteger();
+        StoryIllustrationProvider provider = value -> {
+            providerCalls.incrementAndGet();
+            return new GeneratedImage(GeneratedImageStoreTest.png(), "tinygrad-pony");
         };
         PonyPromptTransformer transformer = brief -> {
-            assertTrue(brief.contains("Itsuki"));
+            transformerCalls.incrementAndGet();
             return "score_9, score_8_up, score_7_up, 2girls, hotel suite, tense rivalry";
         };
         StoryIllustrationService service = new StoryIllustrationService(
@@ -212,14 +266,14 @@ class StoryIllustrationServiceTest {
         var result = service.illustrate("owner", "story-fallback",
                 "เล่าเรื่อง Itsuki กับ Rena", "Itsuki และ Rena เผชิญหน้ากันในโรงแรม");
 
-        assertEquals(1, result.attachments().size());
-        assertTrue(result.notice().isEmpty());
-        assertEquals("tinygrad-pony", result.attachments().getFirst().provider());
-        assertTrue(request.get().prompt().contains("2girls, hotel suite, tense rivalry"));
+        assertTrue(result.attachments().isEmpty());
+        assertTrue(result.notice().contains("สร้างภาพประกอบไม่สำเร็จ"));
+        assertEquals(0, transformerCalls.get());
+        assertEquals(0, providerCalls.get());
     }
 
     @Test
-    void rejectsFallbackTransformerGenderHallucinationBeforeTinyGrad() {
+    void correctsDirectImageTransformerGenderBeforeTinyGrad() {
         AtomicReference<ImageGenerationRequest> request = new AtomicReference<>();
         StoryIllustrationProvider provider = new StoryIllustrationProvider() {
             @Override public GeneratedImage generate(String prompt) { throw new AssertionError(); }
@@ -235,7 +289,7 @@ class StoryIllustrationServiceTest {
                 brief -> "score_9, score_8_up, score_7_up, 1boy, observatory, starlight");
 
         var result = service.illustrate("owner", "story-fallback",
-                "แต่งเรื่องหญิงสาวมะลิ", "หญิงสาวมะลิมองดาวในหอดูดาว");
+                "วาดภาพหญิงสาวมะลิ", "หญิงสาวมะลิมองดาวในหอดูดาว");
 
         assertEquals(1, result.attachments().size());
         assertTrue(request.get().prompt().contains("1girl"));
@@ -244,7 +298,7 @@ class StoryIllustrationServiceTest {
     }
 
     @Test
-    void anchorsExplicitFemaleStoryWhenFallbackPromptOmitsGender() {
+    void anchorsExplicitFemaleDirectImageWhenTransformerOmitsGender() {
         AtomicReference<ImageGenerationRequest> request = new AtomicReference<>();
         StoryIllustrationProvider provider = new StoryIllustrationProvider() {
             @Override public GeneratedImage generate(String prompt) { throw new AssertionError(); }
@@ -260,7 +314,7 @@ class StoryIllustrationServiceTest {
                 brief -> "score_9, score_8_up, score_7_up, observatory, starlight");
 
         service.illustrate("owner", "story-fallback",
-                "แต่งเรื่องหญิงสาวมะลิ", "หญิงสาวมะลิมองดาวในหอดูดาว");
+                "วาดภาพหญิงสาวมะลิ", "หญิงสาวมะลิมองดาวในหอดูดาว");
 
         assertTrue(request.get().prompt().contains("1girl"));
         assertFalse(request.get().prompt().contains("1boy"));
@@ -303,9 +357,8 @@ class StoryIllustrationServiceTest {
     }
 
     @Test
-    void plannerFailureKeepsAllStoryboardPanels() {
+    void directImageTransformerFailureDoesNotUseDeterministicPrompt() {
         List<ImageGenerationRequest> requests = new ArrayList<>();
-        List<String> briefs = new ArrayList<>();
         StoryIllustrationProvider provider = new StoryIllustrationProvider() {
             @Override public GeneratedImage generate(String prompt) { throw new AssertionError(); }
             @Override public GeneratedImage generate(ImageGenerationRequest request) {
@@ -315,25 +368,16 @@ class StoryIllustrationServiceTest {
         };
         StoryIllustrationService service = new StoryIllustrationService(
                 tool(provider), true, 4000,
-                (user, story, mode, memory, maximum) -> { throw new IllegalArgumentException("empty scene"); },
+                (user, story, mode, memory, maximum) -> { throw new AssertionError("planner must not run"); },
                 new InMemoryCharacterVisualMemory(), 3,
-                brief -> {
-                    briefs.add(brief);
-                    return "score_9, score_8_up, score_7_up, observatory, blue star";
-                });
+                brief -> { throw new IllegalArgumentException("bad prompt"); });
 
         var result = service.illustrate("owner", "storyboard-fallback",
-                "แต่งเรื่องพร้อมภาพแต่ละฉากแบบ storyboard", "A blue star appears in an observatory.");
+                "วาดภาพ storyboard ดาวสีฟ้าในหอดูดาว", "A blue star appears in an observatory.");
 
-        assertEquals(3, result.attachments().size());
-        assertEquals(3, requests.size());
-        assertEquals(3, briefs.stream().distinct().count());
-        assertTrue(briefs.getFirst().contains("opening story moment"));
-        assertTrue(briefs.getLast().contains("emotional ending moment"));
-        assertTrue(result.attachments().getFirst().title().contains("1/3"));
-        assertTrue(result.attachments().getLast().title().contains("3/3"));
-        assertTrue(requests.getFirst().prompt().contains("opening story moment"));
-        assertTrue(requests.getLast().prompt().contains("emotional ending moment"));
+        assertTrue(result.attachments().isEmpty());
+        assertTrue(result.notice().contains("สร้างภาพประกอบไม่สำเร็จ"));
+        assertTrue(requests.isEmpty());
     }
 
     @Test
