@@ -10,6 +10,20 @@ import org.junit.jupiter.api.Test;
 
 class FastPathSearchDecisionServiceTest {
     @Test
+    void sourceWordingCannotTakeGeneralTranslationFastPath() {
+        SearchDecisionService delegate = query -> {
+            throw new AssertionError("model should not be called");
+        };
+        SearchDecisionService service = new FastPathSearchDecisionService(
+                delegate, new RuleBasedSearchDecisionService(null));
+
+        assertTrue(service.decide("แปลเนื้อร้องเพลงนี้ให้หน่อย").shouldSearch());
+        assertTrue(service.decide("แปลแบบเน้นความหมายลึกซึ้ง",
+                "user: ช่วยแปลเพลงนั้นให้ฟังหน่อย").shouldSearch());
+        assertFalse(service.decide("แปลคำว่า resilience").shouldSearch());
+    }
+
+    @Test
     void bypassesModelForObviousGeneralQuestion() {
         SearchDecisionService delegate = query -> {
             throw new AssertionError("model should not be called");

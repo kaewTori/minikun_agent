@@ -64,6 +64,14 @@ final class OpenAiChatResponseFactory {
                 "stop");
     }
 
+    List<ChatAttachment> combineAttachments(List<ChatAttachment> existing, List<ChatAttachment> generated) {
+        if (generated == null || generated.isEmpty()) return existing == null ? List.of() : existing;
+        java.util.ArrayList<ChatAttachment> combined = new java.util.ArrayList<>();
+        if (existing != null) combined.addAll(existing);
+        combined.addAll(generated);
+        return List.copyOf(combined);
+    }
+
     List<String> contentStream(String model, String content) {
         String id = "chatcmpl-" + UUID.randomUUID();
         long created = Instant.now().getEpochSecond();

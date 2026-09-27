@@ -1,3 +1,5 @@
+CREATE EXTENSION IF NOT EXISTS vector;
+
 CREATE TABLE IF NOT EXISTS minikun_memory (
     id UUID PRIMARY KEY,
     owner_id VARCHAR(255),
@@ -197,3 +199,6 @@ ALTER TABLE minikun_memory ADD COLUMN IF NOT EXISTS evidence text;
 ALTER TABLE minikun_memory ADD COLUMN IF NOT EXISTS supersedes_id uuid;
 CREATE INDEX IF NOT EXISTS idx_minikun_memory_slot
     ON minikun_memory(owner_id, fact_subject, fact_key, (COALESCE(valid_from, recorded_at)), recorded_at);
+
+ALTER TABLE minikun_memory ADD COLUMN IF NOT EXISTS embedding vector;
+ALTER TABLE minikun_memory ADD COLUMN IF NOT EXISTS embedding_model varchar(255);

@@ -34,6 +34,8 @@ final class MemoryFormatter {
                         + ", recordedAt=" + memory.fact().recordedAt() + ", evidence=" + memory.fact().evidence() + "]")
                     + " (confidence=" + memory.confidence()
                     + ", source=" + memory.source()
+                    + ", memoryId=" + memory.id().value()
+                    + ", conversationId=" + (memory.conversationId() == null ? "unknown" : memory.conversationId())
                     + ", reason=" + memory.reason() + ")";
             int separatorLength = content.isEmpty() ? 0 : 1;
             if (content.length() + separatorLength + entry.length() > maximumCharacters) {
@@ -44,7 +46,7 @@ final class MemoryFormatter {
             }
             content.append(entry);
             candidates.add(new KnowledgeCandidate(
-                    "memory-" + index, KnowledgeSource.MEMORY, entry, index,
+                    "memory-" + memory.id().value(), KnowledgeSource.MEMORY, entry, index,
                     memory.conversationId() == null ? "memory" : "conversation:" + memory.conversationId()));
         }
         return new KnowledgeContext(content.toString(), candidates);

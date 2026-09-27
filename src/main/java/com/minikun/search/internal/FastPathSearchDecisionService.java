@@ -4,6 +4,7 @@ import com.minikun.conversation.continuity.ConversationContinuity;
 import com.minikun.conversation.continuity.ConversationContinuityResolver;
 import com.minikun.model.CooperationRouter;
 import com.minikun.search.SearchDecisionService;
+import com.minikun.search.GroundingIntent;
 import com.minikun.search.model.SearchDecision;
 import com.minikun.search.model.SearchDecisionReason;
 import java.util.Locale;
@@ -64,6 +65,9 @@ public final class FastPathSearchDecisionService implements SearchDecisionServic
 
     @Override
     public SearchDecision decide(String query) {
+        if (GroundingIntent.requiresSource(query, "")) {
+            return new SearchDecision(true, query, SearchDecisionReason.FACT_LOOKUP);
+        }
         if (dynamicLocalDiscovery(query)) {
             return requireLocalSearch(query, delegate.decide(query));
         }
@@ -73,6 +77,9 @@ public final class FastPathSearchDecisionService implements SearchDecisionServic
 
     @Override
     public SearchDecision decide(String query, String conversationContext) {
+        if (GroundingIntent.requiresSource(query, conversationContext)) {
+            return new SearchDecision(true, query, SearchDecisionReason.FACT_LOOKUP);
+        }
         if (dynamicLocalDiscovery(query)) {
             return requireLocalSearch(query, delegate.decide(query, conversationContext));
         }

@@ -46,7 +46,8 @@ public class MemoryRecallService {
         if (limit < 0) throw new IllegalArgumentException("memory retrieval limit must not be negative");
         Objects.requireNonNull(scope, "scope must not be null");
         if (limit == 0) return new KnowledgeContext("");
-        List<Memory> candidates = repository.findLongTerm(scope, query, Math.max(limit * 5, limit));
+        // The JDBC repository searches stored vectors across the whole owner scope; lexical fallback uses this pool.
+        List<Memory> candidates = repository.findLongTerm(scope, query, Math.max(limit * 5, 200));
         List<Memory> ranked = ranker.rank(candidates, query, limit);
         return pipeline.apply(ranked);
     }

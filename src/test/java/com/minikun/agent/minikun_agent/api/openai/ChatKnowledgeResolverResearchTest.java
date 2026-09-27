@@ -229,6 +229,25 @@ class ChatKnowledgeResolverResearchTest {
     }
 
     @Test
+    void exactWordingRequestOpensSearchResultBeforeAnswering() {
+        AtomicInteger renders = new AtomicInteger();
+        BrowserContentService browser = new BrowserContentService(url -> {
+            renders.incrementAndGet();
+            return new BrowserContent(url,
+                    "The original passage is available on this complete source page.", "text/html", false);
+        }, true, 5);
+        ChatKnowledgeResolver resolver = resolver(browser, new KnowledgeContext("snippet", List.of(
+                searchCandidate(0, "https://example.org/original"))), 1);
+
+        ChatKnowledgeSelection result = resolver.resolve(new ChatKnowledgeResolver.Request(
+                "ขอข้อความต้นฉบับ", "request-exact", null, "default", false, ""));
+
+        assertEquals(1, renders.get());
+        assertTrue(result.selection().selectedCandidates().stream()
+                .anyMatch(candidate -> candidate.source() == KnowledgeSource.BROWSER));
+    }
+
+    @Test
     void retriesLocalDiscoveryOnceWhenEvidenceIsThin() {
         AtomicInteger searches = new AtomicInteger();
         com.minikun.search.SearchService search = request -> {

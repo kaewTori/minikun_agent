@@ -18,6 +18,25 @@ import org.junit.jupiter.api.Test;
 
 class ChatCapabilityFactoryTest {
     @Test
+    void memoryGuidancePrioritizesUserCorrectionsAndGroundsSourceClaims() {
+        var memory = new KnowledgeCandidate("memory-1", KnowledgeSource.MEMORY,
+                "PREFERENCE: ไม่ชอบหวาน (source=USER_DIRECTIVE)", 0, "conversation:chat-1");
+        var knowledge = new ChatKnowledgeSelection(
+                new KnowledgeSelection(List.of(memory), false), KnowledgeConsolidation.EMPTY,
+                SearchSelectionSignals.EMPTY, SearchContext.EMPTY);
+
+        String text = new ChatCapabilityFactory().create("ฉันชอบอะไร", knowledge,
+                null, null, null, null, "", false).stream()
+                .map(capability -> capability.name() + " " + capability.content())
+                .reduce((left, right) -> left + "\n" + right).orElse("");
+
+        assertTrue(text.contains("Personal memory"));
+        assertTrue(text.contains("explicit user corrections take precedence"));
+        assertTrue(text.contains("extracted facts backed by user quotes, and unsupported inferences"));
+        assertTrue(text.contains("say when no verifiable quote is available"));
+    }
+
+    @Test
     void composesResearchAndStorytellingGuidanceWithResolvedKnowledge() {
         KnowledgeCandidate source = new KnowledgeCandidate(
                 "search-0", KnowledgeSource.SEARCH,

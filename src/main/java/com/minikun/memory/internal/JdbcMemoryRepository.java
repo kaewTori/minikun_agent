@@ -1,9 +1,15 @@
 package com.minikun.memory.internal;
 
 import java.time.ZoneOffset;
+import java.util.Arrays;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
+import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.scheduling.annotation.Scheduled;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -26,6 +32,9 @@ final class JdbcMemoryRepository implements MemoryRepository {
     private static final String PERSIST_FAILURE = "minikun.memory.reflection.persist.failure";
     private final JdbcTemplate jdbcTemplate;
     private final MeterRegistry meterRegistry;
+    private final EmbeddingModel embeddingModel;
+    private final String embeddingModelName;
+    private final double semanticWeight;
     private static final String CURRENT = " AND (fact_key IS NULL OR (COALESCE(valid_from, recorded_at) <= CURRENT_TIMESTAMP AND (valid_to IS NULL OR valid_to > CURRENT_TIMESTAMP)))";
 
 
@@ -34,8 +43,64 @@ final class JdbcMemoryRepository implements MemoryRepository {
     }
 
     JdbcMemoryRepository(JdbcTemplate jdbcTemplate, MeterRegistry meterRegistry) {
+        this(jdbcTemplate, meterRegistry, null, "", 0.85);
+    }
+
+    JdbcMemoryRepository(JdbcTemplate jdbcTemplate, MeterRegistry meterRegistry,
+            EmbeddingModel embeddingModel, String embeddingModelName, double semanticWeight) {
         this.jdbcTemplate = jdbcTemplate;
         this.meterRegistry = meterRegistry;
+        this.embeddingModel = embeddingModel;
+        this.embeddingModelName = embeddingModelName;
+        if (!Double.isFinite(semanticWeight) || semanticWeight < 0 || semanticWeight > 1)
+            throw new IllegalArgumentException("semantic memory weight must be between 0 and 1");
+        this.semanticWeight = semanticWeight;
+    }
+
+    boolean semanticEnabled() {
+        return embeddingModel != null;
+    }
+
+    @Scheduled(initialDelayString = "${minikun.memory.semantic.backfill-initial-delay:10000}",
+            fixedDelayString = "${minikun.memory.semantic.backfill-delay:30000}")
+    void backfillEmbeddings() {
+        if (embeddingModel == null) return;
+        try {
+            var rows = jdbcTemplate.query("""
+                    SELECT id, category, content FROM minikun_memory
+                    WHERE owner_id IS NOT NULL AND owner_id <> '' AND owner_id <> '*'
+                      AND (embedding IS NULL OR embedding_model IS DISTINCT FROM ?)
+                    ORDER BY created_at, id LIMIT 64
+                    """, (rs, n) -> new EmbeddingRow(rs.getObject("id", java.util.UUID.class),
+                            rs.getString("category"), rs.getString("content")), embeddingModelName);
+            if (rows.isEmpty()) return;
+            List<float[]> vectors = embeddingModel.embed(rows.stream()
+                    .map(row -> row.category() + ": " + row.content()).toList());
+            if (vectors == null || vectors.size() != rows.size()) throw new IllegalStateException("embedding batch size mismatch");
+            for (int i = 0; i < rows.size(); i++) {
+                var row = rows.get(i);
+                jdbcTemplate.update("""
+                        UPDATE minikun_memory SET embedding = ?::vector, embedding_model = ?
+                        WHERE id = ? AND category = ? AND content = ?
+                        """, vector(vectors.get(i)), embeddingModelName, row.id(), row.category(), row.content());
+            }
+            log.info("memory_embedding_backfill rows={}", rows.size());
+        } catch (RuntimeException exception) {
+            log.warn("memory_embedding_backfill_failed error_type={}", exception.getClass().getSimpleName());
+        }
+    }
+
+    private record EmbeddingRow(java.util.UUID id, String category, String content) {}
+
+    private static String vector(float[] values) {
+        if (values == null || values.length == 0) throw new IllegalArgumentException("embedding vector is empty");
+        boolean nonzero = false;
+        for (float value : values) {
+            if (!Float.isFinite(value)) throw new IllegalArgumentException("embedding vector must be finite");
+            nonzero |= value != 0;
+        }
+        if (!nonzero) throw new IllegalArgumentException("embedding vector must not be zero");
+        return Arrays.toString(values);
     }
 
     @Override
@@ -192,19 +257,49 @@ final class JdbcMemoryRepository implements MemoryRepository {
         var terms = com.minikun.memory.MemoryRelevanceRanker.terms(query);
         boolean historical = com.minikun.memory.MemoryRecallService.historical(query);
         String filter = historical ? "" : CURRENT;
-        if (terms.isEmpty()) return queryOwnerMemories("WHERE owner_id = ?" + filter + " ORDER BY created_at DESC, id LIMIT ?", scope.ownerId(), limit);
-        // ponytail: query-time scan across one owner's memory; add an indexed search column if profiling warrants it.
-        String score = terms.stream().map(term -> "CASE WHEN strpos(lower(content), ?) > 0 THEN 1 ELSE 0 END")
-                .collect(java.util.stream.Collectors.joining(" + "));
-        java.util.List<Object> arguments = new java.util.ArrayList<>();
-        arguments.add(scope.ownerId());
-        arguments.addAll(terms);
-        arguments.add(Math.max(1, limit - limit / 5));
         var candidates = new java.util.LinkedHashMap<com.minikun.memory.model.MemoryId, Memory>();
-        queryOwnerMemories("WHERE owner_id = ?" + filter + " ORDER BY (" + score + ") DESC, confidence DESC, created_at DESC, id LIMIT ?",
-                arguments.toArray()).forEach(memory -> candidates.put(memory.id(), memory));
-        queryOwnerMemories("WHERE owner_id = ?" + filter + " ORDER BY created_at DESC, id LIMIT ?", scope.ownerId(), Math.max(1, limit / 5)).forEach(memory -> candidates.putIfAbsent(memory.id(), memory));
-        return candidates.values().stream().limit(limit).toList();
+        if (!terms.isEmpty()) {
+            // ponytail: exact owner-filtered scan is sufficient at today's corpus size; add ANN only if profiling warrants it.
+            String score = terms.stream().map(term -> "CASE WHEN strpos(lower(content), ?) > 0 THEN 1 ELSE 0 END")
+                    .collect(java.util.stream.Collectors.joining(" + "));
+            java.util.List<Object> arguments = new java.util.ArrayList<>();
+            arguments.add(scope.ownerId());
+            arguments.addAll(terms);
+            arguments.add(Math.max(1, limit - limit / 5));
+            queryOwnerMemories("WHERE owner_id = ?" + filter + " ORDER BY (" + score + ") DESC, confidence DESC, created_at DESC, id LIMIT ?",
+                    arguments.toArray()).forEach(memory -> candidates.put(memory.id(), memory));
+        }
+        queryOwnerMemories("WHERE owner_id = ?" + filter + " ORDER BY created_at DESC, id LIMIT ?", scope.ownerId(),
+                terms.isEmpty() ? limit : Math.max(1, limit / 5)).forEach(memory -> candidates.putIfAbsent(memory.id(), memory));
+        if (embeddingModel == null || query == null || query.isBlank()) return candidates.values().stream().limit(limit).toList();
+        try {
+            float[] queryVector = embeddingModel.embed(query);
+            String vector = vector(queryVector);
+            List<Memory> semantic = queryOwnerMemories("""
+                    WHERE owner_id = ? AND embedding_model = ? AND vector_dims(embedding) = ?
+                    """ + filter + " ORDER BY embedding <=> ?::vector, created_at DESC, id LIMIT ?",
+                    scope.ownerId(), embeddingModelName, queryVector.length, vector, limit);
+            if (semantic.isEmpty()) return candidates.values().stream().limit(limit).toList();
+            Map<MemoryId, Double> scores = new HashMap<>();
+            Map<MemoryId, Memory> merged = new HashMap<>();
+            for (int i = 0; i < semantic.size(); i++) {
+                Memory memory = semantic.get(i);
+                merged.put(memory.id(), memory);
+                scores.merge(memory.id(), semanticWeight / (i + 1), Double::sum);
+            }
+            int rank = 0;
+            for (Memory memory : candidates.values()) {
+                merged.putIfAbsent(memory.id(), memory);
+                scores.merge(memory.id(), (1 - semanticWeight) / (++rank), Double::sum);
+            }
+            return merged.values().stream().sorted(Comparator
+                    .comparingDouble((Memory memory) -> scores.get(memory.id())).reversed()
+                    .thenComparing(Memory::createdAt, Comparator.reverseOrder()))
+                    .limit(limit).toList();
+        } catch (RuntimeException exception) {
+            log.warn("memory_semantic_recall_fallback error_type={}", exception.getClass().getSimpleName());
+            return candidates.values().stream().limit(limit).toList();
+        }
     }
 
     private List<Memory> queryOwnerMemories(String suffix, Object... arguments) {
@@ -262,7 +357,8 @@ final class JdbcMemoryRepository implements MemoryRepository {
                 update.content(), update.confidence(), update.reason(), current.source()));
         return jdbcTemplate.update("""
                 UPDATE minikun_memory
-                SET category = ?, content = ?, confidence = ?, reason = ?, fingerprint = ?
+                SET category = ?, content = ?, confidence = ?, reason = ?, fingerprint = ?,
+                    embedding = NULL, embedding_model = NULL
                 WHERE owner_id = ? AND id = ?
                 """, update.category().name(), update.content(), update.confidence(), update.reason(), fingerprint,
                 ownerId, memoryId.value()) > 0;

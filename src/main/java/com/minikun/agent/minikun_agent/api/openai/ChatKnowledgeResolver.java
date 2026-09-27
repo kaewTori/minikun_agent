@@ -39,6 +39,7 @@ import com.minikun.search.SearchDecisionService;
 import com.minikun.search.SearchQueryPlanningService;
 import com.minikun.search.SearchSelectionSignalMapper;
 import com.minikun.search.SearchService;
+import com.minikun.search.GroundingIntent;
 import com.minikun.search.internal.ExternalContextPlanner;
 import com.minikun.search.internal.ImageIntentDetector;
 import com.minikun.search.model.ExternalContextAction;
@@ -364,7 +365,7 @@ final class ChatKnowledgeResolver {
                     ? combine(joinKnowledge(searchFuture, "image"), joinKnowledge(evidenceFuture, "image_evidence"))
                     : searchFuture.join();
             searchKnowledge = ensureRecommendationEvidence(plan, searchKnowledge);
-            if (deepResearch) {
+            if (deepResearch || GroundingIntent.requiresSource(query, request.classifierContext())) {
                 browserCandidates = mergeBrowserCandidates(
                         browserCandidates, readResearchSourceCandidates(searchKnowledge));
             }
@@ -384,6 +385,9 @@ final class ChatKnowledgeResolver {
     }
 
     private SearchDecision decideSearch(String query, String classifierContext) {
+        if (GroundingIntent.requiresSource(query, classifierContext)) {
+            return new SearchDecision(true, query, SearchDecisionReason.FACT_LOOKUP);
+        }
         SearchDecision decision = searchDecisionService.decide(query, classifierContext);
         if (decision == null) decision = searchDecisionService.decide(query);
         return decision == null ? new SearchDecision(false, query) : decision;
@@ -892,7 +896,7 @@ final class ChatKnowledgeResolver {
                 int personalKnowledgeLimit, int researchSourceReadLimit, Duration autonomousResearchTimeout) {
             this(searchEnabled, searchTimeout, safeSearch, queryPlanningEnabled, searchResultLimit,
                     memoryRetrievalLimit, personalKnowledgeLimit, researchSourceReadLimit,
-                    autonomousResearchTimeout, Duration.ofSeconds(3));
+                    autonomousResearchTimeout, Duration.ofSeconds(5));
         }
 
         Configuration {

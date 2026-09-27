@@ -24,6 +24,8 @@ import com.minikun.tools.ToolRequestRouter;
 import com.minikun.tools.springai.SpringAiToolCallingRuntime;
 import com.minikun.vision.VisionInputService;
 import com.minikun.visual.StoryIllustrationService;
+import com.minikun.visual.ImageGenerationTool;
+import com.minikun.visual.PonyPromptTransformer;
 import com.minikun.weather.ReverseGeocodingService;
 
 /** Resolves optional chat capabilities once at the composition boundary. */
@@ -51,6 +53,7 @@ final class ChatCollaborators {
     private final ChatExplainabilitySink explainabilitySink;
     private final ConversationThreadService conversationThreadService;
     private final StoryIllustrationService storyIllustrationService;
+    private final PonyPromptChatService ponyPromptChatService;
     private final TurnPlanner turnPlanner;
     private final ChatGptReasoningClient chatGptReasoningClient;
     private final KimiK3ReasoningClient kimiK3ReasoningClient;
@@ -79,6 +82,8 @@ final class ChatCollaborators {
             ObjectProvider<ChatExplainabilitySink> explainabilitySink,
             ObjectProvider<ConversationThreadService> conversationThreadService,
             ObjectProvider<StoryIllustrationService> storyIllustrationService,
+            ObjectProvider<PonyPromptTransformer> ponyPromptTransformer,
+            ObjectProvider<ImageGenerationTool> imageGenerationTool,
             ObjectProvider<TurnPlanner> turnPlanner,
             ObjectProvider<ChatGptReasoningClient> chatGptReasoningClient,
             ObjectProvider<KimiK3ReasoningClient> kimiK3ReasoningClient,
@@ -105,6 +110,10 @@ final class ChatCollaborators {
         this.explainabilitySink = explainabilitySink.getIfAvailable();
         this.conversationThreadService = conversationThreadService.getIfAvailable();
         this.storyIllustrationService = storyIllustrationService.getIfAvailable();
+        PonyPromptTransformer transformer = ponyPromptTransformer.getIfAvailable();
+        ImageGenerationTool imageTool = imageGenerationTool.getIfAvailable();
+        this.ponyPromptChatService = transformer == null || imageTool == null
+                ? null : new PonyPromptChatService(transformer, imageTool);
         this.turnPlanner = turnPlanner.getIfAvailable();
         this.chatGptReasoningClient = chatGptReasoningClient.getIfAvailable();
         this.kimiK3ReasoningClient = kimiK3ReasoningClient.getIfAvailable();
@@ -133,6 +142,7 @@ final class ChatCollaborators {
     ChatExplainabilitySink explainabilitySink() { return explainabilitySink; }
     ConversationThreadService conversationThreadService() { return conversationThreadService; }
     StoryIllustrationService storyIllustrationService() { return storyIllustrationService; }
+    PonyPromptChatService ponyPromptChatService() { return ponyPromptChatService; }
     TurnPlanner turnPlanner() { return turnPlanner; }
     ChatGptReasoningClient chatGptReasoningClient() { return chatGptReasoningClient; }
     KimiK3ReasoningClient kimiK3ReasoningClient() { return kimiK3ReasoningClient; }

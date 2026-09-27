@@ -87,6 +87,11 @@ public final class TinyGradImageGenerationProvider implements StoryIllustrationP
     }
 
     @Override
+    public String effectiveNegativePrompt(String negativePrompt) {
+        return mergeNegativePrompt(negativePrompt, defaultNegativePrompt);
+    }
+
+    @Override
     public GeneratedImage generate(ImageGenerationRequest request) {
         Objects.requireNonNull(request, "image generation request must not be null");
         return runtimeAccess.generate(() -> generateExclusively(request));
@@ -95,7 +100,7 @@ public final class TinyGradImageGenerationProvider implements StoryIllustrationP
     private GeneratedImage generateExclusively(ImageGenerationRequest request) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("prompt", required(request.prompt(), "prompt"));
-        String negativePrompt = mergeNegativePrompt(request.negativePrompt(), defaultNegativePrompt);
+        String negativePrompt = effectiveNegativePrompt(request.negativePrompt());
         if (!negativePrompt.isBlank()) {
             payload.put("negative_prompt", negativePrompt);
         }

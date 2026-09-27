@@ -54,6 +54,7 @@ class TemporalMemoryIntegrationTest {
             assertFalse(repo.updateByOwner("other", current.id(), new MemoryUpdate(MemoryCategory.PREFERENCE, "edited", 1, "owner correction")));
             assertTrue(repo.updateByOwner("owner", current.id(), new MemoryUpdate(MemoryCategory.PREFERENCE, "edited", 1, "owner correction")));
             assertEquals("edited", current(repo, "owner").fact().value());
+            assertEquals(MemorySource.USER_DIRECTIVE, current(repo, "owner").source());
             assertEquals(5, repo.findByOwner("owner", 20).size());
             repo.deleteAllByOwner("owner");
             assertEquals("ความลับ", current(repo, "other").fact().value());

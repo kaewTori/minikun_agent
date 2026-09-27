@@ -4,6 +4,10 @@ package com.minikun.visual;
 public interface StoryIllustrationProvider {
     GeneratedImage generate(String prompt);
 
+    default String effectiveNegativePrompt(String negativePrompt) {
+        return negativePrompt == null ? "" : negativePrompt.strip();
+    }
+
     default GeneratedImage generate(ImageGenerationRequest request) {
         return generate(request.prompt());
     }

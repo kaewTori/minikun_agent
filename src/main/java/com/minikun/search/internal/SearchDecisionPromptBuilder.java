@@ -29,6 +29,8 @@ final class SearchDecisionPromptBuilder {
             GENERAL_KNOWLEDGE always requires shouldSearch=false.
             Thai requests containing explicit freshness or lookup intent such as ล่าสุด, ตอนนี้, ปัจจุบัน,
             ค้นหา, ค้นข้อมูล, เช็กข้อมูล, or ตรวจสอบข้อเท็จจริง require search.
+            Requests for exact wording, quotations, original text, lyrics, or a translation of an external work
+            require search. A prior assistant answer is not evidence for the wording of an external source.
             Recommendations for real-world businesses, restaurants, shops, venues, services, attractions, museums,
             parks, markets, galleries, landmarks, or activities near a named neighborhood, landmark, or transit station
             require search and use EXTERNAL_RESOURCE, even when the user says "recommend" rather than

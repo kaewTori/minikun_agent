@@ -37,8 +37,10 @@ class MemoryRecallComponentsTest {
                 "Learn Java", Instant.now());
 
         assertEquals("", new MemoryFormatter(20).format(List.of()).content());
-        assertEquals("PROFILE: Lives in Bangkok [legacy: validity unknown] (confidence=0.9, source=LLM_EXTRACTION, reason=user stated directly)", new MemoryFormatter(150)
+        assertEquals("PROFILE: Lives in Bangkok [legacy: validity unknown] (confidence=0.9, source=LLM_EXTRACTION, memoryId=00000000-0000-0000-0000-000000000001, conversationId=unknown, reason=user stated directly)", new MemoryFormatter(250)
                 .format(List.of(first, second)).content());
+        assertEquals("memory-00000000-0000-0000-0000-000000000001", new MemoryFormatter(250)
+                .format(List.of(first)).candidates().getFirst().candidateId());
     }
 
     private Memory memory(String id, MemoryCategory category, String content, Instant createdAt) {

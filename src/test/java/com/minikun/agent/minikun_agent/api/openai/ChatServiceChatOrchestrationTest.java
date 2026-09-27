@@ -110,6 +110,45 @@ class ChatServiceChatOrchestrationTest {
     @TempDir Path temporaryDirectory;
 
     @Test
+    void unsupportedOriginalTextNeverReachesModelOrStream() throws Exception {
+        ChatModel chatModel = mock(ChatModel.class);
+        ConversationMemoryService conversation = mock(ConversationMemoryService.class);
+        when(conversation.load(any())).thenReturn(List.of());
+        ChatService service = service(chatModel, conversation);
+        var request = new ChatCompletionRequest("mini-kun",
+                List.of(new Message("user", "ขอเนื้อร้องต้นฉบับของเพลงนี้")),
+                "unsupported-source", false, null, null, null);
+
+        var answer = service.chatCompletion(request, new ConversationId("unsupported-source"));
+        var stream = service.chatCompletionStream(request, new ConversationId("unsupported-source"))
+                .collectList().block();
+
+        assertEquals(GroundedAnswerGuard.NO_SOURCE, answer.choices().getFirst().message().content());
+        assertTrue(stream.stream().anyMatch(chunk -> chunk.contains("ยังไม่มีข้อความต้นฉบับที่ตรวจสอบได้")));
+        verify(chatModel, never()).call(any(Prompt.class));
+        verify(chatModel, never()).stream(any(Prompt.class));
+    }
+
+    @Test
+    void streamedInventedSourceLineIsReplacedBeforeAnyContentIsSent() throws Exception {
+        ChatModel chatModel = mock(ChatModel.class);
+        ConversationMemoryService conversation = mock(ConversationMemoryService.class);
+        when(conversation.load(any())).thenReturn(List.of());
+        when(chatModel.stream(any(Prompt.class))).thenReturn(Flux.just(
+                response("[Verse 1]\nA completely invented line that was never supplied by the user.")));
+        ChatService service = service(chatModel, conversation);
+        String query = "แปลเนื้อเพลงนี้: The sample sentence here is supplied directly by the user for translation.";
+        var request = new ChatCompletionRequest("mini-kun", List.of(new Message("user", query)),
+                "stream-source-check", true, null, null, null);
+
+        var stream = service.chatCompletionStream(request, new ConversationId("stream-source-check"))
+                .collectList().block();
+
+        assertTrue(stream.stream().anyMatch(chunk -> chunk.contains(GroundedAnswerGuard.NO_SOURCE)));
+        assertFalse(stream.stream().anyMatch(chunk -> chunk.contains("completely invented line")));
+    }
+
+    @Test
     void sendsAMixedLanguageImageRequestToTheImageProvider() throws Exception {
         ChatModel chatModel = mock(ChatModel.class);
         ConversationMemoryService conversation = mock(ConversationMemoryService.class);
@@ -399,6 +438,71 @@ class ChatServiceChatOrchestrationTest {
         String promptText = promptText(prompt.getValue());
         assertTrue(promptText.contains("Visual generation handoff"));
         assertTrue(promptText.contains("composition, pose, setting, palette"));
+    }
+
+    @Test
+    void draftsAPonyPromptFromAChatImageWithoutGeneratingAnImage() throws Exception {
+        ChatModel chatModel = mock(ChatModel.class);
+        ConversationMemoryService conversation = mock(ConversationMemoryService.class);
+        when(conversation.load(any())).thenReturn(List.of());
+        when(chatModel.call(any(Prompt.class))).thenReturn(response("one black cat on a wooden table"));
+        ChatService service = service(chatModel, conversation);
+        setField(service, "visionInputService", new VisionInputService(
+                true, 3, 1024, true, false, Duration.ofSeconds(1), Duration.ofSeconds(1),
+                new GeneratedImageStore(temporaryDirectory, 1024, Clock.systemUTC())));
+        var imageTool = new ImageGenerationTool(prompt -> {
+            throw new AssertionError("image generation must wait for the next user turn");
+        }, new GeneratedImageStore(temporaryDirectory, 1024, Clock.systemUTC()),
+                8000, 4_194_304L);
+        setField(service, "ponyPromptChatService", new PonyPromptChatService(
+                brief -> "1cat, black cat, wooden table, moonlight", imageTool));
+        ChatCompletionRequest request = new ObjectMapper().readValue("""
+                {"model":"mini-kun","conversation_id":"pony-from-chat","stream":false,"messages":[
+                  {"role":"user","content":[
+                    {"type":"text","text":"ช่วยแปลงรูปนี้เป็น Pony prompt และเปลี่ยนแสงเป็นแสงจันทร์"},
+                    {"type":"image_url","image_url":{"url":"data:image/png;base64,iVBORw0KGgo="}}
+                  ]}
+                ]}
+                """, ChatCompletionRequest.class);
+
+        ChatCompletionResponse result = service.chatCompletion(request, new ConversationId("pony-from-chat"));
+
+        assertTrue(result.choices().getFirst().message().content().contains(
+                "score_9, score_8_up, score_7_up, 1cat, black cat, wooden table, moonlight"));
+        assertTrue(result.attachments().isEmpty());
+        assertTrue(service.chatCompletionStream(request, new ConversationId("pony-from-chat"))
+                .collectList().block().stream()
+                .anyMatch(chunk -> chunk.contains("Pony prompt")));
+        ArgumentCaptor<Prompt> prompt = ArgumentCaptor.forClass(Prompt.class);
+        verify(chatModel, org.mockito.Mockito.times(2)).call(prompt.capture());
+        assertEquals(1, prompt.getAllValues().getFirst().getUserMessage().getMedia().size());
+    }
+
+    @Test
+    void generatesOnlyAfterTheUserAcceptsTheShownChatPrompt() throws Exception {
+        ChatModel chatModel = mock(ChatModel.class);
+        ConversationMemoryService conversation = mock(ConversationMemoryService.class);
+        ChatService service = service(chatModel, conversation);
+        var imageTool = new ImageGenerationTool(prompt -> new GeneratedImage(
+                new byte[] {(byte) 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1},
+                "test-image-model"),
+                new GeneratedImageStore(temporaryDirectory, 1024, Clock.systemUTC()),
+                8000, 4_194_304L);
+        setField(service, "ponyPromptChatService", new PonyPromptChatService(
+                brief -> "unused", imageTool));
+        ChatCompletionRequest request = new ChatCompletionRequest("mini-kun", List.of(
+                new Message("user", "แปลงรูปเป็น prompt"),
+                new Message("assistant", "Pony prompt\n```pony\nscore_9, score_8_up, score_7_up, 1cat, moonlight\n```"
+                        + "\nNegative prompt\n```text\nlow quality\n```"),
+                new Message("user", "สร้างภาพจาก prompt นี้")),
+                "pony-confirm", false, null, null, null);
+
+        ChatCompletionResponse result = service.chatCompletion(request, new ConversationId("pony-confirm"));
+
+        assertEquals(1, result.attachments().size());
+        assertEquals("score_9, score_8_up, score_7_up, 1cat, moonlight",
+                result.attachments().getFirst().prompt());
+        verify(chatModel, never()).call(any(Prompt.class));
     }
 
     @Test

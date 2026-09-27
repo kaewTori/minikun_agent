@@ -25,7 +25,6 @@ import com.minikun.memory.MemoryPolicy;
 import com.minikun.memory.MemoryRecallService;
 import com.minikun.memory.MemoryRanker;
 import com.minikun.memory.MemoryRelevanceRanker;
-import com.minikun.memory.EmbeddingMemoryRelevanceRanker;
 import com.minikun.memory.MemoryRepository;
 import com.minikun.memory.MemoryRetrievalProperties;
 import com.minikun.memory.MemoryService;
@@ -79,8 +78,13 @@ public class MemoryConfiguration {
 
     @Bean
     @ConditionalOnProperty(name = "minikun.memory.persistence.enabled", havingValue = "true", matchIfMissing = true)
-    MemoryRepository memoryRepository(JdbcTemplate jdbcTemplate, MeterRegistry meterRegistry) {
-        return new JdbcMemoryRepository(jdbcTemplate, meterRegistry);
+    MemoryRepository memoryRepository(JdbcTemplate jdbcTemplate, MeterRegistry meterRegistry,
+            ObjectProvider<EmbeddingModel> embeddingModels,
+            @Value("${minikun.memory.semantic.enabled:true}") boolean semanticEnabled,
+            @Value("${minikun.memory.semantic.weight:0.85}") double semanticWeight,
+            @Value("${spring.ai.ollama.embedding.options.model:qwen3-embedding:0.6b}") String embeddingModelName) {
+        return new JdbcMemoryRepository(jdbcTemplate, meterRegistry,
+                semanticEnabled ? embeddingModels.getIfAvailable() : null, embeddingModelName, semanticWeight);
     }
 
     @Bean
@@ -105,21 +109,13 @@ public class MemoryConfiguration {
     @ConditionalOnBean(MemoryRepository.class)
     MemoryRecallService memoryRecallService(
             MemoryRepository repository,
-            ObjectProvider<EmbeddingModel> embeddingModels,
-            MeterRegistry meterRegistry,
             @Value("${minikun.memory.recall.maximum-count:10}") int maximumCount,
-            @Value("${minikun.memory.recall.maximum-characters:4000}") int maximumCharacters,
-            @Value("${minikun.memory.semantic.enabled:true}") boolean semanticEnabled,
-            @Value("${minikun.memory.semantic.weight:0.85}") double semanticWeight,
-            @Value("${minikun.memory.semantic.cache.maximum-entries:1000}") int semanticCacheMaximumEntries) {
+            @Value("${minikun.memory.recall.maximum-characters:4000}") int maximumCharacters) {
         MemorySelector selector = new MemorySelector(maximumCount);
         MemoryFormatter formatter = new MemoryFormatter(maximumCharacters);
         MemoryRanker ranker = MemoryRelevanceRanker::rank;
-        EmbeddingModel embeddingModel = embeddingModels.getIfAvailable();
-        if (semanticEnabled && embeddingModel != null) {
-            ranker = new EmbeddingMemoryRelevanceRanker(
-                    embeddingModel, semanticWeight, meterRegistry, semanticCacheMaximumEntries);
-        }
+        if (repository instanceof JdbcMemoryRepository jdbc && jdbc.semanticEnabled())
+            ranker = (memories, query, limit) -> memories.stream().limit(limit).toList();
         return new MemoryRecallService(repository,
             memories -> formatter.format(selector.select(memories)), ranker);
     }

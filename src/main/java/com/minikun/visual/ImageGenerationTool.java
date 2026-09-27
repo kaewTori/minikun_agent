@@ -123,6 +123,14 @@ public final class ImageGenerationTool implements Tool {
         return generate(request, ImageGenerationScope.standalone());
     }
 
+    public ImageGenerationRequest preview(ImageGenerationRequest request) {
+        ImageGenerationRequest formatted = validate(request);
+        return new ImageGenerationRequest(
+                formatted.prompt(), provider.effectiveNegativePrompt(formatted.negativePrompt()),
+                formatted.facePrompts(), formatted.width(), formatted.height(), formatted.steps(),
+                formatted.guidance(), formatted.scheduler(), formatted.schedule(), formatted.seed());
+    }
+
     public Generation generate(ImageGenerationRequest request, ImageGenerationScope scope) {
         ImageGenerationRequest safeRequest = withSeed(validate(request));
         GeneratedImage image = provider.generate(safeRequest);

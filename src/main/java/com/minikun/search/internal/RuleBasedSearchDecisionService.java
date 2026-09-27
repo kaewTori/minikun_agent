@@ -1,6 +1,7 @@
 package com.minikun.search.internal;
 
 import com.minikun.search.SearchDecisionService;
+import com.minikun.search.GroundingIntent;
 import com.minikun.search.model.SearchDecision;
 import com.minikun.search.model.SearchDecisionReason;
 import java.util.List;
@@ -50,7 +51,8 @@ public final class RuleBasedSearchDecisionService implements SearchDecisionServi
             }
             String normalized = query.trim().toLowerCase(Locale.ROOT);
             boolean localDiscovery = isLocalDiscovery(normalized);
-            boolean shouldSearch = localDiscovery || KEYWORDS.stream().anyMatch(normalized::contains);
+            boolean shouldSearch = localDiscovery || GroundingIntent.requiresSource(query, "")
+                    || KEYWORDS.stream().anyMatch(normalized::contains);
             decision = new SearchDecision(
                     shouldSearch,
                     query.trim(),

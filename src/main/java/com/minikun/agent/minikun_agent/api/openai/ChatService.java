@@ -143,6 +143,7 @@ public class ChatService {
     private ConversationThreadService conversationThreadService;
     private AutonomousResearchService autonomousResearchService;
     private StoryIllustrationService storyIllustrationService;
+    private PonyPromptChatService ponyPromptChatService;
     private ReverseGeocodingService reverseGeocodingService;
 
     private ChatExplainabilityRecorder explainabilityRecorder = new ChatExplainabilityRecorder(null);
@@ -173,6 +174,7 @@ public class ChatService {
         conversationThreadService = collaborators.conversationThreadService();
         autonomousResearchService = collaborators.autonomousResearchService();
         storyIllustrationService = collaborators.storyIllustrationService();
+        ponyPromptChatService = collaborators.ponyPromptChatService();
         reverseGeocodingService = collaborators.reverseGeocodingService();
         if (collaborators.turnPlanner() != null) turnPlanner = collaborators.turnPlanner();
         explainabilityRecorder = new ChatExplainabilityRecorder(collaborators.explainabilitySink());
@@ -287,8 +289,8 @@ public class ChatService {
 
     @Value("${minikun.search.enabled:false}")
     private boolean searchEnabled;
-    @Value("${minikun.chat.context-timeout:3s}")
-    private java.time.Duration contextTimeout = java.time.Duration.ofSeconds(3);
+    @Value("${minikun.chat.context-timeout:5s}")
+    private java.time.Duration contextTimeout = java.time.Duration.ofSeconds(5);
     @Value("${minikun.search.timeout:10s}")
     private java.time.Duration searchTimeout;
     @Value("${minikun.diagnostics.conversational.enabled:false}")
@@ -372,6 +374,11 @@ public class ChatService {
                     responseForContent(request, titleGenerationService.generateTitle(requestInspector.titleMessages(request))),
                     null);
         }
+        if (ponyPromptChatService != null) {
+            ChatCompletionOutcome pony = ponyPromptChatService.complete(request, userMessage, visionInput,
+                    conversationId, requestContext, ponyDependencies(request, conversationId));
+            if (pony != null) return pony;
+        }
         String model = requestInspector.publicModelName();
         ChatTransactionLogger.Transaction transaction = transactionLogger.start(
                 "chatcmpl-" + UUID.randomUUID(), model, false, request.messages().size());
@@ -422,6 +429,15 @@ public class ChatService {
                 transaction.success();
                 return new ChatCompletionOutcome(responseForContent(request, content), null);
             }
+            if (context.groundingFallback() != null) {
+                String content = context.groundingFallback();
+                turnFinalizer().complete(context.conversationId(), userMessage, context.ownerId(),
+                        transaction.requestId(), content, context.persistConversation(), false);
+                recordExplainability(context.ownerId(), context.conversationId(), transaction.requestId(),
+                        context.explainability());
+                transaction.success();
+                return new ChatCompletionOutcome(responseForContent(request, content), null);
+            }
             // The weather route has already executed the tool. Generate the final
             // answer from the MCS/PCS prompt, without invoking that tool twice.
             requestContext.requireRemaining("model");
@@ -453,6 +469,10 @@ public class ChatService {
                 content = BLANK_MODEL_RESPONSE;
             }
             content = CitationLinker.normalize(content, context.citations());
+            if (context.groundingRequired()) {
+                content = GroundedAnswerGuard.afterModel(
+                        content, context.groundingEvidence(), userMessage.content());
+            }
             requestContext.requireRemaining("post_model");
             IllustrationTask illustrationTask = shouldIllustrate(context.turnPlan())
                     ? new IllustrationTask(context.ownerId(), context.conversationId().value(),
@@ -462,7 +482,7 @@ public class ChatService {
                     ? new StoryIllustrationService.IllustrationResult(List.of(), "")
                     : illustrate(context, userMessage.content(), content);
             content = illustration.appendNoticeTo(content);
-            List<ChatAttachment> attachments = combineAttachments(
+            List<ChatAttachment> attachments = responseFactory.combineAttachments(
                     context.attachments(), illustration.attachments());
             turnFinalizer().complete(
                     context.conversationId(), userMessage, context.ownerId(), transaction.requestId(), content,
@@ -494,6 +514,11 @@ public class ChatService {
         }
         if (requestInspector.isInternalTitleRequest(request)) {
             return commandStream(titleGenerationService.generateTitle(requestInspector.titleMessages(request)), request);
+        }
+        if (ponyPromptChatService != null) {
+            Flux<String> pony = ponyPromptChatService.stream(request, userMessage, visionInput,
+                    conversationId, ponyDependencies(request, conversationId));
+            if (pony != null) return pony;
         }
         String model = requestInspector.publicModelName();
         String requestId = "chatcmpl-" + UUID.randomUUID();
@@ -545,6 +570,15 @@ public class ChatService {
             transaction.success();
             return commandStream(content, request);
         }
+        if (context.groundingFallback() != null) {
+            String content = context.groundingFallback();
+            turnFinalizer().complete(context.conversationId(), userMessage, context.ownerId(),
+                    transaction.requestId(), content, context.persistConversation(), true);
+            recordExplainability(context.ownerId(), context.conversationId(), transaction.requestId(),
+                    context.explainability());
+            transaction.success();
+            return commandStream(content, request);
+        }
         long modelStarted = System.nanoTime();
         ChatModelGateway generationGateway = modelGateway(context.turnPlan());
         String traceId = MDC.get("trace_id");
@@ -583,6 +617,16 @@ public class ChatService {
                     recordStage("model", modelStarted, signalResult(signal));
                     recordModelUsage(modelUsage.get(), modelStarted);
                 }));
+        if (context.groundingRequired()) {
+            chunks = chunks.thenMany(Flux.defer(() -> {
+                String checked = GroundedAnswerGuard.afterModel(
+                        assistantContent.toString(), context.groundingEvidence(), userMessage.content());
+                assistantContent.setLength(0);
+                assistantContent.append(checked);
+                return Flux.just(responseFactory.contentChunk(
+                        CitationLinker.normalize(checked, context.citations()), id, created, model));
+            }));
+        }
         return Flux.concat(
                 Flux.just(responseFactory.initialChunk(id, created, model, context.attachments())),
                 chunks,
@@ -727,7 +771,11 @@ public class ChatService {
                 explainabilityRecorder.context(
                         knowledgeSelection, verifiedToolResult, preparedPrompt.generationProfile(), turnPlan),
                 turnPlan,
-                CitationLinker.from(knowledgeSelection.selection()));
+                CitationLinker.from(knowledgeSelection.selection()),
+                GroundedAnswerGuard.required(userMessage.content(), classifierContext),
+                GroundedAnswerGuard.beforeModel(userMessage.content(), classifierContext,
+                        knowledgeSelection.selection()),
+                knowledgeSelection.selection());
     }
     private ChatCommandHandler commandHandler() {
         return new ChatCommandHandler(
@@ -769,12 +817,10 @@ public class ChatService {
                 chatGptReasoningClient, kimiK3ReasoningClient, effectiveConfiguredChatModel());
     }
     private ChatCompletionResponse responseForContent(ChatCompletionRequest request, String content) {
-        String model = requestInspector.publicModelName();
-        return responseFactory.contentCompletion(model, content);
+        return responseFactory.contentCompletion(requestInspector.publicModelName(), content);
     }
     private Flux<String> commandStream(String content, ChatCompletionRequest request) {
-        String model = requestInspector.publicModelName();
-        return Flux.fromIterable(responseFactory.contentStream(model, content));
+        return Flux.fromIterable(responseFactory.contentStream(requestInspector.publicModelName(), content));
     }
     private ModelUsage modelUsage(ChatResponse response) {
         return responseFactory.modelUsage(response);
@@ -829,10 +875,7 @@ public class ChatService {
     }
     private String memoryOwnerId(ChatCompletionRequest request, ConversationId conversationId) {
         String requestedOwnerId = request.owner_id();
-        if (requestedOwnerId != null && !requestedOwnerId.isBlank()) {
-            return requestedOwnerId;
-        }
-        return "default";
+        return requestedOwnerId == null || requestedOwnerId.isBlank() ? "default" : requestedOwnerId;
     }
     private ChatKnowledgeResolver knowledgeResolver() {
         return new ChatKnowledgeResolver(
@@ -921,7 +964,8 @@ public class ChatService {
     private record ChatExecutionContext(Prompt prompt, ConversationId conversationId, boolean persistConversation,
             String ownerId, List<ChatAttachment> attachments, String generationProfile, Long estimatedInputTokens,
             GenerationOptions.Reasoning reasoning, ChatExplainabilityRecorder.Context explainability,
-            TurnPlan turnPlan, CitationLinker.Context citations) { }
+            TurnPlan turnPlan, CitationLinker.Context citations, boolean groundingRequired,
+            String groundingFallback, com.minikun.pcs.KnowledgeSelection groundingEvidence) { }
 
     private boolean hasConversationContext(
             List<ChatMessage> history, ChatCompletionRequest request) {
@@ -952,9 +996,14 @@ public class ChatService {
         return modelsService.requireChatModel();
     }
 
-
     private boolean shouldIllustrate(TurnPlan turnPlan) {
         return storyIllustrationService != null && turnPlan != null && turnPlan.imageOutput();
+    }
+
+    private PonyPromptChatService.Dependencies ponyDependencies(
+            ChatCompletionRequest request, ConversationId conversationId) {
+        return new PonyPromptChatService.Dependencies(modelGateway(), effectiveConfiguredChatModel(),
+                memoryOwnerId(request, conversationId), turnFinalizer(), responseFactory, requestInspector);
     }
 
     private StoryIllustrationService.IllustrationResult illustrate(
@@ -963,18 +1012,6 @@ public class ChatService {
         return storyIllustrationService.illustrate(context.ownerId(), context.conversationId().value(),
                 userMessage, assistantContent,
                 context.turnPlan() != null && context.turnPlan().imageOutput());
-    }
-    private List<ChatAttachment> combineAttachments(
-            List<ChatAttachment> existing, List<ChatAttachment> generated) {
-        if (generated == null || generated.isEmpty()) {
-            return existing == null ? List.of() : existing;
-        }
-        java.util.ArrayList<ChatAttachment> combined = new java.util.ArrayList<>();
-        if (existing != null) {
-            combined.addAll(existing);
-        }
-        combined.addAll(generated);
-        return List.copyOf(combined);
     }
     private void recordFirstToken(
             ChatResponse response,

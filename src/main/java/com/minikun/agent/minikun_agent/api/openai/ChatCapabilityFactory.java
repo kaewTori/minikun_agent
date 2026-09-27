@@ -10,6 +10,7 @@ import com.minikun.model.CooperationRouter;
 import com.minikun.personality.companion.CompanionModeContext;
 import com.minikun.research.MinikunNarrativeVoiceAdvisor;
 import com.minikun.research.ResearchStorytellingAdvisor;
+import com.minikun.search.GroundingIntent;
 import com.minikun.search.model.SearchDecisionReason;
 import com.minikun.tools.ToolEvidence;
 import com.minikun.vision.VisionInput;
@@ -46,6 +47,18 @@ final class ChatCapabilityFactory {
             boolean creativeConversation) {
         List<CapabilityInstruction> capabilities = new ArrayList<>();
         addConversationStyle(capabilities, conversationStyleInstruction);
+        capabilities.add(new CapabilityInstruction("Factual grounding",
+                "Earlier assistant answers are conversation history, not evidence. For factual claims, distinguish "
+                        + "source-backed facts from interpretation. Never invent exact wording, names, numbers, "
+                        + "dates, or a source check. User-supplied text is not proof of its authorship or origin. "
+                        + "If the available evidence does not establish a claim, say what remains unverified.", true));
+        if (GroundingIntent.correction(userMessage)) {
+            capabilities.add(new CapabilityInstruction("Factual correction",
+                    "The user is challenging an earlier answer. Prior assistant messages are unverified claims, "
+                            + "not evidence. Recheck against the current user message and available sources; "
+                            + "acknowledge the specific error. If verification is unavailable, say so instead of "
+                            + "defending the old answer or inventing a different version.", true));
+        }
         addCreativeWritingGuidance(capabilities, creativeConversation);
         narrativeVoiceAdvisor.advise(userMessage, creativeConversation).ifPresent(capabilities::add);
         addInteractionMode(capabilities, interactionMode);
@@ -106,6 +119,8 @@ final class ChatCapabilityFactory {
             ImageAwareness imageAwareness) {
         boolean hasBrowserContent = selection.selection().selectedCandidates().stream()
                 .anyMatch(candidate -> candidate.source() == KnowledgeSource.BROWSER);
+        boolean hasMemory = selection.selection().selectedCandidates().stream()
+                .anyMatch(candidate -> candidate.source() == KnowledgeSource.MEMORY);
         boolean hasPersonalKnowledge = selection.selection().selectedCandidates().stream()
                 .anyMatch(candidate -> candidate.source() == KnowledgeSource.PERSONAL);
         boolean hasSearchContent = selection.selection().selectedCandidates().stream()
@@ -114,6 +129,16 @@ final class ChatCapabilityFactory {
                 == SearchDecisionReason.IMAGE_REQUEST;
         addDeviceLocationCapability(capabilities, selection.deviceLocationContext());
         addLocalGuideCapability(capabilities, selection);
+        if (hasMemory) {
+            capabilities.add(new CapabilityInstruction("Personal memory",
+                    "The current user message and explicit user corrections take precedence over stored memory. "
+                            + "For stored versions of a fact, use the version valid at the time asked about; "
+                            + "when evidence conflicts at the same time, prefer a user directive over an AI extraction. "
+                            + "Distinguish direct user directives, "
+                            + "extracted facts backed by user quotes, and unsupported inferences. If asked for "
+                            + "a source, use the stored conversation and "
+                            + "evidence quote, and say when no verifiable quote is available.", true));
+        }
         if (hasSearchContent) {
             String concreteEvidence = selection.selection().selectedCandidates().stream()
                     .filter(candidate -> candidate.source() == KnowledgeSource.SEARCH)

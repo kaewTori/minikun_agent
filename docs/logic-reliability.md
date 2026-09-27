@@ -26,7 +26,7 @@ Memory candidate selection searches across the owner's corpus using bound query 
 
 The query-time lexical scan has an O(owner memory count) ceiling and cannot discover every synonym without matching words. Add indexed retrieval only when profiling justifies it; existing semantic ranking still operates on the selected candidates.
 
-`MINIKUN_CHAT_CONTEXT_TIMEOUT` defaults to `3s`, shared across optional summary, long-term memory and personal knowledge waits in one turn. Ready results survive a slow sibling; timeout cancels the worker and falls back to available context. Client libraries must honor interruption or their own I/O timeouts for cancellation to release resources promptly. This budget does not cap model generation, required actions, explicit web evidence, or deep research.
+`MINIKUN_CHAT_CONTEXT_TIMEOUT` defaults to `5s`, shared across optional summary, long-term memory and personal knowledge waits in one turn. Ready results survive a slow sibling; timeout cancels the worker and falls back to available context. Client libraries must honor interruption or their own I/O timeouts for cancellation to release resources promptly. This budget does not cap model generation, required actions, explicit web evidence, or deep research.
 
 Timers `minikun.chat.stage.duration` with stages `summary_wait`, `memory_wait`, and `personal_wait` distinguish `success`, `timeout`, `fallback`, and `cancelled`. Plain greetings bypass retrieval and the search-decision model.
 Queue gauges expose `minikun.chat.background.queue.depth`, `minikun.chat.background.active`, `minikun.chat.image.queue.depth`, and `minikun.chat.image.active`; result counters distinguish rejected, timeout, failed, and completed work.
@@ -41,7 +41,7 @@ MINIKUN_EVAL_JDBC_USER=minikun \
 ./mvnw -Dtest=JdbcMemoryRecallIntegrationTest test
 ```
 
-The live answer suite contains 29 conversation scenarios plus 96 Thai/temporal/reasoning scenarios in `src/main/resources/evals/`: contextual references, corrections, constraints, uncertainty, evidence, temporal updates and bounded reasoning. The controller exposes all 125 with the same isolated-owner guard. The conversation scenarios include a seven-turn rolling-summary recall check and a ten-turn long-window recall check. Operational recovery, confirmation stops, persistence checks, old-memory retrieval and timeouts are covered separately by automated Java tests.
+The live answer suite contains 30 conversation scenarios plus 96 Thai/temporal/reasoning scenarios in `src/main/resources/evals/`: contextual references, corrections, constraints, uncertainty, evidence, temporal updates and bounded reasoning. The controller exposes all 126 with the same isolated-owner guard. The conversation scenarios include a seven-turn rolling-summary recall check and a ten-turn long-window recall check. Operational recovery, confirmation stops, persistence checks, old-memory retrieval and timeouts are covered separately by automated Java tests.
 
 Run live evaluation against a **test deployment of this revision** with `MINIKUN_EVAL_MANAGEMENT_TOKEN` configured on both the server and shell:
 
