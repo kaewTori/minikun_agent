@@ -79,7 +79,7 @@ final class KnowledgeAcquisitionAgent {
                         verification.status() == ClaimStatus.PUBLISHED ? now : null,
                         topic.refreshPolicy().expiresAfter(now), now);
                 Claim saved = store.saveClaim(claim);
-                if (saved.status() == ClaimStatus.PUBLISHED) published++;
+                if (verification.status() == ClaimStatus.PUBLISHED && saved.status() == ClaimStatus.PUBLISHED) published++;
             }
             Instant completed = clock.instant();
             store.saveTopic(topic.scheduleAfter(completed));

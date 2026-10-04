@@ -60,6 +60,26 @@ class MainModelPonyPromptTransformerTest {
     }
 
     @Test
+    void groupsTheGeneratedStudioPromptWithoutDroppingTags() {
+        MainModelPonyPromptTransformer transformer = transformer(new CapturingMainModel("""
+                {"subjects":["girl"],"appearance":["short black hair"],
+                 "pose_action":["holding a cat"],"setting":["old observatory"],
+                 "lighting":["blue moonlight"],"style":["anime key visual"],
+                 "camera":["medium shot"]}
+                """));
+
+        PonyPromptTransformer.Grouped result = transformer.transformGrouped("girl holding a cat at night");
+
+        assertEquals("score_9, score_8_up, score_7_up", result.groups().get("quality"));
+        assertTrue(result.groups().get("character").contains("short black hair"));
+        assertTrue(result.groups().get("action").contains("holding a cat"));
+        assertTrue(result.groups().get("scene").contains("blue moonlight"));
+        assertTrue(result.groups().get("finish").contains("medium shot"));
+        assertEquals(String.join(", ", List.of("quality", "character", "action", "scene", "finish")
+                .stream().map(result.groups()::get).toList()), result.prompt());
+    }
+
+    @Test
     void rejectsEmptyOrMalformedModelOutput() {
         MainModelPonyPromptTransformer transformer = transformer(new CapturingMainModel("not enough tags"));
 

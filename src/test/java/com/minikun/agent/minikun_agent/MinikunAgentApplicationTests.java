@@ -79,6 +79,11 @@ class MinikunAgentApplicationTests {
 				applicationContext.getBean(com.minikun.research.AutonomousResearchService.class));
 		org.junit.jupiter.api.Assertions.assertNotNull(
 				applicationContext.getBean(com.minikun.knowledge.acquisition.KnowledgeAcquisitionService.class));
+		org.junit.jupiter.api.Assertions.assertNotNull(
+				applicationContext.getBean(com.minikun.presentation.PresentationController.class));
+		org.junit.jupiter.api.Assertions.assertTrue(toolRegistry.find("presentation.create").isPresent());
+		org.junit.jupiter.api.Assertions.assertTrue(toolRegistry.find("presentation.read_latest").isPresent());
+		org.junit.jupiter.api.Assertions.assertTrue(toolRegistry.find("presentation.revise").isPresent());
 	}
 
 	@Test

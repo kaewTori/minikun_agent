@@ -59,6 +59,50 @@ final class ChatRequestInspector {
         return "system".equalsIgnoreCase(message.role());
     }
 
+    boolean hasConversationContext(List<ChatMessage> history, ChatCompletionRequest request, CommandCatalog commands) {
+        boolean hasHistory = history.stream()
+                .anyMatch(message -> !isCommand(message.content(), commands));
+        long requestConversationMessages = request.messages().stream()
+                .filter(message -> !"system".equals(message.role()))
+                .filter(message -> hasText(message.content()))
+                .count();
+        return hasHistory || requestConversationMessages > 1;
+    }
+
+    List<ChatMessage> visualHistory(List<ChatMessage> history, ChatCompletionRequest request) {
+        List<ChatMessage> requestHistory = request.messages().subList(0, lastUserMessageIndex(request.messages())).stream()
+                .filter(message -> ("user".equals(message.role()) || "assistant".equals(message.role()))
+                        && hasText(message.content()))
+                .map(message -> new ChatMessage(message.role(), message.content())).toList();
+        return requestHistory.stream().anyMatch(message -> "user".equals(message.role())) ? requestHistory : history;
+    }
+
+    String toolQuery(String message, ChatCompletionRequest request) {
+        if (message == null || !message.matches("(?iu).*?(?:ที่(?:เรา|รา)อยู่|แถวนี้|ตรงนี้|ที่นี่|current location).*")) {
+            return message;
+        }
+        String previousUserMessage = request.messages()
+                .subList(0, lastUserMessageIndex(request.messages()))
+                .reversed().stream()
+                .filter(previous -> "user".equals(previous.role()))
+                .map(Message::content)
+                .filter(this::hasText)
+                .findFirst().orElse("");
+        return previousUserMessage.matches("(?iu).*(?:อากาศ|พยากรณ์|weather|forecast).*")
+                ? "อากาศ " + message : message;
+    }
+
+    String classifierContext(List<ChatMessage> history, CommandCatalog commands) {
+        if (history == null || history.isEmpty()) return "";
+        return history.stream()
+                .filter(message -> message != null && !isSystemMessage(message)
+                        && hasText(message.content()) && !isCommand(message.content(), commands))
+                .skip(Math.max(0, history.size() - 6L))
+                .map(message -> message.role() + ": " + message.content())
+                .reduce((left, right) -> left + "\n" + right)
+                .orElse("");
+    }
+
     private boolean isInternalTitleRequest(String content) {
         if (!hasText(content)) return false;
         String normalized = content.toLowerCase(java.util.Locale.ROOT);

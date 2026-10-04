@@ -64,6 +64,9 @@ public final class ChatFeedbackService {
         if (contains(text, "ค้นผิด", "ผลค้นหา", "แหล่งข้อมูลผิด", "wrong search", "bad source")) {
             return ChatFeedbackCategory.SEARCH_WRONG;
         }
+        if (contains(text, "ไม่เห็นรูป", "อ่านรูปผิด", "วิเคราะห์ภาพผิด", "wrong image", "couldn't see the image")) {
+            return ChatFeedbackCategory.VISION_WRONG;
+        }
         if (contains(text, "ใช้เครื่องมือผิด", "เรียก tool ผิด", "tool ผิด", "wrong tool")) {
             return ChatFeedbackCategory.TOOL_WRONG;
         }
@@ -90,7 +93,7 @@ public final class ChatFeedbackService {
                 case ADVICE_TOO_SOON -> learning.feedback(ownerId, AdaptationDimensions.INITIATIVE, "low", true);
                 case TOO_AGREEABLE -> learning.feedback(ownerId, AdaptationDimensions.CHALLENGE, "direct", true);
                 case SHOULD_HAVE_ACTED -> learning.feedback(ownerId, AdaptationDimensions.INITIATIVE, "high", true);
-                case CONTEXT_WRONG, FACT_WRONG, SEARCH_WRONG, TOOL_WRONG, OTHER -> {
+                case CONTEXT_WRONG, FACT_WRONG, SEARCH_WRONG, VISION_WRONG, TOOL_WRONG, OTHER -> {
                     /* recorded for routing evaluation; no unsafe preference inference */
                 }
             }

@@ -253,6 +253,8 @@ public final class KnowledgeAcquisitionStore {
     private Claim merge(Claim current, Claim proposed) {
         // A proposal carrying the durable id is an explicit management review, not an agent re-discovery.
         if (current.id().equals(proposed.id())) return proposed;
+        // A failed recheck cannot renew or overwrite the last published verification.
+        if (current.status() == ClaimStatus.PUBLISHED && proposed.status() != ClaimStatus.PUBLISHED) return current;
         LinkedHashSet<String> evidence = new LinkedHashSet<>(current.evidenceUrls());
         evidence.addAll(proposed.evidenceUrls());
         ClaimStatus status = switch (current.status()) {

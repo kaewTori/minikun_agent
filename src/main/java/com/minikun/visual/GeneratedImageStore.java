@@ -30,7 +30,18 @@ public final class GeneratedImageStore {
         if (bytes.length == 0 || bytes.length > maximumImageBytes) {
             throw new ImageGenerationException("generated image has an invalid size");
         }
-        ImageType type = ImageType.detect(bytes);
+        return write(bytes, ImageType.detect(bytes));
+    }
+
+    public StoredImage saveSvg(String source) {
+        byte[] bytes = SafeSvg.sanitize(source);
+        if (bytes.length > maximumImageBytes) {
+            throw new ImageGenerationException("generated image has an invalid size");
+        }
+        return write(bytes, ImageType.SVG);
+    }
+
+    private StoredImage write(byte[] bytes, ImageType type) {
         String filename = UUID.randomUUID() + "." + type.extension;
         Path target = root.resolve(filename).normalize();
         if (!target.getParent().equals(root)) {
@@ -43,12 +54,13 @@ public final class GeneratedImageStore {
             throw new ImageGenerationException("generated image could not be stored", exception);
         }
         return new StoredImage(filename, "/v1/images/generated/" + filename,
-                type.contentType, bytes.length, clock.instant());
+                type.contentType, bytes.length, clock.instant(),
+                type == ImageType.SVG ? 1200 : null, type == ImageType.SVG ? SafeSvg.canvasHeight(bytes) : null);
     }
 
     public StoredImageContent read(String filename) {
         String safeName = filename == null ? "" : filename.strip().toLowerCase(Locale.ROOT);
-        if (!safeName.matches("[0-9a-f-]{36}\\.(?:png|jpg|webp)")) {
+        if (!safeName.matches("[0-9a-f-]{36}\\.(?:png|jpg|webp|svg)")) {
             throw new ImageGenerationException("generated image name is invalid");
         }
         Path target = root.resolve(safeName).normalize();
@@ -61,6 +73,10 @@ public final class GeneratedImageStore {
                 throw new ImageGenerationException("stored image has an invalid size");
             }
             byte[] bytes = Files.readAllBytes(target);
+            if (safeName.endsWith(".svg")) {
+                return new StoredImageContent(SafeSvg.sanitize(new String(bytes, java.nio.charset.StandardCharsets.UTF_8)),
+                        ImageType.SVG.contentType);
+            }
             ImageType type = ImageType.detect(bytes);
             return new StoredImageContent(bytes, type.contentType);
         } catch (IOException exception) {
@@ -68,7 +84,8 @@ public final class GeneratedImageStore {
         }
     }
 
-    public record StoredImage(String filename, String url, String contentType, int bytes, Instant createdAt) { }
+    public record StoredImage(String filename, String url, String contentType, int bytes, Instant createdAt,
+            Integer width, Integer height) { }
 
     public record StoredImageContent(byte[] bytes, String contentType) {
         public StoredImageContent {
@@ -84,7 +101,8 @@ public final class GeneratedImageStore {
     private enum ImageType {
         PNG("png", "image/png"),
         JPEG("jpg", "image/jpeg"),
-        WEBP("webp", "image/webp");
+        WEBP("webp", "image/webp"),
+        SVG("svg", "image/svg+xml");
 
         private final String extension;
         private final String contentType;

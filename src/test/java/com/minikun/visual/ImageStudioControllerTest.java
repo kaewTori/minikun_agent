@@ -2,6 +2,7 @@ package com.minikun.visual;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -108,6 +109,39 @@ class ImageStudioControllerTest {
         assertEquals(768, captured.get().width());
         assertEquals(1280, captured.get().height());
         assertEquals(77L, captured.get().seed());
+    }
+
+    @Test
+    void keepsManualAndStoryPromptsInTheAuthenticatedStudioHistory() {
+        InMemoryImageGenerationHistoryStore history = new InMemoryImageGenerationHistoryStore();
+        GeneratedImageStore images = new GeneratedImageStore(directory, 1024, Clock.systemUTC());
+        ImageGenerationTool imageTool = new ImageGenerationTool(
+                prompt -> new GeneratedImage(GeneratedImageStoreTest.png(), "tinygrad-test"),
+                images, history, 8000, 4_194_304L);
+        ImageStudioController controller = new ImageStudioController(imageTool,
+                () -> new TinyGradRuntimeStatusReader.RuntimeStatus(false, "OFFLINE", "", 0,
+                        new TinyGradRuntimeStatusReader.RuntimeMemory(-1, -1, -1), -1, -1,
+                        -1, -1, false, null, null, null, 0, 0, Instant.EPOCH),
+                brief -> brief, history, "secret", 8000);
+
+        controller.generate(new ImageStudioController.GenerationRequest(
+                "1girl, observatory, moonlight", null, List.of(), null, null, null,
+                null, null, null, null, "manual", null), "alice", "secret");
+        controller.generate(new ImageStudioController.GenerationRequest(
+                "score_9, floating city, night sky, wide shot", null, List.of(), null,
+                null, null, null, null, null, null, "story", "เมืองลอยฟ้ายามค่ำ"),
+                "alice", "secret");
+
+        List<ImageStudioController.StudioHistoryItem> saved = controller.generations("alice", 50, "secret");
+        assertEquals(2, saved.size());
+        assertTrue(saved.stream().anyMatch(item -> item.mode().equals("manual")));
+        assertTrue(saved.stream().anyMatch(item -> item.mode().equals("story")
+                && item.title().equals("เมืองลอยฟ้ายามค่ำ")));
+        assertTrue(saved.stream().allMatch(item -> item.review().score() > 0
+                && !item.review().tip().isBlank()));
+        assertEquals(List.of(), controller.generations("bob", 50, "secret"));
+        assertThrows(ResponseStatusException.class,
+                () -> controller.generations("alice", 50, "wrong"));
     }
 
     private ImageGenerationTool tool(StoryIllustrationProvider provider, GeneratedImageStore store) {

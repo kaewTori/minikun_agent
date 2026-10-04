@@ -15,6 +15,7 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Clock;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -39,6 +40,7 @@ import org.springframework.beans.factory.ObjectProvider;
 
 import com.minikun.agent.minikun_agent.api.openai.dto.ChatCompletionRequest;
 import com.minikun.agent.minikun_agent.api.openai.dto.ChatCompletionResponse;
+import com.minikun.agent.minikun_agent.api.openai.dto.ChatAttachment;
 import com.minikun.agent.minikun_agent.api.openai.dto.Message;
 import com.minikun.agent.minikun_agent.conversation.ChatMessage;
 import com.minikun.agent.minikun_agent.conversation.ConversationId;
@@ -57,6 +59,7 @@ import com.minikun.model.ModelCapabilities;
 import com.minikun.model.existing.ExistingChatModelProvider;
 import com.minikun.model.task.title.TitleGenerationProvider;
 import com.minikun.model.task.title.TitleGenerationService;
+import com.minikun.presentation.PresentationAttachmentScope;
 import com.minikun.character.CharacterLoader;
 import com.minikun.character.model.CharacterSpecification;
 import com.minikun.commands.CommandCatalog;
@@ -92,11 +95,13 @@ import com.minikun.tools.WeatherForecastTool;
 import com.minikun.tools.WeatherToolRouter;
 import com.minikun.tools.springai.SpringAiToolCallingRuntime;
 import com.minikun.weather.WeatherReport;
+import com.minikun.weather.DeviceLocation;
 import com.minikun.vision.VisionInputService;
 import com.minikun.visual.GeneratedImage;
 import com.minikun.visual.GeneratedImageStore;
 import com.minikun.visual.ImageGenerationTool;
 import com.minikun.visual.InMemoryCharacterVisualMemory;
+import com.minikun.visual.SvgGraphicGenerator;
 import com.minikun.visual.StoryIllustrationService;
 import com.minikun.visual.StorySceneSpec;
 import com.minikun.visual.StoryVisualPlan;
@@ -173,7 +178,8 @@ class ChatServiceChatOrchestrationTest {
         assertEquals("test-image-model", result.attachments().getFirst().provider());
         ArgumentCaptor<Prompt> prompt = ArgumentCaptor.forClass(Prompt.class);
         verify(chatModel).call(prompt.capture());
-        assertTrue(promptText(prompt.getValue()).contains("Generated story illustration"));
+        assertTrue(promptText(prompt.getValue()).contains("Visual output capability"));
+        assertTrue(promptText(prompt.getValue()).contains("รอบนี้ระบบวางแผนสร้างภาพ"));
     }
 
     @Test
@@ -203,7 +209,160 @@ class ChatServiceChatOrchestrationTest {
         verify(chatModel).call(prompt.capture());
         String text = promptText(prompt.getValue());
         assertTrue(text.contains("Voice response"));
-        assertFalse(text.contains("Generated story illustration"));
+        assertFalse(text.contains("รอบนี้ระบบวางแผนสร้างภาพ"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"sync", "stream", "background", "follow-up"})
+    void svgCapabilitiesReachEveryChatPathAndOverrideStaleDenial(String mode) throws Exception {
+        ChatModel chatModel = mock(ChatModel.class);
+        ConversationMemoryService conversation = mock(ConversationMemoryService.class);
+        when(conversation.load(any())).thenReturn(List.of(
+                new ChatMessage("assistant", "ผมเป็นโมเดลภาษา จึงสร้างไฟล์ภาพให้ไม่ได้ครับ")));
+        when(chatModel.call(any(Prompt.class))).thenReturn(response("กำลังจัดทำอินโฟกราฟิกให้ครับ"));
+        when(chatModel.stream(any(Prompt.class))).thenReturn(Flux.just(response("กำลังจัดทำอินโฟกราฟิกให้ครับ")));
+        ChatService service = service(chatModel, conversation);
+        var store = new GeneratedImageStore(temporaryDirectory, 128_000, Clock.systemUTC());
+        var svg = new SvgGraphicGenerator(request -> """
+                {"title":"PostgreSQL","subtitle":"ฐานข้อมูลเชิงสัมพันธ์",
+                 "cards":[{"heading":"ความเสถียร","body":"ดูแลข้อมูลสำคัญ"}],"summary":"ฐานข้อมูลที่ยืดหยุ่น"}
+                """, store, new ObjectMapper());
+        var imageTool = new ImageGenerationTool(prompt -> {
+            throw new AssertionError("SVG must not call the raster provider");
+        }, store, 8000, 4_194_304L);
+        setField(service, "storyIllustrationService", new StoryIllustrationService(imageTool, false, 2000,
+                visualPlan(), new InMemoryCharacterVisualMemory(), 3, null,
+                new com.minikun.visual.StoryIllustrationIntentDetector(new CooperationRouter()), svg));
+        boolean followUp = mode.equals("follow-up");
+        var request = new ChatCompletionRequest("mini-kun", List.of(new Message("user",
+                followUp ? "รองรับไฟล์ SVG หรือเปล่า" : "ทำอินโฟกราฟิก PostgreSQL ให้หน่อย")),
+                "svg-capability", mode.equals("stream"), null, null, null);
+        var conversationId = new ConversationId("svg-capability");
+        ArgumentCaptor<Prompt> prompt = ArgumentCaptor.forClass(Prompt.class);
+        if (mode.equals("stream")) {
+            var chunks = service.chatCompletionStream(request, conversationId).collectList().block();
+            assertTrue(chunks.stream().anyMatch(chunk -> chunk.contains(".svg")));
+            assertTrue(chunks.stream().anyMatch(chunk -> chunk.contains("สร้างไฟล์ SVG และแนบให้แล้ว")));
+        } else if (mode.equals("background")) {
+            var outcome = service.chatCompletionInBackground(request, conversationId, ChatRequestContext.direct());
+            assertTrue(outcome.response().attachments().isEmpty());
+            assertTrue(service.completeIllustration(outcome.illustrationTask()).attachments().getFirst().url().endsWith(".svg"));
+            assertEquals(StoryIllustrationService.VECTOR_PENDING_NOTICE,
+                    outcome.response().choices().getFirst().message().content());
+        } else {
+            var result = service.chatCompletion(request, conversationId);
+            if (followUp) assertTrue(result.attachments().isEmpty());
+            else assertTrue(result.attachments().getFirst().url().endsWith(".svg"));
+            if (followUp) verify(chatModel).call(prompt.capture());
+            else assertEquals("สร้างไฟล์ SVG และแนบให้แล้วครับ", result.choices().getFirst().message().content());
+        }
+        if (followUp) {
+            String instructions = promptText(prompt.getValue());
+            assertTrue(instructions.contains("SVG เป็นไฟล์ภาพที่ดูและดาวน์โหลดได้"));
+            assertTrue(instructions.contains("คำปฏิเสธเรื่องความสามารถในประวัติคำตอบเก่าไม่ใช่หลักฐาน"));
+            assertFalse(instructions.contains("รอบนี้ระบบวางแผนสร้างภาพ"));
+        } else {
+            verify(chatModel, never()).call(any(Prompt.class));
+            verify(chatModel, never()).stream(any(Prompt.class));
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"sync", "stream", "background", "sync-failure", "stream-failure", "background-failure",
+            "sync-revision", "stream-revision", "background-revision"})
+    void approvedGraphicIsActuallyGeneratedAndCompletionRequiresAnAttachment(String mode) throws Exception {
+        ChatModel chatModel = mock(ChatModel.class);
+        ConversationMemoryService conversation = mock(ConversationMemoryService.class);
+        String original = "อยากได้วิธีคิดของมินิคุง ในรูปแบบ info";
+        String outline = "ทำความเข้าใจ: รับคำขอ\nวิเคราะห์และตรวจสอบ: แยกข้อมูล\n"
+                + "ให้เหตุผล: ประเมินทางเลือก\nตอบสนอง: แนะนำและระบุความไม่แน่นอน";
+        boolean revision = mode.endsWith("revision");
+        String currentRequest = revision ? "ปรับให้ลองทำเป็น flowchart" : "เอาตามนี้เลย";
+        // Exercise stored history and stateless multi-message requests through the same resolver.
+        boolean stateless = mode.startsWith("stream");
+        var history = new java.util.ArrayList<>(List.of(
+                new ChatMessage("user", "มินิคุง ช่วยทำแผนภาพเกี่ยวกับตัวมินิคุงมาให้เราหน่อย"),
+                new ChatMessage("assistant", "อยากเน้นอะไรครับ"),
+                new ChatMessage("user", original), new ChatMessage("assistant", outline)));
+        if (revision) {
+            history.add(new ChatMessage("user", "เอาตามนี้เลย"));
+            history.add(new ChatMessage("assistant", "สร้างไฟล์ SVG และแนบให้แล้วครับ"));
+        }
+        when(conversation.load(any())).thenReturn(stateless && revision
+                ? List.of(new ChatMessage("user", "วันนี้อากาศเป็นยังไง"), new ChatMessage("assistant", "ฝนตกครับ"))
+                : stateless ? List.of() : history);
+        ChatService service = service(chatModel, conversation);
+        var store = new GeneratedImageStore(temporaryDirectory, 128_000, Clock.systemUTC());
+        var brief = new java.util.concurrent.atomic.AtomicReference<String>();
+        boolean failed = mode.endsWith("failure");
+        var svg = new SvgGraphicGenerator(task -> {
+            brief.set(task.messages().getLast().content());
+            if (failed) throw new com.minikun.visual.ImageGenerationException("test provider failure");
+            if (revision) {
+                assertFalse(task.messages().getFirst().content().contains("\"cards\":"));
+                return """
+                        {"title":"วิธีทำงานของมินิคุง","steps":[
+                        {"heading":"ทำความเข้าใจ","body":"รับคำขอและระบุเป้าหมาย"},
+                        {"heading":"ตรวจสอบและให้เหตุผล","body":"แยกข้อมูลและคัดกรองทางเลือก"},
+                        {"heading":"ตอบสนอง","body":"แนะนำและระบุความไม่แน่นอน"}]}
+                        """;
+            }
+            return """
+                    {"title":"วิธีการทำงานของมินิคุง","subtitle":"ภาพรวมของขั้นตอนการตอบ",
+                     "cards":[{"heading":"ทำความเข้าใจ","body":"รับคำขอ"},
+                              {"heading":"ตรวจสอบและประเมิน","body":"แยกข้อมูลและประเมินทางเลือก"},
+                              {"heading":"ตอบสนอง","body":"แนะนำและระบุความไม่แน่นอน"}],
+                     "summary":"ตรวจสอบข้อมูลก่อนตอบ"}
+                    """;
+        }, store, new ObjectMapper());
+        var imageTool = new ImageGenerationTool(prompt -> {
+            throw new AssertionError("diagram must not call the raster provider");
+        }, store, 8000, 4_194_304L);
+        setField(service, "storyIllustrationService", new StoryIllustrationService(imageTool, false, 2000,
+                visualPlan(), new InMemoryCharacterVisualMemory(), 3, null,
+                new com.minikun.visual.StoryIllustrationIntentDetector(new CooperationRouter()), svg));
+        var messages = new java.util.ArrayList<Message>();
+        if (stateless) history.forEach(previous -> messages.add(new Message(previous.role(), previous.content())));
+        messages.add(new Message("user", currentRequest));
+        var request = new ChatCompletionRequest("mini-kun", messages, "approved-svg", false, null, null, null);
+        var conversationId = new ConversationId("approved-svg");
+        String content;
+        int attachments;
+        if (mode.startsWith("stream")) {
+            var chunks = service.chatCompletionStream(request, conversationId).collectList().block();
+            content = String.join("", chunks);
+            attachments = chunks.stream().anyMatch(chunk -> chunk.contains(".svg")) ? 1 : 0;
+        } else if (mode.startsWith("background")) {
+            var outcome = service.chatCompletionInBackground(request, conversationId, ChatRequestContext.direct());
+            assertEquals(StoryIllustrationService.VECTOR_PENDING_NOTICE,
+                    outcome.response().choices().getFirst().message().content());
+            assertTrue(outcome.response().attachments().isEmpty());
+            assertTrue(outcome.illustrationTask().userMessage().contains(outline));
+            var result = service.completeIllustration(outcome.illustrationTask());
+            content = result.appendNoticeTo(outcome.response().choices().getFirst().message().content());
+            attachments = result.attachments().size();
+        } else {
+            var result = service.chatCompletion(request, conversationId);
+            content = result.choices().getFirst().message().content();
+            attachments = result.attachments().size();
+        }
+        assertTrue(brief.get().contains(original));
+        assertTrue(brief.get().contains(outline));
+        if (revision) {
+            assertEquals(currentRequest, com.minikun.visual.StoryIllustrationIntentDetector.currentRequest(brief.get()));
+            try (var files = java.nio.file.Files.list(temporaryDirectory)) {
+                var svgFile = files.filter(path -> path.toString().endsWith(".svg")).findFirst().orElseThrow();
+                String graphic = java.nio.file.Files.readString(svgFile);
+                assertTrue(graphic.contains("<line"));
+                assertTrue(graphic.contains("<polygon"));
+                assertTrue(graphic.contains("ตรวจสอบและให้เหตุผล"));
+            }
+        }
+        assertEquals(failed ? 0 : 1, attachments);
+        assertEquals(!failed, content.contains("สร้างไฟล์ SVG และแนบให้แล้ว"));
+        assertEquals(failed, content.contains("สร้างภาพประกอบไม่สำเร็จ"));
+        verify(chatModel, never()).call(any(Prompt.class));
+        verify(chatModel, never()).stream(any(Prompt.class));
     }
 
     @Test
@@ -257,6 +416,7 @@ class ChatServiceChatOrchestrationTest {
         verify(chatModel).call(prompt.capture());
         String text = promptText(prompt.getValue());
         assertTrue(text.contains("Turn continuity"));
+        assertTrue(text.contains("คำพูดของ assistant ที่ผู้ใช้ไม่ยืนยัน"));
         assertTrue(text.contains("RenaRaziel"));
         assertTrue(text.contains("Conversation repair"));
         assertTrue(text.contains("Do not switch to a different person"));
@@ -541,6 +701,32 @@ class ChatServiceChatOrchestrationTest {
         assertTrue(text.contains("70%"));
         assertTrue(text.contains("Keep the identity, language, tone, and response style from MCS"));
         assertTrue(text.contains("พี่สาววางแผนจะออกจากบ้านพรุ่งนี้เช้าครับ"));
+    }
+
+    @Test
+    void currentLocationWeatherFollowUpUsesDeviceCoordinates() throws Exception {
+        ChatModel chatModel = mock(ChatModel.class);
+        when(chatModel.call(any(Prompt.class))).thenReturn(response("อากาศแถวนี้มีเมฆบางส่วนครับ"));
+        ChatService service = service(chatModel, mock(ConversationMemoryService.class));
+        setField(service, "toolsEnabled", true);
+        setField(service, "toolRequestRouters", List.of(new WeatherToolRouter(new DefaultToolExecutor(
+                new DefaultToolRegistry(List.of(new WeatherForecastTool(weather -> {
+                    assertEquals(13.75, weather.latitude());
+                    assertEquals(100.5, weather.longitude());
+                    return new WeatherReport("ตำแหน่งปัจจุบัน", "", 13.75, 100.5, "Asia/Bangkok",
+                            "2026-09-29", 30.0, null, null, null, null, "เมฆบางส่วน",
+                            27.0, 33.0, 40, null, "", "", java.time.Instant.now(), "test");
+                })))))));
+
+        var result = service.chatCompletion(new ChatCompletionRequest("test-model", List.of(
+                new Message("user", "มินิคุง สภาพอากาศวันนี้เป็นยังไงบ้าง"),
+                new Message("assistant", "บอกชื่อเมืองหรือเปิดตำแหน่งให้หน่อยครับ"),
+                new Message("user", "เอาที่ราอยู่ในตอนนี้น่ะ")),
+                "weather-follow-up", false, null, null, null, null, null, null, null,
+                new DeviceLocation(13.75, 100.5, 10.0, System.currentTimeMillis())),
+                new ConversationId("weather-follow-up"));
+
+        assertEquals("อากาศแถวนี้มีเมฆบางส่วนครับ", result.choices().getFirst().message().content());
     }
 
     @ParameterizedTest
@@ -984,6 +1170,87 @@ class ChatServiceChatOrchestrationTest {
         verify(chatModel).stream(prompt.capture());
         assertFalse(promptText(prompt.getValue()).contains("Native tools"));
         verify(toolRuntime, never()).call(any(Prompt.class), any(ConversationId.class), any(String.class));
+    }
+
+    @Test
+    void presentationStreamCarriesTheCreatedPowerPointAttachment() throws Exception {
+        ChatModel chatModel = mock(ChatModel.class);
+        ConversationMemoryService conversation = mock(ConversationMemoryService.class);
+        SpringAiToolCallingRuntime toolRuntime = mock(SpringAiToolCallingRuntime.class);
+        when(conversation.load(any())).thenReturn(List.of());
+        String artifactId = "123e4567-e89b-12d3-a456-426614174000";
+        ChatAttachment deck = new ChatAttachment("presentation", "/v1/presentations/" + artifactId + "/download",
+                "PostgreSQL Performance Tuning", "", "PowerPoint", "generated", "", "", null, null,
+                "Apache POI", "", "", "", null, artifactId, "postgres.pptx",
+                "application/vnd.openxmlformats-officedocument.presentationml.presentation", 1024L, 8, artifactId);
+        AssistantMessage output = AssistantMessage.builder()
+                .content("ตอนนี้มินิคุงยังไม่มีลิงก์ไฟล์หรือพาธที่ดาวน์โหลดได้")
+                .properties(Map.of(
+                PresentationAttachmentScope.METADATA_KEY, List.of(deck))).build();
+        when(toolRuntime.call(any(Prompt.class), any(ConversationId.class), any(String.class), any(String.class)))
+                .thenReturn(new ChatResponse(List.of(new Generation(output))));
+        ChatService service = service(chatModel, conversation);
+        setField(service, "toolsEnabled", true);
+        setField(service, "toolCallingRuntime", toolRuntime);
+        setField(service, "generationProfileSelector", new ChatGenerationProfileSelector(
+                new CooperationRouter(), true, 384, 512, 768, 1_536, 3_072, 4_096, 2_048, 4_096));
+        setField(service, "configuredGenerationMaxTokens", 2_048);
+        ChatCompletionRequest request = new ChatCompletionRequest(
+                "test-model", List.of(new Message("user", "ทำเป็นสไลด์ให้เราหน่อยนะ")),
+                "presentation-stream", true, null, null, null);
+
+        List<String> chunks = service.chatCompletionStream(request, new ConversationId("presentation-stream"))
+                .collectList().block();
+
+        assertTrue(chunks.stream().anyMatch(chunk -> chunk.contains("\"type\":\"presentation\"")
+                && chunk.contains(artifactId)));
+        assertTrue(chunks.stream().anyMatch(chunk -> chunk.contains("สร้างและแนบไฟล์ PowerPoint ให้แล้วครับ")));
+        assertFalse(chunks.stream().anyMatch(chunk -> chunk.contains("ไม่มีลิงก์ไฟล์")));
+        verify(toolRuntime).call(any(Prompt.class), any(ConversationId.class), any(String.class), any(String.class));
+        verify(chatModel, never()).stream(any(Prompt.class));
+    }
+
+    @Test
+    void presentationStreamDoesNotClaimSuccessWithoutAnAttachment() throws Exception {
+        ChatModel chatModel = mock(ChatModel.class);
+        ConversationMemoryService conversation = mock(ConversationMemoryService.class);
+        SpringAiToolCallingRuntime toolRuntime = mock(SpringAiToolCallingRuntime.class);
+        when(conversation.load(any())).thenReturn(List.of());
+        when(toolRuntime.call(any(Prompt.class), any(ConversationId.class), any(String.class), any(String.class)))
+                .thenReturn(response("สร้างไฟล์และแนบให้แล้วครับ"));
+        ChatService service = service(chatModel, conversation);
+        setField(service, "toolsEnabled", true);
+        setField(service, "toolCallingRuntime", toolRuntime);
+        setField(service, "generationProfileSelector", new ChatGenerationProfileSelector(
+                new CooperationRouter(), true, 384, 512, 768, 1_536, 3_072, 4_096, 2_048, 4_096));
+        setField(service, "configuredGenerationMaxTokens", 2_048);
+        ChatCompletionRequest request = new ChatCompletionRequest(
+                "test-model", List.of(new Message("user", "ทำเป็นสไลด์ให้เราหน่อยนะ")),
+                "presentation-no-attachment", true, null, null, null);
+
+        List<String> chunks = service.chatCompletionStream(request, new ConversationId("presentation-no-attachment"))
+                .collectList().block();
+
+        String stream = String.join("\n", chunks);
+        assertTrue(stream.contains("จึงไม่มีไฟล์แนบให้ดาวน์โหลด"));
+        assertFalse(stream.contains("สร้างไฟล์และแนบให้แล้วครับ"));
+    }
+
+    @Test
+    void presentationRequestFailsClearlyWhenToolRuntimeIsUnavailable() throws Exception {
+        ChatModel chatModel = mock(ChatModel.class);
+        ConversationMemoryService conversation = mock(ConversationMemoryService.class);
+        when(conversation.load(any())).thenReturn(List.of());
+        ChatService service = service(chatModel, conversation);
+        ChatCompletionRequest request = new ChatCompletionRequest(
+                "test-model", List.of(new Message("user", "ทำเป็นสไลด์ให้เราหน่อยนะ")),
+                "presentation-no-runtime", true, null, null, null);
+
+        List<String> chunks = service.chatCompletionStream(request, new ConversationId("presentation-no-runtime"))
+                .collectList().block();
+
+        assertTrue(String.join("\n", chunks).contains("จึงไม่มีไฟล์แนบให้ดาวน์โหลด"));
+        verify(chatModel, never()).stream(any(Prompt.class));
     }
 
     @Test

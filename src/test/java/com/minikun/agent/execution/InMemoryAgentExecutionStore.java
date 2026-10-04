@@ -45,6 +45,12 @@ final class InMemoryAgentExecutionStore implements AgentExecutionStore {
     }
 
     @Override
+    public List<AgentRun> listRuns(String ownerId, String conversationId, AgentRunStatus status, int limit) {
+        return listRuns(ownerId, status, Integer.MAX_VALUE).stream()
+                .filter(run -> run.conversationId().equals(conversationId)).limit(limit).toList();
+    }
+
+    @Override
     public AgentExecutionStep createStep(AgentExecutionStep step) {
         steps.put(step.id(), step);
         return step;

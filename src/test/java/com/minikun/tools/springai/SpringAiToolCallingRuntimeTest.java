@@ -18,6 +18,7 @@ import java.time.Instant;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.ToolResponseMessage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
@@ -25,6 +26,7 @@ import org.springframework.ai.chat.model.Generation;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.chat.model.ToolContext;
 import org.springframework.ai.ollama.api.OllamaChatOptions;
+import org.springframework.ai.model.tool.ToolCallingChatOptions;
 import org.mockito.ArgumentCaptor;
 
 import com.minikun.agent.minikun_agent.conversation.ConversationId;
@@ -52,6 +54,75 @@ import com.minikun.tools.ToolParameter;
 import com.minikun.tools.ToolParameterType;
 
 class SpringAiToolCallingRuntimeTest {
+    @Test
+    void limitsPresentationRequestsToPresentationResearchAndImageTools() {
+        ChatModel chatModel = mock(ChatModel.class);
+        ChatResponse noToolResponse = new ChatResponse(List.of(
+                new Generation(new AssistantMessage("พร้อมสร้างไฟล์"))));
+        when(chatModel.call(any(Prompt.class))).thenReturn(noToolResponse, noToolResponse);
+        List<Tool> tools = List.of(new CalculatorAddTool(), namedTool("presentation.create"),
+                namedTool("image.generate"), namedTool("web.search"), namedTool("web.open_url"));
+        var registry = new DefaultToolRegistry(tools);
+        SpringAiToolCallingRuntime runtime = new SpringAiToolCallingRuntime(
+                new DefaultActiveChatModelProvider(
+                        new ActiveModelConfiguration(ChatModelId.EXISTING),
+                        new DefaultChatModelProviderRegistry(List.of(new ExistingChatModelProvider(chatModel)))),
+                tools, new DefaultToolExecutor(registry), new ObjectMapper());
+
+        runtime.call(new Prompt(List.of(new SystemMessage("MINIKUN_PRESENTATION_CREATE_REQUIRED")),
+                        OllamaChatOptions.builder().model("main-model").build()),
+                new ConversationId("conversation"));
+
+        ArgumentCaptor<Prompt> prompt = ArgumentCaptor.forClass(Prompt.class);
+        verify(chatModel, times(2)).call(prompt.capture());
+        for (Prompt attemptedPrompt : prompt.getAllValues()) {
+            List<String> offeredTools = ((ToolCallingChatOptions) attemptedPrompt.getOptions())
+                    .getToolCallbacks().stream().map(callback -> callback.getToolDefinition().name()).toList();
+            assertEquals(List.of("image.generate", "presentation.create", "web.open_url", "web.search"), offeredTools);
+        }
+        assertEquals(true, prompt.getAllValues().get(1).getInstructions().stream()
+                .filter(SystemMessage.class::isInstance).map(SystemMessage.class::cast)
+                .anyMatch(message -> message.getText().contains("has not been created yet")));
+    }
+
+    @Test
+    void retriesPresentationWhenTheFirstToolCallFails() {
+        ChatModel chatModel = mock(ChatModel.class);
+        ChatResponse failedPresentationCall = new ChatResponse(List.of(new Generation(
+                AssistantMessage.builder().content("").toolCalls(List.of(new AssistantMessage.ToolCall(
+                        "presentation-call", "function", "presentation.create", "{\"spec_json\":\"{}\"}")))
+                        .build())));
+        ChatResponse plainResponse = new ChatResponse(List.of(new Generation(new AssistantMessage("ยังไม่สำเร็จ"))));
+        when(chatModel.call(any(Prompt.class))).thenReturn(failedPresentationCall, plainResponse, plainResponse);
+        Tool presentation = new Tool() {
+            @Override public ToolDefinition definition() {
+                return new ToolDefinition("presentation.create", "create a PowerPoint", Map.of(
+                        "spec_json", new ToolParameter("spec_json", ToolParameterType.STRING, true, "slide spec")));
+            }
+            @Override public ToolResult execute(com.minikun.tools.ToolCallContext context,
+                    Map<String, Object> arguments) {
+                return ToolResult.failure(ToolErrorCode.INVALID_ARGUMENTS, "invalid presentation spec");
+            }
+        };
+        SpringAiToolCallingRuntime runtime = new SpringAiToolCallingRuntime(
+                new DefaultActiveChatModelProvider(
+                        new ActiveModelConfiguration(ChatModelId.EXISTING),
+                        new DefaultChatModelProviderRegistry(List.of(new ExistingChatModelProvider(chatModel)))),
+                List.of(presentation), new DefaultToolExecutor(new DefaultToolRegistry(List.of(presentation))),
+                new ObjectMapper());
+
+        runtime.call(new Prompt(List.of(new SystemMessage("MINIKUN_PRESENTATION_CREATE_REQUIRED")),
+                        OllamaChatOptions.builder().model("main-model").build()),
+                new ConversationId("conversation"));
+
+        ArgumentCaptor<Prompt> prompts = ArgumentCaptor.forClass(Prompt.class);
+        verify(chatModel, times(3)).call(prompts.capture());
+        assertEquals(true, prompts.getAllValues().get(2).getInstructions().stream()
+                .filter(SystemMessage.class::isInstance).map(SystemMessage.class::cast)
+                .anyMatch(message -> message.getText().contains("has not been created yet")
+                        && message.getText().contains("nested spec object")));
+    }
+
     @Test
     void executesNativeToolCallAndReturnsFinalAssistantResponse() {
         ChatModel chatModel = mock(ChatModel.class);
@@ -197,6 +268,14 @@ class SpringAiToolCallingRuntimeTest {
                         .build())));
     }
 
+    private Tool namedTool(String name) {
+        return new Tool() {
+            @Override public ToolDefinition definition() { return new ToolDefinition(name, "test tool", Map.of()); }
+            @Override public ToolResult execute(com.minikun.tools.ToolCallContext context,
+                    Map<String, Object> arguments) { return ToolResult.success(Map.of()); }
+        };
+    }
+
     @Test
     void callbackMakesSuccessfulResultExplicitForFinalMcsAnswer() throws Exception {
         CalculatorAddTool tool = new CalculatorAddTool();
@@ -227,6 +306,25 @@ class SpringAiToolCallingRuntimeTest {
         assertEquals("calculator.add", callback.getToolDefinition().name());
         assertEquals("number", schema.get("properties").get("a").get("type").asText());
         assertEquals("[\"a\",\"b\"]", schema.get("required").toString());
+    }
+
+    @Test
+    void callbackExposesNestedObjectParametersAsJsonObjects() throws Exception {
+        Tool deckTool = new Tool() {
+            @Override public ToolDefinition definition() {
+                return new ToolDefinition("presentation.create", "Create a PowerPoint.", Map.of(
+                        "spec", new ToolParameter("spec", ToolParameterType.OBJECT, true, "Nested slide deck.")));
+            }
+            @Override public ToolResult execute(com.minikun.tools.ToolCallContext context,
+                    Map<String, Object> arguments) { return ToolResult.success(arguments); }
+        };
+        SpringAiToolCallback callback = new SpringAiToolCallback(deckTool,
+                new DefaultToolExecutor(new DefaultToolRegistry(List.of(deckTool))), new ObjectMapper());
+
+        var schema = new ObjectMapper().readTree(callback.getToolDefinition().inputSchema());
+
+        assertEquals("object", schema.path("properties").path("spec").path("type").asText());
+        assertEquals("[\"spec\"]", schema.path("required").toString());
     }
 
     @Test

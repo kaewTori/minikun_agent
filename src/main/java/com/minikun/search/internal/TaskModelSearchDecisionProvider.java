@@ -3,10 +3,12 @@ package com.minikun.search.internal;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.ArrayList;
 import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Pattern;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -35,6 +37,17 @@ final class TaskModelSearchDecisionProvider implements SearchDecisionProvider {
     private static final Set<String> EVIDENCE_NEEDS = Set.of(
             "opening_hours", "rating", "location", "price", "availability", "transit_access",
             "official_source", "freshness", "atmosphere");
+    // ponytail: split common conjunctions only; use semantic segmentation if wider phrasing proves necessary.
+    private static final Pattern REQUEST_SEPARATOR = Pattern.compile(
+            "(?iu)(?:\\s*(?:แล้ว|และ|;|\\n)\\s*|\\s+(?:and|then)\\s+)");
+    private static final String PART_INSTRUCTIONS = """
+            Classify ONE request into reason and searchQuery, output JSON only.
+            Reasons: EXTERNAL_RESOURCE for recommending real places or services;
+            CURRENT_INFORMATION for time-varying facts; FACT_LOOKUP for external source;
+            IMAGE_REQUEST for finding images; GENERAL_KNOWLEDGE for stable explanations or conversation.
+            searchQuery must be a concise nonempty query in the user language if search is needed,
+            empty otherwise. Never invent locations or constraints. No examples.
+            """;
     private final TaskModelProvider taskModelProvider;
     private final ObjectMapper objectMapper;
     private final Duration timeout;
@@ -52,6 +65,52 @@ final class TaskModelSearchDecisionProvider implements SearchDecisionProvider {
 
     @Override
     public SearchDecision classify(SearchDecisionPrompt prompt) {
+        String message = prompt.userMessage();
+        int current = message.lastIndexOf("Current user message:\n");
+        int start = current < 0 ? 0 : current + "Current user message:\n".length();
+        String prefix = message.substring(0, start);
+        List<String> parts = java.util.Arrays.stream(REQUEST_SEPARATOR.split(message.substring(start)))
+                .map(String::trim).filter(part -> !part.isBlank()).toList();
+        if (parts.size() < 2 || parts.size() > 4) return classifySingle(prompt);
+        List<SearchDecision> decisions = new ArrayList<>();
+        for (String part : parts) {
+            try {
+                decisions.add(classifySingle(new SearchDecisionPrompt(
+                        PART_INSTRUCTIONS, prompt.currentDate(), prefix + part)));
+            } catch (SearchDecisionClientException exception) {
+                decisions.add(classifySingle(new SearchDecisionPrompt(
+                        prompt.instructions(), prompt.currentDate(), prefix + part)));
+            }
+        }
+        SearchDecision selected = decisions.stream()
+                .filter(decision -> decision.reason() == SearchDecisionReason.EXTERNAL_RESOURCE)
+                .findFirst().orElseGet(() -> decisions.stream().filter(SearchDecision::shouldSearch)
+                        .findFirst().orElse(decisions.getFirst()));
+        if (!selected.shouldSearch()) {
+            return new SearchDecision(false, prompt.userMessage(), SearchDecisionReason.GENERAL_KNOWLEDGE);
+        }
+        int selectedIndex = decisions.indexOf(selected);
+        String primary = selected.planHints().primaryQuery().isBlank()
+                ? parts.get(selectedIndex) : selected.planHints().primaryQuery();
+        List<String> alternates = java.util.stream.IntStream.range(0, decisions.size())
+                .filter(index -> index != selectedIndex && decisions.get(index).shouldSearch())
+                .mapToObj(index -> decisions.get(index).planHints().primaryQuery().isBlank()
+                        ? parts.get(index) : decisions.get(index).planHints().primaryQuery())
+                .filter(query -> !query.isBlank() && !query.equalsIgnoreCase(primary))
+                .limit(2).toList();
+        String intent = switch (selected.reason()) {
+            case EXTERNAL_RESOURCE -> "local_discovery";
+            case CURRENT_INFORMATION -> "current_information";
+            case FACT_LOOKUP -> "fact_lookup";
+            case IMAGE_REQUEST -> "images";
+            default -> "general";
+        };
+        SearchPlanHints hints = new SearchPlanHints(intent, selected.planHints().confidence(),
+                primary, alternates, selected.planHints().evidenceNeeds(), selected.planHints().location());
+        return new SearchDecision(true, prompt.userMessage(), selected.reason(), hints);
+    }
+
+    private SearchDecision classifySingle(SearchDecisionPrompt prompt) {
         try {
             TaskModelRequest request = new TaskModelRequest(
                     List.of(new TaskModelMessage("system", prompt.instructions()),
@@ -87,8 +146,8 @@ final class TaskModelSearchDecisionProvider implements SearchDecisionProvider {
 
     private void validateSchema(JsonNode root) {
         if (root == null || !root.isObject()
-                || !root.has("shouldSearch") || !root.has("reason")
-                || !root.get("shouldSearch").isBoolean() || !root.get("reason").isTextual()) {
+                || !root.has("reason") || !root.get("reason").isTextual()
+                || root.has("shouldSearch") && !root.get("shouldSearch").isBoolean()) {
             throw new SearchDecisionClientException("search decision response has invalid fields", null);
         }
         root.fieldNames().forEachRemaining(field -> {

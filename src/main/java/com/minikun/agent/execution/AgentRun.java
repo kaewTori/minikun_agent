@@ -9,6 +9,7 @@ public record AgentRun(
         UUID id,
         String ownerId,
         String conversationId,
+        String responseId,
         String objective,
         List<String> plannedSteps,
         AgentRiskAssessment riskAssessment,
@@ -25,6 +26,7 @@ public record AgentRun(
         Objects.requireNonNull(id, "agent run id must not be null");
         ownerId = require(ownerId, "owner id");
         conversationId = require(conversationId, "conversation id");
+        responseId = Objects.requireNonNullElse(responseId, "").trim();
         objective = require(objective, "objective");
         plannedSteps = plannedSteps == null ? List.of() : List.copyOf(plannedSteps);
         Objects.requireNonNull(riskAssessment, "risk assessment must not be null");

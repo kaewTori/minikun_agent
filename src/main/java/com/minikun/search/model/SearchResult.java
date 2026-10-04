@@ -1,5 +1,6 @@
 package com.minikun.search.model;
 
+import java.time.Instant;
 import java.util.Objects;
 
 public record SearchResult(
@@ -8,14 +9,25 @@ public record SearchResult(
         String content,
         SearchSource source,
         Integer sourcePosition,
-        double providerScore) {
+        double providerScore,
+        Instant publishedAt) {
     public SearchResult(
             String title,
             String canonicalUri,
             String content,
             SearchSource source,
             Integer sourcePosition) {
-        this(title, canonicalUri, content, source, sourcePosition, 0.0);
+        this(title, canonicalUri, content, source, sourcePosition, 0.0, null);
+    }
+
+    public SearchResult(
+            String title,
+            String canonicalUri,
+            String content,
+            SearchSource source,
+            Integer sourcePosition,
+            double providerScore) {
+        this(title, canonicalUri, content, source, sourcePosition, providerScore, null);
     }
 
     public SearchResult {

@@ -18,6 +18,37 @@ import org.junit.jupiter.api.Test;
 
 class ChatCapabilityFactoryTest {
     @Test
+    void requiresPresentationToolForActualDeckRequests() {
+        var knowledge = new ChatKnowledgeSelection(KnowledgeSelection.EMPTY, KnowledgeConsolidation.EMPTY,
+                SearchSelectionSignals.EMPTY, SearchContext.EMPTY);
+        String requested = new ChatCapabilityFactory().create("ช่วยทำสไลด์แบบสวย ๆ ให้หน่อย", knowledge,
+                null, null, null, null, "", true).stream()
+                .map(capability -> capability.name() + " " + capability.content())
+                .reduce((left, right) -> left + "\n" + right).orElse("");
+        String planning = new ChatCapabilityFactory().create("ช่วยวางแผนให้มินิคุงทำสไลด์ได้", knowledge,
+                null, null, null, null, "", true).stream()
+                .map(capability -> capability.content()).reduce((left, right) -> left + "\n" + right).orElse("");
+
+        assertTrue(requested.contains("MINIKUN_PRESENTATION_CREATE_REQUIRED"));
+        assertTrue(requested.contains("MUST call presentation.create"));
+        assertTrue(requested.contains("make a fresh tool call"));
+        org.junit.jupiter.api.Assertions.assertFalse(planning.contains("MINIKUN_PRESENTATION_CREATE_REQUIRED"));
+    }
+
+    @Test
+    void visualCapabilityReportsConfiguredFormatsAndPendingStatus() {
+        var factory = new ChatCapabilityFactory();
+        var planned = factory.visualOutput(true, true);
+        assertTrue(planned.required());
+        assertTrue(planned.content().contains("SVG เป็นไฟล์ภาพที่ดูและดาวน์โหลดได้"));
+        assertTrue(planned.content().contains("รอบนี้ระบบวางแผนสร้างภาพ"));
+        assertTrue(planned.content().contains("อย่าอ้างว่าสร้างเสร็จแล้วก่อนมีผลสำเร็จ"));
+        assertTrue(planned.content().contains("คำปฏิเสธเรื่องความสามารถในประวัติคำตอบเก่าไม่ใช่หลักฐาน"));
+        assertTrue(factory.visualOutput(true, false).content().contains("รอบนี้ยังไม่มีแผนสร้างภาพ"));
+        org.junit.jupiter.api.Assertions.assertFalse(factory.visualOutput(false, true).content().contains("SVG"));
+    }
+
+    @Test
     void memoryGuidancePrioritizesUserCorrectionsAndGroundsSourceClaims() {
         var memory = new KnowledgeCandidate("memory-1", KnowledgeSource.MEMORY,
                 "PREFERENCE: ไม่ชอบหวาน (source=USER_DIRECTIVE)", 0, "conversation:chat-1");

@@ -18,7 +18,7 @@ public final class BrowserUrlPolicy {
     }
 
     public void validate(URI uri) {
-        if (uri == null || uri.getHost() == null
+        if (uri == null || uri.getHost() == null || uri.getUserInfo() != null
                 || !("http".equalsIgnoreCase(uri.getScheme())
                 || "https".equalsIgnoreCase(uri.getScheme()))) {
             throw new BrowserContentException("browser URL must use http or https");
@@ -35,7 +35,10 @@ public final class BrowserUrlPolicy {
             for (InetAddress address : InetAddress.getAllByName(host)) {
                 if (address.isAnyLocalAddress() || address.isLoopbackAddress()
                         || address.isLinkLocalAddress() || address.isSiteLocalAddress()
-                        || address.isMulticastAddress()) {
+                        || address.isMulticastAddress()
+                        || address.getAddress().length == 16 && (address.getAddress()[0] & 0xfe) == 0xfc
+                        || address.getAddress().length == 4 && (address.getAddress()[0] & 0xff) == 100
+                                && (address.getAddress()[1] & 0xc0) == 64) {
                     throw new BrowserContentException("browser URL targets a private address");
                 }
             }

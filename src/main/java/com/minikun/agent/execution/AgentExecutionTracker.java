@@ -7,6 +7,9 @@ import java.util.UUID;
 
 public interface AgentExecutionTracker {
     Optional<AgentRun> start(String ownerId, String conversationId, AgentPlanDraft plan);
+    default Optional<AgentRun> start(String ownerId, String conversationId, String responseId, AgentPlanDraft plan) {
+        return start(ownerId, conversationId, plan);
+    }
     AgentExecutionStep beginStep(UUID runId, String toolCallId, String toolName, Map<String, Object> arguments);
     void finishStep(UUID runId, String toolCallId, ToolResult result, boolean willRetry);
     boolean shouldRetry(ToolResult result, int attempts);

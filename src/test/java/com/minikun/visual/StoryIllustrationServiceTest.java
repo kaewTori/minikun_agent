@@ -157,6 +157,42 @@ class StoryIllustrationServiceTest {
     }
 
     @Test
+    void infographicUsesGemmaSvgInsteadOfTinyGrad() {
+        AtomicInteger tinyGradCalls = new AtomicInteger();
+        AtomicReference<String> brief = new AtomicReference<>();
+        GeneratedImageStore store = new GeneratedImageStore(directory, 128_000, Clock.systemUTC());
+        SvgGraphicGenerator svg = new SvgGraphicGenerator(request -> {
+            brief.set(request.messages().getLast().content());
+            return "{\"title\":\"ประหยัดไฟ\",\"subtitle\":\"เริ่มจากสิ่งใกล้ตัว\","
+                    + "\"cards\":[{\"heading\":\"ถอดปลั๊ก\",\"body\":\"ถอดปลั๊กเมื่อเลิกใช้งาน\"}],"
+                    + "\"summary\":\"ลดการใช้พลังงานที่ไม่จำเป็น\"}";
+        }, store, new com.fasterxml.jackson.databind.ObjectMapper());
+        StoryIllustrationService service = new StoryIllustrationService(
+                tool(prompt -> {
+                    tinyGradCalls.incrementAndGet();
+                    throw new AssertionError("TinyGrad must not draw an infographic");
+                }), false, 1000,
+                (user, story, mode, memory, maximum) -> {
+                    throw new AssertionError("story planner must not run");
+                }, new InMemoryCharacterVisualMemory(), 3, null,
+                new StoryIllustrationIntentDetector(), svg);
+
+        var result = service.illustrate("ช่วยทำอินโฟกราฟิกเรื่องประหยัดไฟ", "ได้ครับ");
+
+        assertEquals(0, tinyGradCalls.get());
+        assertEquals("ช่วยทำอินโฟกราฟิกเรื่องประหยัดไฟ", brief.get());
+        assertEquals(1, result.attachments().size());
+        assertEquals("image/svg+xml", store.read(result.attachments().getFirst().url()
+                .substring("/v1/images/generated/".length())).contentType());
+        String drawing = new String(store.read(result.attachments().getFirst().url()
+                .substring("/v1/images/generated/".length())).bytes(), java.nio.charset.StandardCharsets.UTF_8);
+        assertEquals(1200, result.attachments().getFirst().width());
+        assertEquals(SafeSvg.canvasHeight(drawing.getBytes(java.nio.charset.StandardCharsets.UTF_8)),
+                result.attachments().getFirst().height());
+        assertTrue(result.attachments().getFirst().height() < 800, "short content should not leave a tall empty canvas");
+    }
+
+    @Test
     void rendersStoryboardPanelsSequentiallyAsSeparateAttachments() {
         List<ImageGenerationRequest> requests = new ArrayList<>();
         StoryIllustrationProvider provider = new StoryIllustrationProvider() {

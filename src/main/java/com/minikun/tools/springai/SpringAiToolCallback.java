@@ -78,6 +78,7 @@ public final class SpringAiToolCallback implements ToolCallback {
                     objectMapper.readTree(toolInput == null || toolInput.isBlank() ? "{}" : toolInput), Map.class));
             String conversationValue = value(toolContext, "conversationId", "tool-call");
             String ownerValue = value(toolContext, "ownerId", "default");
+            String requestId = value(toolContext, "requestId", "");
             String toolCallId = callId();
             Optional<UUID> runId = uuid(toolContext, "agentRunId");
             boolean requiresRiskReview = booleanValue(toolContext, "riskExplicitReview")
@@ -103,7 +104,7 @@ public final class SpringAiToolCallback implements ToolCallback {
             }
             while (true) {
                 result = executor.execute(
-                        new ToolCallContext(new ConversationId(conversationValue), toolCallId, ownerValue),
+                        new ToolCallContext(new ConversationId(conversationValue), toolCallId, ownerValue, requestId),
                         new ToolCall(toolCallId, tool.definition().name(), arguments));
                 boolean retry = step != null && !tool.requiresExplicitConfirmation(arguments)
                         && executionTracker.shouldRetry(result, step.attempts());
@@ -141,9 +142,11 @@ public final class SpringAiToolCallback implements ToolCallback {
         Map<String, Object> properties = new LinkedHashMap<>();
         java.util.List<String> required = new java.util.ArrayList<>();
         for (ToolParameter parameter : tool.definition().parameters().values()) {
-            properties.put(parameter.name(), Map.of(
-                    "type", jsonType(parameter.type()),
-                    "description", parameter.description()));
+            Map<String, Object> property = new LinkedHashMap<>();
+            property.put("type", jsonType(parameter.type()));
+            property.put("description", parameter.description());
+            property.putAll(parameter.schema());
+            properties.put(parameter.name(), property);
             if (parameter.required()) {
                 required.add(parameter.name());
             }
@@ -168,6 +171,7 @@ public final class SpringAiToolCallback implements ToolCallback {
             case NUMBER -> "number";
             case INTEGER -> "integer";
             case BOOLEAN -> "boolean";
+            case OBJECT -> "object";
         };
     }
 

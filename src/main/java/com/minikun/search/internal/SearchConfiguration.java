@@ -172,7 +172,7 @@ public class SearchConfiguration {
     SearchDecisionProvider searchDecisionProvider(
             TaskModelProvider taskModelProvider,
             ObjectMapper objectMapper,
-            @Value("${minikun.search.decision.timeout:PT2S}") Duration timeout) {
+            @Value("${minikun.search.decision.timeout:PT8S}") Duration timeout) {
         return new TaskModelSearchDecisionProvider(taskModelProvider, objectMapper, timeout);
     }
 
@@ -199,8 +199,10 @@ public class SearchConfiguration {
             default -> throw new IllegalArgumentException(
                     "Unsupported minikun.search.decision.mode: " + mode);
         };
-        decisionService = new FastPathSearchDecisionService(
-                decisionService, new RuleBasedSearchDecisionService(meterRegistry), meterRegistry, fastPathEnabled);
+        if ("rule".equals(mode)) {
+            decisionService = new FastPathSearchDecisionService(
+                    decisionService, new RuleBasedSearchDecisionService(meterRegistry), meterRegistry, fastPathEnabled);
+        }
         return new ImageIntentSearchDecisionService(decisionService, imageIntentDetector);
     }
 

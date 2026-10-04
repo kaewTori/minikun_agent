@@ -82,6 +82,49 @@ class KnowledgeClaimExtractorTest {
     }
 
     @Test
+    void citesMatchingRenderedPagesAcrossDomainsButNotSearchSnippets() {
+        String fact = "Spring AI supports portable model APIs.";
+        KnowledgeClaimExtractor extractor = extractor("""
+                {"claims":[{"text":"Spring AI supports portable model APIs.","evidence":[0],"confidence":0.9}]}
+                """);
+        List<KnowledgeCandidate> evidence = List.of(
+                new KnowledgeCandidate("first", KnowledgeSource.BROWSER, fact, 0, "https://one.example/page"),
+                new KnowledgeCandidate("second", KnowledgeSource.BROWSER, fact, 1, "https://two.example/page"),
+                new KnowledgeCandidate("snippet", KnowledgeSource.SEARCH, fact, 2, "https://three.example/page"));
+        Topic base = topic();
+        Topic balanced = new Topic(base.id(), base.ownerId(), base.name(), base.objective(), base.origin(),
+                base.priority(), base.refreshPolicy(), SourcePolicy.BALANCED, List.of(), base.status(),
+                base.nextRunAt(), base.lastRunAt(), base.createdAt(), base.updatedAt());
+
+        ClaimDraft claim = extractor.extract(balanced, evidence).getFirst();
+
+        assertEquals(List.of(0, 1), claim.evidenceIndexes());
+        assertEquals(ClaimStatus.PUBLISHED, new KnowledgeClaimVerifier(.7)
+                .verify(balanced, claim, evidence).status());
+    }
+
+    @Test
+    void retriesParaphrasedClaimAndKeepsOnlyAnExactRenderedQuoteForPublication() {
+        AtomicInteger calls = new AtomicInteger();
+        TaskModelProvider provider = request -> {
+            assertTrue(request.messages().getLast().content().contains("Track stable Spring AI capabilities"));
+            if (calls.incrementAndGet() == 1) return """
+                    {"claims":[{"text":"Spring AI offers ChatClient and streaming.","evidence":[0],"confidence":0.9}]}
+                    """;
+            return """
+                    {"claims":[{"text":"Spring AI reference documentation describes the fluent ChatClient API and streaming support.","evidence":[0],"confidence":0.9}]}
+                    """;
+        };
+        KnowledgeClaimExtractor extractor = new TaskModelKnowledgeClaimExtractor(provider, new ObjectMapper());
+
+        ClaimDraft claim = extractor.extract(topic(), evidence()).getFirst();
+
+        assertEquals(2, calls.get());
+        assertEquals(ClaimStatus.PUBLISHED, new KnowledgeClaimVerifier(.7)
+                .verify(topic(), claim, evidence()).status());
+    }
+
+    @Test
     void quarantinesEvidenceWhenTheModelReturnsNoUsableClaims() {
         KnowledgeClaimExtractor extractor = extractor("{\"claims\":[{\"text\":\"Unsupported\"}]}");
 

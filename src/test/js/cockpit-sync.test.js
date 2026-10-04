@@ -27,6 +27,7 @@ function syncContext(fetch) {
     persistConversations() {},
     renderConversationList() {},
     renderChat() {},
+    loadChatActivity() {},
     syncChatState() {},
     resumeBackgroundChats() {},
     chatId: () => "new"
@@ -104,4 +105,29 @@ test("voice sync reuses the saved timestamp and clears its retry entry", async (
   assert.equal(await context.syncConversation(), true);
   assert.equal(uploaded.updatedAt, new Date(savedTime).toISOString());
   assert.equal(stored.get("minikun.sync-pending"), "[]");
+});
+
+test("feedback uses the server response id and preserves the chosen category", async () => {
+  const calls = [];
+  const context = {
+    state: { ownerId: "owner", currentConversationId: "chat", chatMessages: [] },
+    requestFeedback: async () => ({ category: "FACT_WRONG", reason: "ข้อมูลผิด" }),
+    saveConversation() {}, renderChat() {}, toast() {},
+    api: async (path, options) => { calls.push({ path, options }); }
+  };
+  vm.createContext(context);
+  vm.runInContext(source.slice(source.indexOf("  async function setMessageFeedback("),
+    source.indexOf("  function renderLiveProgress(")), context);
+  const oldMessage = { id: "message-local", feedback: "" };
+  await context.setMessageFeedback(oldMessage, "down");
+  assert.equal(calls.length, 0);
+  const message = { id: "message-local", responseId: "chatcmpl-real", feedback: "" };
+  await context.setMessageFeedback(message, "down");
+  assert.equal(calls.length, 1);
+  const body = JSON.parse(calls[0].options.body);
+  assert.equal(body.message_id, "chatcmpl-real");
+  assert.equal(body.category, "FACT_WRONG");
+  const core = require("../../main/resources/static/cockpit/cockpit-core.js");
+  const stored = core.syncPayload({ id: "chat", title: "test", updatedAt: 1, messages: [message] });
+  assert.equal(core.normalizeMessage(stored.messages[0]).feedbackCategory, "FACT_WRONG");
 });

@@ -1,10 +1,12 @@
 package com.minikun.tools.springai;
 
 import java.util.List;
+import java.util.ArrayList;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.LinkedHashMap;
+import java.util.Set;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -12,6 +14,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
 import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.ai.chat.messages.Message;
+import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.ToolResponseMessage;
 import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.chat.prompt.Prompt;
@@ -91,6 +95,17 @@ public final class SpringAiToolCallingRuntime {
     }
 
     public ChatResponse call(Prompt prompt, ConversationId conversationId, String ownerId) {
+        return call(prompt, conversationId, ownerId, "");
+    }
+
+    public ChatResponse call(Prompt prompt, ConversationId conversationId, String ownerId, String responseId) {
+        try (var attachments = com.minikun.presentation.PresentationAttachmentScope.open()) {
+            return attachments.attach(callWithToolScope(prompt, conversationId, ownerId, responseId));
+        }
+    }
+
+    private ChatResponse callWithToolScope(Prompt prompt, ConversationId conversationId, String ownerId,
+            String responseId) {
         Objects.requireNonNull(prompt, "prompt must not be null");
         Objects.requireNonNull(conversationId, "conversation id must not be null");
         Objects.requireNonNull(ownerId, "owner id must not be null");
@@ -111,53 +126,71 @@ public final class SpringAiToolCallingRuntime {
             copyChatOptions(prompt.getOptions(), optionsBuilder);
         }
         Optional<AgentRun> agentRun = planningService.plan(prompt)
-                .flatMap(plan -> executionTracker.start(ownerId, conversationId.value(), plan));
+                .flatMap(plan -> executionTracker.start(ownerId, conversationId.value(), responseId, plan));
         String activeGoals = agentRun.isPresent() && goalService != null
                 ? goalService.activeSummary(ownerId, 8, 2400) : "";
         Prompt executionPrompt = agentRun.map(run -> planningService.enrich(prompt, run, activeGoals)).orElse(prompt);
         Map<String, Object> toolContext = new LinkedHashMap<>();
         toolContext.put("conversationId", conversationId.value());
         toolContext.put("ownerId", ownerId);
+        toolContext.put("requestId", responseId == null ? "" : responseId);
         agentRun.ifPresent(run -> toolContext.put("agentRunId", run.id().toString()));
         agentRun.filter(run -> run.riskAssessment().level().requiresExplicitReview())
                 .ifPresent(run -> toolContext.put("riskExplicitReview", true));
         ToolCallingChatOptions options = optionsBuilder
-                .toolCallbacks(callbacks)
+                .toolCallbacks(callbacksFor(prompt))
                 .toolContext(Map.copyOf(toolContext))
                 .build();
         Prompt currentPrompt = new Prompt(executionPrompt.getInstructions(), options);
         try {
+            boolean presentationRequired = requiresPresentationTool(prompt);
+            boolean presentationSucceeded = false;
+            boolean presentationRetryUsed = false;
             ChatResponse response = chatModelProvider.chat(currentPrompt);
             int continuationCount = 0;
-            while (hasToolCalls(response)) {
-                if (continuationCount >= maxToolContinuations) {
-                    LOGGER.warn("process=tool_calling event=continuation_limit_reached conversation_id={} rounds={}",
-                            conversationId.value(), continuationCount);
-                    if (agentRun.isPresent()) {
-                        executionTracker.limitReached(agentRun.get().id(),
-                                "tool continuation limit reached after " + continuationCount + " rounds");
+            while (true) {
+                while (hasToolCalls(response)) {
+                    if (continuationCount >= maxToolContinuations) {
+                        LOGGER.warn("process=tool_calling event=continuation_limit_reached conversation_id={} rounds={}",
+                                conversationId.value(), continuationCount);
+                        if (agentRun.isPresent()) {
+                            executionTracker.limitReached(agentRun.get().id(),
+                                    "tool continuation limit reached after " + continuationCount + " rounds");
+                        }
+                        return continuationLimitResponse();
                     }
-                    return continuationLimitResponse();
+
+                    continuationCount++;
+                    prepareCurrentCallIds(response);
+                    ToolExecutionResult executionResult;
+                    try {
+                        executionResult = toolCallingManager.executeToolCalls(currentPrompt, response);
+                    } finally {
+                        clearCurrentCallIds();
+                    }
+                    presentationSucceeded |= hasSuccessfulPresentation(executionResult);
+                    Optional<String> confirmationMessage = confirmationMessage(executionResult);
+                    if (confirmationMessage.isPresent()) {
+                        agentRun.ifPresent(run -> executionTracker.waitingConfirmation(
+                                run.id(), confirmationMessage.get()));
+                        return assistantResponse(confirmationMessage.get());
+                    }
+                    LOGGER.debug("process=tool_calling event=continuation_completed conversation_id={} round={}",
+                            conversationId.value(), continuationCount);
+                    currentPrompt = new Prompt(executionResult.conversationHistory(), options);
+                    response = chatModelProvider.chat(currentPrompt);
                 }
 
-                continuationCount++;
-                prepareCurrentCallIds(response);
-                ToolExecutionResult executionResult;
-                try {
-                    executionResult = toolCallingManager.executeToolCalls(currentPrompt, response);
-                } finally {
-                    clearCurrentCallIds();
-                }
-                Optional<String> confirmationMessage = confirmationMessage(executionResult);
-                if (confirmationMessage.isPresent()) {
-                    agentRun.ifPresent(run -> executionTracker.waitingConfirmation(
-                            run.id(), confirmationMessage.get()));
-                    return assistantResponse(confirmationMessage.get());
-                }
-                LOGGER.debug("process=tool_calling event=continuation_completed conversation_id={} round={}",
-                        conversationId.value(), continuationCount);
-                currentPrompt = new Prompt(executionResult.conversationHistory(), options);
+                if (!presentationRequired || presentationSucceeded || presentationRetryUsed) break;
+                presentationRetryUsed = true;
+                LOGGER.warn("process=tool_calling event=required_presentation_tool_not_succeeded retrying=true conversation_id={}",
+                        conversationId.value());
+                currentPrompt = presentationRetryPrompt(currentPrompt, options);
                 response = chatModelProvider.chat(currentPrompt);
+            }
+            if (presentationRequired && !presentationSucceeded) {
+                LOGGER.warn("process=tool_calling event=required_presentation_tool_not_succeeded retrying=false conversation_id={}",
+                        conversationId.value());
             }
             ChatResponse finalResponse = response;
             agentRun.ifPresent(run -> executionTracker.complete(run.id(), responseText(finalResponse)));
@@ -172,6 +205,48 @@ public final class SpringAiToolCallingRuntime {
             agentRun.ifPresent(run -> executionTracker.fail(run.id(), exception.getClass().getSimpleName()));
             throw exception;
         }
+    }
+
+    private List<ToolCallback> callbacksFor(Prompt prompt) {
+        if (!requiresPresentationTool(prompt)) return callbacks;
+        List<ToolCallback> focused = callbacks.stream()
+                .filter(callback -> Set.of("presentation.create", "image.generate", "web.search", "web.open_url")
+                        .contains(callback.getToolDefinition().name()))
+                .toList();
+        return focused.isEmpty() ? callbacks : focused;
+    }
+
+    private boolean requiresPresentationTool(Prompt prompt) {
+        return prompt.getInstructions().stream()
+                .filter(message -> message.getMessageType()
+                        == org.springframework.ai.chat.messages.MessageType.SYSTEM)
+                .map(org.springframework.ai.chat.messages.Message::getText)
+                .anyMatch(text -> text.contains("MINIKUN_PRESENTATION_CREATE_REQUIRED"));
+    }
+
+    private Prompt presentationRetryPrompt(Prompt prompt, ToolCallingChatOptions options) {
+        List<Message> instructions = new ArrayList<>(prompt.getInstructions());
+        instructions.add(new SystemMessage("The requested PowerPoint has not been created yet. If a previous "
+                + "presentation.create call failed, use its error to correct the nested spec object and call it "
+                + "again now. Otherwise call presentation.create now with a complete structured spec object. "
+                + "Do not answer in plain text or claim success "
+                + "until the tool returns a successful attachment."));
+        return new Prompt(instructions, options);
+    }
+
+    private boolean hasSuccessfulPresentation(ToolExecutionResult result) {
+        for (var message : result.conversationHistory()) {
+            if (!(message instanceof ToolResponseMessage toolResponses)) continue;
+            for (ToolResponseMessage.ToolResponse response : toolResponses.getResponses()) {
+                if (!"presentation.create".equals(response.name())) continue;
+                try {
+                    if (objectMapper.readTree(response.responseData()).path("success").asBoolean(false)) return true;
+                } catch (Exception exception) {
+                    return false;
+                }
+            }
+        }
+        return false;
     }
 
     private void prepareCurrentCallIds(ChatResponse response) {

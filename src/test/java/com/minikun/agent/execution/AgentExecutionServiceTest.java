@@ -82,6 +82,23 @@ class AgentExecutionServiceTest {
         assertEquals(List.of(), service.list("owner-b", null, 20));
     }
 
+    @Test
+    void keepsResponseIdThroughRunUpdates() {
+        String browserId = "web-5bd3be5d-9548-460c-a4fd-2ab4d9d67ad3";
+        AgentRun run = service.start("owner-a",
+                com.minikun.agent.minikun_agent.conversation.ConversationId.fromTransport(browserId).value(),
+                "chatcmpl-123", new AgentPlanDraft(
+                "inspect and verify", List.of("inspect", "verify"))).orElseThrow();
+        service.beginStep(run.id(), "call-1", "example.tool", Map.of());
+        service.finishStep(run.id(), "call-1", ToolResult.success(Map.of("ok", true)), false);
+        service.complete(run.id(), "done");
+
+        assertEquals("chatcmpl-123", service.details("owner-a", run.id()).run().responseId());
+        assertEquals(List.of(run.id()), service.list("owner-a", browserId, null, 10).stream()
+                .map(AgentRun::id).toList());
+        assertTrue(service.list("owner-a", "different-conversation", null, 10).isEmpty());
+    }
+
     private AgentRun start(String owner) {
         return service.start(owner, "conversation", new AgentPlanDraft(
                 "do multiple operations", List.of("inspect", "execute", "verify"))).orElseThrow();

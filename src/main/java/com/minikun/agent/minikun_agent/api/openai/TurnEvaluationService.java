@@ -146,6 +146,7 @@ public final class TurnEvaluationService {
 
     private boolean routingFailure(ChatFeedbackCategory category) {
         return category == ChatFeedbackCategory.CONTEXT_WRONG || category == ChatFeedbackCategory.SEARCH_WRONG
+                || category == ChatFeedbackCategory.VISION_WRONG
                 || category == ChatFeedbackCategory.TOOL_WRONG || category == ChatFeedbackCategory.SHOULD_HAVE_ACTED;
     }
 

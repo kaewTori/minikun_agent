@@ -81,6 +81,10 @@ public final class BrowserContentService {
     }
 
     public BrowserReadResult readPartial(String message) {
+        return readPartial(message, message);
+    }
+
+    private BrowserReadResult readPartial(String message, String query) {
         List<String> urls = urlsIn(message);
         if (urls.isEmpty() || !enabled) {
             return new BrowserReadResult(List.of(), List.of());
@@ -89,7 +93,7 @@ public final class BrowserContentService {
             throw new BrowserContentException("too many links (maximum " + maxUrls + ")");
         }
         if (maxConcurrentUrls == 1) {
-            return readSequentially(urls);
+            return readSequentially(urls, query);
         }
         Semaphore permits = new Semaphore(maxConcurrentUrls);
         List<CompletableFuture<UrlReadResult>> futures = new ArrayList<>();
@@ -101,7 +105,7 @@ public final class BrowserContentService {
                 try {
                     permits.acquire();
                     acquired = true;
-                    return readOne(urlIndex, requestedUrl);
+                    return readOne(urlIndex, requestedUrl, query);
                 } catch (InterruptedException exception) {
                     Thread.currentThread().interrupt();
                     return new UrlReadResult(null,
@@ -131,11 +135,11 @@ public final class BrowserContentService {
         return new BrowserReadResult(candidates, failures);
     }
 
-    private BrowserReadResult readSequentially(List<String> urls) {
+    private BrowserReadResult readSequentially(List<String> urls, String query) {
         List<KnowledgeCandidate> candidates = new ArrayList<>();
         List<BrowserReadFailure> failures = new ArrayList<>();
         for (int index = 0; index < urls.size(); index++) {
-            UrlReadResult result = readOne(index, urls.get(index));
+            UrlReadResult result = readOne(index, urls.get(index), query);
             if (result.candidate() != null) {
                 candidates.add(result.candidate());
             }
@@ -148,6 +152,10 @@ public final class BrowserContentService {
 
     /** Reads a bounded set of URLs discovered by another trusted pipeline stage. */
     public BrowserReadResult readUrls(List<String> urls, int requestedLimit) {
+        return readUrls(urls, requestedLimit, "");
+    }
+
+    public BrowserReadResult readUrls(List<String> urls, int requestedLimit, String query) {
         if (urls == null || urls.isEmpty() || requestedLimit < 1) {
             return new BrowserReadResult(List.of(), List.of());
         }
@@ -159,10 +167,10 @@ public final class BrowserContentService {
                 .toList();
         return bounded.isEmpty()
                 ? new BrowserReadResult(List.of(), List.of())
-                : readPartial(String.join("\n", bounded));
+                : readPartial(String.join("\n", bounded), query);
     }
 
-    private UrlReadResult readOne(int index, String requestedUrl) {
+    private UrlReadResult readOne(int index, String requestedUrl, String query) {
         try {
             urlPolicy.validate(new URI(requestedUrl));
         } catch (BrowserContentException exception) {
@@ -182,15 +190,19 @@ public final class BrowserContentService {
             BrowserContentQuality quality = qualityClassifier.classify(rendered);
             if (quality == BrowserContentQuality.ERROR_PAGE
                     || quality == BrowserContentQuality.ACCESS_BLOCKED
-                    || quality == BrowserContentQuality.PROMPT_INJECTION_SUSPECTED) {
+                    || quality == BrowserContentQuality.PROMPT_INJECTION_SUSPECTED
+                    || quality == BrowserContentQuality.CHALLENGE_REQUIRED) {
                 recordOutcome("quality_rejected", started);
                 return new UrlReadResult(null, new BrowserReadFailure(requestedUrl,
-                        "browser content rejected as " + quality.name().toLowerCase()));
+                        quality == BrowserContentQuality.CHALLENGE_REQUIRED
+                                ? "Cloudflare/CAPTCHA verification required; open Minikun browser session and verify manually"
+                                : "browser content rejected as " + quality.name().toLowerCase()));
             }
             String sourceUrl = normalizeResponseUrl(rendered.url(), requestedUrl);
-            String renderedContent = rendered.content().length() > maxContentCharacters
-                    ? rendered.content().substring(0, maxContentCharacters) : rendered.content();
-            boolean truncated = rendered.truncated() || rendered.content().length() > maxContentCharacters;
+            urlPolicy.validate(URI.create(sourceUrl));
+            String fullContent = rendered.rawContent().isBlank() ? rendered.content() : rendered.rawContent();
+            String renderedContent = BrowserTextSelector.select(fullContent, query, maxContentCharacters);
+            boolean truncated = rendered.truncated() || fullContent.length() > maxContentCharacters;
             String content = "Source URL: " + sourceUrl + "\n"
                     + "Content type: " + rendered.contentType() + "\n"
                     + "Truncated: " + truncated + "\nRendered page content:\n" + renderedContent;
@@ -236,6 +248,11 @@ public final class BrowserContentService {
     }
 
     private String trimTrailingPunctuation(String value) {
+        value = value.replaceFirst("[.,;:!?]+$", "");
+        while (value.endsWith(")") && value.chars().filter(c -> c == ')').count()
+                > value.chars().filter(c -> c == '(').count()) {
+            value = value.substring(0, value.length() - 1);
+        }
         return value.replaceFirst("[.,;:!?]+$", "");
     }
 

@@ -156,6 +156,37 @@ class DefaultAutonomousResearchServiceTest {
     }
 
     @Test
+    void triesNextSearchResultWhenTheFirstPageCannotBeRendered() {
+        SearchService search = request -> KnowledgeContext.fromCandidates(List.of(
+                new KnowledgeCandidate("blocked", KnowledgeSource.SEARCH, "Blocked result", 0,
+                        "https://example.com/blocked"),
+                new KnowledgeCandidate("working", KnowledgeSource.SEARCH, "Working result", 1,
+                        "https://example.org/working")));
+        List<String> rendered = new ArrayList<>();
+        BrowserContentService browser = new BrowserContentService(url -> {
+            rendered.add(url);
+            if (url.endsWith("blocked")) throw new IllegalStateException("blocked");
+            return new BrowserContent(url, "Rendered factual evidence with enough content.", "text/html", false);
+        }, true, 1);
+        ResearchReasoningProvider reasoning = new ResearchReasoningProvider() {
+            @Override public ResearchPlan plan(String query, String context, int max) {
+                return ResearchPlan.fallback(query);
+            }
+            @Override public ResearchEvaluation evaluate(ResearchPlan plan, List<String> queries,
+                    String evidence, int max) {
+                return new ResearchEvaluation(true, List.of(), List.of());
+            }
+        };
+        DefaultAutonomousResearchService service = new DefaultAutonomousResearchService(
+                search, browser, reasoning, true, 1, 3, 1, 4_000);
+
+        AutonomousResearchResult result = service.research(request("evidence", 1));
+
+        assertEquals(List.of("https://example.com/blocked", "https://example.org/working"), rendered);
+        assertEquals(1, result.browserCandidates().size());
+    }
+
+    @Test
     void respectsPreferredDomainOrderWhenSeveralTrustedDomainsMatch() {
         SearchService search = request -> KnowledgeContext.fromCandidates(List.of(
                 new KnowledgeCandidate("broad", KnowledgeSource.SEARCH, "Broad result", 0,

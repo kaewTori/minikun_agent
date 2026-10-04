@@ -418,8 +418,11 @@ public final class BackgroundChatService implements AutoCloseable {
                 failImage(id, job, "image deadline exceeded", false);
                 return;
             }
+            boolean failed = result.attachments().isEmpty();
+            if (failed && result.notice().isBlank()) {
+                result = new StoryIllustrationService.IllustrationResult(List.of(), StoryIllustrationService.FAILURE_NOTICE);
+            }
             ChatCompletionResponse response = mergeIllustration(job.response, result);
-            boolean failed = result.attachments().isEmpty() && !result.notice().isBlank();
             ImageState terminal = failed ? ImageState.FAILED : ImageState.COMPLETED;
             if (!job.imageState.compareAndSet(ImageState.RUNNING, terminal)) return;
             job.response = response;

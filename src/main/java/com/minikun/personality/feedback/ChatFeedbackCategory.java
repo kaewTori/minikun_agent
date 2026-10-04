@@ -10,6 +10,7 @@ public enum ChatFeedbackCategory {
     CONTEXT_WRONG,
     FACT_WRONG,
     SEARCH_WRONG,
+    VISION_WRONG,
     TOOL_WRONG,
     TOO_AGREEABLE,
     SHOULD_HAVE_ACTED,

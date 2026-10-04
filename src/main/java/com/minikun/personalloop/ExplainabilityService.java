@@ -3,6 +3,7 @@ package com.minikun.personalloop;
 import static com.minikun.personalloop.PersonalLoopModels.ExplainabilityTrace;
 
 import com.minikun.agent.minikun_agent.api.openai.ChatExplainabilitySink;
+import com.minikun.agent.minikun_agent.conversation.ConversationId;
 import java.time.Clock;
 import java.util.List;
 import java.util.Map;
@@ -37,7 +38,9 @@ public final class ExplainabilityService implements ChatExplainabilitySink {
 
     public List<ExplainabilityTrace> list(String ownerId, String conversationId, int limit) {
         if (limit < 1 || limit > 500) throw new IllegalArgumentException("limit must be between 1 and 500");
-        return store.traces(PersonalLoopModels.owner(ownerId), conversationId, limit);
+        String resolvedId = conversationId == null || conversationId.isBlank() ? conversationId
+                : ConversationId.fromTransport(conversationId).value();
+        return store.traces(PersonalLoopModels.owner(ownerId), resolvedId, limit);
     }
 
     private String summary(List<String> sources, List<String> tools, Map<String, Object> decisions) {

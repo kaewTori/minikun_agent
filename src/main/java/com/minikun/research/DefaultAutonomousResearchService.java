@@ -204,26 +204,31 @@ public final class DefaultAutonomousResearchService implements AutonomousResearc
                 || browserEvidence.size() >= request.sourceReadLimit() || found == null) {
             return;
         }
-        int remaining = request.sourceReadLimit() - browserEvidence.size();
         List<String> urls = found.candidates().stream()
                 .sorted(Comparator.comparingInt(candidate -> preferredRank(
                         candidate.provenance(), request.preferredDomains())))
                 .map(KnowledgeCandidate::provenance)
                 .filter(value -> value != null && !value.isBlank())
-                .filter(readUrls::add)
-                .limit(remaining)
+                .filter(value -> !readUrls.contains(value))
+                .distinct()
                 .toList();
-        if (urls.isEmpty()) {
-            return;
-        }
-        try {
-            BrowserReadResult result = browserContentService.readUrls(urls, remaining);
-            result.candidates().forEach(candidate -> browserEvidence.putIfAbsent(key(candidate), candidate));
-            result.failures().forEach(failure -> log.warn(
-                    "process=autonomous_research event=source_read_failed url={} reason={}",
-                    failure.url(), failure.reason()));
-        } catch (RuntimeException exception) {
-            log.warn("Autonomous research source reading failed; retaining search evidence", exception);
+        int position = 0;
+        while (position < urls.size() && browserEvidence.size() < request.sourceReadLimit()
+                && Instant.now().isBefore(request.deadline())) {
+            int remaining = request.sourceReadLimit() - browserEvidence.size();
+            List<String> batch = urls.subList(position, Math.min(urls.size(), position + remaining));
+            position += batch.size();
+            readUrls.addAll(batch);
+            try {
+                BrowserReadResult result = browserContentService.readUrls(batch, remaining, request.userQuery());
+                result.candidates().forEach(candidate -> browserEvidence.putIfAbsent(key(candidate), candidate));
+                result.failures().forEach(failure -> log.warn(
+                        "process=autonomous_research event=source_read_failed url={} reason={}",
+                        failure.url(), failure.reason()));
+            } catch (RuntimeException exception) {
+                log.warn("Autonomous research source reading failed; retaining search evidence", exception);
+                break;
+            }
         }
     }
 

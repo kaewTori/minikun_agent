@@ -2,6 +2,7 @@ package com.minikun.agent.execution;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.minikun.agent.minikun_agent.conversation.ConversationId;
 import com.minikun.tools.ToolErrorCode;
 import com.minikun.tools.ToolResult;
 import java.time.Clock;
@@ -39,9 +40,14 @@ public final class AgentExecutionService implements AgentExecutionTracker {
 
     @Override
     public Optional<AgentRun> start(String ownerId, String conversationId, AgentPlanDraft plan) {
+        return start(ownerId, conversationId, "", plan);
+    }
+
+    @Override
+    public Optional<AgentRun> start(String ownerId, String conversationId, String responseId, AgentPlanDraft plan) {
         Instant now = clock.instant();
         return Optional.of(store.createRun(new AgentRun(UUID.randomUUID(), owner(ownerId),
-                require(conversationId, "conversation id"), plan.objective(), plan.steps(), plan.riskAssessment(), AgentRunStatus.PLANNED,
+                require(conversationId, "conversation id"), responseId, plan.objective(), plan.steps(), plan.riskAssessment(), AgentRunStatus.PLANNED,
                 0, maxSteps, "", "", now, now, null)));
     }
 
@@ -139,6 +145,11 @@ public final class AgentExecutionService implements AgentExecutionTracker {
         return store.listRuns(owner(ownerId), status, limit);
     }
 
+    public List<AgentRun> list(String ownerId, String conversationId, AgentRunStatus status, int limit) {
+        if (limit < 1 || limit > 200) throw new IllegalArgumentException("limit must be between 1 and 200");
+        return store.listRuns(owner(ownerId), ConversationId.fromTransport(require(conversationId, "conversation id")).value(), status, limit);
+    }
+
     public List<AgentExecutionStep> steps(String ownerId, UUID runId) {
         find(ownerId, runId);
         return store.listSteps(runId);
@@ -166,7 +177,7 @@ public final class AgentExecutionService implements AgentExecutionTracker {
 
     private AgentRun updateRun(AgentRun run, AgentRunStatus status, int currentStep, String summary,
             String failure, Instant completedAt) {
-        return store.updateRun(new AgentRun(run.id(), run.ownerId(), run.conversationId(), run.objective(),
+        return store.updateRun(new AgentRun(run.id(), run.ownerId(), run.conversationId(), run.responseId(), run.objective(),
                 run.plannedSteps(), run.riskAssessment(), status, currentStep, run.maxSteps(), summary, failure,
                 run.createdAt(), clock.instant(), completedAt));
     }

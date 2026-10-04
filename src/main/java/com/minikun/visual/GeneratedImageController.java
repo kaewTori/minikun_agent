@@ -28,6 +28,7 @@ public final class GeneratedImageController {
                     .contentType(MediaType.parseMediaType(image.contentType()))
                     .cacheControl(CacheControl.maxAge(Duration.ofDays(30)).cachePrivate().immutable())
                     .header("X-Content-Type-Options", "nosniff")
+                    .header("Content-Security-Policy", "default-src 'none'; script-src 'none'; style-src 'none'; object-src 'none'")
                     .body(image.bytes());
         } catch (ImageGenerationException exception) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, exception.getMessage(), exception);

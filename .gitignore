@@ -32,3 +32,6 @@ build/
 ### VS Code ###
 .vscode/
 logs/**
+
+# Python browser helper checks
+__pycache__/

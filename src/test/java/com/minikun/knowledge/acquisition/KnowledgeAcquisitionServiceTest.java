@@ -19,6 +19,8 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 
 class KnowledgeAcquisitionServiceTest {
@@ -72,6 +74,48 @@ class KnowledgeAcquisitionServiceTest {
         assertEquals(0, run.publishedCount());
         assertEquals(ClaimStatus.CANDIDATE, service.claims("default", null, 10).getFirst().status());
         assertTrue(index.recall("default", "unverified search excerpt", 5).candidates().isEmpty());
+    }
+
+    @Test
+    void failedRecheckDoesNotRenewPublishedClaimOrCountItAsNewlyPublished() {
+        KnowledgeAcquisitionStore store = new KnowledgeAcquisitionStore(null, new ObjectMapper());
+        AcquiredKnowledgeIndex index = new AcquiredKnowledgeIndex(store, null, "", CLOCK, 100, .85, .1);
+        AtomicInteger checks = new AtomicInteger();
+        KnowledgeClaimExtractor extractor = (topic, evidence) -> List.of(new ClaimDraft(
+                "Spring AI supports portable model APIs.", List.of(0),
+                checks.getAndIncrement() == 0 ? .9 : .3, ExtractionMethod.MODEL));
+        KnowledgeAcquisitionService service = service(store, index, extractor, research(List.of(
+                candidate("official", "https://docs.spring.io/spring-ai/reference/", KnowledgeSource.BROWSER))));
+        Topic topic = service.createTopic("default", "Spring AI", "Track Spring AI model APIs",
+                null, null, RefreshPolicy.WEEKLY, SourcePolicy.OFFICIAL_ONLY,
+                List.of("docs.spring.io"), null);
+
+        assertEquals(1, service.runNow("default", topic.id()).publishedCount());
+        Claim original = service.claims("default", null, 10).getFirst();
+        assertEquals(0, service.runNow("default", topic.id()).publishedCount());
+        assertEquals(original, service.claims("default", null, 10).getFirst());
+    }
+
+    @Test
+    void onlyPassingRecheckExtendsPublishedExpiry() {
+        KnowledgeAcquisitionStore store = new KnowledgeAcquisitionStore(null, new ObjectMapper());
+        UUID topicId = UUID.randomUUID();
+        String fact = "Spring AI supports portable model APIs.";
+        String fingerprint = KnowledgeAcquisitionAgent.fingerprint(fact);
+        Claim original = new Claim(UUID.randomUUID(), topicId, "default", "Spring AI", fact, fingerprint,
+                ClaimStatus.PUBLISHED, .9, List.of("https://one.example"), "verified", "", "",
+                NOW, NOW, NOW, NOW.plus(Duration.ofDays(7)), NOW);
+        store.saveClaim(original);
+        Claim failed = new Claim(UUID.randomUUID(), topicId, "default", "Spring AI", fact, fingerprint,
+                ClaimStatus.CANDIDATE, .3, List.of("https://two.example"), "low confidence", "", "",
+                NOW, null, null, NOW.plus(Duration.ofDays(8)), NOW.plus(Duration.ofDays(1)));
+
+        assertEquals(original, store.saveClaim(failed));
+        Claim passed = new Claim(UUID.randomUUID(), topicId, "default", "Spring AI", fact, fingerprint,
+                ClaimStatus.PUBLISHED, .95, List.of("https://two.example"), "verified again", "", "",
+                NOW, NOW.plus(Duration.ofDays(1)), NOW.plus(Duration.ofDays(1)),
+                NOW.plus(Duration.ofDays(8)), NOW.plus(Duration.ofDays(1)));
+        assertEquals(passed.expiresAt(), store.saveClaim(passed).expiresAt());
     }
 
     @Test

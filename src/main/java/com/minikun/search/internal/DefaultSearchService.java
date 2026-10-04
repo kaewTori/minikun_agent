@@ -219,7 +219,8 @@ public final class DefaultSearchService implements SearchService {
             int index = candidates.size();
             candidates.add(new com.minikun.pcs.KnowledgeCandidate(
                     "cached-search-" + index, candidate.source(), candidate.content(),
-                    candidate.sourcePosition(), candidate.provenance()));
+                    candidate.sourcePosition(), candidate.provenance(), candidate.publishedAt(),
+                    candidate.providerScore()));
             if (candidates.size() == request.resultLimit()) {
                 break;
             }

@@ -37,6 +37,7 @@ def main():
     p.add_argument('--limit', type=int)
     p.add_argument('--timeout', type=float, default=120)
     p.add_argument('--tokens', type=int, default=2048)
+    p.add_argument('--system-prompt', default='ตอบตามเจตนาผู้ใช้ รักษาขอบเขตเวลาและบุคคล อย่าสร้างข้อมูลที่ไม่มีหลักฐาน ปฏิบัติตามรูปแบบคำตอบที่ระบุ')
     p.add_argument('--self-test', action='store_true')
     args = p.parse_args()
     if args.self_test:
@@ -52,7 +53,7 @@ def main():
     results = []
     args.output.parent.mkdir(parents=True, exist_ok=True)
     for case in cases:
-        messages = [{'role':'system','content':'ตอบตามเจตนาผู้ใช้ รักษาขอบเขตเวลาและบุคคล อย่าสร้างข้อมูลที่ไม่มีหลักฐาน ปฏิบัติตามรูปแบบคำตอบที่ระบุ'}]
+        messages = [{'role':'system','content':args.system_prompt}]
         start = time.monotonic(); first_answer = None; answer = ''; usage = {}
         result = {'id':case['id'], 'category':case['id'].rsplit('-',1)[0], 'passed':False}
         try:

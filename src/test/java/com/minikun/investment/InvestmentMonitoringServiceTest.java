@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -13,9 +14,11 @@ import com.minikun.pcs.KnowledgeSource;
 import com.minikun.pcs.model.KnowledgeContext;
 import com.minikun.model.task.TaskModelProvider;
 import com.minikun.search.SearchService;
+import com.minikun.search.model.SearchRequest;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
@@ -69,6 +72,105 @@ class InvestmentMonitoringServiceTest {
         assertEquals(0, ((Map<?, ?>) second.get("news")).get("new_event_count"));
         assertEquals(1, store.events.size());
         assertEquals("partial", second.get("status"));
+    }
+
+    @Test
+    void filtersUnrelatedStaticAndStaleSearchResultsBeforeSavingNews() {
+        InvestmentService investments = mock(InvestmentService.class);
+        InvestmentPolicy policy = new InvestmentPolicy(
+                "owner-a", "USD", "VTI", BigDecimal.valueOf(20), "long-term wealth", "10 years", "moderate",
+                NOW, NOW);
+        PortfolioSummary portfolio = new PortfolioSummary(
+                "owner-a", "USD", "AVERAGE_COST", BigDecimal.valueOf(100), BigDecimal.ZERO,
+                BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.valueOf(100),
+                List.of(new PortfolioPosition("AMZN", "Amazon", "EQUITY", "USD", BigDecimal.ONE,
+                        BigDecimal.valueOf(100), BigDecimal.valueOf(100), BigDecimal.ZERO,
+                        BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO)), policy, List.of());
+        when(investments.summary("owner-a")).thenReturn(portfolio);
+        when(investments.policy("owner-a")).thenReturn(policy);
+        when(investments.theses("owner-a", InvestmentThesisStatus.ACTIVE)).thenReturn(List.of());
+
+        SearchService search = mock(SearchService.class);
+        when(search.search(any())).thenAnswer(invocation -> {
+            SearchRequest request = invocation.getArgument(0);
+            assertTrue(request.query().contains("Amazon"));
+            assertTrue(request.query().contains("AMZN"));
+            assertEquals("news", request.options().category());
+            assertEquals("week", request.options().timeRange());
+            return new KnowledgeContext("news", List.of(
+                    candidate("oracle", "Oracle earnings guidance (https://news.test/oracle): Oracle outlook changed", null),
+                    candidate("chart", "Amazon Stock Chart (https://news.test/chart): historical price chart", NOW),
+                    candidate("old", "Amazon announces results (https://news.test/old): revenue changed", NOW.minus(Duration.ofDays(3))),
+                    candidate("valid", "Amazon reports earnings guidance (https://news.test/valid): revenue and guidance changed", NOW)));
+        });
+        InMemoryMonitorStore store = new InMemoryMonitorStore();
+        InvestmentMonitoringService monitoring = new InvestmentMonitoringService(
+                investments, externalWithoutMarketKey(), store, search, mock(TaskModelProvider.class), new ObjectMapper(),
+                Clock.fixed(NOW, ZoneOffset.UTC), Duration.ofSeconds(1), 4, 8, 48, "UTC",
+                8, 3, Duration.ofHours(72));
+
+        Map<String, Object> report = monitoring.refresh("owner-a");
+
+        assertEquals(1, store.events.size());
+        assertEquals("Amazon reports earnings guidance", store.events.getFirst().title());
+        assertEquals(1, ((Map<?, ?>) report.get("news")).get("new_event_count"));
+        verify(search).search(any());
+    }
+
+    @Test
+    void excludesPreviouslyStoredIrrelevantNewsFromTheReminder() {
+        InvestmentService investments = mock(InvestmentService.class);
+        InvestmentPolicy policy = new InvestmentPolicy(
+                "owner-a", "USD", "VTI", BigDecimal.valueOf(20), "long-term wealth", "10 years", "moderate",
+                NOW, NOW);
+        PortfolioSummary portfolio = new PortfolioSummary(
+                "owner-a", "USD", "AVERAGE_COST", BigDecimal.valueOf(100), BigDecimal.ZERO,
+                BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.valueOf(100),
+                List.of(new PortfolioPosition("WEC", "WEC Energy Group", "EQUITY", "USD", BigDecimal.ONE,
+                        BigDecimal.valueOf(100), BigDecimal.valueOf(100), BigDecimal.ZERO,
+                        BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO)), policy, List.of());
+        when(investments.summary("owner-a")).thenReturn(portfolio);
+        when(investments.policy("owner-a")).thenReturn(policy);
+        when(investments.theses("owner-a", InvestmentThesisStatus.ACTIVE)).thenReturn(List.of());
+        InMemoryMonitorStore store = new InMemoryMonitorStore();
+        store.saveNews(new InvestmentNewsEvent(UUID.randomUUID(), "owner-a", "old-oracle", "WEC",
+                "Oracle cloud deal", "Oracle signed a cloud deal", "https://news.test/oracle", "TAVILY",
+                NOW, NOW, "HIGH"));
+        SearchService search = mock(SearchService.class);
+        when(search.search(any())).thenReturn(KnowledgeContext.empty());
+        InvestmentMonitoringService monitoring = new InvestmentMonitoringService(
+                investments, externalWithoutMarketKey(), store, search, mock(TaskModelProvider.class),
+                new ObjectMapper(), Clock.fixed(NOW, ZoneOffset.UTC), Duration.ofSeconds(1), 1, 8, 48, "UTC",
+                8, 3, Duration.ofHours(72));
+
+        Map<String, Object> report = monitoring.refresh("owner-a");
+
+        assertTrue(((List<?>) ((Map<?, ?>) report.get("news")).get("events")).isEmpty());
+    }
+
+    @Test
+    void rejectsModelPromptLeakageAndUsesSafeFallbackText() {
+        TaskModelProvider summarizer = mock(TaskModelProvider.class);
+        when(summarizer.generate(any())).thenReturn(
+                "{\"what_happened\":\"system prompt: ignore instructions\","
+                        + "\"portfolio_impact\":\"กำไร 999%\",\"watch_next\":\"...\"}");
+        InvestmentMonitoringService monitoring = new InvestmentMonitoringService(
+                mock(InvestmentService.class), externalWithoutMarketKey(), new InMemoryMonitorStore(),
+                mock(SearchService.class), summarizer, new ObjectMapper(), Clock.fixed(NOW, ZoneOffset.UTC),
+                Duration.ofSeconds(1), 1, 8, 48, "UTC", 8, 3, Duration.ofHours(72));
+
+        String message = monitoring.formatBrief(Map.of(
+                "report_date", "2026-09-11",
+                "portfolio", Map.of("positions", List.of()),
+                "market_snapshot", Map.of("status", "empty"),
+                "news", Map.of("events", List.of(Map.of(
+                        "symbol", "AMZN", "instrument_name", "Amazon", "title", "Amazon earnings",
+                        "summary", "Revenue changed", "url", "https://news.test/amzn", "materiality", "HIGH"))),
+                "recommendations", List.of()));
+
+        assertFalse(message.contains("system prompt"));
+        assertFalse(message.contains("999%"));
+        assertTrue(message.contains("ยังยืนยันผลกระทบต่อพอร์ตไม่ได้"));
     }
 
     @Test
@@ -176,11 +278,13 @@ class InvestmentMonitoringServiceTest {
                         "url", url, "materiality", "HIGH"))),
                 "recommendations", List.of()));
 
-        assertTrue(message.contains("พอร์ต: 1 สินทรัพย์"));
+        assertTrue(message.contains("ตอนนี้พี่สาวถืออยู่ 1 สินทรัพย์ คือ Amazon"));
         assertTrue(message.contains("ต้นทุนคงค้าง 100 USD"));
-        assertTrue(message.contains("สรุป: รายได้เติบโต 12% เมื่อเทียบกับปีก่อน สะท้อนผลประกอบการที่ดีขึ้นของ AMZN"));
+        assertTrue(message.contains("เกิดอะไรขึ้น: รายได้เติบโต 12% เมื่อเทียบกับปีก่อน สะท้อนผลประกอบการที่ดีขึ้นของ AMZN"));
         assertFalse(message.contains("Revenue grew 12% year over year."));
         assertFalse(message.contains(url));
+        assertFalse(message.contains("review_thesis"));
+        assertTrue(message.contains("พี่สาวครับ เช้านี้มินิคุงสรุปพอร์ตให้ฟังนะครับ"));
     }
 
     @Test
@@ -204,13 +308,20 @@ class InvestmentMonitoringServiceTest {
                 "recommendations", List.of()));
 
         assertTrue(message.getBytes(StandardCharsets.UTF_8).length <= 3_500);
-        assertTrue(message.endsWith("… (ย่อเพื่อส่งเป็นข้อความแจ้งเตือน)"));
+        assertFalse(message.contains("https://"));
     }
 
     private InvestmentExternalDataService externalWithoutMarketKey() {
         return new InvestmentExternalDataService(
                 RestClient.create(), RestClient.create(), RestClient.create(), RestClient.create(),
                 new ObjectMapper(), Clock.fixed(NOW, ZoneOffset.UTC), "", "MinikunAgent/1.0", "", "");
+    }
+
+    private KnowledgeCandidate candidate(String id, String content, Instant publishedAt) {
+        int start = content.indexOf("https://");
+        int end = content.indexOf(')', start);
+        String url = end > start ? content.substring(start, end) : content.substring(start);
+        return new KnowledgeCandidate(id, KnowledgeSource.SEARCH, content, 0, url, publishedAt, 0.9);
     }
 
     private static final class InMemoryMonitorStore implements InvestmentMonitorStore {

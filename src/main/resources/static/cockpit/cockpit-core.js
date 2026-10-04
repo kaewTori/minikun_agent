@@ -49,6 +49,7 @@
       status: value.status || metadata.status || "complete",
       finishReason: value.finishReason || metadata.finishReason || "",
       feedback: value.feedback || metadata.feedback || "",
+      feedbackCategory: value.feedbackCategory || metadata.feedbackCategory || "",
       feedbackReason: value.feedbackReason || metadata.feedbackReason || "",
       backgroundJobId: value.backgroundJobId || metadata.backgroundJobId || "",
       files: Array.isArray(value.files) ? value.files.slice(0, 12) : [],
@@ -94,6 +95,11 @@
           negativePrompt: attachment.negativePrompt || attachment.negative_prompt || "",
           seed: attachment.seed ?? null,
           generationId: attachment.generationId || attachment.generation_id || "",
+          filename: attachment.filename || "",
+          contentType: attachment.contentType || attachment.content_type || "",
+          sizeBytes: attachment.sizeBytes ?? attachment.size_bytes ?? null,
+          slideCount: attachment.slideCount ?? attachment.slide_count ?? null,
+          artifactId: attachment.artifactId || attachment.artifact_id || "",
           assetId: attachment.assetId || "",
           kind: attachment.kind || "image",
           type: attachment.type || ""
@@ -138,6 +144,7 @@
           status: message.status || "complete",
           finishReason: message.finishReason || "",
           feedback: message.feedback || "",
+          feedbackCategory: message.feedbackCategory || "",
           feedbackReason: message.feedbackReason || "",
           backgroundJobId: message.backgroundJobId || "",
           sources: (message.sources || []).slice(0, 12)
@@ -193,6 +200,19 @@
       throw error;
     }
     return readResponse(response);
+  }
+
+  async function download(path, identity = {}) {
+    const response = await fetch(withOwner(path, identity.ownerId || "default"), {
+      headers: authHeaders(identity.token)
+    });
+    if (!response.ok) {
+      const body = await readResponse(response).catch(() => null);
+      const error = new Error(responseMessage(body, `ดาวน์โหลดไม่สำเร็จ (${response.status})`));
+      error.status = response.status;
+      throw error;
+    }
+    return response.blob();
   }
 
   async function syncRequest(path, options = {}, identity = {}) {
@@ -267,6 +287,7 @@
     withOwner,
     readResponse,
     request,
+    download,
     syncRequest,
     defaultDeviceName,
     wavBlob

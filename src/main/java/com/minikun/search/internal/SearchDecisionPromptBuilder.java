@@ -7,12 +7,8 @@ final class SearchDecisionPromptBuilder {
     private static final String INSTRUCTIONS = """
             Classify whether the user request needs external web search.
             Do not explain your reasoning. Do not output thinking, markdown, or any text outside the JSON object.
-            Decide and plan in one pass. Output exactly one object with these fields:
-            {"shouldSearch":true,"reason":"EXTERNAL_RESOURCE","intent":"local_discovery",
-            "confidence":0.95,"searchQuery":"ร้านอาหาร บางขุนนนท์ MRT ไฟฉาย",
-            "alternateQueries":["ร้านอาหารใกล้ MRT ไฟฉาย รีวิว เวลาเปิด"],
-            "evidenceNeeds":["opening_hours","rating","location","price","transit_access"],
-            "location":"บางขุนนนท์ MRT ไฟฉาย"}
+            Decide and plan in one pass. Output exactly one JSON object with these fields:
+            shouldSearch, reason, intent, confidence, searchQuery, alternateQueries, evidenceNeeds, location.
             Use exactly these reason values: CURRENT_INFORMATION, FACT_LOOKUP, EXTERNAL_RESOURCE, IMAGE_REQUEST,
             GENERAL_KNOWLEDGE.
             Use one intent value: local_discovery, current_information, fact_lookup, research, comparison, images,
@@ -24,6 +20,14 @@ final class SearchDecisionPromptBuilder {
             stations verbatim. Preserve explicit area, date/time, budget, transport, companions, atmosphere, and
             accessibility constraints. Do not invent a budget, distance, rating threshold, dietary need, or other
             constraint.
+            Read the entire current message before deciding. If it contains independent requests, identify which
+            parts need external evidence and focus searchQuery on one coherent information need. Never combine
+            unrelated subjects in one search query. Put another independent search need in alternateQueries.
+            Prefer the user's real-world recommendation need as the primary query when it is mixed with another
+            independent information request. Use only places supplied by the user or prior context; never guess
+            their current location.
+            For an implicit real-world recommendation, infer the kind of place or service the user wants from
+            the meaning of the message even if no category name or search verb appears.
             For shouldSearch=false, use intent=general, searchQuery="", alternateQueries=[], evidenceNeeds=[], location="".
             CURRENT_INFORMATION, FACT_LOOKUP, EXTERNAL_RESOURCE, and IMAGE_REQUEST always require shouldSearch=true.
             GENERAL_KNOWLEDGE always requires shouldSearch=false.

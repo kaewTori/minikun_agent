@@ -172,6 +172,7 @@ CREATE TABLE IF NOT EXISTS minikun_agent_run (
     id UUID PRIMARY KEY,
     owner_id VARCHAR(255) NOT NULL,
     conversation_id VARCHAR(255) NOT NULL,
+    response_id VARCHAR(255) NOT NULL DEFAULT '',
     objective TEXT NOT NULL,
     planned_steps_json TEXT NOT NULL DEFAULT '[]',
     risk_level VARCHAR(16) NOT NULL DEFAULT 'LOW',
@@ -189,6 +190,7 @@ CREATE TABLE IF NOT EXISTS minikun_agent_run (
 -- Keep existing home-use databases compatible when the agent execution schema evolves.
 ALTER TABLE minikun_agent_run ADD COLUMN IF NOT EXISTS risk_level VARCHAR(16) NOT NULL DEFAULT 'LOW';
 ALTER TABLE minikun_agent_run ADD COLUMN IF NOT EXISTS risk_reasons_json TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE minikun_agent_run ADD COLUMN IF NOT EXISTS response_id VARCHAR(255) NOT NULL DEFAULT '';
 
 CREATE INDEX IF NOT EXISTS idx_minikun_agent_run_owner
     ON minikun_agent_run (owner_id, created_at DESC);

@@ -110,7 +110,7 @@ public final class DefaultSearchQueryPlanningService implements SearchQueryPlann
         if (!semanticPlan && "th".equals(language) && terms.size() > 1) {
             primary = String.join(" ", terms);
         }
-        String timeRange = detectTimeRange(original + " " + primary);
+        String timeRange = detectTimeRange(semanticPlan ? primary : original + " " + primary);
         String intent = semanticIntent(hints.intent(), primary, timeRange, decision, researchIntent);
         String reason = semanticPlan ? "semantic_plan" : contextual ? "contextual_query" : "deterministic_core_query";
         String plannedPrimary = primary;

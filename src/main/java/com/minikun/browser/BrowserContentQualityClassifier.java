@@ -9,6 +9,10 @@ public final class BrowserContentQualityClassifier {
             return BrowserContentQuality.TOO_SHORT;
         }
         String value = content.content().toLowerCase(Locale.ROOT);
+        if (isChallenge(value) || isChallenge(content.rawContent())) {
+            return BrowserContentQuality.CHALLENGE_REQUIRED;
+        }
+        value += "\n" + content.rawContent().toLowerCase(Locale.ROOT);
         if (containsAny(value, "401 unauthorized", "403 forbidden", "404 not found",
                 "500 internal server error", "502 bad gateway", "503 service unavailable")) {
             return BrowserContentQuality.ERROR_PAGE;
@@ -23,6 +27,19 @@ public final class BrowserContentQualityClassifier {
             return BrowserContentQuality.PROMPT_INJECTION_SUSPECTED;
         }
         return BrowserContentQuality.USABLE;
+    }
+
+    public boolean isChallenge(String value) {
+        value = value == null ? "" : value.toLowerCase(Locale.ROOT);
+        // ponytail: challenge signatures are heuristic; add observed variants instead of blocking mentions of Cloudflare.
+        return value.contains("<title>just a moment")
+                || value.contains("cf-chl-") && containsAny(value, "challenge-platform", "challenge-form")
+                || value.strip().matches("(?s)^(?:#\\s*)?just a moment(?:\\.{0,3}|…)?\\s*$")
+                || value.length() < 4_000 && value.strip().startsWith("just a moment") && value.contains("cloudflare")
+                || value.length() < 4_000 && containsAny(value,
+                        "verify you are human", "verifying you are human", "checking your browser before accessing",
+                        "performing security verification", "enable javascript and cookies to continue",
+                        "complete the captcha", "ยืนยันว่าคุณเป็นมนุษย์");
     }
 
     private boolean containsAny(String value, String... terms) {

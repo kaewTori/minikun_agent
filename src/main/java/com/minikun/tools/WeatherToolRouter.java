@@ -11,6 +11,7 @@ import java.util.UUID;
 import org.springframework.stereotype.Component;
 
 import com.minikun.agent.minikun_agent.conversation.ConversationId;
+import com.minikun.weather.DeviceLocation;
 import com.minikun.weather.WeatherReport;
 
 /**
@@ -27,17 +28,29 @@ public final class WeatherToolRouter implements ToolRequestRouter {
 
     @Override
     public Optional<ToolEvidence> route(String userText, ConversationId conversationId) {
+        return route(userText, conversationId, "", null);
+    }
+
+    @Override
+    public Optional<ToolEvidence> route(String userText, ConversationId conversationId, String ownerId,
+            DeviceLocation deviceLocation) {
         if (userText == null || userText.isBlank() || conversationId == null || !isWeatherQuestion(userText)) {
             return Optional.empty();
         }
-        Optional<String> locationValue = location(userText);
-        if (locationValue.isEmpty()) {
-            return Optional.empty();
+        boolean currentLocation = refersToCurrentLocation(userText);
+        Optional<String> locationValue = currentLocation ? Optional.empty() : location(userText);
+        if (locationValue.isEmpty() && !usable(deviceLocation)) {
+            return Optional.of(ToolEvidence.finalFailed("weather.get_forecast",
+                    "บอกชื่อเมืองหรือเปิด/อัปเดตตำแหน่งแล้วถามสภาพอากาศอีกครั้งได้ไหมครับ"));
         }
-        String location = locationValue.get();
+        String location = locationValue.orElse("ตำแหน่งปัจจุบัน");
 
         Map<String, Object> arguments = new LinkedHashMap<>();
         arguments.put("location", location);
+        if (locationValue.isEmpty()) {
+            arguments.put("latitude", deviceLocation.latitude());
+            arguments.put("longitude", deviceLocation.longitude());
+        }
         time(userText).ifPresent(value -> arguments.put("when", value));
         String callId = "weather-route-" + UUID.randomUUID();
         ToolResult result = executor.execute(
@@ -53,6 +66,19 @@ public final class WeatherToolRouter implements ToolRequestRouter {
                     "ขออภัยครับ ข้อมูลสภาพอากาศที่ได้รับมีรูปแบบไม่ถูกต้อง"));
         }
         return Optional.of(ToolEvidence.verified("weather.get_forecast", format(report)));
+    }
+
+    private boolean refersToCurrentLocation(String text) {
+        String normalized = text.toLowerCase(Locale.ROOT);
+        return java.util.List.of("ที่นี่", "แถวนี้", "ตรงนี้", "ใกล้ฉัน", "ใกล้ผม", "ใกล้เรา",
+                "ที่เราอยู่", "ที่ราอยู่", "ตำแหน่งปัจจุบัน", "current location", "near me", "here")
+                .stream().anyMatch(normalized::contains);
+    }
+
+    private boolean usable(DeviceLocation location) {
+        if (location == null || location.capturedAt() == null) return false;
+        long age = System.currentTimeMillis() - location.capturedAt();
+        return age >= -120_000 && age <= 600_000;
     }
 
     private boolean isWeatherQuestion(String text) {

@@ -43,15 +43,18 @@ public final class OpenMeteoWeatherProvider implements WeatherProvider {
         Objects.requireNonNull(request, "request must not be null");
         Instant started = clock.instant();
         try {
-            LocationResult location = locationResolver.resolve(
-                    new LocationRequest(request.location(), request.countryCode()));
+            LocationResult location = request.latitude() == null
+                    ? locationResolver.resolve(new LocationRequest(request.location(), request.countryCode()))
+                    : new LocationResult(request.location(), "", "", "", "", request.latitude(),
+                            request.longitude(), "UTC", clock.instant(), "Device location");
             double latitude = location.latitude();
             double longitude = location.longitude();
-            String timezone = location.timezone();
-            ZoneId zone = ZoneId.of(timezone);
-            LocalDate requestedDate = requestedDate(request.when(), clock.instant(), zone);
             URIRequest forecastRequest = forecastUri(latitude, longitude);
             String body = forecastClient.get().uri(forecastRequest.uri()).retrieve().body(String.class);
+            String timezone = request.latitude() == null ? location.timezone()
+                    : forecastTimezone(body);
+            ZoneId zone = ZoneId.of(timezone);
+            LocalDate requestedDate = requestedDate(request.when(), clock.instant(), zone);
             WeatherReport report = parseReport(location, body, requestedDate, latitude, longitude, timezone);
             LOGGER.info("process=weather event=completed location={} requested_date={} duration_ms={}",
                     report.location(), report.requestedDate(), Duration.between(started, clock.instant()).toMillis());
@@ -63,6 +66,14 @@ public final class OpenMeteoWeatherProvider implements WeatherProvider {
             LOGGER.warn("process=weather event=failed location={} failure_type={} message={}",
                     request.location(), exception.getClass().getSimpleName(), exception.getMessage());
             throw exception;
+        }
+    }
+
+    private String forecastTimezone(String body) {
+        try {
+            return objectMapper.readTree(body).path("timezone").asText("");
+        } catch (Exception exception) {
+            throw new IllegalStateException("weather forecast response is invalid", exception);
         }
     }
 

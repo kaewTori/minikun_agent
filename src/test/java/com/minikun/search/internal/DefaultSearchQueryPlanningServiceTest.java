@@ -45,6 +45,22 @@ class DefaultSearchQueryPlanningServiceTest {
     }
 
     @Test
+    void usesSemanticPlanForMixedWeatherAndNearbyFood() {
+        String query = "มินิคุง ขอสภาพอากาศตอนนี้ให้เรา แล้วมีอะไรน่ากินมั้ง แถวนี้";
+
+        SearchQueryPlan plan = planner.plan(query,
+                new SearchDecision(true, query, SearchDecisionReason.EXTERNAL_RESOURCE,
+                        new SearchPlanHints("local_discovery", 0.9, "ร้านอาหาร แถวนี้",
+                                List.of(), List.of("location"), "")));
+
+        assertEquals("recommendation", plan.intent());
+        assertTrue(plan.primaryQuery().startsWith("ร้านอาหาร"));
+        assertFalse(plan.primaryQuery().contains("อากาศ"));
+        assertEquals("", plan.timeRange());
+        assertEquals("semantic_plan", plan.reason());
+    }
+
+    @Test
     void plansPlaceDiscoveryWithBudgetTransportAndAtmosphereConstraints() {
         String query = "อยากไปพิพิธภัณฑ์เงียบ ๆ แถวเชียงใหม่ งบ 500 บาท เดินทางด้วยรถไฟ";
 

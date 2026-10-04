@@ -30,10 +30,10 @@ public final class JdbcAgentExecutionStore implements AgentExecutionStore {
     public AgentRun createRun(AgentRun run) {
         jdbc.update("""
                 INSERT INTO minikun_agent_run
-                    (id, owner_id, conversation_id, objective, planned_steps_json, risk_level, risk_reasons_json, status, current_step,
+                    (id, owner_id, conversation_id, response_id, objective, planned_steps_json, risk_level, risk_reasons_json, status, current_step,
                      max_steps, summary, failure_reason, created_at, updated_at, completed_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, run.id(), run.ownerId(), run.conversationId(), run.objective(), json(run.plannedSteps()),
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, run.id(), run.ownerId(), run.conversationId(), run.responseId(), run.objective(), json(run.plannedSteps()),
                 run.riskAssessment().level().name(), json(run.riskAssessment().reasons()), run.status().name(), run.currentStep(), run.maxSteps(), run.summary(), run.failureReason(),
                 timestamp(run.createdAt()), timestamp(run.updatedAt()), timestamp(run.completedAt()));
         return run;
@@ -76,6 +76,20 @@ public final class JdbcAgentExecutionStore implements AgentExecutionStore {
     }
 
     @Override
+    public List<AgentRun> listRuns(String ownerId, String conversationId, AgentRunStatus status, int limit) {
+        if (status == null) {
+            return jdbc.query("""
+                    SELECT * FROM minikun_agent_run WHERE owner_id = ? AND conversation_id = ?
+                    ORDER BY created_at DESC LIMIT ?
+                    """, this::mapRun, ownerId, conversationId, limit);
+        }
+        return jdbc.query("""
+                SELECT * FROM minikun_agent_run WHERE owner_id = ? AND conversation_id = ? AND status = ?
+                ORDER BY created_at DESC LIMIT ?
+                """, this::mapRun, ownerId, conversationId, status.name(), limit);
+    }
+
+    @Override
     public AgentExecutionStep createStep(AgentExecutionStep step) {
         jdbc.update("""
                 INSERT INTO minikun_agent_step
@@ -113,7 +127,7 @@ public final class JdbcAgentExecutionStore implements AgentExecutionStore {
     }
 
     private AgentRun mapRun(ResultSet rs, int row) throws SQLException {
-        return new AgentRun(uuid(rs, "id"), rs.getString("owner_id"), rs.getString("conversation_id"),
+        return new AgentRun(uuid(rs, "id"), rs.getString("owner_id"), rs.getString("conversation_id"), rs.getString("response_id"),
                 rs.getString("objective"), steps(rs.getString("planned_steps_json")),
                 new AgentRiskAssessment(AgentRiskLevel.valueOf(rs.getString("risk_level")),
                         steps(rs.getString("risk_reasons_json"))),

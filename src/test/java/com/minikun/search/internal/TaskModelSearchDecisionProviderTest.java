@@ -18,6 +18,49 @@ class TaskModelSearchDecisionProviderTest {
             "Classify search intent", "2026-08-29", "ทดสอบ");
 
     @Test
+    void typhoonClassifiesIndependentRequestsAndFocusesRecommendation() {
+        java.util.concurrent.atomic.AtomicInteger calls = new java.util.concurrent.atomic.AtomicInteger();
+        TaskModelProvider classifier = request -> {
+            calls.incrementAndGet();
+            String message = request.messages().getLast().content();
+            return message.contains("น่ากิน")
+                    ? """
+                      {"reason":"EXTERNAL_RESOURCE","searchQuery":"ร้านอาหารใกล้ฉัน"}
+                      """
+                    : """
+                      {"reason":"CURRENT_INFORMATION","searchQuery":"สภาพอากาศตอนนี้"}
+                      """;
+        };
+        var provider = new TaskModelSearchDecisionProvider(
+                classifier, new ObjectMapper(), Duration.ofSeconds(1));
+
+        var decision = provider.classify(new SearchDecisionPrompt(
+                "Classify search intent", "2026-09-29",
+                "ขอสภาพอากาศตอนนี้ แล้วมีอะไรน่ากินมั้ง แถวนี้"));
+
+        assertEquals(SearchDecisionReason.EXTERNAL_RESOURCE, decision.reason());
+        assertEquals("local_discovery", decision.planHints().intent());
+        assertEquals("ร้านอาหารใกล้ฉัน", decision.planHints().primaryQuery());
+        assertEquals(java.util.List.of("สภาพอากาศตอนนี้"), decision.planHints().alternateQueries());
+        assertEquals(2, calls.get());
+    }
+
+    @Test
+    void mixedRequestKeepsFocusedClauseWhenModelOmitsSearchQuery() {
+        TaskModelProvider classifier = request -> request.messages().getLast().content().contains("น่ากิน")
+                ? "{\"reason\":\"EXTERNAL_RESOURCE\",\"searchQuery\":\"\"}"
+                : "{\"reason\":\"CURRENT_INFORMATION\",\"searchQuery\":\"สภาพอากาศ\"}";
+        var provider = new TaskModelSearchDecisionProvider(
+                classifier, new ObjectMapper(), Duration.ofSeconds(1));
+
+        var decision = provider.classify(new SearchDecisionPrompt(
+                "Classify search intent", "2026-09-29", "ขอสภาพอากาศ แล้วมีอะไรน่ากินแถวนี้"));
+
+        assertEquals("มีอะไรน่ากินแถวนี้", decision.planHints().primaryQuery());
+        assertEquals(java.util.List.of("สภาพอากาศ"), decision.planHints().alternateQueries());
+    }
+
+    @Test
     void normalizesFalseCurrentInformationToSearch() {
         TaskModelProvider model = request ->
                 "{\"shouldSearch\":false,\"reason\":\"CURRENT_INFORMATION\"}";

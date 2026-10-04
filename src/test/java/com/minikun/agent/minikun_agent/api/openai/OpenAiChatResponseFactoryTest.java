@@ -48,6 +48,13 @@ class OpenAiChatResponseFactoryTest {
     }
 
     @Test
+    void deterministicStreamKeepsRecordedResponseId() throws Exception {
+        List<String> chunks = factory.contentStream("mini-kun", "ready", "chatcmpl-trace");
+        assertEquals("chatcmpl-trace", objectMapper.readTree(chunks.getFirst()).path("id").asText());
+        assertEquals("chatcmpl-trace", objectMapper.readTree(chunks.get(1)).path("id").asText());
+    }
+
+    @Test
     void emitsRichImageAttachmentsInInitialStreamingChunk() throws Exception {
         ChatAttachment attachment = new ChatAttachment(
                 "image",
@@ -83,6 +90,19 @@ class OpenAiChatResponseFactoryTest {
 
         assertEquals("generated", chunk.at("/attachments/0/origin").asText());
         assertEquals(attachment.url(), chunk.at("/choices/0/delta/images/0/image_url/url").asText());
+    }
+
+    @Test
+    void presentationAttachmentsStayOutOfImageDeltas() throws Exception {
+        ChatAttachment presentation = new ChatAttachment("presentation", "/v1/presentations/example/download",
+                "Deck", "", "PowerPoint", "generated", "", "", null, null, "Apache POI", "",
+                "", "", null, "", "example.pptx",
+                "application/vnd.openxmlformats-officedocument.presentationml.presentation", 512L, 8, "example");
+
+        JsonNode chunk = objectMapper.readTree(factory.attachmentChunk("id", 123L, "mini-kun", List.of(presentation)));
+
+        assertEquals("presentation", chunk.at("/attachments/0/type").asText());
+        assertTrue(chunk.at("/choices/0/delta/images").isEmpty());
     }
 
     @Test

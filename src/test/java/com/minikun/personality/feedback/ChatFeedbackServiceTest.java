@@ -55,4 +55,13 @@ class ChatFeedbackServiceTest {
         assertEquals(feedback, observed.get());
         assertEquals(0, learning.snapshot("owner").activePreferences().size());
     }
+
+    @Test
+    void labelsMissingImageWithoutLearningAnUnrelatedPreference() {
+        ChatFeedback feedback = service.submit("owner", "conversation", "response-id", "down", null,
+                "มินิคุงยังไม่เห็นรูปภาพ");
+
+        assertEquals(ChatFeedbackCategory.VISION_WRONG, feedback.category());
+        assertEquals(0, learning.snapshot("owner").activePreferences().size());
+    }
 }

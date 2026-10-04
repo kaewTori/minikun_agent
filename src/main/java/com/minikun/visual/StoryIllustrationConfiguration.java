@@ -98,6 +98,17 @@ public class StoryIllustrationConfiguration {
     }
 
     @Bean
+    SvgGraphicGenerator svgGraphicGenerator(
+            ObjectMapper objectMapper,
+            GeneratedImageStore store,
+            @Value("${minikun.visual.generation.pony-prompt.ollama.base-url:http://127.0.0.1:11434}") String baseUrl,
+            @Value("${minikun.visual.generation.pony-prompt.ollama.model:hf.co/llmfan46/gemma-4-E4B-it-ultra-uncensored-heretic-GGUF:Q6_K}") String model,
+            @Value("${minikun.visual.generation.pony-prompt.ollama.timeout:PT240S}") Duration timeout) {
+        return new SvgGraphicGenerator(visualPonyTaskModelProvider(objectMapper, baseUrl, model, timeout),
+                store, objectMapper);
+    }
+
+    @Bean
     PonyPromptTransformer ponyPromptTransformer(
             ObjectMapper objectMapper,
             @Value("${minikun.visual.generation.pony-prompt.ollama.base-url:http://127.0.0.1:11434}")
@@ -126,13 +137,14 @@ public class StoryIllustrationConfiguration {
             CharacterVisualMemory characterVisualMemory,
             PonyPromptTransformer promptTransformer,
             StoryIllustrationIntentDetector intentDetector,
-            @Value("${minikun.visual.generation.auto-illustrate-stories:true}") boolean autoIllustrateStories,
+            SvgGraphicGenerator svgGraphicGenerator,
+            @Value("${minikun.visual.generation.auto-illustrate-stories:false}") boolean autoIllustrateStories,
             @Value("${minikun.visual.generation.max-prompt-characters:8000}") int maximumPromptCharacters,
             @Value("${minikun.visual.generation.storyboard.max-scenes:3}") int maximumStoryboardScenes) {
         return new StoryIllustrationService(
                 imageGenerationTool, autoIllustrateStories, maximumPromptCharacters,
                 visualPlanGenerator, characterVisualMemory, maximumStoryboardScenes, promptTransformer,
-                intentDetector);
+                intentDetector, svgGraphicGenerator);
     }
 
     @Bean
@@ -145,10 +157,12 @@ public class StoryIllustrationConfiguration {
             ImageGenerationTool imageGenerationTool,
             TinyGradRuntimeStatusReader runtimeStatus,
             PonyPromptTransformer promptTransformer,
+            ImageGenerationHistoryStore historyStore,
             @Value("${minikun.visual.management.token:${minikun.memory.management.token:}}") String token,
             @Value("${minikun.visual.generation.max-prompt-characters:8000}") int maximumPromptCharacters) {
         return new ImageStudioController(
-                imageGenerationTool, runtimeStatus, promptTransformer, token, maximumPromptCharacters);
+                imageGenerationTool, runtimeStatus, promptTransformer, historyStore,
+                token, maximumPromptCharacters);
     }
 
     @Bean

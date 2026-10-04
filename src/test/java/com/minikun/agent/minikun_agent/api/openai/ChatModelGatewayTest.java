@@ -30,6 +30,20 @@ import java.util.List;
 
 class ChatModelGatewayTest {
     @Test
+    void passesResponseIdToToolExecution() {
+        ActiveChatModelProvider active = mock(ActiveChatModelProvider.class);
+        SpringAiToolCallingRuntime tools = mock(SpringAiToolCallingRuntime.class);
+        when(tools.call(any(Prompt.class), any(ConversationId.class), eq("owner"), eq("chatcmpl-123")))
+                .thenReturn(response("done"));
+        ChatModelGateway gateway = new ChatModelGateway(active, tools, null, true);
+
+        gateway.chatWithTools(new Prompt("inspect and verify"), new ConversationId("conversation"),
+                "owner", "chatcmpl-123");
+
+        verify(tools).call(any(Prompt.class), any(ConversationId.class), eq("owner"), eq("chatcmpl-123"));
+    }
+
+    @Test
     void failedToolLoopStopsWithoutRetryingAMaybeMutatingAction() {
         ActiveChatModelProvider active = mock(ActiveChatModelProvider.class);
         ChatModelProvider provider = mock(ChatModelProvider.class);

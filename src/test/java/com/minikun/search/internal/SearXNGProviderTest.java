@@ -34,7 +34,7 @@ class SearXNGProviderTest {
                 .andExpect(method(HttpMethod.GET))
                 .andRespond(withSuccess("""
                         {"results":[{"title":"Java Records","url":"https://example.com/java",\
-                        "content":"Immutable data carrier"}],"engines":["google"]}
+                        "content":"Immutable data carrier","publishedDate":"2026-08-01T12:00:00Z"}],"engines":["google"]}
                         """, MediaType.APPLICATION_JSON));
 
         var response = provider.search(request("java records", 5));
@@ -43,6 +43,7 @@ class SearXNGProviderTest {
         assertEquals("Java Records", response.results().getFirst().title());
         assertEquals("searxng", response.results().getFirst().source().name());
         assertEquals(1, response.results().getFirst().sourcePosition());
+        assertEquals(Instant.parse("2026-08-01T12:00:00Z"), response.results().getFirst().publishedAt());
         server.verify();
     }
 

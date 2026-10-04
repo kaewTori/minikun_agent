@@ -10,6 +10,43 @@ import org.junit.jupiter.api.Test;
 
 class BrowserContentServiceTest {
     @Test
+    void returnsChallengeAsFailureWithoutTreatingItAsKnowledge() {
+        BrowserContentService service = new BrowserContentService(
+                url -> new BrowserContent(url, "Verify you are human", "text/markdown", false), true, 5);
+        BrowserReadResult result = service.readPartial("https://example.com");
+        assertTrue(result.candidates().isEmpty());
+        assertTrue(result.failures().get(0).reason().contains("verification required"));
+    }
+
+    @Test
+    void usesQuestionToSelectFromFullRawPageForDiscoveredSources() {
+        String raw = "Introduction. ".repeat(500) + "Battery lifespan is 15 hours." + "Footnotes. ".repeat(500);
+        BrowserContentService service = new BrowserContentService(
+                url -> new BrowserContent(url, "Filtered introduction", "text/markdown", false, raw),
+                true, 5, null, BrowserUrlPolicy.permissive(), 1200);
+        var result = service.readUrls(List.of("https://example.com"), 1, "battery lifespan");
+        assertTrue(result.candidates().get(0).content().contains("15 hours"));
+        assertTrue(result.candidates().get(0).content().contains("Truncated: true"));
+    }
+
+    @Test
+    void rejectsPrivateRedirectProvenance() {
+        BrowserContentService service = new BrowserContentService(
+                url -> new BrowserContent("http://127.0.0.1/secret", "content", "text/markdown", false),
+                true, 5, null, new BrowserUrlPolicy(true));
+        assertTrue(service.readPartial("https://1.1.1.1").candidates().isEmpty());
+    }
+
+    @Test
+    void extractsMarkdownAndParenthesizedLinksWithoutDamagingBalancedUrlParentheses() {
+        BrowserContentService service = new BrowserContentService(
+                url -> new BrowserContent(url, "content", "text/markdown", false), true, 5);
+
+        assertEquals(List.of("https://example.com/article", "https://example.org/wiki/Foo_(bar)"),
+                service.urlsIn("[อ่าน](https://example.com/article). (https://example.org/wiki/Foo_(bar))."));
+    }
+
+    @Test
     void extractsNormalizesDeduplicatesAndRendersUrlsInOrder() {
         AtomicInteger calls = new AtomicInteger();
         BrowserContentService service = new BrowserContentService(url -> {

@@ -32,6 +32,10 @@ public final class DefaultToolExecutor implements ToolExecutor {
             result = ToolResult.failure(ToolErrorCode.EXECUTION_FAILED, "tool execution failed");
             log.warn("Tool execution raised an exception tool={} callId={}", toolCall.name(), toolCall.id(), exception);
         }
+        if (!result.success() && "presentation.create".equals(toolCall.name())) {
+            log.warn("process=presentation_creation_failure error_code={} reason={}",
+                    result.errorCode(), result.error());
+        }
         log.info("process=tool_execution tool={} call_id={} success={} duration_ms={}",
                 toolCall.name(), toolCall.id(), result.success(), (System.nanoTime() - started) / 1_000_000);
         return result;
@@ -72,6 +76,7 @@ public final class DefaultToolExecutor implements ToolExecutor {
             case INTEGER -> value instanceof Byte || value instanceof Short
                     || value instanceof Integer || value instanceof Long;
             case BOOLEAN -> value instanceof Boolean;
+            case OBJECT -> value instanceof Map<?, ?>;
         };
     }
 }

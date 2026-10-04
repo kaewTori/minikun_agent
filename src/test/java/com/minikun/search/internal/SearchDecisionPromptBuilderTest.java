@@ -20,7 +20,8 @@ class SearchDecisionPromptBuilderTest {
         assertEquals("today's gold price", first.userMessage());
         assertTrue(first.instructions().contains("external web search"));
         assertTrue(first.instructions().contains("Do not output thinking"));
-        assertTrue(first.instructions().contains("{\"shouldSearch\":true"));
+        assertTrue(first.instructions().contains("shouldSearch, reason, intent, confidence"));
+        assertTrue(first.instructions().contains("Never combine"));
         assertTrue(first.instructions().contains(
             "CURRENT_INFORMATION, FACT_LOOKUP, EXTERNAL_RESOURCE, IMAGE_REQUEST"));
         assertTrue(first.instructions().contains(

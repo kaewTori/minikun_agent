@@ -14,6 +14,7 @@
 - Autonomous Deep Research แบบ bounded สำหรับวาง subquestions, ค้นซ้ำตาม evidence gap, เปิดแหล่งต้นฉบับ และระบุข้อจำกัด
 - Storytelling advisor สำหรับวางแรงขับ อุปสรรค stakes ฉาก จังหวะ มุมมอง และตอนจบ พร้อม `Minikun narrative voice` ที่ทำให้งานเล่าเรื่องเป็นธรรมชาติ มีรายละเอียดรูปธรรม และรักษาน้ำเสียงของมินิคุงโดยอัตโนมัติ
 - Story Illustration สำหรับสร้างภาพของจังหวะสำคัญหลังเล่าเรื่องเสร็จ แล้วแนบภาพเข้า response ทั้งแบบ JSON และ streaming โดยไม่เก็บ image bytes ใน conversation history
+- สร้าง PowerPoint ภาษาไทย/อังกฤษแบบแก้ข้อความได้ พร้อมธีม Layout กราฟิกและภาพประกอบที่มินิคุงเลือก แล้วแก้ฉบับต่อไปจากบทสนทนาได้
 - Adaptive Companion ที่เรียนรู้ภาษา ความยาว รูปแบบ ระดับเทคนิค และโทนการตอบแบบ owner-scoped
 - Natural Conversation Advisor ที่ใช้เจตนา บริบทต่อเนื่อง และสัญญาณอารมณ์เพื่อปรับคำตอบโดยไม่เก็บข้อความเพิ่ม
 - Conversation Policy Engine ที่แยกการรับฟัง ชวนคิด ตัดสินใจ อธิบาย สร้างงาน และลงมือทำ พร้อม question/initiative/challenge contract ราย turn
@@ -41,7 +42,7 @@
 - ส่ง language/category/time-range/safe-search options ไปยัง search provider พร้อม multi-query ranking และ URL deduplication
 - Actuator health และ metrics
 - คำสั่ง runtime และ diagnostics ที่จัดการในระดับ application
-- Native function tools: `time.get_current_time`, `weather.get_forecast`, `web.search`, `web.open_url`, `image.generate`, `calculator.add`, `planner.manage`, `calendar.manage`, `task.manage`, `investment.manage`, `investment.analyze`, `investment.data`, `homelab.guardian`, `computer.local`, `knowledge.personal`, `communication.assist` และ `personal.loop`
+- Native function tools: `time.get_current_time`, `weather.get_forecast`, `web.search`, `web.open_url`, `image.generate`, `presentation.create`, `presentation.read_latest`, `presentation.revise`, `calculator.add`, `planner.manage`, `calendar.manage`, `task.manage`, `investment.manage`, `investment.analyze`, `investment.data`, `homelab.guardian`, `computer.local`, `knowledge.personal`, `communication.assist` และ `personal.loop`
 - ผลลัพธ์จาก tool จะถูกส่งกลับเข้า prompt ของ MCS/PCS เพื่อให้โมเดลตอบต่อด้วยตัวตน บริบท และน้ำเสียงเดิมของมินิคุง
 - เก็บ reminder ใน PostgreSQL และส่ง browser notification ผ่าน Cockpit โดยมี ntfy เป็น fallback
 - เชื่อม private iCalendar feed จาก Google, Apple หรือ Outlook เพื่ออ่าน agenda และเตือนก่อนนัด
@@ -170,7 +171,7 @@ Actuator ที่เปิดให้เข้าถึงคือ `/actuator
 | `MINIKUN_KIMI_TIMEOUT` | `PT120S` | timeout ของ reasoning request |
 | `MINIKUN_CHATGPT_REASONING_ENABLED` | `true` | เปิด ChatGPT ผ่าน Codex App Server เป็นเพื่อน reasoning หลัก |
 | `MINIKUN_CHATGPT_COMMAND` | `codex` | executable ของ Codex CLI ที่ login ด้วย ChatGPT แล้ว |
-| `MINIKUN_CHATGPT_MODEL` | ว่าง | บังคับ model ของ ChatGPT/Codex; ว่าง = ใช้ค่าเริ่มต้นของบัญชี |
+| `MINIKUN_CHATGPT_MODEL` | `gpt-6-luna` | ใช้ Luna Max; ถ้า 6 Luna ยังไม่เปิดให้บัญชี ใช้ `gpt-5.6-luna` ที่รองรับ Max; ถ้าไม่มี Luna ใช้ค่าเริ่มต้นที่ `model/list` รายงาน |
 | `MINIKUN_CHATGPT_TIMEOUT` | `PT120S` | timeout ของ peer review จาก ChatGPT |
 | `MINIKUN_MODEL_TASK_OLLAMA_MODEL` | `hf.co/mradermacher/llama3.2-typhoon2-3b-GGUF:Q4_K_M` | task model สำหรับ reflection, preference extraction, planner และ search decision; ใช้ native `/api/chat` |
 | `VALKEY_URL` | `redis://127.0.0.1:6379` | Valkey/Redis endpoint |
@@ -189,6 +190,11 @@ Actuator ที่เปิดให้เข้าถึงคือ `/actuator
 | `MINIKUN_CHAT_BACKGROUND_TIMEOUT` | `15m` | deadline รวมของ background chat และงานภาพต่อเนื่อง |
 | `MINIKUN_CHAT_BACKGROUND_MAX_QUEUED` | `32` | จำนวน background chat ที่รอ worker ได้พร้อมกัน |
 | `MINIKUN_CHAT_BACKGROUND_MAX_ACTIVE` | `8` | จำนวน background chat ที่ประมวลผลพร้อมกัน |
+| `MINIKUN_PRESENTATION_ENABLED` | `true` | เปิดหรือปิดการสร้างและแก้ไข PowerPoint |
+| `MINIKUN_PRESENTATION_OUTPUT_DIRECTORY` | `${user.home}/.minikun/presentations` | ที่เก็บไฟล์ PowerPoint ที่สร้าง |
+| `MINIKUN_PRESENTATION_MAX_FILE_BYTES` | `20971520` | ขนาดไฟล์ PowerPoint สูงสุด 20 MiB |
+| `MINIKUN_PRESENTATION_RETENTION` | `P30D` | อายุไฟล์ก่อนลบอัตโนมัติ |
+| `MINIKUN_PRESENTATION_MANAGEMENT_TOKEN` | ใช้ค่า visual token หรือ memory token ถ้ามี | token สำหรับดาวน์โหลดไฟล์ที่สร้าง |
 
 ตั้ง key ก่อนรันแอป โดยไม่ต้องใส่ใน `application.properties`, source code หรือ commit:
 
@@ -204,6 +210,7 @@ export NVIDIA_API_KEY='nvapi-ใส่คีย์ของเราแทนต
 ถ้า ChatGPT ปฏิเสธหรือเรียกไม่สำเร็จ ระบบจะใช้ Kimi K3 เป็นความเห็นสำรอง; สำหรับงานกำกวม/เชิงผู้เชี่ยวชาญอาจเรียก ChatGPT และ Kimi แบบ parallel opinion พร้อมกัน
 คำถามความเสี่ยงสูง เช่น สุขภาพ การเงิน กฎหมาย และ credential จะไม่ส่ง peer ภายนอกโดยอัตโนมัติ
 ก่อนใช้งานให้ตรวจว่า `codex login status` แสดงว่า login ด้วย ChatGPT แล้ว; ดู protocol ได้ที่ [Codex App Server documentation](https://learn.chatgpt.com/docs/app-server)
+มินิคุงลบ Codex thread ที่สร้างสำหรับแต่ละ peer review หลังได้ผลลัพธ์ เพื่อไม่ให้ประวัติการเรียกจากมินิคุงค้างใน Codex
 | `MINIKUN_VISUAL_GENERATION_ENABLED` | `true` | เปิดการสร้างภาพจากเรื่องและ Image Studio |
 | `MINIKUN_VISUAL_TINYGRAD_BASE_URL` | `http://127.0.0.1:8002` | TinyGrad SDXL service ที่มี `/generate` และ `/health` |
 | `MINIKUN_VISUAL_TINYGRAD_TOKEN` | ว่าง | Bearer token หากตั้ง `SDXL_SERVER_TOKEN` ฝั่ง TinyGrad |
@@ -213,7 +220,7 @@ export NVIDIA_API_KEY='nvapi-ใส่คีย์ของเราแทนต
 | `MINIKUN_VISUAL_TINYGRAD_GUIDANCE` | `6.0` | CFG guidance เริ่มต้น |
 | `MINIKUN_VISUAL_TINYGRAD_SCHEDULER` / `SCHEDULE` | `dpmpp2m` / `karras` | sampler defaults |
 | `MINIKUN_VISUAL_TINYGRAD_TIMEOUT` | `PT10M` | timeout สำหรับ SDXL generation รวม first-run compile |
-| `MINIKUN_VISUAL_AUTO_ILLUSTRATE_STORIES` | `true` | สร้างภาพหนึ่งภาพอัตโนมัติสำหรับ creative story; คำขอสร้างภาพโดยตรงยังตรวจพบได้เสมอเมื่อระบบเปิด |
+| `MINIKUN_VISUAL_AUTO_ILLUSTRATE_STORIES` | `false` | เปิดสร้างภาพอัตโนมัติสำหรับ creative story; หากปิดอยู่ คำขอสร้างภาพโดยตรงยังใช้งานได้เมื่อระบบเปิด |
 | `MINIKUN_VISUAL_GENERATION_OUTPUT_DIRECTORY` | `${user.home}/.minikun/generated-images` | ที่เก็บ image bytes; conversation จะเก็บเฉพาะ local URL |
 | `MINIKUN_VISUAL_ASYNC_MAX_QUEUED` | `8` | จำนวนงานภาพประกอบที่รอ TinyGrad ได้พร้อมกัน |
 | `MINIKUN_VISUAL_ASYNC_MAX_ACTIVE` | `1` | จำนวนงานภาพประกอบที่ใช้ TinyGrad พร้อมกัน |
@@ -296,11 +303,19 @@ Whisper Large V3 Turbo Q4 ผ่าน MLX สำหรับถอดเสี�
 | `MINIKUN_BROWSER_ENABLED` | `true` | เปิด/ปิดการอ่าน URL ผ่าน Crawl4AI |
 | `MINIKUN_CRAWL4AI_BASE_URL` | `http://127.0.0.1:11235` | endpoint ของ Crawl4AI |
 | `MINIKUN_CRAWL4AI_TOKEN` | ใช้ค่า `CRAWL4AI_API_TOKEN` | Bearer token สำหรับ Crawl4AI |
-| `MINIKUN_BROWSER_TIMEOUT` | `20s` | timeout ของการ render แต่ละ URL |
+| `MINIKUN_BROWSER_TIMEOUT` | `25s` | HTTP timeout ต่อการ render หนึ่งครั้ง |
 | `MINIKUN_BROWSER_MAX_URLS` | `5` | จำนวน URL สูงสุดต่อข้อความ |
 | `MINIKUN_BROWSER_BLOCK_PRIVATE_ADDRESSES` | `true` | ป้องกัน Crawl4AI เข้าถึง localhost/private network |
 | `MINIKUN_BROWSER_MAX_CONTENT_CHARACTERS` | `12000` | ขนาดเนื้อหาสูงสุดต่อ URL ก่อนใส่เข้า Knowledge context |
 | `MINIKUN_BROWSER_MAX_CONCURRENCY` | `3` | จำนวน URL ที่ Crawl4AI อ่านพร้อมกัน |
+| `MINIKUN_BROWSER_PAGE_TIMEOUT` | `15s` | timeout โหลดหน้าเว็บ (สูงสุด 60s) |
+| `MINIKUN_BROWSER_SETTLE_DELAY` | `1500ms` | รอ JavaScript ก่อนเก็บเนื้อหา (สูงสุด 5s) |
+| `MINIKUN_BROWSER_RETRY_DELAY` | `1s` | พักก่อน retry; รองรับ HTTP 429/5xx และ Retry-After โดยพักสูงสุด 10s |
+| `MINIKUN_BROWSER_CACHE_TTL` | `5m` | อายุ cache เนื้อหาเว็บที่อ่านสำเร็จ (`0s` ปิด cache) |
+| `MINIKUN_BROWSER_CACHE_CAPACITY` | `128` | จำนวนหน้าใน cache ภายใน process |
+| `MINIKUN_BROWSER_DOMAIN_INTERVAL` | `2s` | เว้นช่วงระหว่างการอ่านโดเมนเดียวกัน รวมคำขอจากหลายแชต |
+| `MINIKUN_BROWSER_RUNTIME_ROOT` | `~/Library/Application Support/Minikun/browser` | runtime และ profile สำหรับ browser บน Mac |
+| `MINIKUN_BROWSER_SESSION_TIMEOUT` | `35s` | timeout ต่อคำสั่งเปิด/อ่าน browser session (สูงสุด 60s) |
 | `MINIKUN_RESEARCH_SOURCE_READ_LIMIT` | `3` | จำนวนแหล่งต้นฉบับจากผลค้นหาที่เปิดอ่านใน deep-research path (`0` เพื่อปิด stage นี้) |
 | `MINIKUN_RESEARCH_AUTONOMOUS_ENABLED` | `true` | เปิด plan-search-read-evaluate loop สำหรับ explicit deep research |
 | `MINIKUN_RESEARCH_AUTONOMOUS_MAX_ITERATIONS` | `3` | จำนวนรอบประเมินและค้นซ้ำสูงสุด (`1-5`) |
@@ -395,6 +410,8 @@ deterministic seed query และส่งต่อแบบ fail-open แท�
 export MINIKUN_VISUAL_GENERATION_ENABLED=true
 ```
 
+คำขออินโฟกราฟิกและการ์ดข้อความในแชตให้ Gemma 4 เขียนเนื้อหาเป็น JSON แล้วแอปจัด SVG ลงแม่แบบหัวเรื่อง การ์ด 1–3 ใบ และสรุป โดยวัดความกว้างข้อความและตัดบรรทัดภาษาไทยภายในกล่อง หากเนื้อหายาวเกินพื้นที่จะให้โมเดลย่อแล้วลองใหม่หนึ่งครั้ง ผังงาน ไทม์ไลน์ และกราฟยังใช้ JSON ขององค์ประกอบกราฟิก โดยข้อความจะตัดบรรทัดตามกล่องที่ครอบอยู่ SVG เปิดดูและดาวน์โหลดได้ ส่วนภาพวาดทั่วไปให้ Gemma 4 เตรียม Pony prompt แล้วใช้ TinyGrad สร้าง PNG
+
 TinyGrad provider เรียก `POST /generate`, ส่ง prompt, negative prompt, face prompts, ขนาด, steps,
 guidance, scheduler, schedule และ seed แล้วรับ `image/png` โดยตรง ระบบสร้างภาพรองรับเฉพาะ local
 TinyGrad `sdxl_use.py --serve 8002` และไม่มี OpenAI image-generation fallback
@@ -447,8 +464,19 @@ curl -N -X POST http://127.0.0.1:8080/v1/chat/completions \
 
 ### อ่านและสรุปลิงก์
 
-เมื่อข้อความล่าสุดมี HTTP/HTTPS URL ระบบจะเรียก Crawl4AI `/md` เพื่อรับ Fit Markdown
-แล้วให้โมเดลตอบโดยอ้างอิงจากเนื้อหาที่อ่านได้:
+เมื่อข้อความล่าสุดมี HTTP/HTTPS URL ระบบจะเรียก Crawl4AI `/crawl` เพื่อรับทั้ง Fit และ Raw Markdown
+ในคำขอเดียว รอ `body` และ JavaScript ตามเวลาที่กำหนด พร้อมเลื่อนหน้าไม่เกิน 8 ขั้น
+หาก Fit ว่างหรือสั้นกว่า 200 ตัวอักษรจะใช้ Raw ส่วนก่อนส่งเข้าโมเดลจะเลือกข้อความจาก Raw
+ที่ตรงคำถาม (รองรับไทย/อังกฤษ) แล้วคุมขนาดตาม `MINIKUN_BROWSER_MAX_CONTENT_CHARACTERS`
+ถ้าไม่มีคำสำคัญจะเก็บตัวอย่างจากต้น กลาง และท้ายหน้า โดยระบุ `Truncated: true` เมื่อเลือกเพียงบางส่วน
+
+ลิงก์แบบ `[ชื่อ](https://example.com/article)` รองรับโดยไม่ส่งวงเล็บปิดส่วนเกินไปยัง crawler
+ตรวจหน้า Cloudflare/CAPTCHA จาก HTML และข้อความ แล้วส่งสถานะอ่านไม่สำเร็จให้โมเดลแจ้งผู้ใช้
+แทนการสรุปหน้า challenge เป็นบทความ ระบบไม่ retry challenge หรือ 401/403 โดยอัตโนมัติ
+เนื้อหาที่อ่านสำเร็จมี cache แบบ TTL และจำกัดขนาด ส่วนการอ่านใหม่คุม concurrency ร่วมทุกแชต
+พร้อมเว้นช่วงต่อโดเมนและพักก่อน retry network/429/5xx ไม่มีการหมุน IP หรือแก้ CAPTCHA อัตโนมัติ
+
+ตัวอย่างการส่งลิงก์ให้สรุป:
 
 ```sh
 curl -X POST http://127.0.0.1:8080/v1/chat/completions \
@@ -461,6 +489,29 @@ curl -X POST http://127.0.0.1:8080/v1/chat/completions \
 
 ตั้ง `MINIKUN_CRAWL4AI_BASE_URL` ให้ agent มองเห็น Crawl4AI และกำหนด
 `CRAWL4AI_API_TOKEN` เป็น `export` ใน `/Volumes/minikun/homelab/java/script/minikun-agent.sh`.
+
+#### ยืนยันหรือล็อกอินผ่าน browser session
+
+ติดตั้ง runtime บน Mac ที่รันมินิคุงครั้งเดียวด้วย `./deploy/install-browser-runtime.sh`
+(Playwright + Chromium อยู่ใน venv แยก ไม่มี Java dependency ใหม่) แล้ว deploy agent ตามขั้นตอนเดิม
+การ deploy รอบถัดไปจะอัปเดต `session.py` หากติดตั้ง runtime นี้ไว้แล้ว
+
+1. เปิดหน้าตั้งค่า → **Browser session** จากอุปกรณ์ที่จับคู่แล้ว
+2. วาง URL แล้วกด **เปิดบน Mac**: หน้าต่าง Chromium จะเปิดบน Mac ที่รัน agent
+3. ยืนยัน CAPTCHA หรือล็อกอินด้วยตัวเอง แล้วกด **อ่านต่อหลังยืนยัน**
+4. ส่ง URL เดิมในแชต มินิคุงจะอ่านจาก browser session ที่เปิดไว้สำหรับโดเมนนั้น
+5. กด **ปิด browser** เพื่อหยุดใช้ session และล้าง cache; cookies ยังอยู่ใน profile แยกเพื่อใช้ครั้งถัดไป
+
+browser ใช้ private stdio ไม่มี browser-control HTTP/CDP port และปิด downloads/service workers/WebSockets
+การเชื่อมต่อผ่าน proxy ชั่วคราวบน loopback ที่ตรวจและ pin public IP เพื่อบล็อก private/local network รวม DNS rebinding ใช้ profile เดียวสำหรับเจ้าของมินิคุงและอุปกรณ์ที่จับคู่กับเจ้าของนั้นเท่านั้น
+API `/v1/browser/session` (GET/DELETE), `/open` และ `/read` (POST) ต้องมี paired-device cookie และเป็น same-origin
+จึงไม่ให้หน้าเว็บภายนอกสั่งเปิดหรืออ่าน browser ได้
+
+การตรวจ challenge และการเลือกข้อความใช้ heuristic จึงไม่รับประกันทุกเว็บ การรอหน้าเป็นเวลาจำกัด
+ไม่รองรับ infinite scroll ทั้งหน้าโดยไม่สิ้นสุด การยืนยันทำบน Mac ไม่ได้สตรีมหน้าจอไปยังโทรศัพท์
+profile และไฟล์ cookies ส่วนตัว (`session-state.json`) สำหรับล้างข้อมูลล็อกอินทั้งหมดอยู่ใน `<runtime-root>/profile`
+ให้ปิด browser ก่อนลบโฟลเดอร์นี้ ทดสอบ offline ด้วย `python3 browser/test_session.py`
+และทดสอบ browser จริงพร้อมการเก็บ cookies ข้ามการเปิดใหม่ด้วย `python3 browser/smoke_session.py` (ต้องมีอินเทอร์เน็ต)
 
 ระบบจะส่ง `X-Conversation-Id` กลับมาใน response หาก request ไม่ได้ระบุ conversation ID ระบบจะสร้าง UUID ใหม่ให้โดยอัตโนมัติ ลำดับการเลือก ID คือ:
 

@@ -26,6 +26,19 @@ class DefaultToolExecutorTest {
     }
 
     @Test
+    void acceptsNestedJsonObjectsForObjectParameters() {
+        Map<String, Object> spec = Map.of("title", "Deck", "slides", List.of(Map.of("title", "One")));
+        Tool tool = tool("presentation.create", new ToolDefinition("presentation.create", "Create a deck.",
+                Map.of("spec", new ToolParameter("spec", ToolParameterType.OBJECT, true, "Nested deck spec."))),
+                (context, arguments) -> ToolResult.success(arguments.get("spec")));
+
+        ToolResult result = executor(tool).execute(CONTEXT,
+                new ToolCall("call-1", "presentation.create", Map.of("spec", spec)));
+
+        assertEquals(ToolResult.success(spec), result);
+    }
+
+    @Test
     void returnsStableValidationFailures() {
         Tool tool = tool("calculator", new ToolDefinition(
                 "calculator", "Calculate.", Map.of(

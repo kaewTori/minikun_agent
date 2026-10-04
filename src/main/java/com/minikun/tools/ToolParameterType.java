@@ -4,5 +4,6 @@ public enum ToolParameterType {
     STRING,
     NUMBER,
     INTEGER,
-    BOOLEAN
+    BOOLEAN,
+    OBJECT
 }

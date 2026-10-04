@@ -40,6 +40,25 @@ class TurnPlannerTest {
     }
 
     @Test
+    void slideDeliverableUsesTheToolLoopButSlidePlanningDoesNotCreateADeck() {
+        TurnPlanner planner = planner(null);
+        TurnPlan deck = planner.plan("ช่วยทำสไลด์แนะนำ homelab 8 หน้า", "", null, false, null, true);
+        TurnPlan revision = planner.plan("ช่วยย่อข้อความในสไลด์หน้า 3", "", null, false, null, true);
+        TurnPlan plan = planner.plan("ทำแผนให้มินิคุงสามารถทำสไลด์ออกมาให้เรา", "", null,
+                false, null, true);
+        TurnPlan howTo = planner.plan("วิธีแก้ข้อความใน PowerPoint", "", null, false, null, true);
+
+        assertEquals(TurnPlan.Execution.TOOL_LOOP, deck.execution());
+        assertTrue(deck.needsTools());
+        assertEquals(TurnPlan.Execution.TOOL_LOOP, revision.execution());
+        assertTrue(revision.needsTools());
+        assertEquals(TurnPlan.Execution.DIRECT_STREAM, plan.execution());
+        assertFalse(plan.needsTools());
+        assertEquals(TurnPlan.Execution.DIRECT_STREAM, howTo.execution());
+        assertFalse(howTo.needsTools());
+    }
+
+    @Test
     void naturalInvestmentReviewUsesTheToolLoop() {
         TurnPlan plan = planner(null).plan("ช่วยทบทวนพอร์ตระยะยาวของฉัน", "", null,
                 false, null, true);
@@ -58,11 +77,72 @@ class TurnPlannerTest {
     }
 
     @Test
+    void storytellingNeedsAnExplicitImageRequestWhenAutoIllustrationIsOff() {
+        TurnPlanner planner = new TurnPlanner(new CooperationRouter(),
+                (TurnAmbiguityResolver) null, null, false);
+
+        assertFalse(planner.plan("เล่าเรื่องสงครามโลกครั้งที่สองให้ฟัง", "", null,
+                false, null, true).imageOutput());
+        assertFalse(planner.plan("แต่งเรื่องสั้นเกี่ยวกับหุ่นยนต์ที่กลัวฝน", "", null,
+                false, null, true).imageOutput());
+        assertTrue(planner.plan("เล่านิทานเรื่องแมวพร้อมภาพประกอบ", "", null,
+                false, null, true).imageOutput());
+        assertTrue(planner.plan("ช่วยทำอินโฟกราฟิกเรื่องประหยัดไฟ", "", null,
+                false, null, true).imageOutput());
+    }
+
+    @Test
+    void graphicApprovalUsesTheLatestVisualRequestAndItsApprovedOutline() {
+        TurnPlanner planner = new TurnPlanner(new CooperationRouter(), (TurnAmbiguityResolver) null, null, false);
+        String original = "อยากได้วิธีคิดของมินิคุง ในรูปแบบ info";
+        var history = java.util.List.of(
+                new com.minikun.agent.minikun_agent.conversation.ChatMessage("user", original),
+                new com.minikun.agent.minikun_agent.conversation.ChatMessage("assistant", "ทำความเข้าใจ ตรวจสอบ ตอบสนอง"));
+        String resolved = planner.resolveVisualRequest("เอาตามนี้เลย", history);
+        assertTrue(resolved.contains(original));
+        assertTrue(resolved.contains("ทำความเข้าใจ ตรวจสอบ ตอบสนอง"));
+        assertTrue(planner.plan("เอาตามนี้เลย", "", null, false, null, false, false, resolved).imageOutput());
+        assertFalse(planner.plan("เอาตามนี้เลย", "", null, false, null, false, true, resolved).imageOutput());
+        assertEquals("ต่อ", planner.resolveVisualRequest("ต่อ", history));
+        assertEquals("ไม่ต้องสร้างภาพ", planner.resolveVisualRequest("ไม่ต้องสร้างภาพ", history));
+        var unrelated = new java.util.ArrayList<>(history);
+        unrelated.add(new com.minikun.agent.minikun_agent.conversation.ChatMessage("user", "เล่าเรื่องให้ฟัง"));
+        unrelated.add(new com.minikun.agent.minikun_agent.conversation.ChatMessage("assistant", "กาลครั้งหนึ่ง"));
+        assertEquals("เอาตามนี้เลย", planner.resolveVisualRequest("เอาตามนี้เลย", unrelated));
+    }
+
+    @Test
     void voiceModeKeepsVisualWorkOutOfTheTurnPlan() {
         TurnPlan plan = planner(null).plan("ช่วยสร้างภาพเมืองลอยฟ้ายามค่ำคืน", "", null,
                 false, null, true, true);
 
         assertFalse(plan.imageOutput());
+    }
+
+    @Test
+    void graphicRevisionCarriesTheOriginalTopicAndOutlineAcrossApprovalsAndEarlierRevisions() {
+        TurnPlanner planner = new TurnPlanner(new CooperationRouter(), (TurnAmbiguityResolver) null, null, false);
+        String original = "อยากได้วิธีคิดของมินิคุง ในรูปแบบ info";
+        String outline = "ทำความเข้าใจ ตรวจสอบ ให้เหตุผล ตอบสนอง";
+        var history = new java.util.ArrayList<>(java.util.List.of(
+                new com.minikun.agent.minikun_agent.conversation.ChatMessage("user", original),
+                new com.minikun.agent.minikun_agent.conversation.ChatMessage("assistant", outline),
+                new com.minikun.agent.minikun_agent.conversation.ChatMessage("user", "เอาตามนี้เลย"),
+                new com.minikun.agent.minikun_agent.conversation.ChatMessage("assistant", "สร้างไฟล์ SVG และแนบให้แล้วครับ")));
+        String message = "ปรับให้ลองทำเป็น flowchart";
+        String resolved = planner.resolveVisualRequest(message, history);
+        assertEquals(message, com.minikun.visual.StoryIllustrationIntentDetector.currentRequest(resolved));
+        assertTrue(resolved.contains(original));
+        assertTrue(resolved.contains(outline));
+        history.add(new com.minikun.agent.minikun_agent.conversation.ChatMessage("user", message));
+        history.add(new com.minikun.agent.minikun_agent.conversation.ChatMessage("assistant", "แนบ flowchart แล้ว"));
+        String back = planner.resolveVisualRequest("เปลี่ยนเป็น infographic", history);
+        assertEquals("เปลี่ยนเป็น infographic", com.minikun.visual.StoryIllustrationIntentDetector.currentRequest(back));
+        assertTrue(back.contains(original));
+        assertTrue(back.contains(outline));
+        history.add(new com.minikun.agent.minikun_agent.conversation.ChatMessage("user", "วันนี้อากาศเป็นยังไง"));
+        history.add(new com.minikun.agent.minikun_agent.conversation.ChatMessage("assistant", "ฝนตกครับ"));
+        assertEquals(message, planner.resolveVisualRequest(message, history));
     }
 
     @Test

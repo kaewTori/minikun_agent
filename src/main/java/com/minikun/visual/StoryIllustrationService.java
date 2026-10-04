@@ -10,7 +10,8 @@ import lombok.extern.slf4j.Slf4j;
 /** Fail-open post-processor that turns a story's defining moment into an attachment. */
 @Slf4j
 public final class StoryIllustrationService {
-    static final String FAILURE_NOTICE = "\n\n> ⚠️ มินิคุงสร้างภาพประกอบไม่สำเร็จครับ กรุณาลองใหม่อีกครั้ง";
+    public static final String VECTOR_PENDING_NOTICE = "กำลังจัดทำไฟล์ SVG ให้ครับ";
+    public static final String FAILURE_NOTICE = "\n\n> ⚠️ มินิคุงสร้างภาพประกอบไม่สำเร็จครับ กรุณาลองใหม่อีกครั้ง";
 
     private final ImageGenerationTool imageGenerationTool;
     private final StoryIllustrationIntentDetector intentDetector;
@@ -22,6 +23,7 @@ public final class StoryIllustrationService {
     private final StoryIllustrationModeDetector modeDetector;
     private final int maximumStoryboardScenes;
     private final PonyPromptTransformer fallbackPromptTransformer;
+    private final SvgGraphicGenerator svgGraphicGenerator;
 
     public StoryIllustrationService(
             ImageGenerationTool imageGenerationTool,
@@ -57,6 +59,21 @@ public final class StoryIllustrationService {
             int maximumStoryboardScenes,
             PonyPromptTransformer fallbackPromptTransformer,
             StoryIllustrationIntentDetector intentDetector) {
+        this(imageGenerationTool, autoIllustrateCreativeStories, maximumPromptCharacters,
+                visualPlanGenerator, characterMemory, maximumStoryboardScenes,
+                fallbackPromptTransformer, intentDetector, null);
+    }
+
+    public StoryIllustrationService(
+            ImageGenerationTool imageGenerationTool,
+            boolean autoIllustrateCreativeStories,
+            int maximumPromptCharacters,
+            StoryVisualPlanGenerator visualPlanGenerator,
+            CharacterVisualMemory characterMemory,
+            int maximumStoryboardScenes,
+            PonyPromptTransformer fallbackPromptTransformer,
+            StoryIllustrationIntentDetector intentDetector,
+            SvgGraphicGenerator svgGraphicGenerator) {
         this.imageGenerationTool = Objects.requireNonNull(
                 imageGenerationTool, "image generation tool must not be null");
         this.intentDetector = Objects.requireNonNull(intentDetector, "illustration intent detector must not be null");
@@ -73,6 +90,7 @@ public final class StoryIllustrationService {
         }
         this.maximumStoryboardScenes = maximumStoryboardScenes;
         this.fallbackPromptTransformer = fallbackPromptTransformer;
+        this.svgGraphicGenerator = svgGraphicGenerator;
         this.promptCompiler = new PonyStoryPromptCompiler();
         this.modeDetector = new StoryIllustrationModeDetector();
     }
@@ -80,6 +98,14 @@ public final class StoryIllustrationService {
     public boolean shouldIllustrate(String userMessage) {
         return intentDetector.detect(userMessage, autoIllustrateCreativeStories)
                 != StoryIllustrationIntent.NONE;
+    }
+
+    public boolean isVectorGraphic(String message) {
+        return intentDetector.detect(message, false) == StoryIllustrationIntent.VECTOR_GRAPHIC;
+    }
+
+    public boolean supportsSvgGraphics() {
+        return svgGraphicGenerator != null;
     }
 
     public IllustrationResult illustrate(String userMessage, String assistantStory) {
@@ -106,6 +132,19 @@ public final class StoryIllustrationService {
         StoryIllustrationIntent intent = intentDetector.detect(userMessage, autoIllustrateCreativeStories);
         if (intent == StoryIllustrationIntent.NONE) {
             return IllustrationResult.empty();
+        }
+        if (intent == StoryIllustrationIntent.VECTOR_GRAPHIC) {
+            if (svgGraphicGenerator == null) return IllustrationResult.failure(FAILURE_NOTICE);
+            try {
+                GeneratedImageStore.StoredImage image = svgGraphicGenerator.generate(userMessage);
+                return new IllustrationResult(List.of(new ChatAttachment(
+                        "image", image.url(), "กราฟิกโดยมินิคุง", "",
+                        "กราฟิก SVG ที่ Gemma 4 สร้าง", "generated", image.url(), "",
+                        image.width(), image.height(), "gemma-4-svg", "")), "\n\nสร้างไฟล์ SVG และแนบให้แล้วครับ");
+            } catch (RuntimeException failure) {
+                log.warn("process=svg_graphic event=failed reason={}", failure.getMessage());
+                return IllustrationResult.failure(FAILURE_NOTICE);
+            }
         }
         StoryIllustrationMode mode = modeDetector.detect(userMessage);
         if (intent == StoryIllustrationIntent.DIRECT_IMAGE && fallbackPromptTransformer != null) {
@@ -367,7 +406,7 @@ public final class StoryIllustrationService {
         }
 
         public String appendNoticeTo(String content) {
-            return content + notice;
+            return VECTOR_PENDING_NOTICE.equals(content) && !notice.isBlank() ? notice.strip() : content + notice;
         }
     }
 }

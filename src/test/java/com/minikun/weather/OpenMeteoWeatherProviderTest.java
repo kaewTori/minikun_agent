@@ -20,6 +20,33 @@ class OpenMeteoWeatherProviderTest {
             Instant.parse("2026-08-18T05:00:00Z"), ZoneOffset.UTC);
 
     @Test
+    void forecastsDeviceCoordinatesUsingProviderTimezoneWithoutGeocoding() {
+        RestClient.Builder forecastBuilder = RestClient.builder().baseUrl("https://forecast.test");
+        MockRestServiceServer forecastServer = MockRestServiceServer.bindTo(forecastBuilder).build();
+        OpenMeteoWeatherProvider provider = new OpenMeteoWeatherProvider(
+                request -> { throw new AssertionError("device coordinates must bypass geocoding"); },
+                forecastBuilder.build(), new ObjectMapper(), CLOCK);
+        forecastServer.expect(requestTo("https://forecast.test/v1/forecast?latitude=13.75&longitude=100.5"
+                + "&current=temperature_2m,apparent_temperature,precipitation,wind_speed_10m,weather_code"
+                + "&daily=weather_code,temperature_2m_min,temperature_2m_max,precipitation_probability_max,"
+                + "precipitation_sum,sunrise,sunset&forecast_days=16&timezone=auto&temperature_unit=celsius"
+                + "&wind_speed_unit=kmh&precipitation_unit=mm"))
+                .andRespond(withSuccess("""
+                        {"timezone":"Asia/Bangkok","current":{"temperature_2m":30},
+                        "daily":{"time":["2026-08-18"],"weather_code":[1],
+                        "temperature_2m_min":[27],"temperature_2m_max":[33]}}
+                        """, MediaType.APPLICATION_JSON));
+
+        WeatherReport report = provider.forecast(new WeatherRequest(
+                "ตำแหน่งปัจจุบัน", "today", "", 13.75, 100.5));
+
+        assertEquals("Asia/Bangkok", report.timezone());
+        assertEquals("2026-08-18", report.requestedDate());
+        assertEquals(30.0, report.currentTemperatureCelsius());
+        forecastServer.verify();
+    }
+
+    @Test
     void resolvesLocationAndMapsCurrentAndDailyForecast() {
         RestClient.Builder geocodingBuilder = RestClient.builder().baseUrl("https://geo.test");
         RestClient.Builder forecastBuilder = RestClient.builder().baseUrl("https://forecast.test");

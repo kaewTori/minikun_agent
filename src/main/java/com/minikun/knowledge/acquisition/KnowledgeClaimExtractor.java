@@ -8,8 +8,10 @@ import com.minikun.model.task.TaskModelMessage;
 import com.minikun.model.task.TaskModelProvider;
 import com.minikun.model.task.TaskModelRequest;
 import com.minikun.pcs.KnowledgeCandidate;
+import com.minikun.pcs.KnowledgeSource;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import lombok.extern.slf4j.Slf4j;
 
@@ -64,7 +66,7 @@ final class TaskModelKnowledgeClaimExtractor implements KnowledgeClaimExtractor 
         if (!recovered.isEmpty()) {
             log.info("process=knowledge_acquisition event=claim_extraction_completed claims={} sources={}",
                     recovered.size(), extractionCount);
-            return List.copyOf(recovered);
+            return recovered.stream().map(claim -> citeMatchingPages(claim, evidence)).toList();
         }
         log.warn("process=knowledge_acquisition event=claim_extraction_fallback reason_type={} reason={}",
                 firstFailure == null ? "NoClaims" : firstFailure.getClass().getSimpleName(),
@@ -74,10 +76,29 @@ final class TaskModelKnowledgeClaimExtractor implements KnowledgeClaimExtractor 
 
     private List<ClaimDraft> extractModel(Topic topic, List<KnowledgeCandidate> evidence,
             List<Integer> selectedIndexes) throws java.io.IOException {
+        List<ClaimDraft> result = modelClaims(topic, evidence, selectedIndexes, "");
+        if (!result.isEmpty() && !hasRenderedQuote(result, evidence)
+                && evidence.get(selectedIndexes.getFirst()).source() == KnowledgeSource.BROWSER) {
+            try {
+                List<ClaimDraft> retry = modelClaims(topic, evidence, selectedIndexes,
+                        "Your previous claim was a paraphrase. Copy an exact factual sentence from the evidence, "
+                                + "including its original words and punctuation. If none exists, return {\"claims\":[]}.");
+                if (hasRenderedQuote(retry, evidence)) result = retry;
+            } catch (RuntimeException | java.io.IOException ignored) {
+                // Keep the unverified candidate when correction is unavailable.
+            }
+        }
+        if (result.isEmpty()) throw new IllegalStateException("claim extraction returned no usable claims");
+        return List.copyOf(result);
+    }
+
+    private List<ClaimDraft> modelClaims(Topic topic, List<KnowledgeCandidate> evidence,
+            List<Integer> selectedIndexes, String correction) throws java.io.IOException {
         String response = taskModel.generate(new TaskModelRequest(List.of(
                 new TaskModelMessage("system", POLICY),
-                new TaskModelMessage("user", "/no_think\nUntrusted evidence:\n"
-                        + digest(evidence, selectedIndexes))),
+                new TaskModelMessage("user", "/no_think\nResearch objective: " + topic.objective()
+                        + "\nUntrusted evidence:\n" + digest(evidence, selectedIndexes)
+                        + (correction.isBlank() ? "" : "\n" + correction))),
                 1_600, 0.0, TaskModelRequest.ResponseFormat.JSON_OBJECT));
         JsonNode root = json.readTree(response);
         JsonNode claims = claimsArray(root);
@@ -85,9 +106,17 @@ final class TaskModelKnowledgeClaimExtractor implements KnowledgeClaimExtractor 
             throw new IllegalStateException("claims array is missing; root_fields=" + fieldNames(root));
         }
         List<ClaimDraft> localClaims = parseClaims(claims, selectedIndexes.size());
-        List<ClaimDraft> result = remap(localClaims, selectedIndexes);
-        if (result.isEmpty()) throw new IllegalStateException("claim extraction returned no usable claims");
-        return List.copyOf(result);
+        return remap(localClaims, selectedIndexes);
+    }
+
+    private boolean hasRenderedQuote(List<ClaimDraft> claims, List<KnowledgeCandidate> evidence) {
+        for (ClaimDraft claim : claims) {
+            for (int index : claim.evidenceIndexes()) {
+                if (evidence.get(index).source() == KnowledgeSource.BROWSER
+                        && normalize(evidence.get(index).content()).contains(normalize(claim.text()))) return true;
+            }
+        }
+        return false;
     }
 
     private List<ClaimDraft> remap(List<ClaimDraft> claims, List<Integer> selectedIndexes) {
@@ -101,6 +130,21 @@ final class TaskModelKnowledgeClaimExtractor implements KnowledgeClaimExtractor 
             }
         }
         return List.copyOf(mapped);
+    }
+
+    private ClaimDraft citeMatchingPages(ClaimDraft claim, List<KnowledgeCandidate> evidence) {
+        String text = normalize(claim.text());
+        List<Integer> indexes = new ArrayList<>(claim.evidenceIndexes());
+        for (int index = 0; index < evidence.size(); index++) {
+            if (evidence.get(index).source() == KnowledgeSource.BROWSER
+                    && normalize(evidence.get(index).content()).contains(text)
+                    && !indexes.contains(index)) indexes.add(index);
+        }
+        return new ClaimDraft(claim.text(), indexes, claim.confidence(), claim.extractionMethod());
+    }
+
+    private String normalize(String value) {
+        return value.toLowerCase(Locale.ROOT).replaceAll("\\s+", " ").strip();
     }
 
     private String digest(List<KnowledgeCandidate> evidence, List<Integer> selectedIndexes) {

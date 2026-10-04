@@ -33,12 +33,15 @@ public final class AgentExecutionController {
     @GetMapping
     public List<AgentRun> list(
             @RequestParam(name = "owner_id", defaultValue = "default") String ownerId,
+            @RequestParam(name = "conversation_id", required = false) String conversationId,
             @RequestParam(required = false) String status,
             @RequestParam(defaultValue = "50") int limit,
             @RequestHeader(value = "X-Minikun-Agent-Token", required = false) String token) {
         authorize(token);
         try {
-            return executions.list(ownerId, AgentRunStatus.parse(status), limit);
+            return conversationId == null || conversationId.isBlank()
+                    ? executions.list(ownerId, AgentRunStatus.parse(status), limit)
+                    : executions.list(ownerId, conversationId, AgentRunStatus.parse(status), limit);
         } catch (IllegalArgumentException exception) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, exception.getMessage(), exception);
         }

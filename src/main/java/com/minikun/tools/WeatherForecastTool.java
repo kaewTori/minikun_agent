@@ -20,6 +20,10 @@ public final class WeatherForecastTool implements Tool {
                             "Place name, address, postal code, or coordinates provided by the user."),
                     "when", new ToolParameter("when", ToolParameterType.STRING, false,
                             "Current, today, tomorrow, or an ISO date such as 2026-08-20."),
+                    "latitude", new ToolParameter("latitude", ToolParameterType.NUMBER, false,
+                            "Latitude supplied by the user's device for a current-location forecast."),
+                    "longitude", new ToolParameter("longitude", ToolParameterType.NUMBER, false,
+                            "Longitude supplied by the user's device for a current-location forecast."),
                     "country_code", new ToolParameter("country_code", ToolParameterType.STRING, false,
                             "Optional ISO-3166 alpha-2 country code to disambiguate a place.")));
 
@@ -44,7 +48,8 @@ public final class WeatherForecastTool implements Tool {
         }
         try {
             WeatherReport report = provider.forecast(new WeatherRequest(
-                    location, text(arguments, "when"), text(arguments, "country_code")));
+                    location, text(arguments, "when"), text(arguments, "country_code"),
+                    number(arguments, "latitude"), number(arguments, "longitude")));
             return ToolResult.success(report);
         } catch (IllegalArgumentException exception) {
             return ToolResult.failure(ToolErrorCode.INVALID_ARGUMENTS, exception.getMessage());
@@ -57,5 +62,10 @@ public final class WeatherForecastTool implements Tool {
     private String text(Map<String, Object> arguments, String key) {
         Object value = arguments == null ? null : arguments.get(key);
         return value == null ? "" : value.toString().trim();
+    }
+
+    private Double number(Map<String, Object> arguments, String key) {
+        Object value = arguments == null ? null : arguments.get(key);
+        return value instanceof Number number ? number.doubleValue() : null;
     }
 }

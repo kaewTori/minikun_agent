@@ -31,3 +31,19 @@ test("builds owner-scoped requests without duplicating auth headers", () => {
   assert.equal(headers["Content-Type"], "application/json");
   assert.equal(headers["X-Minikun-Model-Token"], "secret");
 });
+
+test("keeps presentation downloads in chat sync without copying file bytes", () => {
+  const [conversation] = core.normalizeConversations([{
+    id: "chat-1", messages: [{ id: "assistant-1", role: "assistant", content: "Done", attachments: [{
+      type: "presentation", title: "Homelab", url: "/v1/presentations/123e4567-e89b-12d3-a456-426614174000/download",
+      filename: "homelab.pptx", artifact_id: "123e4567-e89b-12d3-a456-426614174000", slide_count: 8,
+      size_bytes: 4096
+    }]}]
+  }]);
+  const [attachment] = core.compactMessages(conversation.messages)[0].attachments;
+
+  assert.equal(attachment.type, "presentation");
+  assert.equal(attachment.filename, "homelab.pptx");
+  assert.equal(attachment.slideCount, 8);
+  assert.equal(attachment.sizeBytes, 4096);
+});

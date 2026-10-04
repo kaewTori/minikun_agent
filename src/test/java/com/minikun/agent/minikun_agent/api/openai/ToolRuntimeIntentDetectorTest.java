@@ -26,6 +26,14 @@ class ToolRuntimeIntentDetectorTest {
     }
 
     @Test
+    void routesPowerPointDeliverablesButNotSlidePlanning() {
+        assertTrue(detector.requiresTools("ช่วยทำสไลด์แบบสวย ๆ ให้หน่อย"));
+        assertTrue(detector.requiresTools("ทำเป็นสไลด์ให้เราหน่อยนะ"));
+        assertTrue(detector.requiresTools("ช่วยทำ PowerPoint 8 หน้าให้หน่อย"));
+        assertFalse(detector.requiresTools("ช่วยวางแผนให้มินิคุงทำสไลด์ได้"));
+    }
+
+    @Test
     void routesNaturalInvestmentReviewsToTools() {
         assertTrue(detector.requiresTools("ช่วยวิเคราะห์พอร์ตระยะยาวของฉัน"));
         assertTrue(detector.requiresTools("ช่วยดู portfolio ที่ถืออยู่"));

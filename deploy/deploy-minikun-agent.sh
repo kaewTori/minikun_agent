@@ -86,6 +86,11 @@ trap 'rm -f "$staged_launcher"' EXIT HUP INT TERM
 mv "$staged_launcher" "$local_script/minikun-agent.sh"
 trap - EXIT HUP INT TERM
 chmod 700 "$local_script/minikun-agent.sh"
+browser_runtime="${MINIKUN_BROWSER_RUNTIME_ROOT:-$local_root/browser}"
+if [ -x "$browser_runtime/venv/bin/python" ]; then
+  cp "$app_root/browser/session.py" "$browser_runtime/session.py"
+  chmod 600 "$browser_runtime/session.py"
+fi
 cp "$app_root/deploy/minikun-db-recovery-watchdog.sh" "$local_script/minikun-db-recovery-watchdog.sh"
 chmod 700 "$local_script/minikun-db-recovery-watchdog.sh"
 cp "$app_root/voice/whisper_transcribe.py" "$local_voice/whisper_transcribe.py"

@@ -12,6 +12,7 @@ import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.minikun.agent.minikun_agent.api.openai.ChatExplainabilitySink;
+import com.minikun.agent.minikun_agent.conversation.ConversationId;
 import com.minikun.goal.GoalService;
 import com.minikun.goal.GoalStatus;
 import com.minikun.goal.GoalStore;
@@ -174,7 +175,8 @@ class PersonalLoopServicesTest {
     @Test
     void explainabilityStoresProvenanceWithoutResponseContent() {
         ExplainabilityService service = new ExplainabilityService(store, timeline, clock);
-        service.record(new ChatExplainabilitySink.Event("owner-a", "home", "chatcmpl-1",
+        String browserId = "web-5bd3be5d-9548-460c-a4fd-2ab4d9d67ad3";
+        service.record(new ChatExplainabilitySink.Event("owner-a", ConversationId.fromTransport(browserId).value(), "chatcmpl-1",
                 List.of("PERSONAL:notes/plan.md"), List.of("knowledge.personal"),
                 Map.of("search_attempted", false, "confirmation_required", false), NOW));
 
@@ -182,6 +184,7 @@ class PersonalLoopServicesTest {
         assertEquals(List.of("PERSONAL:notes/plan.md"), trace.sources());
         assertFalse(trace.decisions().containsKey("prompt"));
         assertTrue(trace.summary().contains("1"));
+        assertEquals(List.of(trace), service.list("owner-a", browserId, 10));
     }
 
     @Test

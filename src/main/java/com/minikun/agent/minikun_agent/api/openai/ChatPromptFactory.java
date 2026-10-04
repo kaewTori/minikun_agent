@@ -329,6 +329,16 @@ final class ChatPromptFactory {
                 input.userMessage().content(), input.knowledgeSelection(), input.imageAwareness(),
                 input.verifiedToolResult(), input.visionInput(), input.interactionMode(),
                 conversationStyleInstruction, nativeToolsAvailable, creativeRequest));
+        if (configuration.visualGenerationAvailable()) {
+            values.add(capabilityFactory.visualOutput(
+                    configuration.svgGenerationAvailable(), input.illustrationPlanned()));
+        }
+        values.add(new CapabilityInstruction("Temporal facts and attribution", """
+                ก่อนตอบข้อเท็จจริงตามเวลา ให้เรียงเหตุการณ์และใช้ข้อความล่าสุดที่ผู้ใช้ยืนยัน;
+                ตั้งแต่รวมวันเริ่ม ก่อนวันนั้นไม่รวมวันนั้น; คำพูดของ assistant ที่ผู้ใช้ไม่ยืนยัน
+                ห้ามบันทึกเป็นข้อเท็จจริงของผู้ใช้; หากโจทย์ให้เลือกคำตอบ ให้แยกเนื้อหาคำตอบ
+                ออกจากตัวเลือก A/B/C แล้วส่งเพียงตัวอักษรที่ตรงกันเมื่อผู้ใช้กำหนดให้ตอบเฉพาะตัวอักษร
+                """.strip(), true));
         ConversationContinuity continuity = continuityResolver.resolve(
                 input.userMessage().content(), continuityContext(input.history()));
         if (continuity.followUp()) {
@@ -349,12 +359,6 @@ final class ChatPromptFactory {
             values.add(new CapabilityInstruction("Relationship continuity", relationshipContext, true));
         }
         if (input.illustrationPlanned()) {
-            values.add(new CapabilityInstruction("Generated story illustration", """
-                    A generated image attachment is planned after this response. Write the story or concise visual
-                    brief that best fulfills the request. Do not output a fabricated image URL, do not redirect the
-                    user to an image search, and do not claim that image creation is impossible. Do not promise that
-                    generation will succeed; the application handles the image separately after the text is ready.
-                    """.strip(), true));
             if (input.visionInput() != null && input.visionInput().hasImages()) {
                 values.add(new CapabilityInstruction("Visual generation handoff", """
                         Inspect the attached reference image before answering. The image generator receives your
@@ -520,6 +524,8 @@ final class ChatPromptFactory {
             int generationMaxTokens,
             double generationTemperature,
             int ollamaContextSize,
-            String configuredModel) {
+            String configuredModel,
+            boolean visualGenerationAvailable,
+            boolean svgGenerationAvailable) {
     }
 }

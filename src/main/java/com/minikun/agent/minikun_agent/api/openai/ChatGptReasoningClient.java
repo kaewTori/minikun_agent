@@ -131,32 +131,52 @@ public final class ChatGptReasoningClient {
             awaitResponse(reader, 0);
             sendNotification(writer, "initialized", Map.of());
 
+            JsonNode models = awaitResponseAfterSend(reader, writer, 1, "model/list", Map.of("limit", 100))
+                    .path("result").path("data");
+            String selectedModel = "";
+            String defaultModel = "";
+            String lunaFallback = "";
+            for (JsonNode available : models) {
+                String availableModel = available.path("model").asText();
+                if (availableModel.equals(model)) selectedModel = model;
+                if (available.path("isDefault").asBoolean()) defaultModel = availableModel;
+                if ("gpt-6-luna".equals(model) && "gpt-5.6-luna".equals(availableModel)) lunaFallback = availableModel;
+            }
+            if (selectedModel.isBlank()) selectedModel = lunaFallback.isBlank() ? defaultModel : lunaFallback;
+            if (selectedModel.isBlank()) throw new IllegalStateException("Codex App Server returned no available model");
+
             Map<String, Object> threadParams = new LinkedHashMap<>();
             threadParams.put("cwd", safeWorkingDirectory);
             threadParams.put("approvalPolicy", "never");
             threadParams.put("sandbox", "read-only");
             threadParams.put("personality", "friendly");
             threadParams.put("serviceName", "minikun_agent");
-            if (!model.isBlank()) threadParams.put("model", model);
-            JsonNode thread = awaitResponseAfterSend(reader, writer, 1, "thread/start", threadParams);
+            threadParams.put("model", selectedModel);
+            JsonNode thread = awaitResponseAfterSend(reader, writer, 2, "thread/start", threadParams);
             String threadId = thread.path("result").path("thread").path("id").asText();
             if (threadId.isBlank()) throw new IllegalStateException("Codex App Server returned no thread id");
 
-            Map<String, Object> turnParams = new LinkedHashMap<>();
-            turnParams.put("threadId", threadId);
-            turnParams.put("cwd", safeWorkingDirectory);
-            turnParams.put("approvalPolicy", "never");
-            turnParams.put("summary", "concise");
-            turnParams.put("personality", "friendly");
-            turnParams.put("input", List.of(Map.of(
-                    "type", "text",
-                    "text", INSTRUCTION + "\n\n[peer_context]\n" + sanitizedPrompt)));
-            if (!model.isBlank()) turnParams.put("model", model);
-            if (reasoning != null && reasoning != GenerationOptions.Reasoning.OFF) {
-                turnParams.put("effort", wireEffort(reasoning));
+            try {
+                Map<String, Object> turnParams = new LinkedHashMap<>();
+                turnParams.put("threadId", threadId);
+                turnParams.put("cwd", safeWorkingDirectory);
+                turnParams.put("approvalPolicy", "never");
+                turnParams.put("summary", "concise");
+                turnParams.put("personality", "friendly");
+                turnParams.put("input", List.of(Map.of(
+                        "type", "text",
+                        "text", INSTRUCTION + "\n\n[peer_context]\n" + sanitizedPrompt)));
+                turnParams.put("model", selectedModel);
+                if (selectedModel.endsWith("-luna")) {
+                    turnParams.put("effort", "max");
+                } else if (reasoning != null && reasoning != GenerationOptions.Reasoning.OFF) {
+                    turnParams.put("effort", wireEffort(reasoning));
+                }
+                send(writer, 3, "turn/start", turnParams);
+                return readTurn(reader, 3);
+            } finally {
+                awaitResponseAfterSend(reader, writer, 4, "thread/delete", Map.of("threadId", threadId));
             }
-            send(writer, 2, "turn/start", turnParams);
-            return readTurn(reader, 2);
         } catch (IOException exception) {
             throw new IllegalStateException("Codex App Server transport failed", exception);
         }

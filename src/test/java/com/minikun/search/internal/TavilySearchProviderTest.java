@@ -39,7 +39,8 @@ class TavilySearchProviderTest {
                         """))
                 .andRespond(withSuccess("""
                         {"results":[{"title":"Java Records","url":"https://example.com/java",
-                        "content":"Immutable data carrier","score":0.9}]}
+                        "content":"Immutable data carrier","score":0.9,
+                        "published_date":"2026-08-01T12:00:00Z"}]}
                         """, MediaType.APPLICATION_JSON));
 
         var response = provider.search(request("java records", 5));
@@ -47,6 +48,7 @@ class TavilySearchProviderTest {
         assertEquals(1, response.results().size());
         assertEquals("Java Records", response.results().getFirst().title());
         assertEquals("tavily", response.results().getFirst().source().name());
+        assertEquals(Instant.parse("2026-08-01T12:00:00Z"), response.results().getFirst().publishedAt());
         server.verify();
     }
 

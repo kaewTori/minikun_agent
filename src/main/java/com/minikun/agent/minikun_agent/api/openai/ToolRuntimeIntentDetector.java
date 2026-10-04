@@ -16,6 +16,21 @@ final class ToolRuntimeIntentDetector {
                     + "homelab|system|service|website|url|link|memory|portfolio|investment)");
     private static final Pattern SEQUENCE = Pattern.compile(
             "(?iu)(จากนั้น|แล้วค่อย|ต่อด้วย|เสร็จแล้ว|and then|then)");
+    private static final Pattern PRESENTATION_REQUEST = Pattern.compile(
+            "(?iu)(?:(?:make|create|build|generate|design|prepare|draft|produce)\\s+(?:(?:me|us|an?|the|my|our)\\s+)?"
+                    + ".{0,48}\\b(?:slide\\s+deck|slides?|presentations?|powerpoints?)\\b|"
+                    + "(?:ทำ|สร้าง|จัดทำ|ออกแบบ|ร่าง|จัด)(?:\\s*(?:เป็น|ให้|ออกมา))?\\s*.{0,24}"
+                    + "(?:สไลด์|พรีเซนเทชัน|พาวเวอร์พอยต์|presentation|powerpoint)|"
+                    + "(?:อยากได้|ขอ)(?:\\s*.{0,12})?(?:สไลด์|พรีเซนเทชัน|powerpoint).{0,20}(?:ให้หน่อย|ด้วย|เลย|ครับ|ค่ะ)?|"
+                    + "(?:สไลด์|พรีเซนเทชัน|powerpoint).{0,18}(?:ให้หน่อย|ด้วย|เลย|ให้เรา))");
+    private static final Pattern PRESENTATION_DISCUSSION = Pattern.compile(
+            "(?iu)(?:วางแผน|ทำแผน|แผนให้|แผนการ|ขั้นตอนการ|วิธี(?:ทำ|สร้าง|แก้|ใช้)|กระบวนการ|how\\s+to|plan\\s+to)"
+                    + ".{0,80}(?:slides?|slide\\s+deck|presentation|powerpoint|สไลด์|พรีเซนเทชัน)");
+    private static final Pattern PRESENTATION_REVISION = Pattern.compile(
+            "(?iu)(?:(?:แก้|แก้ไข|ปรับ|ย่อ|เปลี่ยน|เพิ่ม|ลบ|rewrite|revise|edit|update|change|shorten)"
+                    + ".{0,40}(?:slides?|slide\\s+deck|presentation|powerpoint|สไลด์|พรีเซนเทชัน)|"
+                    + "(?:slides?|slide\\s+deck|presentation|powerpoint|สไลด์|พรีเซนเทชัน)"
+                    + ".{0,40}(?:แก้|แก้ไข|ปรับ|ย่อ|เปลี่ยน|เพิ่ม|ลบ|rewrite|revise|edit|update|change|shorten))");
     private static final Pattern INVESTMENT_ACTION = Pattern.compile(
             "(?iu)(ทบทวน|วิเคราะห์|ตรวจสอบ|ตรวจ|เช็ก|เช็ค|ดู|สรุป|ประเมิน|ราคา|มูลค่า|ราคาปัจจุบัน|ราคาล่าสุด|"
                     + "ข่าว|วันนี้|ล่าสุด|ติดตาม|แนะนำ|มุมมอง|แผน|เพิ่ม|สร้าง|บันทึก|แก้ไข|อัปเดต|ปิด|"
@@ -68,6 +83,8 @@ final class ToolRuntimeIntentDetector {
     boolean requiresTools(String message) {
         String value = message == null ? "" : message.toLowerCase(Locale.ROOT).trim();
         if (value.isBlank()) return false;
+        if (PRESENTATION_REVISION.matcher(value).find() && !PRESENTATION_DISCUSSION.matcher(value).find()) return true;
+        if (requestsPresentationDeliverable(value)) return true;
         if (EXPLICIT_TOOL.matcher(value).find()) return true;
         if (INVESTMENT_TRADE_REPORT.matcher(message == null ? "" : message).find()) return true;
         if (INVESTMENT_MARKET_ANALYSIS.matcher(value).find()) return false;
@@ -79,6 +96,12 @@ final class ToolRuntimeIntentDetector {
                 && INVESTMENT_ACTION.matcher(value).find()) return true;
         if (INVESTMENT_ACTION.matcher(value).find() && INVESTMENT_TARGET.matcher(value).find()) return true;
         return ACTION.matcher(value).find() && (TARGET.matcher(value).find() || SEQUENCE.matcher(value).find());
+    }
+
+    boolean requestsPresentationDeliverable(String message) {
+        String value = message == null ? "" : message.toLowerCase(Locale.ROOT).trim();
+        return !value.isBlank() && PRESENTATION_REQUEST.matcher(value).find()
+                && !PRESENTATION_DISCUSSION.matcher(value).find();
     }
 
     private boolean investmentTransactionRequiresTools(String message, String value) {

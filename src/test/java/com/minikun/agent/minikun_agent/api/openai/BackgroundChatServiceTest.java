@@ -252,6 +252,38 @@ class BackgroundChatServiceTest {
     }
 
     @Test
+    void emptyImageResultCannotMarkTheImageJobCompleted() throws Exception {
+        ChatService chat = mock(ChatService.class);
+        var response = new ChatCompletionResponse("chatcmpl-empty", "chat.completion", 1, "mini-kun",
+                List.of(new ChatCompletionResponse.Choice(0,
+                        new Message("assistant", com.minikun.visual.StoryIllustrationService.VECTOR_PENDING_NOTICE), "stop")),
+                new ChatCompletionResponse.Usage(0, 0, 0));
+        var task = new ChatService.IllustrationTask("owner", "empty-image", "ทำอินโฟกราฟิก",
+                "กำลังทำ", true, "chatcmpl-empty", java.time.Instant.now().plusSeconds(10));
+        when(chat.chatCompletionInBackground(any(), any(), any()))
+                .thenReturn(new ChatService.ChatCompletionOutcome(response, task));
+        when(chat.completeIllustration(any())).thenReturn(
+                new com.minikun.visual.StoryIllustrationService.IllustrationResult(List.of(), ""));
+        try (BackgroundChatService service = new BackgroundChatService(
+                chat, ignored -> { }, (BackgroundChatStore) null, Duration.ofSeconds(10), 2, 1)) {
+            UUID id = service.submit(new ChatCompletionRequest("mini-kun",
+                    List.of(new Message("user", "ทำอินโฟกราฟิก")), "empty-image", false, null, null, null),
+                    new ConversationId("empty-image"));
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
+            while (System.nanoTime() < deadline) {
+                var current = service.find(id).orElseThrow();
+                if ("failed".equals(current.imageStatus()) && current.response().choices().getFirst()
+                        .message().content().contains("สร้างภาพประกอบไม่สำเร็จ")) break;
+                Thread.onSpinWait();
+            }
+            var finished = service.find(id).orElseThrow();
+            assertEquals("failed", finished.imageStatus());
+            assertTrue(finished.response().attachments().isEmpty());
+            assertTrue(finished.response().choices().getFirst().message().content().contains("สร้างภาพประกอบไม่สำเร็จ"));
+        }
+    }
+
+    @Test
     void capsWaitingBackgroundJobsWithoutBlockingTheActiveWorker() throws Exception {
         ChatService chat = mock(ChatService.class);
         ChatCompletionResponse response = new ChatCompletionResponse(

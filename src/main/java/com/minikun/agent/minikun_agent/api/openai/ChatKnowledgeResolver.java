@@ -192,10 +192,10 @@ final class ChatKnowledgeResolver {
                 ? memoryStarted + configuration.contextTimeout().toNanos() : request.contextDeadline();
         boolean exhausted = contextDeadline <= System.nanoTime();
         if (exhausted) fastPath("context_budget_exhausted");
-        boolean nearbyQuery = isNearbyQuery(query);
         Request requestForTasks = request;
         DeviceLocation deviceLocation = requestForTasks.deviceLocation();
-        java.util.concurrent.Future<DeviceLocationContext> locationFuture = exhausted || !nearbyQuery
+        boolean nearbyQuery = isNearbyQuery(query);
+        java.util.concurrent.Future<DeviceLocationContext> locationFuture = exhausted || !nearbyQuery && deviceLocation == null
                 ? CompletableFuture.completedFuture(nearbyQuery
                         ? DeviceLocationContext.unavailable() : DeviceLocationContext.EMPTY)
                 : OptionalContextBudget.start(() -> resolveDeviceLocation(deviceLocation));
@@ -212,13 +212,6 @@ final class ChatKnowledgeResolver {
                 && !isInternalTitleRequest(query)
                 ? CompletableFuture.supplyAsync(() -> decideSearch(query, requestForTasks.classifierContext()))
                 : null;
-        DeviceLocationContext locationContext = OptionalContextBudget.await(
-                locationFuture,
-                contextDeadline,
-                nearbyQuery ? DeviceLocationContext.unavailable() : DeviceLocationContext.EMPTY,
-                "location_wait", performanceMetrics);
-        locationFuture.cancel(true);
-        request = request.withDeviceLocationContext(locationContext);
         KnowledgeContext memoryKnowledge;
         KnowledgeContext personalKnowledge;
         try {
@@ -235,6 +228,7 @@ final class ChatKnowledgeResolver {
         KnowledgeContext localKnowledge = combine(memoryKnowledge, personalKnowledge);
         long searchStarted = System.nanoTime();
         if (!configuration.searchEnabled() || isInternalTitleRequest(query)) {
+            locationFuture.cancel(true);
             log.info("process=search event=skipped enabled={} internal_request={}",
                     configuration.searchEnabled(), isInternalTitleRequest(query));
             List<KnowledgeCandidate> browserCandidates = readBrowserCandidates(query);
@@ -247,6 +241,14 @@ final class ChatKnowledgeResolver {
         SearchDecision decision = decisionFuture == null
                 ? new SearchDecision(false, query)
                 : joinSearchDecision(decisionFuture, query);
+        boolean useLocation = nearbyQuery || deviceLocation != null && decision.shouldSearch()
+                && "local_discovery".equals(decision.planHints().intent());
+        DeviceLocationContext locationContext = useLocation
+                ? OptionalContextBudget.await(locationFuture, contextDeadline,
+                        DeviceLocationContext.unavailable(), "location_wait", performanceMetrics)
+                : DeviceLocationContext.EMPTY;
+        locationFuture.cancel(true);
+        request = request.withDeviceLocationContext(locationContext);
         boolean visionToTextRequest = hasVisionToTextRequest(request, query);
         String searchQuery = visionToTextRequest && !request.visionSearchQuery().isBlank()
                 ? request.visionSearchQuery() : query;
@@ -367,7 +369,7 @@ final class ChatKnowledgeResolver {
             searchKnowledge = ensureRecommendationEvidence(plan, searchKnowledge);
             if (deepResearch || GroundingIntent.requiresSource(query, request.classifierContext())) {
                 browserCandidates = mergeBrowserCandidates(
-                        browserCandidates, readResearchSourceCandidates(searchKnowledge));
+                        browserCandidates, readResearchSourceCandidates(searchKnowledge, query));
             }
             log.info("Search completed knowledgeCharacters={}",
                     searchKnowledge == null ? 0 : searchKnowledge.content().length());
@@ -553,7 +555,15 @@ final class ChatKnowledgeResolver {
         browserRead.failures().forEach(failure ->
                 log.warn("process=browser event=url_failed url={} reason={}",
                         failure.url(), failure.reason()));
-        return browserRead.candidates();
+        List<KnowledgeCandidate> candidates = new java.util.ArrayList<>(browserRead.candidates());
+        for (var failure : browserRead.failures()) {
+            candidates.add(new KnowledgeCandidate("browser-failure-" + candidates.size(), KnowledgeSource.BROWSER,
+                    "Browser read status (application metadata, NOT website evidence):\nSource URL: " + failure.url()
+                            + "\nRead failed: " + failure.reason()
+                            + "\nTell the user this URL was not read. Do not summarize the challenge/error as page content.",
+                    candidates.size(), failure.url()));
+        }
+        return List.copyOf(candidates);
     }
 
     private List<KnowledgeCandidate> joinBrowser(CompletableFuture<List<KnowledgeCandidate>> future) {
@@ -584,7 +594,7 @@ final class ChatKnowledgeResolver {
                 && imageIntentDetector.detectsByImage(query);
     }
 
-    private List<KnowledgeCandidate> readResearchSourceCandidates(KnowledgeContext searchKnowledge) {
+    private List<KnowledgeCandidate> readResearchSourceCandidates(KnowledgeContext searchKnowledge, String query) {
         if (browserContentService == null || configuration.researchSourceReadLimit() < 1
                 || searchKnowledge == null || searchKnowledge.candidates().isEmpty()) {
             return List.of();
@@ -600,7 +610,7 @@ final class ChatKnowledgeResolver {
         }
         try {
             BrowserReadResult result = browserContentService.readUrls(
-                    urls, configuration.researchSourceReadLimit());
+                    urls, configuration.researchSourceReadLimit(), query);
             log.info("process=research_source_read event=completed requested={} candidates={} failures={}",
                     Math.min(urls.size(), configuration.researchSourceReadLimit()),
                     result.candidates().size(), result.failures().size());

@@ -1,5 +1,6 @@
 package com.minikun.agent.minikun_agent.api.openai;
 
+import com.minikun.agent.minikun_agent.conversation.ChatMessage;
 import com.minikun.model.CooperationRouter;
 import com.minikun.model.CooperationRoutingDecision;
 import com.minikun.personality.companion.CompanionMode;
@@ -10,6 +11,7 @@ import com.minikun.tools.ToolRequestRouter;
 import com.minikun.visual.StoryIllustrationIntent;
 import com.minikun.visual.StoryIllustrationIntentDetector;
 import com.minikun.agent.minikun_agent.conversation.ConversationId;
+import com.minikun.weather.DeviceLocation;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
@@ -34,6 +36,10 @@ final class TurnPlanner {
             "(?iu)(ทำงานเบื้องหลัง|background\\s+(?:job|task)|วิจัยเชิงลึก|deep\\s*research)");
     private static final Pattern FOLLOW_UP = Pattern.compile(
             "(?iu)(ต่อ|จากตรงนั้น|อันเดิม|แบบเดิม|เหมือนเดิม|continue|from there|same one)");
+    private static final Pattern VISUAL_APPROVAL = Pattern.compile(
+            "(?iu)^(?:เอาตามนี้|ทำตามนี้|ตามนี้|ตกลง|โอเค|ได้|ทำ|สร้าง|วาด|จัดมา)(?:เลย|ครับ|ค่ะ|นะ|ให้หน่อย|ได้เลย)*[!?.… ]*$");
+    private static final Pattern VISUAL_REVISION = Pattern.compile(
+            "(?iu)(ปรับ|เปลี่ยน|แก้|แปลง|(?:ลอง)?ทำ(?:ใหม่)?(?:ให้)?เป็น|(?:ภาพ|รูป|กราฟิก)(?:นี้|เดิม)|revise|change|convert|redraw)");
     private final CooperationRouter cooperationRouter;
     private final TurnAmbiguityResolver ambiguityResolver;
     private final StoryIllustrationIntentDetector illustrationIntentDetector;
@@ -48,7 +54,7 @@ final class TurnPlanner {
             ObjectProvider<TurnAmbiguityResolver> ambiguityResolver,
             ObjectProvider<StoryIllustrationIntentDetector> illustrationIntentDetector,
             ObjectProvider<ToolRequestRouter> toolRequestRouters,
-            @Value("${minikun.visual.generation.auto-illustrate-stories:true}") boolean autoIllustrateCreativeStories) {
+            @Value("${minikun.visual.generation.auto-illustrate-stories:false}") boolean autoIllustrateCreativeStories) {
         this(cooperationRouter,
                 ambiguityResolver == null ? null : ambiguityResolver.getIfAvailable(),
                 illustrationIntentDetector == null ? null : illustrationIntentDetector.getIfAvailable(),
@@ -103,12 +109,17 @@ final class TurnPlanner {
 
     Optional<ToolEvidence> route(String userText, ConversationId conversationId, String ownerId,
             boolean toolsEnabled, List<ToolRequestRouter> fallbackRouters) {
+        return route(userText, conversationId, ownerId, toolsEnabled, fallbackRouters, null);
+    }
+
+    Optional<ToolEvidence> route(String userText, ConversationId conversationId, String ownerId,
+            boolean toolsEnabled, List<ToolRequestRouter> fallbackRouters, DeviceLocation deviceLocation) {
         List<ToolRequestRouter> routers = toolRequestRouters.isEmpty() && fallbackRouters != null
                 && !fallbackRouters.isEmpty() ? fallbackRouters : toolRequestRouters;
         if (!toolsEnabled || routers.isEmpty()) return Optional.empty();
         for (ToolRequestRouter router : routers) {
             Optional<ToolEvidence> result = router.route(
-                    userText == null ? "" : userText, conversationId, ownerId);
+                    userText == null ? "" : userText, conversationId, ownerId, deviceLocation);
             if (result.isPresent()) {
                 ToolEvidence evidence = result.get();
                 log.info("process=tool_route event=completed tool={} success={} route_owner=turn_planner",
@@ -126,6 +137,12 @@ final class TurnPlanner {
 
     TurnPlan plan(String message, String conversationContext, CompanionModeContext mode,
             boolean hasVision, ToolEvidence verifiedTool, boolean toolsAvailable, boolean voiceMode) {
+        return plan(message, conversationContext, mode, hasVision, verifiedTool, toolsAvailable, voiceMode, message);
+    }
+
+    TurnPlan plan(String message, String conversationContext, CompanionModeContext mode,
+            boolean hasVision, ToolEvidence verifiedTool, boolean toolsAvailable, boolean voiceMode,
+            String visualRequest) {
         String text = message == null ? "" : message.strip();
         CooperationRoutingDecision cooperation = cooperationRouter.decide(text);
         boolean contextualRoute = text.length() <= 160 && FOLLOW_UP.matcher(text).find()
@@ -137,7 +154,7 @@ final class TurnPlanner {
         }
         boolean creative = "creative_request".equals(cooperation.reason());
         boolean imageOutput = !voiceMode && illustrationIntentDetector
-                .detect(text, autoIllustrateCreativeStories) != StoryIllustrationIntent.NONE;
+                .detect(visualRequest, autoIllustrateCreativeStories) != StoryIllustrationIntent.NONE;
         boolean research = researchIntent.detect(text).deepResearch();
         boolean tools = toolsAvailable && verifiedTool == null && toolIntent.requiresTools(text);
         boolean ambiguous = text.length() <= 100 && AMBIGUOUS.matcher(text.toLowerCase(Locale.ROOT)).find()
@@ -177,6 +194,32 @@ final class TurnPlanner {
                 plan.intent(), plan.execution(), plan.needsTools(), plan.imageOutput(), plan.routeSource(),
                 plan.ambiguous(), plan.confidence(), plan.reason());
         return plan;
+    }
+
+    String resolveVisualRequest(String message, List<ChatMessage> history) {
+        if (message == null) return null;
+        boolean approval = VISUAL_APPROVAL.matcher(message.strip()).matches();
+        boolean revision = visualOutputRequested(message) && VISUAL_REVISION.matcher(message).find();
+        if (!approval && !revision) return message;
+        String request = null;
+        var context = new java.util.ArrayList<ChatMessage>();
+        for (ChatMessage previous : history.reversed()) {
+            if ("assistant".equals(previous.role())) context.add(previous);
+            if (!"user".equals(previous.role())) continue;
+            if (visualOutputRequested(previous.content())) {
+                if (request == null) request = approval ? previous.content() : message;
+                context.add(previous);
+                if (!VISUAL_REVISION.matcher(previous.content()).find()) break;
+            } else if (VISUAL_APPROVAL.matcher(previous.content().strip()).matches()) {
+                context.add(previous);
+            } else {
+                break;
+            }
+        }
+        if (request == null) return message;
+        return request + StoryIllustrationIntentDetector.PREVIOUS_GRAPHIC_CONTEXT
+                + context.reversed().stream().map(previous -> previous.role() + ": " + previous.content())
+                        .collect(java.util.stream.Collectors.joining("\n"));
     }
 
     boolean visualOutputRequested(String message) {

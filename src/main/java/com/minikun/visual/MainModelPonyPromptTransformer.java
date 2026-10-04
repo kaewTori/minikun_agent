@@ -9,8 +9,10 @@ import com.minikun.model.task.TaskModelMessage;
 import com.minikun.model.task.TaskModelProvider;
 import com.minikun.model.task.TaskModelRequest;
 import java.util.LinkedHashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import org.springframework.ai.chat.messages.SystemMessage;
@@ -118,6 +120,37 @@ public final class MainModelPonyPromptTransformer implements PonyPromptTransform
 
     @Override
     public PonyPromptTransformer.Result transformWithCharacters(String brief) {
+        return compilePrompt(parseBrief(brief));
+    }
+
+    @Override
+    public PonyPromptTransformer.Grouped transformGrouped(String brief) {
+        ParsedPrompt parsed = parseBrief(brief);
+        Map<String, List<String>> sections = new LinkedHashMap<>();
+        for (String name : List.of("quality", "character", "action", "scene", "finish")) {
+            sections.put(name, new java.util.ArrayList<>());
+        }
+        sections.get("quality").add(QUALITY_PREFIX);
+        sections.get("character").add(weighted(parsed.anchor(), "1.35"));
+        for (int index = 0; index < parsed.characters().size(); index++) {
+            sections.get("character").add(characterBlock(parsed.characters().get(index), index,
+                    parsed.characters().size()));
+        }
+        for (PromptTag tag : parsed.tags()) {
+            String section = switch (tag.group()) {
+                case "subjects", "appearance", "clothing" -> "character";
+                case "pose_action", "interaction", "objects", "expression" -> "action";
+                case "setting", "environment", "lighting", "palette", "mood" -> "scene";
+                default -> "finish";
+            };
+            sections.get(section).add(compiledTag(tag));
+        }
+        Map<String, String> groups = new LinkedHashMap<>();
+        sections.forEach((name, tags) -> groups.put(name, String.join(", ", tags)));
+        return new PonyPromptTransformer.Grouped(String.join(", ", groups.values()), groups);
+    }
+
+    private ParsedPrompt parseBrief(String brief) {
         String input = brief == null ? "" : brief.replaceAll("[\\r\\n]+", " ")
                 .replaceAll("\\s+", " ").strip();
         if (input.isBlank()) {
@@ -131,7 +164,7 @@ public final class MainModelPonyPromptTransformer implements PonyPromptTransform
             if (taskModel == null || !retryableTaskFailure(firstFailure)) throw firstFailure;
             parsed = parsePrompt(generate(input, firstFailure.getMessage()), excludesHumans);
         }
-        return compilePrompt(parsed);
+        return parsed;
     }
 
     private String generate(String input) {
@@ -461,23 +494,26 @@ public final class MainModelPonyPromptTransformer implements PonyPromptTransform
             compiled.add(characterBlock(parsed.characters().get(index), index, parsed.characters().size()));
         }
         for (PromptTag promptTag : parsed.tags()) {
-            String tag = promptTag.value();
-            String compiledTag = switch (promptTag.group()) {
-                case "subjects" -> weighted(tag, promptTag.groupIndex() == 0 ? "1.3" : "1.2");
-                case "pose_action" -> promptTag.groupIndex() == 0 ? weighted(tag, "1.25") : tag;
-                case "interaction" -> promptTag.groupIndex() == 0 ? weighted(tag, "1.2") : tag;
-                case "objects" -> promptTag.groupIndex() == 0 ? weighted(tag, "1.3") : tag;
-                case "setting" -> promptTag.groupIndex() == 0 ? weighted(tag, "1.2") : tag;
-                case "environment" -> promptTag.groupIndex() == 0 ? weighted(tag, "1.1") : tag;
-                default -> tag;
-            };
-            compiled.add(compiledTag);
+            compiled.add(compiledTag(promptTag));
         }
         List<String> facePrompts = new java.util.ArrayList<>();
         for (int index = 0; index < parsed.characters().size(); index++) {
             facePrompts.add(facePrompt(parsed.characters().get(index), index, parsed.characters().size()));
         }
         return new PonyPromptTransformer.Result(String.join(", ", compiled), facePrompts);
+    }
+
+    private String compiledTag(PromptTag promptTag) {
+        String tag = promptTag.value();
+        return switch (promptTag.group()) {
+            case "subjects" -> weighted(tag, promptTag.groupIndex() == 0 ? "1.3" : "1.2");
+            case "pose_action" -> promptTag.groupIndex() == 0 ? weighted(tag, "1.25") : tag;
+            case "interaction" -> promptTag.groupIndex() == 0 ? weighted(tag, "1.2") : tag;
+            case "objects" -> promptTag.groupIndex() == 0 ? weighted(tag, "1.3") : tag;
+            case "setting" -> promptTag.groupIndex() == 0 ? weighted(tag, "1.2") : tag;
+            case "environment" -> promptTag.groupIndex() == 0 ? weighted(tag, "1.1") : tag;
+            default -> tag;
+        };
     }
 
     private String characterBlock(PromptCharacter character, int index, int total) {

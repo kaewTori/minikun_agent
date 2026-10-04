@@ -73,7 +73,10 @@ final class OpenAiChatResponseFactory {
     }
 
     List<String> contentStream(String model, String content) {
-        String id = "chatcmpl-" + UUID.randomUUID();
+        return contentStream(model, content, "chatcmpl-" + UUID.randomUUID());
+    }
+
+    List<String> contentStream(String model, String content, String id) {
         long created = Instant.now().getEpochSecond();
         return List.of(
                 data(new ChatCompletionResponse.StreamChunk(
@@ -206,6 +209,7 @@ final class OpenAiChatResponseFactory {
             return List.of();
         }
         return attachments.stream()
+                .filter(attachment -> "image".equals(attachment.type()))
                 .map(attachment -> new ChatCompletionResponse.Image(
                         "image_url", new ChatCompletionResponse.ImageUrl(attachment.url())))
                 .toList();

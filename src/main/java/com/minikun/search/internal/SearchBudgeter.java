@@ -35,7 +35,7 @@ public final class SearchBudgeter {
             SearchResult bounded = content.equals(result.content())
                     ? result
                     : new SearchResult(result.title(), result.canonicalUri(), content,
-                            result.source(), result.sourcePosition(), result.providerScore());
+                            result.source(), result.sourcePosition(), result.providerScore(), result.publishedAt());
             budgeted.add(bounded);
             used += separator + formattedOverhead(bounded) + content.length();
         }

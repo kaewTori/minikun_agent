@@ -146,9 +146,10 @@ final class ChatModelGateway {
         long started = System.nanoTime();
         String result = "success";
         try {
-            ChatResponse draft = reviewToolRuntimeDraft(prompt, conversationId, ownerId);
-            return reasoningEnabled(reasoning)
+            ChatResponse draft = reviewToolRuntimeDraft(prompt, conversationId, ownerId, requestId);
+            ChatResponse response = reasoningEnabled(reasoning)
                     ? reasonedChat(withToolDraft(prompt, draft), reasoning, draft) : draft;
+            return com.minikun.presentation.PresentationAttachmentScope.carry(response, draft);
         } catch (RuntimeException exception) {
             result = "error";
             throw exception;
@@ -166,10 +167,19 @@ final class ChatModelGateway {
             Prompt prompt,
             ConversationId conversationId,
             String ownerId) {
+        return reviewToolRuntimeDraft(prompt, conversationId, ownerId, "");
+    }
+
+    private ChatResponse reviewToolRuntimeDraft(
+            Prompt prompt,
+            ConversationId conversationId,
+            String ownerId,
+            String requestId) {
         ChatResponse draft;
         long started = System.nanoTime();
         try {
-            draft = toolCallingRuntime.call(prompt, conversationId, ownerId);
+            draft = requestId == null || requestId.isBlank() ? toolCallingRuntime.call(prompt, conversationId, ownerId)
+                    : toolCallingRuntime.call(prompt, conversationId, ownerId, requestId);
         } catch (RuntimeException exception) {
             log.warn("process=tool_calling event=failed conversation_id={} reason={}",
                     conversationValue(conversationId), exception.getClass().getSimpleName());
@@ -189,13 +199,14 @@ final class ChatModelGateway {
             String ownerId,
             String requestId) {
         if (!reasoningEnabled(reasoning)) {
-            return reviewToolRuntimeDraft(prompt, conversationId, ownerId);
+            return reviewToolRuntimeDraft(prompt, conversationId, ownerId, requestId);
         }
         long started = System.nanoTime();
         String result = "success";
         try {
-            ChatResponse draft = reviewToolRuntimeDraft(prompt, conversationId, ownerId);
-            return reasonedChat(withToolDraft(prompt, draft), reasoning, draft);
+            ChatResponse draft = reviewToolRuntimeDraft(prompt, conversationId, ownerId, requestId);
+            return com.minikun.presentation.PresentationAttachmentScope.carry(
+                    reasonedChat(withToolDraft(prompt, draft), reasoning, draft), draft);
         } catch (RuntimeException exception) {
             result = "error";
             throw exception;

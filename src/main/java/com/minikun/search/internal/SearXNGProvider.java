@@ -13,6 +13,9 @@ import com.minikun.search.model.ImageSearchResult;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -166,8 +169,8 @@ public final class SearXNGProvider implements SearchProvider {
                     continue;
                 }
                 SearchSource source = new SearchSource("searxng", url, clock.instant());
-                mapped.add(new SearchResult(title, url, content, source, position));
-                position++;
+                mapped.add(new SearchResult(title, url, content, source, position++, 0.0,
+                        instant(result, "publishedDate", "published_date", "published", "date")));
             }
             return List.copyOf(mapped);
         } catch (SearchExecutionException exception) {
@@ -175,6 +178,27 @@ public final class SearXNGProvider implements SearchProvider {
         } catch (Exception exception) {
             throw new SearchExecutionException("SearXNG response is not valid JSON", exception);
         }
+    }
+
+    private Instant instant(JsonNode node, String... fields) {
+        for (String field : fields) {
+            String value = text(node, field);
+            if (value.isBlank()) continue;
+            try {
+                return Instant.parse(value);
+            } catch (RuntimeException ignored) {
+                try {
+                    return OffsetDateTime.parse(value).toInstant();
+                } catch (RuntimeException ignoredOffset) {
+                    try {
+                        return LocalDate.parse(value).atStartOfDay(ZoneOffset.UTC).toInstant();
+                    } catch (RuntimeException ignoredDate) {
+                        // Try the next provider field.
+                    }
+                }
+            }
+        }
+        return null;
     }
 
     private List<ImageSearchResult> parseImageResults(String body) {
