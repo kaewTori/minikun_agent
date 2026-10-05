@@ -40,7 +40,7 @@ public final class PlannerConfirmationRouter implements ToolRequestRouter {
         }
 
         String callId = "planner-confirm-" + UUID.randomUUID();
-        ToolResult result = executor.execute(
+        ToolResult result = executor.executeAuthorized(
                 new ToolCallContext(conversationId, callId),
                 new ToolCall(callId, TOOL_NAME, confirmations.confirmedArguments(pending.get())));
         if (!result.success()) {

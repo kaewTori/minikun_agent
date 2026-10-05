@@ -37,7 +37,7 @@ public final class GuardianConfirmationRouter implements ToolRequestRouter {
                 .filter(value -> "guardian.execute".equals(value.action()));
         if (pending.isEmpty()) return Optional.empty();
         String callId = "guardian-confirm-" + UUID.randomUUID();
-        ToolResult result = executor.execute(new ToolCallContext(conversationId, callId, ownerId),
+        ToolResult result = executor.executeAuthorized(new ToolCallContext(conversationId, callId, ownerId),
                 new ToolCall(callId, TOOL_NAME, confirmations.confirmedArguments(pending.get())));
         confirmations.clear(conversationId);
         if (!result.success()) {

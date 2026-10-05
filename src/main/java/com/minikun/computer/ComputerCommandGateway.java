@@ -90,6 +90,15 @@ public final class ComputerCommandGateway {
         successful(runner.run(workflow.command(), timeout), "workflow failed");
     }
 
+    /** Read-back probe is a separate fixed workflow named <id>-verify in server configuration. */
+    public Map<String, Object> workflowStatus(String id) {
+        ComputerWorkflowDefinition probe = workflows.get(id + "-verify");
+        if (probe == null) throw new IllegalArgumentException("workflow has no configured verification probe");
+        var result = runner.run(probe.command(), timeout);
+        return Map.of("workflow_id", id, "verified", result.exitCode() == 0 && !result.timedOut(),
+                "exit_code", result.exitCode(), "timed_out", result.timedOut());
+    }
+
     private void successful(com.minikun.guardian.GuardianCommandResult result, String message) {
         if (result.timedOut() || result.exitCode() != 0) throw new IllegalStateException(message);
     }

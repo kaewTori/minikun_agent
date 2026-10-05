@@ -330,7 +330,11 @@ final class ChatCapabilityFactory {
                     "When a native tool returns a successful result, treat its output as verified facts for the "
                             + "user's current request. Continue answering the original request in the identity, "
                             + "language, tone, and response style defined by MCS. Never claim that a tool is "
-                            + "unavailable when a successful tool result is present."));
+                            + "unavailable when a successful tool result is present. For multi-step operational work "
+                            + "or work that must continue after approval, prefer agent.action when available: inspect "
+                            + "its catalog, submit an explicit plan with observable checks, and report its run status. "
+                            + "A PLANNED or WAITING_CONFIRMATION run has not completed the requested work. "
+                            + "Never self-approve an action or treat a queued job as a finished outcome."));
         }
     }
 }

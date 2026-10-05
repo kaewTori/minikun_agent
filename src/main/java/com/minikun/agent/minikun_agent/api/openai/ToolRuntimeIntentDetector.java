@@ -8,12 +8,12 @@ final class ToolRuntimeIntentDetector {
     private static final Pattern EXPLICIT_TOOL = Pattern.compile(
             "(?iu)(ใช้\\s*(?:เครื่องมือ|tool)|เรียก\\s*(?:เครื่องมือ|tool)|use (?:a )?tool)");
     private static final Pattern ACTION = Pattern.compile(
-            "(?iu)(เพิ่ม|สร้าง|บันทึก|แก้ไข|อัปเดต|ลบ|ย้าย|ส่ง|ตั้ง|รัน|เปิด|ตรวจ|เช็ก|เช็ค|ดำเนินการ|"
-                    + "create|add|save|update|delete|remove|move|send|schedule|run|open|check|execute)");
+            "(?iu)(เพิ่ม|สร้าง|บันทึก|แก้ไข|อัปเดต|ลบ|ย้าย|ส่ง|ตั้ง|รัน|เปิด|ตรวจ|เช็ก|เช็ค|ดำเนินการ|ดูแล|จัดการ|ซ่อม|ทดสอบ|"
+                    + "create|add|save|update|delete|remove|move|send|schedule|run|open|check|execute|repair|fix|build|test)");
     private static final Pattern TARGET = Pattern.compile(
-            "(?iu)(งาน|เตือน|ปฏิทิน|เป้าหมาย|ไฟล์|โฟลเดอร์|คอมพิวเตอร์|เซิร์ฟเวอร์|โฮมแล็บ|ระบบ|"
+            "(?iu)(งาน|เตือน|ปฏิทิน|เป้าหมาย|ไฟล์|โฟลเดอร์|คอมพิวเตอร์|เซิร์ฟเวอร์|โฮมแล็บ|ระบบ|บริการ|โปรเจกต์|โค้ด|"
                     + "เว็บ|เว็บไซต์|ลิงก์|ความจำ|task|reminder|calendar|goal|file|folder|computer|server|"
-                    + "homelab|system|service|website|url|link|memory|portfolio|investment)");
+                    + "homelab|system|service|website|url|link|memory|portfolio|investment|repository|project|browser|tests?)");
     private static final Pattern SEQUENCE = Pattern.compile(
             "(?iu)(จากนั้น|แล้วค่อย|ต่อด้วย|เสร็จแล้ว|and then|then)");
     private static final Pattern PRESENTATION_REQUEST = Pattern.compile(

@@ -17,7 +17,7 @@ public final class LocalComputerTool implements Tool {
     private static final ToolDefinition DEFINITION = new ToolDefinition(
             "computer.local",
             "Work with the user's local computer only inside application-configured named roots. "
-                    + "Read-only actions are roots, list, search, read, inspect_folder, clipboard, applications, "
+                    + "Read-only actions are roots, list, search, read, stat, workflow_status, inspect_folder, clipboard, applications, "
                     + "workflows, and audit. Mutating or external actions are write, move, trash, open_path, "
                     + "open_url, open_app, and workflow; they always return a preview and require explicit "
                     + "confirmation in the next user turn. Never pass shell commands or absolute paths. "
@@ -77,6 +77,8 @@ public final class LocalComputerTool implements Tool {
             String action = text(arguments, "action").toLowerCase(java.util.Locale.ROOT);
             return switch (action) {
                 case "roots" -> ToolResult.success(Map.of("roots", computer.roots()));
+                case "stat" -> readOnly(context, arguments, "stat", computer.stat(text(arguments, "root"), text(arguments, "path")));
+                case "workflow_status" -> readOnly(context, arguments, "workflow_status", computer.workflowStatus(text(arguments, "workflow_id")));
                 case "list" -> readOnly(context, arguments, "list", Map.of("entries", computer.list(
                         text(arguments, "root"), text(arguments, "path"), limit(arguments))));
                 case "search" -> readOnly(context, arguments, "search", Map.of("matches", computer.search(
@@ -115,6 +117,14 @@ public final class LocalComputerTool implements Tool {
                     "มินิคุงเตรียมรายการนี้ไว้แล้ว แต่ยังไม่ได้ดำเนินการครับ: " + preview.summary()
                             + "\nยืนยันให้ดำเนินการไหมครับ"));
         }
+        if (ToolAuthorizationScope.permits(context, definition().name(), arguments)
+                && arguments.containsKey("expected_sha256")) {
+            return authorizedOperation(context, arguments);
+        }
+        if (ToolAuthorizationScope.permits(context, definition().name(), arguments)
+                && java.util.Set.of("workflow", "open_path", "open_url", "open_app").contains(text(arguments, "action"))) {
+            return authorizedOperation(context, arguments);
+        }
         if (confirmations.isEmpty()) return ToolResult.failure(ToolErrorCode.EXECUTION_FAILED,
                 "confirmation storage is unavailable; no operation was performed");
         var pending = confirmations.get().find(context.conversationId(), context.ownerId())
@@ -133,6 +143,16 @@ public final class LocalComputerTool implements Tool {
                 ? number.intValue() : Integer.parseInt(value.toString());
         if (result < 1 || result > 100) throw new IllegalArgumentException("limit must be between 1 and 100");
         return result;
+    }
+
+    private ToolResult authorizedOperation(ToolCallContext context, Map<String, Object> arguments) {
+        Map<String, Object> result = computer.execute(arguments, context.ownerId(), context.conversationId().value());
+        var normalized = new LinkedHashMap<>(arguments);
+        normalized.remove("confirmed");
+        confirmations.ifPresent(service -> service.find(context.conversationId(), context.ownerId())
+                .filter(p -> "computer.execute".equals(p.action()) && p.arguments().equals(normalized))
+                .ifPresent(p -> service.clear(context.conversationId())));
+        return ToolResult.success(result);
     }
     private ToolResult readOnly(ToolCallContext context, Map<String, Object> arguments,
             String operation, Object result) {

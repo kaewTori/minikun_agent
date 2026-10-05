@@ -630,3 +630,30 @@ html { scrollbar-gutter: stable; }
   .studio-review-insights .studio-review-section + .studio-review-section { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
   .studio-history-panel > header small { max-width: 95px; }
 }
+
+/* Action runtime uses the existing Cockpit palette and controls. */
+.action-runtime-panel { grid-column: 1 / -1; }
+.action-start-form, .action-grant-form, .action-fields { display: grid; gap: 12px; }
+.action-fields { grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); }
+.action-start-form label, .action-grant-form label { display: grid; gap: 6px; font-size: 14px; }
+.action-start-form input, .action-start-form select, .action-start-form textarea, .action-grant-form input {
+  min-height: 44px; width: 100%; min-width: 0; padding: 10px 12px; border-radius: 12px;
+  color: inherit; background: var(--surface, #171c24); border: 1px solid var(--border, #3c4350); font: inherit;
+}
+.action-start-form textarea { resize: vertical; }
+.action-runtime-list { display: grid; gap: 16px; margin-top: 20px; }
+.action-run { overflow-wrap: anywhere; }
+.action-run .item-controls { flex-wrap: wrap; gap: 10px; }
+.action-run button, .action-grant-row button, .action-grants summary { min-height: 44px; }
+.action-run details, .action-grants { margin-top: 12px; }
+.action-plan-steps { padding-left: 24px; line-height: 1.7; }
+.action-plan-steps small { display: block; }
+.action-preview { padding: 12px; border: 1px solid var(--border, #3c4350); border-radius: 12px; }
+.action-preview pre { max-height: 240px; overflow: auto; white-space: pre-wrap; font-size: 14px; }
+.action-grant-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.action-grant-form { margin-top: 12px; }
+.action-grant-form input[type=checkbox] { width: 24px; min-height: 24px; }
+#action-form-error { color: var(--coral, #ffaaa4); }
+.action-start-form :focus-visible, .action-run :focus-visible, .action-grants :focus-visible {
+  outline: 2px solid var(--mint, #a4efd5); outline-offset: 3px;
+}

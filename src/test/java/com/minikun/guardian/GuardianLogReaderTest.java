@@ -39,7 +39,23 @@ class GuardianLogReaderTest {
         GuardianLogSnapshot result = reader.read("missing", 20);
 
         assertEquals("UNAVAILABLE", result.status());
+        assertEquals("FILE_MISSING", result.unavailableReason());
         assertTrue(result.lines().isEmpty());
         assertFalse(result.toString().contains("secret/location"));
+    }
+
+    @Test
+    void redactsAuthorizationAndJsonCredentialsBeforeEvidenceLeavesReader() throws Exception {
+        Path log = directory.resolve("credentials.log");
+        Files.writeString(log, "ERROR Authorization: Bearer bearer-secret\n"
+                + "ERROR Authorization=Basic basic-secret\n"
+                + "ERROR {\"password\": \"has spaces secret\", \"api_key\": \"api-secret\"}\n");
+        String lines = String.join("\n", new GuardianLogReader(List.of(
+                new GuardianLogSource("application", log))).read("application", 20).lines());
+        assertFalse(lines.contains("bearer-secret"));
+        assertFalse(lines.contains("basic-secret"));
+        assertFalse(lines.contains("has spaces secret"));
+        assertFalse(lines.contains("api-secret"));
+        assertTrue(lines.contains("[REDACTED]"));
     }
 }

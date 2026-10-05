@@ -45,7 +45,17 @@ public final class DefaultToolExecutor implements ToolExecutor {
         ToolResult validation = validate(tool.definition(), toolCall.arguments());
         if (validation != null) return validation;
         ToolResult blocked = BackgroundToolScope.guard(tool.requiresExplicitConfirmation(toolCall.arguments()));
-        return blocked == null ? tool.execute(context, toolCall.arguments()) : blocked;
+        if (blocked != null) return blocked;
+        Map<String, Object> arguments = new java.util.LinkedHashMap<>(toolCall.arguments());
+        if (tool.definition().parameters().containsKey("confirmed") && tool.requiresExplicitConfirmation(arguments)) {
+            arguments.put("confirmed", ToolAuthorizationScope.permits(context, toolCall.name(), arguments));
+        }
+        ToolResult result = tool.execute(context, arguments);
+        // A successful transport wrapper is not a successful domain operation.
+        if (result.success() && result.value() instanceof Map<?, ?> value && Boolean.FALSE.equals(value.get("success"))) {
+            return ToolResult.failure(ToolErrorCode.EXECUTION_FAILED, "operation reported failure; inspect its audit result");
+        }
+        return result;
     }
 
     private ToolResult validate(ToolDefinition definition, Map<String, Object> arguments) {

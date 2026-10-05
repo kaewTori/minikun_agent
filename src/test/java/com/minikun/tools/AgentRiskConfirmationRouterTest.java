@@ -44,7 +44,7 @@ class AgentRiskConfirmationRouterTest {
         when(executions.getIfAvailable()).thenReturn(tracker);
         when(confirmations.find(conversationId, "owner")).thenReturn(Optional.of(pending));
         when(registry.find("memory.write")).thenReturn(Optional.of(tool));
-        when(executor.execute(any(), any())).thenReturn(succeeds ? ToolResult.success(Map.of("saved", true))
+        when(executor.executeAuthorized(any(), any())).thenReturn(succeeds ? ToolResult.success(Map.of("saved", true))
                 : ToolResult.failure(ToolErrorCode.EXECUTION_FAILED, "response lost after write"));
         AgentRiskConfirmationRouter router = new AgentRiskConfirmationRouter(
                 executor, registry, confirmations, executions);
@@ -53,7 +53,7 @@ class AgentRiskConfirmationRouterTest {
 
         assertTrue(result.isPresent());
         org.junit.jupiter.api.Assertions.assertEquals(succeeds, result.get().success());
-        verify(executor).execute(any(), any());
+        verify(executor).executeAuthorized(any(), any());
         if (succeeds) verify(confirmations).clear(conversationId);
         verify(tracker, org.mockito.Mockito.never()).shouldRetry(any(), org.mockito.ArgumentMatchers.anyInt());
     }

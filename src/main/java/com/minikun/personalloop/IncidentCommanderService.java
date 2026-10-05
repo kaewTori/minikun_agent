@@ -91,14 +91,9 @@ public final class IncidentCommanderService {
     }
 
     private String probableCause(List<GuardianFinding> findings) {
-        List<GuardianFinding> dependencies = findings.stream().filter(v -> "DEPENDENCY_DOWN".equals(v.code())).toList();
-        boolean logErrors = findings.stream().anyMatch(v -> "RECENT_LOG_ERRORS".equals(v.code()));
-        if (!dependencies.isEmpty() && logErrors) {
-            return "Dependency " + dependencies.getFirst().component() + " is unreachable and recent application errors support it as the leading cause";
-        }
-        if (!dependencies.isEmpty()) return "Dependency " + dependencies.getFirst().component() + " is unreachable";
         return findings.stream().max(Comparator.comparing(GuardianFinding::severity))
-                .map(value -> value.component() + ": " + value.summary()).orElse("No deterministic cause identified");
+                .map(value -> value.component() + " [" + value.causeConfidence() + "]: " + value.cause())
+                .orElse("No deterministic cause identified");
     }
 
     private String summary(List<GuardianFinding> findings) {
@@ -111,6 +106,7 @@ public final class IncidentCommanderService {
             Map<String, Object> finding = new LinkedHashMap<>(); finding.put("code", value.code());
             finding.put("severity", value.severity().name()); finding.put("component", value.component());
             finding.put("summary", value.summary()); finding.put("evidence", value.evidence());
+            finding.put("cause", value.cause()); finding.put("cause_confidence", value.causeConfidence());
             finding.put("recommended_action", value.recommendedAction()); return Map.copyOf(finding);
         }).toList();
     }

@@ -25,6 +25,9 @@ class DefaultSystemHealthReaderTest {
         assertTrue(report.disk().containsKey("status"));
         assertTrue(report.jvm().containsKey("java_version"));
         assertEquals("DOWN", report.dependencies().get("unused").get("status"));
+        assertEquals("CONNECTION_REFUSED", report.dependencies().get("unused").get("failure_reason"));
+        assertEquals(85.0, report.memory().get("warning_threshold_percent"));
+        assertEquals(90.0, report.cpu().get("warning_threshold_percent"));
         assertTrue(!report.dependencies().get("unused").containsKey("host"));
     }
 }

@@ -8,6 +8,9 @@ import java.lang.management.OperatingSystemMXBean;
 import java.lang.management.RuntimeMXBean;
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.net.ConnectException;
+import java.net.SocketTimeoutException;
+import java.net.UnknownHostException;
 import java.nio.file.FileStore;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -69,6 +72,7 @@ public final class DefaultSystemHealthReader implements SystemHealthReader {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("status", "UP");
         result.put("logical_processors", operatingSystem.getAvailableProcessors());
+        result.put("warning_threshold_percent", 90.0);
 
         if (operatingSystem instanceof com.sun.management.OperatingSystemMXBean extended) {
             try {
@@ -180,6 +184,14 @@ public final class DefaultSystemHealthReader implements SystemHealthReader {
             result.put("status", "UP");
         } catch (IOException | RuntimeException exception) {
             result.put("status", "DOWN");
+            result.put("failure_reason", switch (exception) {
+                case ConnectException failure -> failure.getMessage() != null
+                        && failure.getMessage().toLowerCase(java.util.Locale.ROOT).contains("refused")
+                        ? "CONNECTION_REFUSED" : "CONNECT_FAILED";
+                case SocketTimeoutException ignored -> "CONNECT_TIMEOUT";
+                case UnknownHostException ignored -> "NAME_RESOLUTION_FAILED";
+                default -> "CONNECT_FAILED";
+            });
         }
         result.put("latency_ms", Math.max(0, (System.nanoTime() - started) / 1_000_000));
         return result;
@@ -197,6 +209,7 @@ public final class DefaultSystemHealthReader implements SystemHealthReader {
     }
 
     private void markResourceWarning(Map<String, Object> result, double threshold) {
+        result.put("warning_threshold_percent", threshold);
         if (number(result, "used_percent") >= threshold) {
             result.put("status", "WARNING");
         }

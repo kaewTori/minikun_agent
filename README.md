@@ -4,6 +4,9 @@
 
 ## ความสามารถหลัก
 
+- อ่านสถานะ CLEANLINE UPS ผ่าน NUT ด้วย `ups.status` และ `/v1/ups/status`
+  พร้อม [วิธีติดตั้งบน Mac และย้ายไป Linux](docs/ups-nut.md)
+
 - OpenAI-compatible Chat Completions API
   - non-streaming JSON response
   - streaming ผ่าน Server-Sent Events (`stream: true`)
@@ -56,6 +59,12 @@
   edit-to-branch, regenerate/retry, feedback, source cards, per-chat draft และไฟล์แนบต่อเนื่องข้าม turn
 - Personal Context Runtime สำหรับ context budget, dynamic max-tokens และ bounded recovery
 - ตรวจสอบ ลบรายรายการ และล้าง long-term memory แบบ owner-scoped ผ่าน `/v1/memory`
+
+## ลงมือทำงานและตรวจผล
+
+มินิคุงมี durable action plans สำหรับ Homelab, ไฟล์, task/reminder, fixed development/desktop workflows และ browser click/fill/select พร้อม checkpoint, approvals และสิทธิ์ล่วงหน้าที่จำกัด resource/เวลา/จำนวนครั้ง ดูสถานะและอนุมัติได้ที่ **Cockpit → Agent → ฝากงานให้มินิคุง**
+
+ตั้งคำสั่งจริงของเครื่องผ่าน `MINIKUN_GUARDIAN_ACTIONS` และ `MINIKUN_COMPUTER_WORKFLOWS` ก่อนเปิดการแก้ปัญหาอัตโนมัติ รายละเอียด API, configuration และ recovery อยู่ใน [Agent Action Runtime](docs/agent-action-runtime.md)
 
 ## เทคโนโลยี
 
@@ -289,6 +298,15 @@ Whisper Large V3 Turbo Q4 ผ่าน MLX สำหรับถอดเสี�
 `VaniraTTS` สำหรับภาษาไทย/คำอังกฤษสั้น ๆ และ `Kokoro-82M` สำหรับวลีภาษาอังกฤษต่อเนื่อง
 (ค่าเริ่มต้นใช้เสียงผู้ชาย Vanira speaker 3 และ Kokoro `am_michael`)
 ไฟล์เสียงถูกจำกัดขนาด 10 MB และมีเฉพาะใน memory/temporary file ระหว่าง request เท่านั้น
+
+TTS โหลดเมื่อมีคำขอเสียงครั้งแรก (`MINIKUN_VOICE_TTS_WARMUP=false` ใน launchd) แล้วเก็บโมเดลไว้
+สั่งแชต `ปิด TTS` เพื่อรอเสียงที่กำลังสร้างให้จบ หยุด Python process ที่มินิคุงดูแล และคืน RAM;
+คำขอเสียงถัดไปจะไม่เปิด process กลับจนกว่าจะสั่ง `เปิด TTS` การถอดเสียง Whisper ยังใช้งานได้
+สั่ง `สถานะ TTS` เพื่อตรวจสถานะ หรือใช้ `GET /v1/audio/tts` และ
+`POST /v1/audio/tts` พร้อม JSON `{"enabled":false}` / `{"enabled":true}`
+ถ้าตั้ง model management token ให้ส่ง header `X-Minikun-Model-Token` เช่นเดียวกับ `/v1/models/runtime`
+สถานะเปิด/ปิดมีผลจนรีสตาร์ตมินิคุง; ถ้าเป็น TTS server ที่เปิดจากภายนอก ต้องหยุดผ่านเจ้าของ process นั้น
+เสียงอ่านจากเบราว์เซอร์หรือ macOS เป็นคนละส่วนกับ Python TTS runtime
 
 | `MINIKUN_SEARCH_CACHE_ENABLED` | `true` | เปิด/ปิด search cache |
 | `MINIKUN_SEARCH_CACHE_TTL` | `PT5M` | อายุ search cache |

@@ -37,7 +37,7 @@ public final class InvestmentConfirmationRouter implements ToolRequestRouter {
                 .filter(value -> value.action().startsWith("investment."));
         if (pending.isEmpty()) return Optional.empty();
         String callId = "investment-confirm-" + UUID.randomUUID();
-        ToolResult result = executor.execute(
+        ToolResult result = executor.executeAuthorized(
                 new ToolCallContext(conversationId, callId, ownerId),
                 new ToolCall(callId, TOOL_NAME, confirmations.confirmedArguments(pending.get())));
         if (!result.success()) {

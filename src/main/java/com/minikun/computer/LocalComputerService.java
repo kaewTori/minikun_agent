@@ -206,7 +206,19 @@ public final class LocalComputerService {
         }
     }
 
+    /** Independent file read-back without exporting file contents. */
+    public Map<String, Object> stat(String rootName, String relativePath) {
+        Path candidate = destination(rootName, relativePath);
+        boolean exists = Files.exists(candidate, LinkOption.NOFOLLOW_LINKS);
+        if (!exists) return Map.of("exists", false, "root", rootName, "path", relativePath);
+        ensureRealPath(rootName, candidate);
+        boolean file = Files.isRegularFile(candidate, LinkOption.NOFOLLOW_LINKS);
+        return Map.of("exists", true, "file", file, "root", rootName, "path", relativePath,
+                "sha256", file ? sha256(candidate) : "");
+    }
+
     public List<Map<String, String>> workflows() { return commands.workflows(); }
+    public Map<String, Object> workflowStatus(String id) { return commands.workflowStatus(id); }
     public List<String> applications() { return commands.applications(); }
     public List<ComputerAudit> audit(String ownerId, int limit) { return audit.list(ownerId, limit); }
     public void recordRead(String ownerId, String conversationId, String operation, String root, String path) {

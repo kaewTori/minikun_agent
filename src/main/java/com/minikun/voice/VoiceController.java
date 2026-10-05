@@ -11,19 +11,23 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.server.ResponseStatusException;
 
 /** OpenAI-compatible audio endpoints plus one local voice-turn convenience endpoint. */
 @RestController
@@ -32,15 +36,42 @@ import org.springframework.web.multipart.MultipartFile;
 public final class VoiceController {
     private final VoiceService voice;
     private final ChatService chat;
+    private final String managementToken;
 
-    public VoiceController(VoiceService voice, ChatService chat) {
+    public VoiceController(VoiceService voice, ChatService chat,
+            @Value("${minikun.model.management.token:${minikun.memory.management.token:}}") String managementToken) {
         this.voice = Objects.requireNonNull(voice, "voice service must not be null");
         this.chat = Objects.requireNonNull(chat, "chat service must not be null");
+        this.managementToken = Objects.requireNonNullElse(managementToken, "");
     }
 
     @GetMapping("/status")
     public VoiceStatus status() {
         return voice.status();
+    }
+
+    @GetMapping("/tts")
+    public Map<String, Object> ttsStatus(
+            @RequestHeader(value = "X-Minikun-Model-Token", required = false) String token) {
+        authorizeTts(token);
+        return voice.synthesisStatus();
+    }
+
+    @PostMapping(value = "/tts", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public Map<String, Object> controlTts(@RequestBody TtsControl request,
+            @RequestHeader(value = "X-Minikun-Model-Token", required = false) String token) {
+        authorizeTts(token);
+        if (request == null || request.enabled() == null) throw new VoiceException(
+                VoiceErrorCode.INVALID_REQUEST, "enabled must be true or false");
+        return voice.setSynthesisEnabled(request.enabled());
+    }
+
+    public record TtsControl(Boolean enabled) {}
+
+    private void authorizeTts(String token) {
+        if (!managementToken.isBlank() && !managementToken.equals(token)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "model management token is invalid");
+        }
     }
 
     @PostMapping(value = "/transcriptions", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

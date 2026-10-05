@@ -53,8 +53,9 @@ public final class BrowserSessionClient implements AutoCloseable {
     }
 
     public synchronized void open(String url) {
-        exchange("open", url);
+        JsonNode response = exchange("open", url);
         hosts.add(host(url));
+        if (!response.path("url").asText().isBlank()) hosts.add(host(response.path("url").asText()));
     }
 
     public synchronized BrowserContent render(String url) {
@@ -70,6 +71,17 @@ public final class BrowserSessionClient implements AutoCloseable {
     }
 
     private JsonNode exchange(String action, String url) {
+        return exchange(action, url, Map.of());
+    }
+
+    public synchronized JsonNode control(String action, String url, Map<String, Object> arguments) {
+        if (!handles(url)) throw new BrowserContentException("Open this website in the owner browser session first");
+        JsonNode response = exchange(action, url, arguments);
+        if (!response.path("url").asText().isBlank()) hosts.add(host(response.path("url").asText()));
+        return response;
+    }
+
+    private JsonNode exchange(String action, String url, Map<String, Object> arguments) {
         if (!available()) throw new BrowserContentException("Browser session runtime is not installed");
         try {
             if (process == null || !process.isAlive()) {
@@ -82,7 +94,10 @@ public final class BrowserSessionClient implements AutoCloseable {
                 writer = new BufferedWriter(new OutputStreamWriter(process.getOutputStream(), StandardCharsets.UTF_8));
                 reader = new BufferedReader(new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8));
             }
-            writer.write(mapper.writeValueAsString(Map.of("action", action, "url", url)));
+            Map<String, Object> command = new java.util.LinkedHashMap<>(arguments);
+            command.put("action", action);
+            command.put("url", url);
+            writer.write(mapper.writeValueAsString(command));
             writer.newLine();
             writer.flush();
             BufferedReader currentReader = reader;

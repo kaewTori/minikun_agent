@@ -158,12 +158,15 @@ class PersonalLoopServicesTest {
         GuardianFinding finding = new GuardianFinding("DEPENDENCY_DOWN", GuardianSeverity.CRITICAL, "postgres",
                 "postgres is unreachable", "status=DOWN", "inspect postgres logs");
         when(guardian.inspect()).thenReturn(new GuardianReport(NOW, "CRITICAL", false, system,
-                List.of(finding), List.of(), List.of()));
+                List.of(finding, new GuardianFinding("RECENT_LOG_ERRORS", GuardianSeverity.WARNING, "application",
+                        "unrelated error", "search request failed", "check search")), List.of(), List.of()));
         IncidentCommanderService service = new IncidentCommanderService(guardian, store, timeline, clock);
 
         Incident opened = service.inspect("owner-a").incident();
         assertEquals(IncidentStatus.OPEN, opened.status());
         assertTrue(opened.probableCause().contains("postgres"));
+        assertTrue(opened.probableCause().contains("UNKNOWN"));
+        assertFalse(opened.probableCause().contains("errors support"));
 
         when(guardian.inspect()).thenReturn(new GuardianReport(NOW, "UP", true,
                 new SystemHealthReport("UP", true, Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of()),

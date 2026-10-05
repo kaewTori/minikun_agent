@@ -28,6 +28,9 @@ public final class VoiceService {
     private final int maxPromptCharacters;
     private final Semaphore transcriptionSlots;
     private final Semaphore synthesisSlots;
+    private final java.util.concurrent.locks.ReentrantReadWriteLock synthesisLifecycle =
+            new java.util.concurrent.locks.ReentrantReadWriteLock(true);
+    private volatile boolean synthesisEnabled = true;
 
     public VoiceService(
             boolean enabled,
@@ -90,6 +93,17 @@ public final class VoiceService {
     }
 
     public VoiceAudio synthesize(String text, String voice, String format, Double speed) {
+        synthesisLifecycle.readLock().lock();
+        try {
+            if (!synthesisEnabled) throw new VoiceException(VoiceErrorCode.UNAVAILABLE,
+                    "TTS is disabled; enable it before requesting speech");
+            return synthesizeEnabled(text, voice, format, speed);
+        } finally {
+            synthesisLifecycle.readLock().unlock();
+        }
+    }
+
+    private VoiceAudio synthesizeEnabled(String text, String voice, String format, Double speed) {
         requireEnabled();
         String input = Objects.requireNonNullElse(text, "").trim();
         if (input.isBlank()) throw new VoiceException(VoiceErrorCode.INVALID_REQUEST,
@@ -118,11 +132,37 @@ public final class VoiceService {
     }
 
     public VoiceStatus status() {
-        return new VoiceStatus(enabled, speechToText.available(), textToSpeech.available(), speechToText.model(),
+        return new VoiceStatus(enabled, speechToText.available(), synthesisEnabled && textToSpeech.available(), speechToText.model(),
                 defaultVoice,
                 voices.keySet().stream().sorted().toList(),
                 audioPolicy.formats().stream().sorted().toList(),
                 List.of("aiff", "wav"), audioPolicy.maxBytes(), maxTextCharacters, true, false);
+    }
+
+    public Map<String, Object> synthesisStatus() {
+        synthesisLifecycle.readLock().lock();
+        try {
+            return Map.of("enabled", enabled && synthesisEnabled,
+                    "available", enabled && synthesisEnabled && textToSpeech.available(),
+                    "running", textToSpeech.running(),
+                    "provider", textToSpeech.getClass().getSimpleName());
+        } finally {
+            synthesisLifecycle.readLock().unlock();
+        }
+    }
+
+    /** Waits for in-flight speech, then releases the model process and blocks automatic restart. */
+    public Map<String, Object> setSynthesisEnabled(boolean value) {
+        requireEnabled();
+        synthesisLifecycle.writeLock().lock();
+        try {
+            if (value) textToSpeech.resumeRuntime();
+            else textToSpeech.releaseRuntime();
+            synthesisEnabled = value;
+            return synthesisStatus();
+        } finally {
+            synthesisLifecycle.writeLock().unlock();
+        }
     }
 
     private void requireEnabled() {

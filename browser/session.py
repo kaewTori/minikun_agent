@@ -2,6 +2,7 @@
 """Owner-only headed browser, controlled over private stdio rather than a debugging port."""
 import asyncio
 import ipaddress
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -98,6 +99,72 @@ EXTRACT = """() => {
 }"""
 
 
+async def snapshot(page, selector=""):
+    await asyncio.to_thread(public_url, page.url)
+    controls = await page.locator("button, a[href], input:not([type=password]), textarea, select, [role=status], [aria-live], output, h1, h2, p[id]").evaluate_all("""elements => {
+      const selector = el => {
+        if(el.id && document.querySelectorAll('#'+CSS.escape(el.id)).length===1) return '#'+CSS.escape(el.id);
+        const parts=[]; let current=el;
+        while(current && current.tagName!=='BODY') {
+          const tag=current.tagName.toLowerCase();
+          const siblings=[...current.parentElement.children].filter(other=>other.tagName===current.tagName);
+          parts.unshift(tag+':nth-of-type('+(siblings.indexOf(current)+1)+')'); current=current.parentElement;
+        }
+        return 'body > '+parts.join(' > ');
+      };
+      return elements.filter(el=>el.getClientRects().length).slice(0,100).map(el=>({tag:el.tagName.toLowerCase(),id:el.id,name:el.getAttribute('name')||'',
+        type:el.getAttribute('type')||'',label:(el.innerText||el.getAttribute('aria-label')||el.getAttribute('placeholder')||el.getAttribute('name')||el.tagName).slice(0,200),
+        href:el.getAttribute('href')||'',formAction:el.form?.getAttribute('action')||'',disabled:el.disabled||false,selector:selector(el)}));
+    }""")
+    text = (await page.locator("body").inner_text())[:12000]
+    selected_text = ""
+    selected_value = ""
+    if selector:
+        target = page.locator(selector)
+        if await target.count() != 1:
+            raise ValueError("Selector must match exactly one element")
+        if not await target.is_visible():
+            raise ValueError("Hidden elements cannot be inspected")
+        if await target.get_attribute("type") == "password":
+            raise ValueError("Password fields stay in manual login")
+        selected_text = (await target.inner_text())[:2000]
+        if await target.evaluate("el => ['INPUT','TEXTAREA','SELECT'].includes(el.tagName)"):
+            selected_value = (await target.input_value())[:2000]
+    result = {"success": True, "url": page.url, "title": await page.title(), "text": text, "controls": controls,
+              "selectedText": selected_text, "selectedValue": selected_value}
+    result["state"] = hashlib.sha256(json.dumps(result, sort_keys=True).encode()).hexdigest()
+    return result
+
+
+async def interact(page, request):
+    # Compare the live page against the exact preview immediately before the interaction.
+    url = request.get("url", "")
+    if request.get("action") != "snapshot" and page.url.split("#")[0] != url.split("#")[0]:
+        raise ValueError("Page URL changed after preview")
+    selector = request.get("selector", "")
+    action = request.get("action")
+    before = await snapshot(page, selector)
+    if action == "snapshot":
+        return before
+    if request.get("expected_state") != before["state"]:
+        raise ValueError("Page changed after preview")
+    target = page.locator(selector)
+    if not await target.is_visible():
+        raise ValueError("Target is not visible")
+    if action == "click":
+        await target.click()
+    elif action == "fill":
+        await target.fill(str(request.get("value", "")))
+    elif action == "select":
+        await target.select_option(str(request.get("value", "")))
+    else:
+        raise ValueError("Unsupported browser interaction")
+    # A click acknowledgement is not evidence that a form submission succeeded.
+    result = await snapshot(page)
+    result["interaction"] = action
+    return result
+
+
 async def serve(profile):
     os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", str(Path(__file__).resolve().parent / "browsers"))
     from playwright.async_api import async_playwright
@@ -153,7 +220,20 @@ async def serve(profile):
                         await page.goto(url, wait_until="domcontentloaded")
                         requested_urls[host] = url.split('#')[0]
                         await page.bring_to_front()
-                        result = {"success": True, "host": host}
+                        actual_host = await asyncio.to_thread(public_url, page.url)
+                        pages[actual_host] = page
+                        requested_urls[actual_host] = page.url.split('#')[0]
+                        status_codes[actual_host] = status_codes.get(host, 200)
+                        result = {"success": True, "host": host, "url": page.url}
+                    elif action in ("snapshot", "click", "fill", "select"):
+                        page = pages.get(host)
+                        if page is None or page.is_closed():
+                            raise ValueError("Open this domain first")
+                        result = await interact(page, request)
+                        actual_host = await asyncio.to_thread(public_url, page.url)
+                        pages[actual_host] = page
+                        requested_urls[actual_host] = page.url.split('#')[0]
+                        status_codes[actual_host] = status_codes.get(host, 200)
                     elif action == "render":
                         page = pages.get(host)
                         if page is None or page.is_closed():

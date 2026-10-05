@@ -122,11 +122,41 @@ public final class HomelabGuardianScheduler {
     private String message(GuardianReport report) {
         StringBuilder result = new StringBuilder("พี่สาวครับ มินิคุงพบสถานะ ")
                 .append(report.status()).append(" ใน homelab");
-        report.findings().stream().limit(5).forEach(finding -> result.append("\n• ")
+        int shown = 0;
+        for (GuardianFinding finding : report.findings()) {
+            if (shown >= 5) break;
+            String block = new StringBuilder("\n• ")
                 .append(finding.component()).append(": ").append(finding.summary())
-                .append(" — ").append(finding.evidence()));
-        result.append("\nถามมินิคุงว่า ‘ตรวจ homelab ให้หน่อย’ เพื่อดูหลักฐานและแนวทางแก้ครับ");
+                .append("\n  ").append(finding.causeConfidence().equals("CONFIRMED")
+                        ? "สาเหตุของคำเตือนที่ยืนยันได้: " : "ผลสืบเบื้องต้น (ยังไม่ยืนยันต้นเหตุ): ")
+                .append(finding.cause())
+                .append("\n  หลักฐาน: ").append(finding.evidence())
+                .append("\n  แนะนำ: ").append(finding.recommendedAction()).toString();
+            if (shown > 0 && (result.toString() + block).getBytes(StandardCharsets.UTF_8).length > 3300) break;
+            result.append(bounded(block, 3000));
+            shown++;
+        }
+        if (report.findings().size() > shown) {
+            result.append("\nยังมีอีก ").append(report.findings().size() - shown)
+                    .append(" รายการ ถาม ‘ตรวจ homelab ให้หน่อย’ เพื่อดูทั้งหมดครับ");
+        }
+        result.append("\nตรวจจาก health probe, log และ backup ที่ตั้งค่าไว้ ณ ").append(report.generatedAt());
         return result.toString();
+    }
+
+    private String bounded(String value, int maxBytes) {
+        if (value.getBytes(StandardCharsets.UTF_8).length <= maxBytes) return value;
+        StringBuilder result = new StringBuilder();
+        int bytes = 0;
+        for (int offset = 0; offset < value.length();) {
+            int point = value.codePointAt(offset);
+            String character = new String(Character.toChars(point));
+            bytes += character.getBytes(StandardCharsets.UTF_8).length;
+            if (bytes > maxBytes - 3) break;
+            result.append(character);
+            offset += Character.charCount(point);
+        }
+        return result.append('…').toString();
     }
 
     private String fingerprint(GuardianReport report) {

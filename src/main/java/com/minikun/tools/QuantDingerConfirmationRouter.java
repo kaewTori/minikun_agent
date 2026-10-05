@@ -36,7 +36,7 @@ public final class QuantDingerConfirmationRouter implements ToolRequestRouter {
                 .filter(value -> value.action().equals("quantdinger.save_strategy"));
         if (pending.isEmpty()) return Optional.empty();
         String callId = "quantdinger-confirm-" + UUID.randomUUID();
-        ToolResult result = executor.execute(new ToolCallContext(conversationId, callId, ownerId),
+        ToolResult result = executor.executeAuthorized(new ToolCallContext(conversationId, callId, ownerId),
                 new ToolCall(callId, "investment.quantdinger", confirmations.confirmedArguments(pending.get())));
         if (!result.success()) {
             return Optional.of(ToolEvidence.failed("investment.quantdinger",

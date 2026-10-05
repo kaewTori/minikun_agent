@@ -15,6 +15,14 @@ import org.springframework.context.annotation.Configuration;
 @ConditionalOnProperty(name = "minikun.voice.enabled", havingValue = "true", matchIfMissing = true)
 public class VoiceConfiguration {
     @Bean
+    VoiceRuntimeTool voiceRuntimeTool(VoiceService voice) { return new VoiceRuntimeTool(voice); }
+
+    @Bean
+    VoiceRuntimeRouter voiceRuntimeRouter(com.minikun.tools.ToolExecutor executor) {
+        return new VoiceRuntimeRouter(executor);
+    }
+
+    @Bean
     SpeechToTextProvider speechToTextProvider(
             GuardianCommandRunner runner,
             ObjectMapper objectMapper,

@@ -39,6 +39,7 @@ public final class PythonVoxCpmTextToSpeechProvider implements TextToSpeechProvi
     private final Object lifecycleLock = new Object();
     private volatile Process managedProcess;
     private volatile boolean closed;
+    private volatile boolean suspended;
 
     public PythonVoxCpmTextToSpeechProvider(
             HttpClient client,
@@ -121,7 +122,7 @@ public final class PythonVoxCpmTextToSpeechProvider implements TextToSpeechProvi
 
     @Override
     public boolean available() {
-        return configured() && (autoStart || healthy());
+        return !closed && !suspended && configured() && (autoStart || healthy());
     }
 
     private boolean configured() {
@@ -148,13 +149,12 @@ public final class PythonVoxCpmTextToSpeechProvider implements TextToSpeechProvi
     }
 
     private void ensureReady() {
-        if (healthy()) return;
-        if (!autoStart) throw new VoiceException(VoiceErrorCode.UNAVAILABLE,
-                "VoxCPM speech server is not running");
         synchronized (lifecycleLock) {
+            if (closed || suspended) throw new VoiceException(VoiceErrorCode.UNAVAILABLE,
+                    "VoxCPM speech provider is closed or disabled");
             if (healthy()) return;
-            if (closed) throw new VoiceException(VoiceErrorCode.UNAVAILABLE,
-                    "VoxCPM speech provider is closed");
+            if (!autoStart) throw new VoiceException(VoiceErrorCode.UNAVAILABLE,
+                    "local TTS server is not running");
             if (!configured()) throw new VoiceException(VoiceErrorCode.UNAVAILABLE,
                     "VoxCPM Python runtime or model is not installed");
             if (managedProcess == null || !managedProcess.isAlive()) startServer();
@@ -170,10 +170,10 @@ public final class PythonVoxCpmTextToSpeechProvider implements TextToSpeechProvi
                             "VoxCPM speech server startup was interrupted");
                 }
             }
+            stopServer();
+            throw new VoiceException(VoiceErrorCode.TIMEOUT,
+                    "VoxCPM speech server did not become ready before the startup timeout");
         }
-        stopServer();
-        throw new VoiceException(VoiceErrorCode.TIMEOUT,
-                "VoxCPM speech server did not become ready before the startup timeout");
     }
 
     private URI endpoint(String speaker) {
@@ -221,18 +221,47 @@ public final class PythonVoxCpmTextToSpeechProvider implements TextToSpeechProvi
         }
     }
 
+    @Override
+    public boolean running() { return healthy(); }
+
+    @Override
+    public void releaseRuntime() {
+        synchronized (lifecycleLock) {
+            if ((managedProcess == null || !managedProcess.isAlive()) && healthy()) {
+                throw new VoiceException(VoiceErrorCode.UNAVAILABLE,
+                        "TTS server is externally managed; stop it through its owner");
+            }
+            stopServer();
+            suspended = true;
+        }
+    }
+
+    @Override
+    public void resumeRuntime() {
+        synchronized (lifecycleLock) {
+            if (closed) throw new VoiceException(VoiceErrorCode.UNAVAILABLE, "TTS provider is closed");
+            suspended = false;
+        }
+    }
+
     private void stopServer() {
         Process process = managedProcess;
-        managedProcess = null;
         if (process != null && process.isAlive()) {
             process.destroy();
             try {
-                if (!process.waitFor(2, java.util.concurrent.TimeUnit.SECONDS)) process.destroyForcibly();
+                if (!process.waitFor(2, java.util.concurrent.TimeUnit.SECONDS)) {
+                    process.destroyForcibly();
+                    if (!process.waitFor(2, java.util.concurrent.TimeUnit.SECONDS)) {
+                        throw new VoiceException(VoiceErrorCode.UNAVAILABLE, "TTS server did not stop");
+                    }
+                }
             } catch (InterruptedException exception) {
                 Thread.currentThread().interrupt();
                 process.destroyForcibly();
+                throw new VoiceException(VoiceErrorCode.UNAVAILABLE, "TTS shutdown was interrupted");
             }
         }
+        managedProcess = null;
     }
 
     @Override

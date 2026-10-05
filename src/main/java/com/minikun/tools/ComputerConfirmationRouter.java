@@ -39,7 +39,7 @@ public final class ComputerConfirmationRouter implements ToolRequestRouter {
         if (pending.isEmpty()) return Optional.empty();
         String callId = "computer-confirm-" + UUID.randomUUID();
         Map<String, Object> arguments = confirmations.confirmedArguments(pending.get());
-        ToolResult result = executor.execute(new ToolCallContext(conversationId, callId, ownerId),
+        ToolResult result = executor.executeAuthorized(new ToolCallContext(conversationId, callId, ownerId),
                 new ToolCall(callId, TOOL_NAME, arguments));
         if (!result.success()) return Optional.of(ToolEvidence.finalFailed(TOOL_NAME,
                 "ขออภัยครับ การทำงานกับคอมพิวเตอร์ไม่สำเร็จ: " + result.error()));

@@ -14,6 +14,13 @@ import java.nio.file.Path;
 @Configuration(proxyBeanMethods = false)
 public class BrowserConfiguration {
     @Bean
+    @org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(name = "minikun.browser.enabled", havingValue = "true", matchIfMissing = true)
+    BrowserControlTool browserControlTool(BrowserSessionClient session,
+            org.springframework.beans.factory.ObjectProvider<com.minikun.planner.PlannerConfirmationService> confirmations,
+            @Value("${minikun.sync.owner-id:default}") String owner) {
+        return new BrowserControlTool(session, confirmations, owner);
+    }
+    @Bean
     BrowserSessionClient browserSessionClient(ObjectMapper mapper,
             @Value("${minikun.browser.session.runtime-root:${user.home}/Library/Application Support/Minikun/browser}") String root,
             @Value("${minikun.browser.session.timeout:35s}") Duration timeout) {

@@ -29,7 +29,7 @@
         <key>MINIKUN_HTTPS_PORT</key>
         <string>8443</string>
         <key>MINIKUN_VOICE_TTS_WARMUP</key>
-        <string>true</string>
+        <string>false</string>
     </dict>
 
     <key>RunAtLoad</key>

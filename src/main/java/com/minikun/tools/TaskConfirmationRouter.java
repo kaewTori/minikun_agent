@@ -37,7 +37,7 @@ public final class TaskConfirmationRouter implements ToolRequestRouter {
                 .filter(value -> value.action().startsWith("task."));
         if (pending.isEmpty()) return Optional.empty();
         String callId = "task-confirm-" + UUID.randomUUID();
-        ToolResult result = executor.execute(new ToolCallContext(conversationId, callId, ownerId),
+        ToolResult result = executor.executeAuthorized(new ToolCallContext(conversationId, callId, ownerId),
                 new ToolCall(callId, TOOL_NAME, confirmations.confirmedArguments(pending.get())));
         confirmations.clear(conversationId);
         if (!result.success()) {

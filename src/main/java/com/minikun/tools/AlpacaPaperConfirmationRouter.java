@@ -36,7 +36,7 @@ public final class AlpacaPaperConfirmationRouter implements ToolRequestRouter {
                 .filter(value -> value.action().equals("alpaca.paper_order"));
         if (pending.isEmpty()) return Optional.empty();
         String callId = "alpaca-paper-confirm-" + UUID.randomUUID();
-        ToolResult result = executor.execute(new ToolCallContext(conversationId, callId, ownerId),
+        ToolResult result = executor.executeAuthorized(new ToolCallContext(conversationId, callId, ownerId),
                 new ToolCall(callId, "investment.data", confirmations.confirmedArguments(pending.get())));
         if (!result.success()) {
             return Optional.of(ToolEvidence.failed("investment.data",

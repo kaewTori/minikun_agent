@@ -64,6 +64,9 @@ public final class HomelabGuardianRouter implements ToolRequestRouter {
                 result.append("• [").append(finding.severity()).append("] ")
                         .append(finding.component()).append(": ").append(finding.summary());
                 if (!finding.evidence().isBlank()) result.append(" (").append(finding.evidence()).append(')');
+                result.append("\n  ").append(finding.causeConfidence().equals("CONFIRMED")
+                        ? "สาเหตุของคำเตือนที่ยืนยันได้: " : "ผลสืบเบื้องต้น (ยังไม่ยืนยันต้นเหตุ): ")
+                        .append(finding.cause());
                 if (!finding.recommendedAction().isBlank()) {
                     result.append("\n  แนะนำ: ").append(finding.recommendedAction());
                 }

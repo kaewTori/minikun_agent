@@ -10,10 +10,12 @@ public enum AgentRunStatus {
     UNVERIFIED,
     COMPLETED_WITH_ERRORS,
     FAILED,
-    LIMIT_REACHED;
+    LIMIT_REACHED,
+    CANCELLED,
+    REVIEW_REQUIRED;
 
     public boolean terminal() {
-        return this == UNVERIFIED || this == COMPLETED || this == COMPLETED_WITH_ERRORS || this == FAILED || this == LIMIT_REACHED;
+        return this == UNVERIFIED || this == COMPLETED || this == COMPLETED_WITH_ERRORS || this == FAILED || this == LIMIT_REACHED || this == CANCELLED || this == REVIEW_REQUIRED;
     }
 
     public static AgentRunStatus parse(String value) {

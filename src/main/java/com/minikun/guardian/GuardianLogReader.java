@@ -8,7 +8,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Pattern;
 
@@ -16,9 +15,15 @@ import java.util.regex.Pattern;
 public final class GuardianLogReader {
     private static final int MAX_LINES = 200;
     private static final int MAX_TAIL_BYTES = 131_072;
+    private static final Pattern LOG_LEVEL = Pattern.compile(
+            "^(?:\\d{4}-\\d{2}-\\d{2}T\\S+\\s+)?(TRACE|DEBUG|INFO|WARN|WARNING|ERROR|FATAL)\\b",
+            Pattern.CASE_INSENSITIVE);
     private static final Pattern SECRET_ASSIGNMENT = Pattern.compile(
             "(?i)(authorization|bearer|token|api[-_]?key|password|passwd|secret)(\\s*[:=]\\s*|\\s+)([^\\s,;]+)");
     private static final Pattern URL_CREDENTIAL = Pattern.compile("(?i)(https?://)([^/@\\s]+)@([A-Za-z0-9.-]+)");
+    private static final Pattern AUTH_CREDENTIAL = Pattern.compile("(?i)(bearer|basic)(\\s+)[^\\s,;]+");
+    private static final Pattern JSON_SECRET = Pattern.compile(
+            "(?i)(\"(?:authorization|token|api[-_]?key|password|passwd|secret)\"\\s*:\\s*)\"[^\"]*\"");
 
     private final Map<String, GuardianLogSource> sources;
 
@@ -42,22 +47,40 @@ public final class GuardianLogReader {
             throw new IllegalArgumentException("unknown guardian log source; allowed sources: " + sourceNames());
         }
         int limit = Math.max(1, Math.min(requestedLines, MAX_LINES));
-        if (!Files.isRegularFile(source.path()) || !Files.isReadable(source.path())) {
-            return new GuardianLogSnapshot(source.name(), "UNAVAILABLE", List.of(), 0, 0);
-        }
+        if (Files.notExists(source.path())) return unavailable(source, "FILE_MISSING");
+        if (!Files.isReadable(source.path())) return unavailable(source, "NOT_READABLE");
+        if (!Files.isRegularFile(source.path())) return unavailable(source, "NOT_REGULAR_FILE");
         try {
             List<String> lines = tail(source, limit);
             int warnings = 0;
             int errors = 0;
             for (String line : lines) {
-                String upper = line.toUpperCase(Locale.ROOT);
-                if (upper.contains("WARN")) warnings++;
-                if (upper.contains("ERROR") || upper.contains("EXCEPTION") || upper.contains("FATAL")) errors++;
+                if (isWarningLine(line)) warnings++;
+                if (isErrorLine(line)) errors++;
             }
             return new GuardianLogSnapshot(source.name(), "UP", lines, warnings, errors);
         } catch (IOException exception) {
-            return new GuardianLogSnapshot(source.name(), "UNAVAILABLE", List.of(), 0, 0);
+            return unavailable(source, "READ_FAILED");
         }
+    }
+
+    static boolean isErrorLine(String line) {
+        String level = logLevel(line);
+        return level.equalsIgnoreCase("ERROR") || level.equalsIgnoreCase("FATAL");
+    }
+
+    static boolean isWarningLine(String line) {
+        String level = logLevel(line);
+        return level.equalsIgnoreCase("WARN") || level.equalsIgnoreCase("WARNING");
+    }
+
+    private static String logLevel(String line) {
+        var match = LOG_LEVEL.matcher(line.stripLeading());
+        return match.find() ? match.group(1) : "";
+    }
+
+    private GuardianLogSnapshot unavailable(GuardianLogSource source, String reason) {
+        return new GuardianLogSnapshot(source.name(), "UNAVAILABLE", List.of(), 0, 0, reason);
     }
 
     public List<GuardianLogSnapshot> inspectAll(int lines) {
@@ -85,7 +108,9 @@ public final class GuardianLogReader {
     }
 
     private String redact(String line) {
-        String redacted = SECRET_ASSIGNMENT.matcher(line).replaceAll("$1$2[REDACTED]");
+        String redacted = JSON_SECRET.matcher(line).replaceAll("$1\"[REDACTED]\"");
+        redacted = AUTH_CREDENTIAL.matcher(redacted).replaceAll("$1$2[REDACTED]");
+        redacted = SECRET_ASSIGNMENT.matcher(redacted).replaceAll("$1$2[REDACTED]");
         return URL_CREDENTIAL.matcher(redacted).replaceAll("$1[REDACTED]@$3");
     }
 

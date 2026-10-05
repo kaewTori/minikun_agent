@@ -75,11 +75,11 @@ public final class AgentRiskConfirmationRouter implements ToolRequestRouter {
     private ToolResult executeTracked(Optional<UUID> runId, ConversationId conversationId, String ownerId,
             String callId, String toolName, Map<String, Object> arguments) {
         if (runId.isEmpty() || executions == null) {
-            return executor.execute(new ToolCallContext(conversationId, callId, ownerId),
+            return executor.executeAuthorized(new ToolCallContext(conversationId, callId, ownerId),
                     new ToolCall(callId, toolName, arguments));
         }
         executions.beginStep(runId.get(), callId, toolName, arguments);
-        ToolResult result = executor.execute(new ToolCallContext(conversationId, callId, ownerId),
+        ToolResult result = executor.executeAuthorized(new ToolCallContext(conversationId, callId, ownerId),
                 new ToolCall(callId, toolName, arguments));
         // A confirmed write may have taken effect even when its response failed.
         executions.finishStep(runId.get(), callId, result, false);

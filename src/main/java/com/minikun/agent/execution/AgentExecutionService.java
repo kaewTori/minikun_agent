@@ -45,16 +45,25 @@ public final class AgentExecutionService implements AgentExecutionTracker {
 
     @Override
     public Optional<AgentRun> start(String ownerId, String conversationId, String responseId, AgentPlanDraft plan) {
+        return start(ownerId, conversationId, responseId, plan, maxSteps);
+    }
+
+    public Optional<AgentRun> startAction(String ownerId, String conversationId, AgentPlanDraft plan) {
+        return start(ownerId, conversationId, "", plan, Math.min(50, Math.max(maxSteps, plan.steps().size() * 6)));
+    }
+
+    private Optional<AgentRun> start(String ownerId, String conversationId, String responseId, AgentPlanDraft plan, int stepBudget) {
         Instant now = clock.instant();
         return Optional.of(store.createRun(new AgentRun(UUID.randomUUID(), owner(ownerId),
                 require(conversationId, "conversation id"), responseId, plan.objective(), plan.steps(), plan.riskAssessment(), AgentRunStatus.PLANNED,
-                0, maxSteps, "", "", now, now, null)));
+                0, stepBudget, "", "", now, now, null)));
     }
 
     @Override
     public AgentExecutionStep beginStep(UUID runId, String toolCallId, String toolName,
             Map<String, Object> arguments) {
         AgentRun run = run(runId);
+        if (run.status() == AgentRunStatus.CANCELLED || run.status() == AgentRunStatus.COMPLETED) throw new IllegalStateException("agent run already stopped");
         Optional<AgentExecutionStep> existing = store.findStep(runId, toolCallId);
         Instant now = clock.instant();
         AgentExecutionStep step;
@@ -110,6 +119,7 @@ public final class AgentExecutionService implements AgentExecutionTracker {
     @Override
     public void complete(UUID runId, String summary) {
         AgentRun run = run(runId);
+        if (run.status() == AgentRunStatus.CANCELLED || run.status() == AgentRunStatus.REVIEW_REQUIRED) return;
         List<AgentExecutionStep> steps = store.listSteps(runId);
         if (steps.stream().anyMatch(step -> step.status() == AgentStepStatus.WAITING_CONFIRMATION)) {
             waitingConfirmation(runId, "waiting for confirmation; remaining plan has not been verified");
@@ -163,6 +173,15 @@ public final class AgentExecutionService implements AgentExecutionTracker {
         complete(runId, summary);
     }
 
+    /** Action worker calls this only after evaluating its persisted observable criteria. */
+    public AgentRun actionStatus(String ownerId, UUID runId, AgentRunStatus status, int cursor, String summary) {
+        AgentRun run = find(ownerId, runId);
+        if (run.status() == AgentRunStatus.CANCELLED && status != AgentRunStatus.CANCELLED) return run;
+        return updateRun(run, status, cursor, bounded(summary, 4000),
+                status == AgentRunStatus.FAILED || status == AgentRunStatus.REVIEW_REQUIRED ? bounded(summary, 1000) : "",
+                status.terminal() ? clock.instant() : null);
+    }
+
     @Override
     public Optional<String> completionNotice(UUID runId) {
         return run(runId).status() == AgentRunStatus.UNVERIFIED
@@ -174,6 +193,8 @@ public final class AgentExecutionService implements AgentExecutionTracker {
         return store.findRun(id)
                 .orElseThrow(() -> new IllegalArgumentException("agent run was not found"));
     }
+
+    public String findRunOwner(UUID id) { return run(id).ownerId(); }
 
     private AgentRun updateRun(AgentRun run, AgentRunStatus status, int currentStep, String summary,
             String failure, Instant completedAt) {

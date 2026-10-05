@@ -91,6 +91,11 @@
     return Core.request(path, options, { ownerId: state.ownerId, token: state.token });
   }
 
+  const actionUI = window.MinikunActions?.create({ api, toast,
+    refresh: () => loadDashboard("agent", { force: true }),
+    conversation: () => state.currentConversationId || "cockpit-actions"
+  });
+
   function showActiveModel(model) {
     state.model = model;
     localStorage.setItem("minikun.model", model);
@@ -684,7 +689,7 @@
     state.sync.eventSource = source;
     source.addEventListener("notification", (event) => {
       try {
-        JSON.parse(event.data);
+        const update = JSON.parse(event.data);
         showBrowserNotification(update.payload, event.lastEventId);
       } catch (_) { /* ignore malformed notification events */ }
     });
@@ -2939,6 +2944,7 @@
   function renderAgentRuns(items = []) {
     const statusLabels = {
       PLANNED: "วางแผนแล้ว", RUNNING: "กำลังทำ", WAITING_CONFIRMATION: "รอยืนยัน",
+      UNVERIFIED: "ยังยืนยันผลไม่ได้", CANCELLED: "ยกเลิกแล้ว", REVIEW_REQUIRED: "ต้องตรวจผล",
       COMPLETED: "เสร็จแล้ว", COMPLETED_WITH_ERRORS: "เสร็จบางส่วน", FAILED: "มีปัญหา", LIMIT_REACHED: "ถึงขีดจำกัด"
     };
     const activeStatuses = new Set(["PLANNED", "RUNNING", "WAITING_CONFIRMATION"]);
@@ -3528,9 +3534,9 @@
   function updateSystemPolling() {
     clearInterval(state.dashboard.timer);
     state.dashboard.timer = null;
-    if (document.hidden || state.cockpitPage !== "system" || $("#cockpit-view").classList.contains("hidden")) return;
+    if (document.hidden || !["system", "agent"].includes(state.cockpitPage) || $("#cockpit-view").classList.contains("hidden")) return;
     state.dashboard.timer = setInterval(() => {
-      return loadDashboard("system", { force: true, healthOnly: true }).catch(() => {});
+      return loadDashboard(state.cockpitPage, { force: true, healthOnly: state.cockpitPage === "system" }).catch(() => {});
     }, 5_000);
   }
 
@@ -3552,6 +3558,7 @@
         ["timeline", `/v1/personal/timeline?limit=${state.timelineLimit}`],
         ["experiments", "/v1/personal/experiments?limit=20"],
         ["agentRuns", "/v1/agent/runs?limit=12"],
+        ["actionRuns", "/v1/agent/actions"], ["actionGrants", "/v1/agent/actions/grants"], ["actionCatalog", "/v1/agent/actions/catalog"],
         ["threads", "/v1/personal/conversation-threads?status=OPEN&limit=20"]
       ],
       memory: [
@@ -3595,7 +3602,10 @@
         renderTimeline(value("timeline"));
         renderConversationThreads(value("threads"));
         const runItems = value("agentRuns");
-        renderAgentRuns(runItems);
+        const actionRuns = value("actionRuns");
+        actionUI?.render(actionRuns, value("actionGrants"), value("actionCatalog", {}));
+        const actionIds = new Set(actionRuns.map(item => item.run.id));
+        renderAgentRuns(runItems.filter(run => !actionIds.has(run.id)));
         await loadToolTimeline(runItems);
       } else if (page === "memory") {
         renderContextMemory(value("memories"), value("knowledge", {}));
@@ -4129,7 +4139,7 @@
   document.addEventListener("visibilitychange", () => {
     updateStudioRuntimePolling($("#studio-view")?.classList.contains("hidden") ? "" : "studio");
     updateSystemPolling();
-    if (state.dashboard.timer) loadDashboard("system", { force: true, healthOnly: true }).catch(() => {});
+    if (state.dashboard.timer) loadDashboard(state.cockpitPage, { force: true, healthOnly: state.cockpitPage === "system" }).catch(() => {});
   });
 
   function openSettings() {

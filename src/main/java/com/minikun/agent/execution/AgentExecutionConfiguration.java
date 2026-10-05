@@ -7,7 +7,7 @@ import org.springframework.context.annotation.Import;
 
 @Configuration
 @Import({AgentPlanningService.class, JdbcAgentExecutionStore.class, AgentExecutionService.class,
-        AgentResumeService.class, AgentExecutionController.class})
+        AgentResumeService.class, AgentExecutionController.class, AgentActionConfiguration.class})
 public class AgentExecutionConfiguration {
     @Bean
     @ConditionalOnMissingBean(AgentExecutionTracker.class)
