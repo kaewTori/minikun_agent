@@ -31,6 +31,11 @@ class ToolRuntimeIntentDetectorTest {
         assertTrue(detector.requiresTools("ทำเป็นสไลด์ให้เราหน่อยนะ"));
         assertTrue(detector.requiresTools("ช่วยทำ PowerPoint 8 หน้าให้หน่อย"));
         assertFalse(detector.requiresTools("ช่วยวางแผนให้มินิคุงทำสไลด์ได้"));
+        assertTrue(detector.requestsPresentationDeliverable(
+                "สร้าง PowerPoint 8 สไลด์เรื่อง GitHub Copilot เพิ่มวิธีใช้จริงและตัวอย่าง prompt บนสไลด์"));
+        assertTrue(detector.requestsPresentationDeliverable("Create slides about how to use GitHub Copilot"));
+        assertTrue(detector.requestsPresentationDeliverable("ขอสไลด์สอนวิธีใช้ GitHub Copilot บนสไลด์ด้วย"));
+        assertFalse(detector.requestsPresentationDeliverable("ขอวิธีสร้าง PowerPoint ให้หน่อย"));
     }
 
     @Test

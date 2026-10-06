@@ -35,6 +35,17 @@ class TaskCaptureToolRouterTest {
         assertTrue(router.route("ช่วยจำวิธีทำข้าวผัด", conversation, "owner-7").isPresent());
     }
 
+    @Test
+    void artifactCreationIsNotTaskCapture() {
+        CapturingExecutor executor = new CapturingExecutor();
+        TaskCaptureToolRouter router = new TaskCaptureToolRouter(executor);
+        assertTrue(router.route("สร้าง PowerPoint ภาษาไทย 8 สไลด์เรื่อง GitHub Copilot", conversation).isEmpty());
+        assertTrue(router.route("เพิ่มสไลด์ตัวอย่างโค้ด Java", conversation).isEmpty());
+        assertEquals(null, executor.call);
+        assertTrue(router.route("สร้างงาน เตรียมสไลด์ GitHub Copilot", conversation).isPresent());
+        assertTrue(router.route("เพิ่มงาน ตรวจสไลด์ก่อนประชุม", conversation).isPresent());
+    }
+
     private static final class CapturingExecutor implements ToolExecutor {
         private ToolCallContext context;
         private ToolCall call;

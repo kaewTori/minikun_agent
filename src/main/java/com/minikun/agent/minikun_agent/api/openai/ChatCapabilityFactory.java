@@ -99,6 +99,10 @@ final class ChatCapabilityFactory {
                     requested slide count, or 8 slides when none is given. A successful tool result attaches the
                     file; only report that it is ready after that result exists. Earlier assistant claims or failed
                     attempts do not change this capability; if the user asks again, make a fresh tool call.
+                    Match the user's language and cover the requested topics with specific explanations and a
+                    concrete example where relevant. The actual example must be visible on the slide, not merely
+                    described in speaker notes. Avoid generic slogans and empty content slides. Keep text readable
+                    at 24pt or larger; condense wording before moving necessary evidence out of view.
                     """.strip(), true));
         }
         return List.copyOf(capabilities);

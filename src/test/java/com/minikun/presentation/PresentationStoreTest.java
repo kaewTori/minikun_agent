@@ -25,7 +25,7 @@ class PresentationStoreTest {
                 new ObjectMapper().findAndRegisterModules(),
                 Clock.fixed(Instant.parse("2026-10-03T00:00:00Z"), ZoneOffset.UTC));
         PresentationSpec spec = new PresentationSpec("Deck", "en", "paper", List.of(
-                new PresentationSpec.SlideSpec("One", "editorial", "", List.of(), "", List.of(), "", List.of(),
+                new PresentationSpec.SlideSpec("One", "editorial", "Example content", List.of(), "", List.of(), "", List.of(),
                         "", "", "", "", List.of(), "", "", List.of())));
 
         var first = store.save(new byte[] {1, 2, 3}, spec, "alice", "chat-1", "request-1");
@@ -36,7 +36,7 @@ class PresentationStoreTest {
         assertThrows(IllegalArgumentException.class, () -> store.read(first.artifactId(), "bob"));
 
         var differentSpec = new PresentationSpec("Different", "en", "paper", List.of(
-                new PresentationSpec.SlideSpec("One", "editorial", "", List.of(), "", List.of(), "", List.of(),
+                new PresentationSpec.SlideSpec("One", "editorial", "Example content", List.of(), "", List.of(), "", List.of(),
                         "", "", "", "", List.of(), "", "", List.of())));
         var distinctOperation = store.save(new byte[] {4}, differentSpec, "alice", "chat-1", "request-1");
         assertNotEquals(first.artifactId(), distinctOperation.artifactId());
@@ -62,7 +62,7 @@ class PresentationStoreTest {
 
     private PresentationSpec spec(String title) {
         return new PresentationSpec(title, "en", "paper", List.of(
-                new PresentationSpec.SlideSpec("One", "editorial", "", List.of(), "", List.of(), "", List.of(),
+                new PresentationSpec.SlideSpec("One", "editorial", "Example content", List.of(), "", List.of(), "", List.of(),
                         "", "", "", "", List.of(), "", "", List.of())));
     }
 

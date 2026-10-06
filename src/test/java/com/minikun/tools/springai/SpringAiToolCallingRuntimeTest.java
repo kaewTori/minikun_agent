@@ -20,6 +20,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.ToolResponseMessage;
+import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
@@ -55,11 +56,14 @@ import com.minikun.tools.ToolParameterType;
 
 class SpringAiToolCallingRuntimeTest {
     @Test
-    void limitsPresentationRequestsToPresentationResearchAndImageTools() {
+    void limitsPresentationRequestsToPresentationResearchAndImageTools() throws Exception {
         ChatModel chatModel = mock(ChatModel.class);
         ChatResponse noToolResponse = new ChatResponse(List.of(
                 new Generation(new AssistantMessage("พร้อมสร้างไฟล์"))));
-        when(chatModel.call(any(Prompt.class))).thenReturn(noToolResponse, noToolResponse);
+        ChatResponse structuredResponse = new ChatResponse(List.of(new Generation(new AssistantMessage("{\"spec\":{}}"))));
+        ChatResponse reviewedResponse = new ChatResponse(List.of(new Generation(new AssistantMessage(
+                "{\"spec\":{\"slides\":[{\"layout\":\"editorial\",\"body\":\"เลือกโค้ดแล้วขอคำอธิบาย\"}]}}"))));
+        when(chatModel.call(any(Prompt.class))).thenReturn(noToolResponse, structuredResponse, reviewedResponse, noToolResponse);
         List<Tool> tools = List.of(new CalculatorAddTool(), namedTool("presentation.create"),
                 namedTool("image.generate"), namedTool("web.search"), namedTool("web.open_url"));
         var registry = new DefaultToolRegistry(tools);
@@ -69,13 +73,15 @@ class SpringAiToolCallingRuntimeTest {
                         new DefaultChatModelProviderRegistry(List.of(new ExistingChatModelProvider(chatModel)))),
                 tools, new DefaultToolExecutor(registry), new ObjectMapper());
 
-        runtime.call(new Prompt(List.of(new SystemMessage("MINIKUN_PRESENTATION_CREATE_REQUIRED")),
+        String brief = "สร้าง 8 สไลด์พร้อมข้อจำกัดว่าคำตอบอาจผิด จึงต้องอ่านโค้ดและรันเทสต์";
+        runtime.call(new Prompt(List.of(new SystemMessage("MINIKUN_PRESENTATION_CREATE_REQUIRED"),
+                        new UserMessage(brief)),
                         OllamaChatOptions.builder().model("main-model").build()),
                 new ConversationId("conversation"));
 
         ArgumentCaptor<Prompt> prompt = ArgumentCaptor.forClass(Prompt.class);
-        verify(chatModel, times(2)).call(prompt.capture());
-        for (Prompt attemptedPrompt : prompt.getAllValues()) {
+        verify(chatModel, times(4)).call(prompt.capture());
+        for (Prompt attemptedPrompt : List.of(prompt.getAllValues().get(0), prompt.getAllValues().get(3))) {
             List<String> offeredTools = ((ToolCallingChatOptions) attemptedPrompt.getOptions())
                     .getToolCallbacks().stream().map(callback -> callback.getToolDefinition().name()).toList();
             assertEquals(List.of("image.generate", "presentation.create", "web.open_url", "web.search"), offeredTools);
@@ -83,6 +89,29 @@ class SpringAiToolCallingRuntimeTest {
         assertEquals(true, prompt.getAllValues().get(1).getInstructions().stream()
                 .filter(SystemMessage.class::isInstance).map(SystemMessage.class::cast)
                 .anyMatch(message -> message.getText().contains("has not been created yet")));
+        var structuredOptions = (OllamaChatOptions) prompt.getAllValues().get(1).getOptions();
+        assertEquals(List.of(), structuredOptions.getToolCallbacks());
+        assertEquals(4096, structuredOptions.getMaxTokens());
+        assertEquals("object", ((Map<?, ?>) structuredOptions.getFormat()).get("type"));
+        var repairItems = new ObjectMapper().valueToTree(structuredOptions.getFormat())
+                .path("properties").path("spec").path("properties").path("slides").path("items");
+        assertEquals(List.of("cover", "editorial"), new ObjectMapper().convertValue(
+                repairItems.path("properties").path("layout").path("enum"), List.class));
+        assertEquals(false, repairItems.path("properties").has("bullets"));
+        assertEquals(true, repairItems.path("required").toString().contains("body"));
+        assertEquals(structuredOptions.getFormat(), ((OllamaChatOptions) prompt.getAllValues().get(2).getOptions()).getFormat());
+        assertEquals(true, prompt.getAllValues().get(2).getInstructions().stream()
+                .anyMatch(message -> message.getText().contains("Review and revise this draft")));
+        var reviewInstructions = prompt.getAllValues().get(2).getInstructions();
+        assertEquals(UserMessage.class, reviewInstructions.getLast().getClass());
+        assertEquals(true, reviewInstructions.getLast().getText().startsWith("ตรวจแก้ร่าง JSON"));
+        assertEquals(true, reviewInstructions.getLast().getText().contains(brief));
+        assertEquals(true, prompt.getAllValues().get(3).getInstructions().stream()
+                .filter(ToolResponseMessage.class::isInstance).map(ToolResponseMessage.class::cast)
+                .flatMap(message -> message.getResponses().stream())
+                .anyMatch(result -> result.name().equals("presentation.create")
+                        && result.responseData().contains("\"success\":true")
+                        && result.responseData().contains("เลือกโค้ดแล้วขอคำอธิบาย")));
     }
 
     @Test
@@ -92,8 +121,11 @@ class SpringAiToolCallingRuntimeTest {
                 AssistantMessage.builder().content("").toolCalls(List.of(new AssistantMessage.ToolCall(
                         "presentation-call", "function", "presentation.create", "{\"spec_json\":\"{}\"}")))
                         .build())));
-        ChatResponse plainResponse = new ChatResponse(List.of(new Generation(new AssistantMessage("ยังไม่สำเร็จ"))));
-        when(chatModel.call(any(Prompt.class))).thenReturn(failedPresentationCall, plainResponse, plainResponse);
+        var structuredResponse = new ChatResponse(List.of(new Generation(
+                new AssistantMessage("{\"spec_json\":\"{}\"}"))));
+        when(chatModel.call(any(Prompt.class))).thenReturn(
+                failedPresentationCall, structuredResponse,
+                structuredResponse, structuredResponse, structuredResponse, structuredResponse);
         Tool presentation = new Tool() {
             @Override public ToolDefinition definition() {
                 return new ToolDefinition("presentation.create", "create a PowerPoint", Map.of(
@@ -116,11 +148,58 @@ class SpringAiToolCallingRuntimeTest {
                 new ConversationId("conversation"));
 
         ArgumentCaptor<Prompt> prompts = ArgumentCaptor.forClass(Prompt.class);
-        verify(chatModel, times(3)).call(prompts.capture());
+        verify(chatModel, times(6)).call(prompts.capture());
         assertEquals(true, prompts.getAllValues().get(2).getInstructions().stream()
                 .filter(SystemMessage.class::isInstance).map(SystemMessage.class::cast)
                 .anyMatch(message -> message.getText().contains("has not been created yet")
                         && message.getText().contains("nested spec object")));
+        assertEquals(false, prompts.getAllValues().get(2).getInstructions().stream()
+                .anyMatch(message -> message instanceof AssistantMessage || message instanceof ToolResponseMessage));
+        assertEquals(true, prompts.getAllValues().get(2).getInstructions().stream()
+                .anyMatch(message -> message.getText().contains("invalid presentation spec")));
+    }
+
+    @Test
+    void reviewsNativePresentationBeforeSavingWithoutChangingOtherToolCalls() {
+        ChatModel chatModel = mock(ChatModel.class);
+        String draft = "{\"spec\":{\"slides\":[{\"body\":\"ติดตั้งส่วนขยาย\"}]}}";
+        String reviewed = "{\"spec\":{\"slides\":[{\"layout\":\"editorial\","
+                + "\"body\":\"ติดตั้งส่วนขยาย แล้วอ่านโค้ดและรันเทสต์ เพราะคำตอบอาจผิด\",\"speakerNotes\":\"SOURCE_NOTE\"}]}}";
+        ChatResponse nativeCalls = new ChatResponse(List.of(new Generation(AssistantMessage.builder().content("")
+                .toolCalls(List.of(new AssistantMessage.ToolCall("deck", "function", "presentation.create", draft),
+                        new AssistantMessage.ToolCall("search", "function", "web.search", "{\"query\":\"Copilot\"}")))
+                .build())));
+        when(chatModel.call(any(Prompt.class))).thenReturn(nativeCalls,
+                new ChatResponse(List.of(new Generation(new AssistantMessage(reviewed)))),
+                new ChatResponse(List.of(new Generation(new AssistantMessage("แนบไฟล์แล้ว")))));
+        List<Tool> tools = List.of(namedTool("presentation.create"), namedTool("web.search"));
+        var runtime = new SpringAiToolCallingRuntime(new DefaultActiveChatModelProvider(
+                new ActiveModelConfiguration(ChatModelId.EXISTING),
+                new DefaultChatModelProviderRegistry(List.of(new ExistingChatModelProvider(chatModel)))),
+                tools, new DefaultToolExecutor(new DefaultToolRegistry(tools)), new ObjectMapper());
+        var evidence = ToolResponseMessage.builder().responses(List.of(new ToolResponseMessage.ToolResponse(
+                "source", "web.open_url", "SOURCE_EVIDENCE: use the selected or attached code"))).build();
+        runtime.call(new Prompt(List.of(new SystemMessage("MINIKUN_PRESENTATION_CREATE_REQUIRED"),
+                new UserMessage("สร้างสไลด์พร้อมข้อจำกัดและขั้นตอนตรวจคำตอบ"), evidence)),
+                new ConversationId("conversation"));
+
+        ArgumentCaptor<Prompt> prompts = ArgumentCaptor.forClass(Prompt.class);
+        verify(chatModel, times(3)).call(prompts.capture());
+        assertEquals("json", ((OllamaChatOptions) prompts.getAllValues().get(1).getOptions()).getFormat());
+        assertEquals(true, prompts.getAllValues().get(1).getInstructions().stream()
+                .filter(ToolResponseMessage.class::isInstance).map(ToolResponseMessage.class::cast)
+                .flatMap(message -> message.getResponses().stream())
+                .anyMatch(result -> result.responseData().contains("SOURCE_EVIDENCE")));
+        var results = prompts.getAllValues().getLast().getInstructions().stream()
+                .filter(ToolResponseMessage.class::isInstance).map(ToolResponseMessage.class::cast)
+                .flatMap(message -> message.getResponses().stream()).toList();
+        assertEquals(true, results.stream().anyMatch(result -> result.id().equals("deck")
+                && result.responseData().contains("คำตอบอาจผิด")));
+        assertEquals(true, results.stream().anyMatch(result -> result.id().equals("deck")
+                && result.responseData().contains("SOURCE_NOTE")
+                && result.responseData().contains("\"layout\":\"editorial\"")));
+        assertEquals(true, results.stream().anyMatch(result -> result.id().equals("search")
+                && result.responseData().contains("\"query\":\"Copilot\"")));
     }
 
     @Test
@@ -270,9 +349,18 @@ class SpringAiToolCallingRuntimeTest {
 
     private Tool namedTool(String name) {
         return new Tool() {
-            @Override public ToolDefinition definition() { return new ToolDefinition(name, "test tool", Map.of()); }
+            @Override public ToolDefinition definition() {
+                Map<String, Object> properties = Map.of("layout", Map.of("type", "string", "enum", List.of("editorial")),
+                        "body", Map.of("type", "string"), "bullets", Map.of("type", "array"));
+                Map<String, Object> spec = Map.of("properties", Map.of("slides", Map.of("type", "array", "items", Map.of(
+                        "oneOf", List.of(Map.of("type", "object", "properties", properties, "required", List.of("body")))))));
+                return new ToolDefinition(name, "test tool", "presentation.create".equals(name)
+                        ? Map.of("spec", new ToolParameter("spec", ToolParameterType.OBJECT, true, "deck", spec))
+                        : "web.search".equals(name)
+                        ? Map.of("query", new ToolParameter("query", ToolParameterType.STRING, true, "query")) : Map.of());
+            }
             @Override public ToolResult execute(com.minikun.tools.ToolCallContext context,
-                    Map<String, Object> arguments) { return ToolResult.success(Map.of()); }
+                    Map<String, Object> arguments) { return ToolResult.success(Map.copyOf(arguments)); }
         };
     }
 

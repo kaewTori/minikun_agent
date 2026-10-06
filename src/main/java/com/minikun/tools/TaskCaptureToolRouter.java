@@ -25,7 +25,7 @@ public final class TaskCaptureToolRouter implements ToolRequestRouter {
     private static final String TOOL_NAME = "task.manage";
     private static final Pattern TASK_STATEMENT = Pattern.compile(
             "(?iu)^(?:มินิคุง[,\\s]*)?(?:ช่วย(?:จด|จำ|บันทึก)|ฝาก(?:จด|จำ|บันทึก|ไว้)|"
-                    + "อย่าลืม|ต้อง(?=\\s)(?:ทำ|ไปทำ|ส่ง|จัดการ)?|เพิ่ม(?:งาน)?|สร้าง(?:งาน)?|todo\\s*:)"
+                    + "อย่าลืม|ต้อง(?=\\s)(?:ทำ|ไปทำ|ส่ง|จัดการ)?|เพิ่มงาน|สร้างงาน|todo\\s*:)"
                     + "\\s*(?:ว่า\\s*)?(.+?)\\s*[.!?,，。!?]*$");
 
     private final ToolExecutor executor;

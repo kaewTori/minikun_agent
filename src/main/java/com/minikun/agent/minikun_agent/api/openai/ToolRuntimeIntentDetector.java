@@ -18,10 +18,10 @@ final class ToolRuntimeIntentDetector {
             "(?iu)(จากนั้น|แล้วค่อย|ต่อด้วย|เสร็จแล้ว|and then|then)");
     private static final Pattern PRESENTATION_REQUEST = Pattern.compile(
             "(?iu)(?:(?:make|create|build|generate|design|prepare|draft|produce)\\s+(?:(?:me|us|an?|the|my|our)\\s+)?"
-                    + ".{0,48}\\b(?:slide\\s+deck|slides?|presentations?|powerpoints?)\\b|"
-                    + "(?:ทำ|สร้าง|จัดทำ|ออกแบบ|ร่าง|จัด)(?:\\s*(?:เป็น|ให้|ออกมา))?\\s*.{0,24}"
+                    + ".{0,48}?\\b(?:slide\\s+deck|slides?|presentations?|powerpoints?)\\b|"
+                    + "(?:ทำ|สร้าง|จัดทำ|ออกแบบ|ร่าง|จัด)(?:\\s*(?:เป็น|ให้|ออกมา))?\\s*.{0,24}?"
                     + "(?:สไลด์|พรีเซนเทชัน|พาวเวอร์พอยต์|presentation|powerpoint)|"
-                    + "(?:อยากได้|ขอ)(?:\\s*.{0,12})?(?:สไลด์|พรีเซนเทชัน|powerpoint).{0,20}(?:ให้หน่อย|ด้วย|เลย|ครับ|ค่ะ)?|"
+                    + "(?:อยากได้|ขอ)(?:\\s*.{0,12}?)?(?:สไลด์|พรีเซนเทชัน|powerpoint)|"
                     + "(?:สไลด์|พรีเซนเทชัน|powerpoint).{0,18}(?:ให้หน่อย|ด้วย|เลย|ให้เรา))");
     private static final Pattern PRESENTATION_DISCUSSION = Pattern.compile(
             "(?iu)(?:วางแผน|ทำแผน|แผนให้|แผนการ|ขั้นตอนการ|วิธี(?:ทำ|สร้าง|แก้|ใช้)|กระบวนการ|how\\s+to|plan\\s+to)"
@@ -100,8 +100,9 @@ final class ToolRuntimeIntentDetector {
 
     boolean requestsPresentationDeliverable(String message) {
         String value = message == null ? "" : message.toLowerCase(Locale.ROOT).trim();
-        return !value.isBlank() && PRESENTATION_REQUEST.matcher(value).find()
-                && !PRESENTATION_DISCUSSION.matcher(value).find();
+        var request = PRESENTATION_REQUEST.matcher(value);
+        var discussion = PRESENTATION_DISCUSSION.matcher(value);
+        return request.find() && (!discussion.find() || request.end() <= discussion.start());
     }
 
     private boolean investmentTransactionRequiresTools(String message, String value) {

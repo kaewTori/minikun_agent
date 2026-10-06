@@ -53,6 +53,8 @@ final class PresentationRenderer {
             }
             deck.write(output);
             return new RenderedPresentation(output.toByteArray(), List.copyOf(warnings));
+        } catch (IllegalArgumentException exception) {
+            throw exception;
         } catch (IOException | RuntimeException exception) {
             throw new IllegalStateException("PowerPoint could not be created", exception);
         }
@@ -65,31 +67,45 @@ final class PresentationRenderer {
 
     private void paintSlide(XMLSlideShow deck, XSLFSlide slide, PresentationSpec.SlideSpec content, PresentationTheme theme,
             int page, int pageCount, List<String> warnings) {
-        if ("cover".equals(content.layout())) {
-            int titleWidth = content.imageUrl().isBlank() ? 540 : 460;
-            addRule(slide, 80, 138, 7, theme.accent, 46);
-            addText(slide, content.title(), rect(108, 142, titleWidth, 126), 40, theme.ink, true, false);
-            addRule(slide, 108, 286, 84, theme.accent, 4);
-            addTextTop(slide, content.body(), rect(108, 311, titleWidth, 88), 22, theme.muted, false);
-            if (!content.imageUrl().isBlank()) {
-                addPanel(slide, rect(600, 90, 310, 360), theme.divider);
-                addImage(deck, slide, content.imageUrl(), rect(612, 102, 286, 336), warnings);
-            } else {
-                coverMotif(slide, theme);
+        String layout = content.layout();
+        if ("cover".equals(layout)) {
+            try {
+                int titleWidth = content.imageUrl().isBlank() ? 540 : 460;
+                addRule(slide, 80, 138, 7, theme.accent, 46);
+                addText(slide, content.title(), rect(108, 96, titleWidth, 208), 44, theme.ink, true, false);
+                addRule(slide, 108, 316, 84, theme.accent, 4);
+                addTextTop(slide, content.body(), rect(108, 336, titleWidth, 132), 24, theme.muted, false);
+                if (!content.imageUrl().isBlank()) {
+                    addPanel(slide, rect(600, 90, 310, 360), theme.divider);
+                    addImage(deck, slide, content.imageUrl(), rect(612, 102, 286, 336), warnings);
+                } else {
+                    coverMotif(slide, theme);
+                }
+                addPageNumber(slide, page, pageCount, theme);
+                return;
+            } catch (IllegalArgumentException textDoesNotFit) {
+                removeShapesAfter(slide, 0);
+                layout = "editorial";
             }
-            addPageNumber(slide, page, pageCount, theme);
-            return;
         }
 
         addRule(slide, 58, 45, 5, theme.accent, 38);
-        addText(slide, content.title(), rect(78, 36, 804, 58), 28, theme.ink, true, false);
+        addText(slide, content.title(), rect(78, 28, 804, 78), 34, theme.ink, true, false);
         addRule(slide, 78, 108, 804, theme.divider, 1);
 
-        switch (content.layout()) {
+        switch (layout) {
             case "editorial" -> editorial(deck, slide, content, theme, warnings);
-            case "split" -> split(deck, slide, content, theme, warnings);
+            case "split", "cards" -> {
+                int existingShapes = slide.getShapes().size();
+                try {
+                    if ("split".equals(layout)) split(deck, slide, content, theme, warnings);
+                    else cards(slide, content, theme);
+                } catch (IllegalArgumentException textDoesNotFit) {
+                    removeShapesAfter(slide, existingShapes);
+                    editorial(deck, slide, content, theme, warnings);
+                }
+            }
             case "comparison" -> comparison(slide, content, theme);
-            case "cards" -> cards(slide, content, theme);
             case "stat" -> stat(slide, content, theme);
             case "quote" -> quote(slide, content, theme);
             case "timeline" -> timeline(slide, content, theme);
@@ -100,13 +116,17 @@ final class PresentationRenderer {
 
     private void editorial(XMLSlideShow deck, XSLFSlide slide, PresentationSpec.SlideSpec content, PresentationTheme theme,
             List<String> warnings) {
+        int bulletsY = 130;
         if (!content.body().isBlank()) {
-            addRule(slide, 72, 150, 4, theme.accent, content.bullets().isEmpty() ? 122 : 76);
-            addTextTop(slide, content.body(), rect(92, 142, content.imageUrl().isBlank() ? 780 : 490,
-                    content.bullets().isEmpty() ? 230 : 104), 22, theme.ink, false);
+            int width = content.imageUrl().isBlank() ? 780 : 490;
+            var body = addTextTop(slide, content.body(), rect(92, 130, width, 358), 24, theme.ink, false);
+            int bodyHeight = (int) Math.ceil(body.getTextHeight()) + 2;
+            body.setAnchor(rect(92, 130, width, bodyHeight));
+            addRule(slide, 72, 138, 4, theme.accent, Math.max(20, bodyHeight - 8));
+            bulletsY += bodyHeight + 16;
         }
-        addBullets(slide, content.bullets(), 74, content.body().isBlank() ? 142 : 278,
-                content.imageUrl().isBlank() ? 800 : 500, content.body().isBlank() ? 306 : 174, theme);
+        addBullets(slide, content.bullets(), 74, bulletsY,
+                content.imageUrl().isBlank() ? 800 : 500, 488 - bulletsY, theme);
         if (!content.imageUrl().isBlank()) {
             addPanel(slide, rect(608, 142, 294, 302), theme.divider);
             addImage(deck, slide, content.imageUrl(), rect(618, 152, 274, 282), warnings);
@@ -118,29 +138,44 @@ final class PresentationRenderer {
         if (content.imageUrl().isBlank()) {
             addPanel(slide, rect(66, 142, 398, 302), theme.divider);
             addRule(slide, 90, 165, 48, theme.accent, 4);
-            addTextTop(slide, content.body(), rect(90, 186, 350, 228), 23, theme.ink, false);
+            addTextTop(slide, content.body(), rect(90, 186, 350, 240), 24, theme.ink, false);
             addBullets(slide, content.bullets(), 506, 154, 366, 280, theme);
             return;
         }
-        addTextTop(slide, content.body(), rect(72, 152, 454, 224), 23, theme.ink, false);
-        addBullets(slide, content.bullets(), 76, 300, 440, 148, theme);
+        addTextTop(slide, content.body(), rect(72, 152, 454, 116), 24, theme.ink, false);
+        addBullets(slide, content.bullets(), 76, 284, 440, 164, theme);
         addPanel(slide, rect(572, 142, 330, 302), theme.divider);
         addImage(deck, slide, content.imageUrl(), rect(584, 154, 306, 278), warnings);
     }
 
     private void comparison(XSLFSlide slide, PresentationSpec.SlideSpec content, PresentationTheme theme) {
-        addPanel(slide, rect(66, 142, 396, 302), theme.divider);
-        addPanel(slide, rect(498, 142, 396, 302), theme.divider);
-        addRule(slide, 88, 161, 44, theme.accent, 4);
-        addRule(slide, 520, 161, 44, theme.accent, 4);
-        addText(slide, content.leftTitle(), rect(88, 174, 344, 42), 22, theme.ink, true, false);
-        addText(slide, content.rightTitle(), rect(520, 174, 344, 42), 22, theme.ink, true, false);
-        addBullets(slide, content.leftBullets(), 88, 225, 350, 198, theme);
-        addBullets(slide, content.rightBullets(), 520, 225, 350, 198, theme);
+        int existingShapes = slide.getShapes().size();
+        try {
+            addPanel(slide, rect(66, 142, 396, 302), theme.divider);
+            addPanel(slide, rect(498, 142, 396, 302), theme.divider);
+            addRule(slide, 88, 161, 44, theme.accent, 4);
+            addRule(slide, 520, 161, 44, theme.accent, 4);
+            addText(slide, content.leftTitle(), rect(88, 172, 344, 56), 26, theme.ink, true, false);
+            addText(slide, content.rightTitle(), rect(520, 172, 344, 56), 26, theme.ink, true, false);
+            addBullets(slide, content.leftBullets(), 88, 236, 350, 198, theme);
+            addBullets(slide, content.rightBullets(), 520, 236, 350, 198, theme);
+        } catch (IllegalArgumentException textDoesNotFit) {
+            removeShapesAfter(slide, existingShapes);
+            List<String> points = new ArrayList<>();
+            content.leftBullets().forEach(point -> points.add(content.leftTitle() + ": " + point));
+            content.rightBullets().forEach(point -> points.add(content.rightTitle() + ": " + point));
+            addBullets(slide, points, 74, 142, 800, 318, theme);
+        }
+    }
+
+    private void removeShapesAfter(XSLFSlide slide, int index) {
+        for (var shape : List.copyOf(slide.getShapes()).subList(index, slide.getShapes().size())) {
+            slide.removeShape(shape);
+        }
     }
 
     private void cards(XSLFSlide slide, PresentationSpec.SlideSpec content, PresentationTheme theme) {
-        if (!content.body().isBlank()) addTextTop(slide, content.body(), rect(72, 130, 812, 54), 19, theme.muted, false);
+        if (!content.body().isBlank()) addTextTop(slide, content.body(), rect(72, 130, 812, 54), 24, theme.muted, false);
         List<String> items = content.bullets();
         if (items.isEmpty()) return;
         int columns = items.size() == 1 ? 1 : 2;
@@ -159,7 +194,7 @@ final class PresentationRenderer {
             addPanel(slide, rect(x, y, cardWidth, cardHeight), theme.divider);
             addDot(slide, x + 19, y + (cardHeight - 12) / 2, theme.accent);
             addText(slide, items.get(index), rect(x + 48, y + 12, cardWidth - 64, cardHeight - 24),
-                    19, theme.ink, false, false);
+                    24, theme.ink, false, false);
         }
     }
 
@@ -167,47 +202,45 @@ final class PresentationRenderer {
         addPanel(slide, rect(68, 144, 824, 298), theme.divider);
         addRule(slide, 96, 176, 6, theme.accent, 194);
         addText(slide, content.value(), rect(132, 158, 420, 124), 72, theme.accent, true, false);
-        addText(slide, content.valueLabel(), rect(136, 292, 680, 48), 25, theme.ink, true, false);
-        addTextTop(slide, content.body(), rect(136, 352, 690, 64), 18, theme.muted, false);
+        addText(slide, content.valueLabel(), rect(136, 282, 680, 60), 28, theme.ink, true, false);
+        addTextTop(slide, content.body(), rect(136, 350, 690, 96), 24, theme.muted, false);
         addDot(slide, 742, 168, theme.accent, 112);
         addDot(slide, 772, 198, theme.divider, 52);
     }
 
     private void quote(XSLFSlide slide, PresentationSpec.SlideSpec content, PresentationTheme theme) {
         addPanel(slide, rect(70, 144, 820, 300), theme.divider);
-        addText(slide, "“", rect(102, 156, 74, 70), 64, theme.accent, true, false);
+        addText(slide, "“", rect(96, 148, 42, 80), 44, theme.accent, true, false);
         addText(slide, content.quote(), rect(142, 202, 690, 150), 29, theme.ink, true, false);
         addRule(slide, 144, 372, 48, theme.accent, 3);
-        addText(slide, content.attribution(), rect(144, 389, 670, 30), 17, theme.muted, false, false);
+        addText(slide, content.attribution(), rect(208, 376, 606, 64), 24, theme.muted, false, false);
     }
 
     private void timeline(XSLFSlide slide, PresentationSpec.SlideSpec content, PresentationTheme theme) {
         List<PresentationSpec.TimelinePoint> points = content.timeline();
-        int startX = 105, endX = 855;
-        int gap = points.size() == 1 ? 0 : (endX - startX) / (points.size() - 1);
-        if (points.size() > 1) addRule(slide, startX, 203, endX - startX, theme.divider, 2);
+        int rowHeight = 310 / points.size();
+        if (points.size() > 1) addRule(slide, 85, 157, 2, theme.divider, rowHeight * (points.size() - 1));
         for (int index = 0; index < points.size(); index++) {
             var point = points.get(index);
-            int x = startX + gap * index;
-            addDot(slide, x - 7, 196, theme.accent);
-            addPanel(slide, rect(x - 75, 228, 150, 188), theme.divider);
-            addText(slide, point.label(), rect(x - 64, 240, 128, 34), 18, theme.accent, true, true);
-            addTextTop(slide, point.text(), rect(x - 63, 283, 126, 118), 16, theme.ink, false, true);
+            int y = 142 + index * rowHeight;
+            addDot(slide, 79, y + 10, theme.accent);
+            addTextTop(slide, point.label(), rect(112, y, 210, rowHeight - 8), 24, theme.accent, true);
+            addTextTop(slide, point.text(), rect(342, y, 536, rowHeight - 8), 24, theme.ink, false);
         }
     }
 
     private void addBullets(XSLFSlide slide, List<String> bullets, int x, int y, int width, int height,
             PresentationTheme theme) {
         if (bullets.isEmpty()) return;
-        int gap = bullets.size() > 3 ? 4 : 13;
-        int rowHeight = Math.min(52, (height - gap * (bullets.size() - 1)) / bullets.size());
-        int topInset = (height - rowHeight * bullets.size() - gap * (bullets.size() - 1)) / 2;
-        int fontSize = rowHeight < 29 ? 16 : rowHeight < 38 ? 17 : 18;
+        int gap = 16;
+        int rowY = y;
         for (int index = 0; index < bullets.size(); index++) {
-            int rowY = y + topInset + index * (rowHeight + gap);
             addDot(slide, x + 2, rowY + 13, theme.accent, 10);
-            addTextTop(slide, bullets.get(index), rect(x + 24, rowY, width - 24, rowHeight),
-                    fontSize, theme.ink, false);
+            var text = addTextTop(slide, bullets.get(index), rect(x + 24, rowY, width - 24, y + height - rowY),
+                    24, theme.ink, false);
+            int textHeight = (int) Math.ceil(text.getTextHeight()) + 2;
+            text.setAnchor(rect(x + 24, rowY, width - 24, textHeight));
+            rowY += textHeight + gap;
         }
     }
 
@@ -268,9 +301,9 @@ final class PresentationRenderer {
     }
 
     private void addPageNumber(XSLFSlide slide, int page, int count, PresentationTheme theme) {
-        addRule(slide, 64, 476, 832, theme.divider, 1);
+        addRule(slide, 64, 504, 832, theme.divider, 1);
         addText(slide, String.format(Locale.ROOT, "%02d / %02d", page, count),
-                rect(806, 482, 90, 24), 11, theme.muted, false, true);
+                rect(806, 510, 90, 20), 11, theme.muted, false, true);
     }
 
     private void addRule(XSLFSlide slide, int x, int y, int width, Color color, int thickness) {
@@ -294,25 +327,42 @@ final class PresentationRenderer {
         addText(slide, text, bounds, size, color, bold, center, VerticalAlignment.MIDDLE);
     }
 
-    private void addTextTop(XSLFSlide slide, String text, Rectangle2D bounds, int size, Color color,
+    private XSLFTextBox addTextTop(XSLFSlide slide, String text, Rectangle2D bounds, int size, Color color,
             boolean bold) {
-        addTextTop(slide, text, bounds, size, color, bold, false);
+        return addTextTop(slide, text, bounds, size, color, bold, false);
     }
 
-    private void addTextTop(XSLFSlide slide, String text, Rectangle2D bounds, int size, Color color,
+    private XSLFTextBox addTextTop(XSLFSlide slide, String text, Rectangle2D bounds, int size, Color color,
             boolean bold, boolean center) {
-        addText(slide, text, bounds, size, color, bold, center, VerticalAlignment.TOP);
+        return addText(slide, text, bounds, size, color, bold, center, VerticalAlignment.TOP);
     }
 
-    private void addText(XSLFSlide slide, String text, Rectangle2D bounds, int size, Color color,
+    private XSLFTextBox addText(XSLFSlide slide, String text, Rectangle2D bounds, int size, Color color,
             boolean bold, boolean center, VerticalAlignment verticalAlignment) {
-        if (text == null || text.isBlank()) return;
+        if (text == null || text.isBlank()) return null;
         XSLFTextBox box = textBox(slide, bounds, verticalAlignment);
-        XSLFTextParagraph paragraph = box.addNewTextParagraph();
-        if (center) paragraph.setTextAlign(org.apache.poi.sl.usermodel.TextParagraph.TextAlign.CENTER);
-        XSLFTextRun run = paragraph.addNewTextRun();
-        run.setText(text);
-        style(run, size, color, bold);
+        box.clearText();
+        boolean bodyText = size >= 24 && size < 32;
+        for (String block : text.split("\\R[\\t ]*\\R", -1)) {
+            XSLFTextParagraph paragraph = box.addNewTextParagraph();
+            paragraph.setLineSpacing(-size * (bodyText ? 1.6 : 1.35));
+            paragraph.setSpaceAfter(bodyText ? 8.0 : 0.0);
+            if (center) paragraph.setTextAlign(org.apache.poi.sl.usermodel.TextParagraph.TextAlign.CENTER);
+            String[] lines = block.split("\\R", -1);
+            for (int index = 0; index < lines.length; index++) {
+                if (index > 0) style(paragraph.addLineBreak(), size, color, bold);
+                XSLFTextRun run = paragraph.addNewTextRun();
+                run.setText(lines[index]);
+                style(run, size, color, bold);
+            }
+        }
+        if (box.getTextHeight() > bounds.getHeight() + 2) {
+            throw new IllegalArgumentException("Text on slide " + (slide.getSlideNumber())
+                    + " does not fit at " + size + "pt: '" + text.substring(0, Math.min(text.length(), 70))
+                    + "'. Shorten the wording or use a wider layout; keep key examples visible and move only "
+                    + "supporting detail to speakerNotes.");
+        }
+        return box;
     }
 
     private XSLFTextBox textBox(XSLFSlide slide, Rectangle2D bounds, VerticalAlignment verticalAlignment) {
@@ -321,7 +371,7 @@ final class PresentationRenderer {
         box.setInsets(new Insets2D(0, 0, 0, 0));
         box.setWordWrap(true);
         box.setVerticalAlignment(verticalAlignment);
-        box.setTextAutofit(TextAutofit.NORMAL);
+        box.setTextAutofit(TextAutofit.NONE);
         return box;
     }
 

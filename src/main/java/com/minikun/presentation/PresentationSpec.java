@@ -48,6 +48,7 @@ record PresentationSpec(String title, String language, String theme, List<SlideS
             if (title.isBlank()) title = defaultSlideTitle(body, bullets);
             title = required(title, "slide title", 160);
             layout = optional(layout, 24).toLowerCase(Locale.ROOT);
+            if (layout.isBlank()) layout = "editorial";
             body = optional(body, 2_000);
             bullets = bounded(bullets, 5, 280, "bullets");
             leftTitle = optional(leftTitle, 120);
@@ -63,19 +64,66 @@ record PresentationSpec(String title, String language, String theme, List<SlideS
             imageUrl = optional(imageUrl, 160);
             speakerNotes = optional(speakerNotes, 4_000);
             sources = bounded(sources, 8, 400, "sources");
+            if (body.matches("(?is).*(?:โค้ดที่ได้|โค้ดตัวอย่าง|ตัวอย่างโค้ด|generated code|code example):\\s*$")) {
+                throw new IllegalArgumentException("Slide '" + title + "' promises a code example but ends at its label. "
+                        + "Include the actual code in visible body text; omit introductory labels if space is limited.");
+            }
+            if (bullets.stream().anyMatch(point -> point.matches("(?s).*</h[1-6]>\\s*,\\s*$"))) {
+                throw new IllegalArgumentException("Slide '" + title
+                        + "' contains broken tool-call markup in bullets. Return clean text in structured JSON, "
+                        + "with actual explanations or steps, not just a heading.");
+            }
+            if ("cover".equals(layout) && body.isBlank() && !bullets.isEmpty()) {
+                body = String.join("\n", bullets);
+                bullets = List.of();
+            }
             if (!List.of("cover", "editorial", "split", "comparison", "cards", "stat", "quote", "timeline")
                     .contains(layout)) {
                 throw new IllegalArgumentException("unsupported slide layout: " + layout);
             }
+            if (List.of("editorial", "split", "cards").contains(layout) && body.isBlank() && bullets.isEmpty()) {
+                if (!timeline.isEmpty()) layout = "timeline";
+                else if (!quote.isBlank()) layout = "quote";
+                else if (!value.isBlank()) layout = "stat";
+                else if (!leftBullets.isEmpty() || !rightBullets.isEmpty()) layout = "comparison";
+            }
             if ("comparison".equals(layout)) {
                 if (leftTitle.isBlank()) leftTitle = "ตัวเลือก A";
                 if (rightTitle.isBlank()) rightTitle = "ตัวเลือก B";
+                if (leftBullets.isEmpty() && rightBullets.isEmpty()) layout = "editorial";
             }
             if (("stat".equals(layout) && value.isBlank())
                     || ("quote".equals(layout) && quote.isBlank())
                     || ("timeline".equals(layout) && timeline.isEmpty())) {
                 layout = "editorial";
             }
+            if ("split".equals(layout) && body.isBlank() && imageUrl.isBlank()) layout = "editorial";
+            boolean sideContent = !leftBullets.isEmpty() || !rightBullets.isEmpty();
+            boolean unusedContent = switch (layout) {
+                case "cover" -> !bullets.isEmpty() || sideContent || !timeline.isEmpty() || !value.isBlank() || !quote.isBlank();
+                case "editorial", "split", "cards" -> sideContent || !timeline.isEmpty()
+                        || !value.isBlank() || !quote.isBlank();
+                case "comparison" -> !body.isBlank() || !bullets.isEmpty() || !timeline.isEmpty()
+                        || !value.isBlank() || !quote.isBlank();
+                case "stat" -> !bullets.isEmpty() || sideContent || !timeline.isEmpty() || !quote.isBlank();
+                case "quote" -> !body.isBlank() || !bullets.isEmpty() || sideContent || !timeline.isEmpty() || !value.isBlank();
+                case "timeline" -> !body.isBlank() || !bullets.isEmpty() || sideContent || !value.isBlank() || !quote.isBlank();
+                default -> false;
+            };
+            if (unusedContent) throw new IllegalArgumentException("Slide '" + title + "' has content fields that "
+                    + "do not appear in layout '" + layout + "'. Put all examples and results in body/bullets for "
+                    + "editorial, leftBullets/rightBullets for comparison, or timeline for timeline; do not mix unused fields.");
+            boolean visibleContent = switch (layout) {
+                case "cover" -> true;
+                case "comparison" -> !leftBullets.isEmpty() || !rightBullets.isEmpty();
+                case "stat" -> !value.isBlank();
+                case "quote" -> !quote.isBlank();
+                case "timeline" -> !timeline.isEmpty();
+                default -> !body.isBlank() || !bullets.isEmpty();
+            };
+            if (!visibleContent) throw new IllegalArgumentException("Slide '" + title
+                    + "' needs visible content in body or bullets; speakerNotes alone do not appear on the slide. "
+                    + "Include the actual example or explanation, not instructions to add it later.");
         }
     }
 

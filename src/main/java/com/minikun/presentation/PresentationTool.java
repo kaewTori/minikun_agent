@@ -31,10 +31,36 @@ final class PresentationTool implements Tool {
                     + "speakerNotes,sources}]}. Theme is japanese, paper, ocean, or midnight. Layout is cover, "
                     + "editorial, split, comparison, cards, stat, quote, or timeline. Before writing slides, set an "
                     + "art direction for the audience and subject, then keep a coherent palette and type scale. "
-                    + "Treat the art direction as guidance; include only fields listed in spec. Give every slide "
-                    + "one message, a short "
-                    + "headline (ideally under 8 words), and at most 3–5 concise points, ideally one short line each. "
-                    + "Put supporting detail in speaker notes rather than shrinking slide text. Choose layouts to fit the story, vary composition "
+                    + "Treat the art direction as guidance; include only fields listed in spec. Match the user's "
+                    + "language, audience, objective, and supplied outline; preserve every requested topic. "
+                    + "Write substantive explanations: each main point should state what happens, why it matters, "
+                    + "or how to apply it. Explain capabilities through a concrete user action and required input "
+                    + "or context, rather than topic labels or generic benefits. Do not assume automatic access to "
+                    + "every workspace file; describe which relevant context must be selected or attached. "
+                    + "Use natural language appropriate to the audience. Explain unfamiliar terms at first use. "
+                    + "Write complete short sentences naming the action and its result; do not concatenate labels "
+                    + "or use vague instructions such as 'use the Test function'. For example, say 'Ask for unit "
+                    + "tests for the normal and boundary cases, then run them to check that behavior is unchanged'. "
+                    + "For Thai copy, prefer sentences such as 'สั่งให้เขียนเทสต์สำหรับกรณีปกติและกรณีขอบเขต "
+                    + "แล้วรันเพื่อเช็กว่าผลลัพธ์ยังเหมือนเดิม' over 'ใช้ฟังก์ชัน Test'. "
+                    + "Do not repeat the slide title in the body. Each sentence must add a distinct useful point. "
+                    + "Remove introductory labels or summaries that repeat the following explanation. "
+                    + "Separate independent paragraphs with a blank line. Use single newlines within code blocks "
+                    + "so code lines keep their indentation without extra paragraph gaps. "
+                    + "Include a concrete worked example for instructional decks, with real input, "
+                    + "an expected result, and the relevant limitation. Avoid slogans and generic benefits. "
+                    + "Give every slide one message and a short headline. Preserve every requested condition and "
+                    + "limitation in visible content; naming a topic does not explain it. Avoid filler to meet a point count. "
+                    + "The renderer uses 44pt cover titles, 34pt slide titles, and at least 24pt body text. "
+                    + "Body text has generous line and paragraph spacing. Budget at most six displayed lines per "
+                    + "slide and two points per side for narrow layouts; shorten wording rather than compress spacing. "
+                    + "Put extended explanation in speakerNotes, but keep the actual example and key evidence visible "
+                    + "in body or bullets. Never leave an example slide empty or write 'add a screenshot here'. "
+                    + "Use comparison only with substantive leftBullets and rightBullets; general bullets use editorial. "
+                    + "Use only content fields rendered by that layout; do not put code or results in unused fields. "
+                    + "Write plain text, with real newlines for code, and no HTML heading tags or markup fragments. "
+                    + "Before creating, check that the deck answers the request, covers the supplied outline, and contains "
+                    + "no empty content slides or invented facts. Choose layouts to fit the story, vary composition "
                     + "across consecutive slides, and use whitespace deliberately. Use cards for grouped ideas, "
                     + "comparison for two sides, stat for one standout number, quote for a sourced voice, and timeline "
                     + "for ordered milestones. Use typography, spacing, color, and native editable shapes as real "
@@ -105,33 +131,63 @@ final class PresentationTool implements Tool {
     private static Map<String, Object> specSchema() {
         Map<String, Object> slideFields = new LinkedHashMap<>();
         slideFields.put("title", stringField());
-        slideFields.put("layout", Map.of("type", "string", "description",
-                "For comparison, also provide leftTitle and rightTitle. For stat, provide value; for quote, provide quote; for timeline, provide timeline points.", "enum",
-                List.of("cover", "editorial", "split", "comparison", "cards", "stat", "quote", "timeline")));
-        slideFields.put("body", stringField());
+        slideFields.put("body", Map.of("type", "string", "minLength", 1));
         slideFields.put("bullets", stringArray(5));
         slideFields.put("leftTitle", stringField());
         slideFields.put("leftBullets", stringArray(5));
         slideFields.put("rightTitle", stringField());
         slideFields.put("rightBullets", stringArray(5));
-        slideFields.put("value", stringField());
+        slideFields.put("value", Map.of("type", "string", "minLength", 1, "maxLength", 16,
+                "description", "One short statistic or number; never put source code here."));
         slideFields.put("valueLabel", stringField());
         slideFields.put("quote", stringField());
         slideFields.put("attribution", stringField());
-        slideFields.put("timeline", Map.of("type", "array", "maxItems", 5, "items", Map.of(
+        slideFields.put("timeline", Map.of("type", "array", "minItems", 1, "maxItems", 5, "items", Map.of(
                 "type", "object", "properties", Map.of("label", stringField(), "text", stringField()),
                 "required", List.of("label", "text"), "additionalProperties", false)));
         slideFields.put("imageUrl", stringField());
         slideFields.put("speakerNotes", stringField());
         slideFields.put("sources", stringArray(8));
 
+        var variants = new java.util.ArrayList<Map<String, Object>>();
+        for (String layout : List.of("cover", "editorial", "split", "comparison", "cards", "stat", "quote", "timeline")) {
+            List<String> contentFields = switch (layout) {
+                case "cover" -> List.of("body", "imageUrl");
+                case "editorial", "split" -> List.of("body", "bullets", "imageUrl");
+                case "cards" -> List.of("body", "bullets");
+                case "comparison" -> List.of("leftTitle", "leftBullets", "rightTitle", "rightBullets");
+                case "stat" -> List.of("value", "valueLabel", "body");
+                case "quote" -> List.of("quote", "attribution");
+                default -> List.of("timeline");
+            };
+            Map<String, Object> properties = new LinkedHashMap<>();
+            for (String field : List.of("title", "speakerNotes", "sources")) properties.put(field, slideFields.get(field));
+            properties.put("layout", Map.of("type", "string", "enum", List.of(layout)));
+            contentFields.forEach(field -> properties.put(field, slideFields.get(field)));
+            var required = new java.util.ArrayList<>(List.of("title", "layout"));
+            Map<String, Object> variant = new LinkedHashMap<>();
+            variant.put("type", "object");
+            variant.put("properties", properties);
+            variant.put("additionalProperties", false);
+            switch (layout) {
+                case "comparison" -> required.addAll(contentFields);
+                case "cards" -> required.add("bullets");
+                case "stat" -> required.add("value");
+                case "quote" -> required.add("quote");
+                case "timeline" -> required.add("timeline");
+                case "editorial", "split" -> required.add("body");
+                default -> { }
+            }
+            variant.put("required", required);
+            variants.add(variant);
+        }
+
         Map<String, Object> fields = new LinkedHashMap<>();
         fields.put("title", stringField());
         fields.put("language", stringField());
         fields.put("theme", Map.of("type", "string", "enum", List.of("japanese", "paper", "ocean", "midnight")));
         fields.put("slides", Map.of("type", "array", "minItems", 1, "maxItems", 20,
-                "items", Map.of("type", "object", "properties", slideFields,
-                        "required", List.of("title", "layout"), "additionalProperties", false)));
+                "items", Map.of("oneOf", variants)));
         return Map.of("properties", fields, "required", List.of("title", "theme", "slides"),
                 "additionalProperties", false);
     }
@@ -141,6 +197,6 @@ final class PresentationTool implements Tool {
     }
 
     private static Map<String, Object> stringArray(int maximumItems) {
-        return Map.of("type", "array", "maxItems", maximumItems, "items", stringField());
+        return Map.of("type", "array", "minItems", 1, "maxItems", maximumItems, "items", stringField());
     }
 }

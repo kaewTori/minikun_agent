@@ -28,12 +28,6 @@ final class PresentationChatGuard {
     String responseContent(String content, List<ChatAttachment> attachments) {
         boolean attached = attachments != null && attachments.stream().anyMatch(attachment ->
                 attachment != null && "presentation".equals(attachment.type()));
-        if (!attached) return FAILURE_NOTICE;
-        if (content == null || content.isBlank() || content.contains("ไม่พบไฟล์") || content.contains("ไม่มีไฟล์")
-                || content.contains("ไม่มีลิงก์") || content.contains("ไม่มีพาธ")
-                || content.contains("ไม่สามารถดาวน์โหลด")) {
-            return SUCCESS_NOTICE;
-        }
-        return content;
+        return attached ? SUCCESS_NOTICE : FAILURE_NOTICE;
     }
 }

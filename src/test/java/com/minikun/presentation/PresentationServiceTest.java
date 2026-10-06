@@ -125,20 +125,87 @@ class PresentationServiceTest {
                 "title", "PostgreSQL Performance Tuning",
                 "theme", "ocean",
                 "slides", List.of(
-                        Map.of("title", "เปรียบเทียบ", "layout", "comparison"),
+                        Map.of("title", "เปรียบเทียบ", "layout", "comparison", "bullets", List.of("วัดก่อนเปลี่ยนค่า")),
                         Map.of("title", "ไม่มีตัวเลข", "layout", "stat", "body", "เริ่มจากการวัด"),
                         Map.of("title", "ไม่มีคำอ้าง", "layout", "quote", "body", "ยึดข้อมูลจริง"),
-                        Map.of("title", "ไม่มีลำดับ", "layout", "timeline", "body", "ใช้แผนที่ทำได้จริง")));
+                        Map.of("title", "ไม่มีลำดับ", "layout", "timeline", "body", "ใช้แผนที่ทำได้จริง"),
+                        Map.of("title", "ไม่ระบุเลย์เอาต์", "body", "อธิบายด้วยข้อความที่อ่านได้")));
 
         var created = service.create(new ToolCallContext(new ConversationId("conversation"), "call", "owner"), spec);
         var saved = mapper.readTree(created.presentation().specJson()).path("slides");
 
-        assertEquals(4, created.presentation().slideCount());
+        assertEquals(5, created.presentation().slideCount());
         assertEquals("ตัวเลือก A", saved.get(0).path("leftTitle").asText());
         assertEquals("ตัวเลือก B", saved.get(0).path("rightTitle").asText());
+        assertEquals("editorial", saved.get(0).path("layout").asText());
+        try (var deck = new org.apache.poi.xslf.usermodel.XMLSlideShow(
+                new java.io.ByteArrayInputStream(store.bytes(created.presentation())))) {
+            assertTrue(deck.getSlides().getFirst().getShapes().stream()
+                    .filter(org.apache.poi.xslf.usermodel.XSLFTextShape.class::isInstance)
+                    .map(org.apache.poi.xslf.usermodel.XSLFTextShape.class::cast)
+                    .anyMatch(shape -> shape.getText().contains("วัดก่อนเปลี่ยนค่า")));
+        }
         assertEquals("editorial", saved.get(1).path("layout").asText());
         assertEquals("editorial", saved.get(2).path("layout").asText());
         assertEquals("editorial", saved.get(3).path("layout").asText());
+        assertEquals("editorial", saved.get(4).path("layout").asText());
+    }
+
+    @Test
+    void rendersAnExampleStoredInTimelineFieldsEvenWhenTheModelSelectedSplit() throws Exception {
+        var mapper = new ObjectMapper();
+        var store = new PresentationStore(directory, 1_000_000, Duration.ofDays(1), mapper, Clock.systemUTC());
+        var service = new PresentationService(mapper, null, store);
+        var created = service.create(new ToolCallContext(new ConversationId("conversation"), "call", "owner"),
+                Map.of("title", "Copilot", "theme", "paper", "slides", List.of(Map.of(
+                        "title", "ตัวอย่างส่วนลด", "layout", "split", "timeline", List.of(
+                                Map.of("label", "Prompt", "text", "ลด 20% เมื่อยอดเกิน 1000"),
+                                Map.of("label", "Code", "text", "double discount(double total) { return total > 1000 ? total * 0.8 : total; }"),
+                                Map.of("label", "Test", "text", "1500 -> 1200; 1000 -> 1000"))))));
+        assertEquals("timeline", mapper.readTree(created.presentation().specJson())
+                .path("slides").get(0).path("layout").asText());
+        try (var deck = new org.apache.poi.xslf.usermodel.XMLSlideShow(
+                new java.io.ByteArrayInputStream(store.bytes(created.presentation())))) {
+            String visible = deck.getSlides().getFirst().getShapes().stream()
+                    .filter(org.apache.poi.xslf.usermodel.XSLFTextShape.class::isInstance)
+                    .map(org.apache.poi.xslf.usermodel.XSLFTextShape.class::cast)
+                    .map(org.apache.poi.xslf.usermodel.XSLFTextShape::getText).collect(java.util.stream.Collectors.joining("\n"));
+            assertTrue(visible.contains("double discount") && visible.contains("1500 -> 1200"));
+        }
+    }
+
+    @Test
+    void rejectsHiddenCodeAndMalformedToolMarkupBeforeSavingADeck() {
+        var service = new PresentationService(new ObjectMapper(), null,
+                new PresentationStore(directory, 1_000_000, Duration.ofDays(1), new ObjectMapper(), Clock.systemUTC()));
+        var hiddenCode = assertThrows(IllegalArgumentException.class, () -> service.create(
+                new ToolCallContext(new ConversationId("conversation"), "call", "owner"),
+                Map.of("title", "Copilot", "theme", "paper", "slides", List.of(Map.of(
+                        "title", "ผลลัพธ์", "layout", "editorial", "bullets", List.of("100 หัก 15% เหลือ 85"),
+                        "leftBullets", List.of("double discount(double price) { return price * 0.85; }"))))));
+        assertTrue(hiddenCode.getMessage().contains("do not appear in layout"));
+        var brokenMarkup = assertThrows(IllegalArgumentException.class, () -> service.create(
+                new ToolCallContext(new ConversationId("conversation"), "call", "owner"),
+                Map.of("title", "Copilot", "theme", "paper", "slides", List.of(Map.of(
+                        "title", "เริ่มใช้", "layout", "editorial", "bullets", List.of("วิธีเริ่มใช้</h2>,"))))));
+        assertTrue(brokenMarkup.getMessage().contains("broken tool-call markup"));
+        var unfinishedExample = assertThrows(IllegalArgumentException.class, () -> service.create(
+                new ToolCallContext(new ConversationId("conversation"), "call", "owner"),
+                Map.of("title", "Copilot", "theme", "paper", "slides", List.of(Map.of(
+                        "title", "ตัวอย่าง", "layout", "editorial", "body", "Prompt: calculate discount\nโค้ดที่ได้:")))));
+        assertTrue(unfinishedExample.getMessage().contains("Include the actual code"));
+    }
+
+    @Test
+    void rejectsAnExampleSlideWithOnlySpeakerNotes() {
+        var service = new PresentationService(new ObjectMapper(), null,
+                new PresentationStore(directory, 1_000_000, Duration.ofDays(1), new ObjectMapper(), Clock.systemUTC()));
+        var error = assertThrows(IllegalArgumentException.class, () -> service.create(
+                new ToolCallContext(new ConversationId("conversation"), "call", "owner"),
+                Map.of("title", "Copilot", "theme", "paper", "slides", List.of(Map.of(
+                        "title", "ตัวอย่างการใช้งานจริง", "layout", "editorial",
+                        "speakerNotes", "เพิ่มตัวอย่างหรือ screenshot ในสไลด์นี้")))));
+        assertTrue(error.getMessage().contains("needs visible content"));
     }
 
     @Test

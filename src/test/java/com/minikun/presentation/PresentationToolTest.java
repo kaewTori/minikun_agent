@@ -64,7 +64,14 @@ class PresentationToolTest {
 
         assertEquals("object", spec.path("type").asText());
         assertEquals("array", slides.path("type").asText());
-        assertEquals("string", slides.path("items").path("properties").path("title").path("type").asText());
-        assertEquals("array", slides.path("items").path("properties").path("bullets").path("type").asText());
+        var variants = slides.path("items").path("oneOf");
+        assertEquals(8, variants.size());
+        var editorial = variants.get(1);
+        assertEquals("string", editorial.path("properties").path("title").path("type").asText());
+        assertEquals("array", editorial.path("properties").path("bullets").path("type").asText());
+        assertEquals(1, editorial.path("properties").path("bullets").path("minItems").asInt());
+        assertTrue(editorial.path("required").toString().contains("body"));
+        assertTrue(editorial.path("properties").path("leftBullets").isMissingNode());
+        assertTrue(variants.get(3).path("required").toString().contains("leftBullets"));
     }
 }
