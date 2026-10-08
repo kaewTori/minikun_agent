@@ -15,8 +15,8 @@ class SearchCacheKeyTest {
 
         assertEquals(first, second);
         String key = ValkeySearchCache.redisKey(first);
-        assertTrue(key.startsWith("minikun:search:v1:"));
-        assertEquals("minikun:search:v1:".length() + 64, key.length());
+        assertTrue(key.startsWith("minikun:search:v2:"));
+        assertEquals("minikun:search:v2:".length() + 64, key.length());
     }
 
     @Test

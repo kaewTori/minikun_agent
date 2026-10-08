@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0d1411">
+  <title>Minikun — Design preview</title>
+  <link rel="icon" href="minikun-avatar.jpg">
+  <style>
+    :root { color-scheme: dark; --topbar-height:64px; --nav-height:0px; --canvas:#0d1411; --surface:#18221c; --accent:#b5d7a1; --peach:#edbfa4; --sky:#adc5ed; --ink:#f0eee6; --muted:#a6afa4; --line:#2a352d; --font:"Sukhumvit Set","Thonburi","Noto Sans Thai",system-ui,sans-serif; }
+    * { box-sizing:border-box; }
+    html,body { height:100%; overflow:hidden; }
+    body { margin:0; background:var(--canvas); color:var(--ink); font:16px/1.65 var(--font); }
+    button,textarea { font:inherit; color:inherit; }
+    button { cursor:pointer; }
+    a { color:inherit; }
+    button,a,textarea { -webkit-tap-highlight-color:transparent; }
+    :focus-visible { outline:2px solid var(--accent); outline-offset:4px; }
+    button { border:0; background:none; }
+    [hidden] { display:none!important; }
+    .sr-only { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
+    .skip { position:fixed; top:10px; left:10px; z-index:10; padding:10px 16px; background:var(--accent); color:var(--canvas); transform:translateY(-160%); }
+    .skip:focus { transform:none; }
+    svg { width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round; flex-shrink:0; }
+    .shell { display:grid; grid-template-columns:224px minmax(0,1fr); height:100dvh; min-height:0; }
+    .rail { display:flex; flex-direction:column; height:100dvh; padding:28px 18px 20px; border-right:1px solid var(--line); overflow-y:auto; }
+    .brand { display:flex; align-items:center; gap:11px; padding:0 8px; }
+    .brand img { width:38px; height:38px; border-radius:12px; border:2px solid var(--accent); transform:rotate(-6deg); }
+    .brand strong { display:block; font:600 19px/1.3 system-ui,sans-serif; letter-spacing:-.5px; }
+    .brand small { display:block; color:var(--muted); font-size:11px; margin-top:2px; }
+    .new-chat { margin:28px 0 19px; width:100%; display:flex; gap:10px; align-items:center; padding:10px 12px; min-height:44px; border:1px dashed #53624d; border-radius:12px; text-align:left; font-size:14px; }
+    .new-chat span { margin-left:auto; color:var(--muted); }
+    .nav { display:grid; gap:5px; }
+    .nav button { min-height:44px; display:flex; gap:12px; align-items:center; padding:10px 12px; border-radius:8px; color:var(--muted); text-align:left; font-size:14px; }
+    .nav button[aria-current="page"] { background:#243023; color:var(--accent); border-radius:12px; }
+    .nav button[aria-current="page"] svg { color:var(--accent); }
+    button:hover { background:var(--surface); }
+    .history { margin-top:35px; }
+    .rail-label { padding:0 12px; margin:0 0 10px; font-size:12px; color:var(--muted); }
+    .history button { display:block; width:100%; min-height:44px; padding:10px 12px; color:var(--muted); text-align:left; font-size:13px; border-radius:8px; }
+    .history button:hover { color:var(--ink); }
+    .rail-footer { margin-top:auto; padding:20px 10px 0; border-top:1px solid var(--line); }
+    .rail-footer p { margin:0; display:flex; align-items:center; gap:8px; font-size:12px; }
+    .rail-footer small { display:block; margin-top:5px; color:var(--muted); font-size:11px; }
+    .dot { display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--accent); flex-shrink:0; }
+    main { min-width:0; min-height:0; height:100dvh; display:flex; flex-direction:column; padding-bottom:var(--nav-height); }
+    .topbar { flex:0 0 var(--topbar-height); padding:0 36px; display:flex; align-items:center; justify-content:space-between; gap:12px; border-bottom:1px solid var(--line); }
+    .breadcrumb { display:flex; align-items:center; gap:12px; font-size:13px; color:var(--muted); }
+    .breadcrumb strong { font-weight:500; color:var(--ink); }
+    .preview-label { border:1px solid var(--line); border-radius:5px; padding:4px 9px; font-size:11px; color:var(--muted); white-space:nowrap; }
+    .chat { flex:1; min-height:0; display:flex; flex-direction:column; }
+    .welcome { width:min(100% - 72px,740px); margin:0 auto; padding:24px 0; flex:1; min-height:0; overflow-y:auto; display:flex; flex-direction:column; justify-content:safe center; scrollbar-gutter:stable; }
+    .welcome > * { flex-shrink:0; }
+    .presence { display:flex; align-items:center; gap:22px; margin-bottom:20px; }
+    .portrait { position:relative; }
+    .portrait img { display:block; width:88px; height:88px; border-radius:26px; border:4px solid var(--ink); transform:rotate(-7deg); box-shadow:5px 6px 0 #324332; }
+    .portrait .dot { position:absolute; bottom:1px; right:1px; width:12px; height:12px; border:3px solid var(--canvas); }
+    .portrait .spark { position:absolute; width:23px; height:23px; top:-15px; right:-12px; color:var(--peach); transform:rotate(12deg); }
+    .presence p { position:relative; margin:0 0 7px; padding:8px 14px; border-radius:14px 14px 14px 3px; background:#2d3325; color:var(--accent); font-size:14px; transform:rotate(-2deg); }
+    .presence small { color:var(--muted); font-size:12px; padding-left:8px; }
+    h1 { margin:0; font-size:clamp(30px,3.1vw,44px); font-weight:500; line-height:1.5; }
+    .welcome h1 span { color:var(--accent); }
+    .welcome h1 em { position:relative; color:var(--peach); font-style:normal; white-space:nowrap; }
+    .welcome h1 em::after { content:""; position:absolute; left:0; right:0; bottom:-4px; height:7px; border-top:2px solid var(--peach); border-radius:50%; transform:rotate(-3deg); }
+    .intro { margin:12px 0 24px; color:var(--muted); font-size:16px; line-height:1.9; }
+    .suggestions { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    .suggestions button { --tile-color:var(--accent); --tile-bg:#1d291d; min-height:96px; display:flex; align-items:center; gap:14px; padding:18px; border:1px solid #344331; border-radius:18px 18px 18px 6px; background:var(--tile-bg); text-align:left; }
+    .suggestions button:nth-child(2) { --tile-color:var(--peach); --tile-bg:#2c241f; border-color:#4c3c31; border-radius:18px 18px 6px 18px; }
+    .suggestions button:nth-child(3) { --tile-color:var(--sky); --tile-bg:#1d252e; border-color:#344353; border-radius:6px 18px 18px 18px; }
+    .suggestions button:nth-child(4) { --tile-color:#c5bce7; --tile-bg:#26232e; border-color:#443c53; }
+    .suggestions svg { color:var(--tile-color); }
+    .suggestions button > svg:first-child { width:34px; height:34px; padding:6px; border:1px solid currentColor; border-radius:11px; transform:rotate(-5deg); }
+    .suggestions strong { display:block; font-size:14px; font-weight:500; }
+    .suggestions small { display:block; color:var(--muted); font-size:12px; margin-top:3px; }
+    .suggestions .arrow { margin-left:auto; width:16px; }
+    .thread { margin:16px 0 0; display:flex; gap:10px; align-items:center; color:var(--muted); font-size:12px; }
+    .thread svg { width:16px; }
+    .thread button { padding:8px 0; color:var(--accent); font-size:12px; min-height:44px; }
+    .composer-dock { width:min(100% - 72px,800px); margin:0 auto; padding:0 0 16px; flex-shrink:0; }
+    .composer { border:1px solid #435443; border-radius:22px; padding:17px 18px 12px; background:var(--surface); }
+    .composer:focus-within { border-color:var(--accent); }
+    textarea { display:block; width:100%; height:50px; min-height:0; resize:none; border:0; background:none; padding:0; line-height:1.8; font-size:16px; }
+    textarea:focus-visible { outline:0; }
+    textarea::placeholder { color:var(--muted); }
+    .composer-bottom { display:flex; align-items:center; gap:8px; }
+    .composer-bottom small { color:var(--muted); font-size:11px; }
+    .composer-bottom .send { margin-left:auto; width:44px; height:44px; display:grid; place-items:center; background:var(--accent); color:var(--canvas); border-radius:14px 14px 14px 5px; }
+    .send:hover { filter:brightness(1.08); }
+    .composer-note { margin:10px 0 0; text-align:center; color:var(--muted); font-size:11px; }
+    .messages { width:min(100% - 72px,740px); margin:0 auto; padding:24px 8px; flex:1; min-height:0; overflow-y:auto; overscroll-behavior:contain; }
+    .message { margin-bottom:28px; }
+    .message-label { margin:0 0 9px; color:var(--accent); font-size:12px; }
+    .message p:last-child { margin:0; white-space:pre-wrap; overflow-wrap:anywhere; line-height:1.9; }
+    .message.user { margin-left:auto; width:fit-content; max-width:90%; padding:16px 20px; background:var(--surface); border-radius:12px; }
+    .today { width:min(100% - 80px,1120px); margin:0 auto; padding:28px 0 16px; flex:1; min-height:0; display:flex; flex-direction:column; }
+    .today > :not(.today-grid) { flex-shrink:0; }
+    .day-meta { margin:0 0 13px; color:var(--muted); font-size:12px; }
+    .today > .intro { margin-top:9px; margin-bottom:28px; }
+    .today-grid { display:grid; grid-template-columns:minmax(0,1fr) 270px; gap:48px; min-height:0; overflow-y:auto; overscroll-behavior:contain; padding:14px 8px 0 0; }
+    .section-head { display:flex; align-items:center; justify-content:space-between; gap:12px; padding-bottom:16px; border-bottom:1px solid var(--line); }
+    h2 { margin:0; font-size:17px; font-weight:500; }
+    .section-head small { color:var(--muted); font-size:12px; }
+    .task-row { display:flex; gap:14px; padding:21px 0; border-bottom:1px solid var(--line); align-items:flex-start; }
+    .task-symbol { display:grid; place-items:center; width:30px; height:30px; background:var(--surface); border-radius:10px 10px 10px 3px; color:var(--accent); flex-shrink:0; }
+    .task-row:has(use[href="#search-icon"]) .task-symbol { color:var(--sky); background:#1d252e; }
+    .task-row:has(use[href="#leaf-icon"]) .task-symbol { color:var(--peach); background:#2c241f; }
+    .task-symbol svg { width:16px; }
+    .task-row h3 { margin:0; font-size:14px; font-weight:500; }
+    .task-row p { margin:5px 0 0; color:var(--muted); font-size:12px; }
+    .task-row .state { margin-left:auto; padding-top:3px; color:var(--accent); font-size:11px; white-space:nowrap; }
+    .focus-note { position:relative; margin:0 0 30px; padding:25px 26px; background:#202a1e; border-radius:20px 20px 20px 6px; border:1px solid #3d4d35; }
+    .focus-note .eyebrow { margin:0 0 12px; color:var(--accent); font-size:11px; display:flex; gap:8px; align-items:center; }
+    .focus-note .eyebrow svg { width:17px; height:17px; color:var(--peach); }
+    .focus-note .note-sticker { position:absolute; top:-13px; right:17px; padding:5px 12px; background:var(--peach); color:var(--canvas); border-radius:5px; font-size:11px; transform:rotate(4deg); }
+    .focus-note p { margin:0; font-size:18px; font-weight:400; line-height:1.9; }
+    .focus-note small { display:block; color:var(--muted); font-size:12px; margin-top:14px; }
+    .agenda { padding:19px 0; display:grid; grid-template-columns:48px 1fr; gap:13px; border-bottom:1px solid var(--line); }
+    time { color:var(--muted); font:12px/1.9 ui-monospace,monospace; }
+    .agenda strong { display:block; font-size:13px; font-weight:500; }
+    .agenda small { color:var(--muted); font-size:11px; }
+    .today-side { margin:0; border:0; }
+    .today-side > summary { min-height:44px; padding-bottom:10px; border-bottom:1px solid var(--line); font-size:17px; color:var(--ink); }
+    .today-side > summary span { display:flex; gap:10px; align-items:center; }
+    .today-side > summary small { color:var(--muted); font-size:12px; }
+    .system-summary { display:flex; align-items:center; gap:10px; padding-top:22px; color:var(--muted); font-size:12px; }
+    .system-summary .dot { width:5px; height:5px; }
+    details { margin-top:36px; border-top:1px solid var(--line); }
+    summary { min-height:52px; display:flex; justify-content:space-between; align-items:center; cursor:pointer; color:var(--muted); font-size:13px; list-style:none; }
+    summary::-webkit-details-marker { display:none; }
+    details[open] summary svg { transform:rotate(180deg); }
+    .system-list { display:grid; grid-template-columns:1fr 1fr 1fr; gap:20px; padding:10px 0 20px; }
+    .system-list div { font-size:13px; }
+    .system-list small { display:block; color:var(--muted); font-size:11px; }
+    .mobile-brand { display:none; }
+    @media (max-height:820px) {
+      .welcome { padding:16px 0; }
+      .presence { margin-bottom:14px; }
+      .portrait img { width:68px; height:68px; border-radius:22px; }
+      h1 { font-size:32px; line-height:1.4; }
+      .intro { margin:10px 0 18px; font-size:14px; }
+      .suggestions button { min-height:78px; padding:12px 16px; }
+      .thread { margin-top:8px; }
+      .today { padding-top:18px; }
+      .today > .intro { margin-bottom:14px; }
+      .focus-note { padding:18px 22px; margin-bottom:18px; }
+      .focus-note p { font-size:16px; line-height:1.6; }
+      .focus-note small { margin-top:8px; }
+      .section-head { padding-bottom:10px; }
+      .task-row { padding:14px 0; }
+      details { margin-top:18px; }
+    }
+    @media (max-width:1100px) { .today-grid { gap:28px; grid-template-columns:minmax(0,1fr) 230px; } .today { width:calc(100% - 56px); } }
+    @media (max-width:800px) {
+      .shell { grid-template-columns:180px minmax(0,1fr); }
+      .rail { padding:24px 12px 18px; }
+      .brand { padding:0 4px; gap:9px; }
+      .brand strong { font-size:17px; }
+      .welcome,.messages,.composer-dock { width:calc(100% - 44px); }
+      .topbar { padding:0 22px; }
+      .today-grid { grid-template-columns:1fr; }
+      .today { width:calc(100% - 44px); }
+      .today-side { margin-top:12px; }
+      .suggestions { gap:10px; }
+      .suggestions button { padding:14px 12px; gap:10px; }
+      .suggestions .arrow { display:none; }
+      .thread { flex-wrap:wrap; }
+    }
+    @media (max-width:600px) {
+      :root { --topbar-height:54px; --nav-height:calc(60px + env(safe-area-inset-bottom)); }
+      .shell { display:block; }
+      .rail { position:fixed; bottom:0; left:0; right:0; height:var(--nav-height); z-index:5; padding:7px 16px calc(7px + env(safe-area-inset-bottom)); background:var(--canvas); border-right:0; border-top:1px solid var(--line); overflow:visible; }
+      .brand,.new-chat,.history,.rail-footer { display:none; }
+      .nav { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+      .nav button { justify-content:center; padding:9px 12px; }
+      .topbar { padding:0 20px; }
+      .breadcrumb > span { display:none; }
+      .mobile-brand { display:block; width:29px; height:29px; border-radius:9px; }
+      .preview-label { font-size:10px; padding:4px 6px; }
+      .welcome { padding:18px 0 12px; width:calc(100% - 40px); scrollbar-gutter:auto; }
+      .presence { margin-bottom:16px; }
+      .portrait img { width:58px; height:58px; border-radius:18px; border-width:3px; }
+      .presence { gap:18px; }
+      .presence p { font-size:12px; padding:8px 11px; }
+      h1 { font-size:28px; line-height:1.45; }
+      .intro { font-size:13px; margin:10px 0 18px; line-height:1.7; }
+      .suggestions { gap:8px; }
+      .suggestions button { min-height:90px; gap:7px; padding:11px; align-items:flex-start; flex-direction:column; }
+      .suggestions button > svg:first-child { width:25px; height:25px; padding:4px; }
+      .suggestions strong { font-size:13px; }
+      .suggestions small { font-size:11px; }
+      .suggestions .arrow { display:none; }
+      .thread { gap:6px; margin-top:8px; font-size:11px; }
+      .thread button { font-size:11px; }
+      .composer-dock { width:calc(100% - 32px); padding-bottom:8px; }
+      .composer { padding:12px 13px 8px; }
+      textarea { height:40px; }
+      .composer-note { margin-top:6px; }
+      .composer-note { font-size:10px; }
+      .messages { width:calc(100% - 40px); }
+      .today { width:calc(100% - 40px); padding-top:16px; }
+      .task-row { gap:10px; }
+      .task-row .state { font-size:10px; }
+      .task-row { padding:10px 0; }
+      .task-row p { font-size:11px; margin-top:3px; }
+      .focus-note { padding:14px 18px; margin-bottom:14px; }
+      .focus-note .eyebrow { margin-bottom:8px; }
+      .focus-note p { font-size:14px; }
+      .focus-note small { display:none; }
+      .today-grid { gap:12px; }
+      .today-side { margin-top:0; }
+      .today details:not(.today-side) { margin-top:10px; }
+      .today summary { min-height:44px; }
+      .system-list { grid-template-columns:1fr; gap:15px; }
+    }
+    @media (max-width:600px) and (max-height:760px) {
+      .welcome { padding:12px 0 6px; }
+      .presence { margin-bottom:10px; }
+      .portrait img { width:50px; height:50px; border-radius:16px; }
+      h1 { font-size:25px; }
+      .intro { margin:8px 0 12px; }
+      .suggestions button { min-height:76px; padding:10px; flex-direction:row; align-items:center; }
+      .suggestions button > svg:first-child { width:22px; height:22px; padding:3px; }
+      .suggestions strong { font-size:12px; }
+      .suggestions small { font-size:10px; }
+      .thread > span { display:none; }
+    }
+    @media (max-width:800px) and (max-height:820px) {
+      .today .focus-note { display:none; }
+    }
+    @media (max-height:600px) {
+      .welcome { padding-block:12px; }
+      .welcome .presence { display:none; }
+      .portrait img { width:44px; height:44px; border-width:2px; border-radius:14px; }
+      .presence small,.welcome > .intro { display:none; }
+      .welcome h1 { font-size:24px; line-height:1.3; margin-bottom:10px; }
+      .suggestions button { min-height:62px; padding:10px; }
+      .thread { margin-top:4px; }
+      .composer-bottom > small { display:none; }
+      .composer { padding:8px 12px; }
+      textarea { height:32px; }
+      .history { margin-top:16px; }
+      .rail-footer { padding-top:10px; }
+      .today > .intro { display:none; }
+      .today { padding-block:10px; }
+      .today .task-row { padding-block:6px; }
+      .today h1 { font-size:22px; line-height:1.3; margin-bottom:12px; }
+      .day-meta { margin-bottom:6px; }
+      .today-grid { padding-top:0; gap:8px; }
+    }
+    @media(prefers-reduced-motion:no-preference) {
+      button { transition:background .15s ease,color .15s ease,transform .2s ease; }
+      .portrait img { transition:transform .2s ease; }
+      .presence:hover .portrait img { transform:rotate(3deg); }
+      .suggestions button:hover { background:var(--tile-bg); transform:translateY(-3px) rotate(-1deg); }
+      .suggestions button:nth-child(even):hover { transform:translateY(-3px) rotate(1deg); }
+      .send:hover { transform:rotate(-6deg); }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip" href="#main">ข้ามไปยังเนื้อหา</a>
+  <svg class="sr-only" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+    <symbol id="chat-icon" viewBox="0 0 24 24"><path d="M20 11.5a8 8 0 0 1-8 8H5l-3 2v-10a9 9 0 0 1 18 0Z"/><path d="M7 11h8M7 15h5"/></symbol>
+    <symbol id="sun-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.4 1.4M17.6 17.6 19 19M5 19l1.4-1.4M17.6 6.4 19 5"/></symbol>
+    <symbol id="arrow-icon" viewBox="0 0 24 24"><path d="M5 12h14m-5-5 5 5-5 5"/></symbol>
+    <symbol id="leaf-icon" viewBox="0 0 24 24"><path d="M20 4c0 11-3 16-9 16a7 7 0 0 1-7-7C4 7 9 4 20 4Z"/><path d="m4 20 11-11"/></symbol>
+    <symbol id="search-icon" viewBox="0 0 24 24"><circle cx="10" cy="10" r="6"/><path d="m15 15 5 5"/></symbol>
+    <symbol id="pulse-icon" viewBox="0 0 24 24"><path d="M2 12h5l3-7 4 14 3-7h5"/></symbol>
+    <symbol id="chevron-icon" viewBox="0 0 24 24"><path d="m7 10 5 5 5-5"/></symbol>
+    <symbol id="spark-icon" viewBox="0 0 24 24"><path d="m12 2 2.6 7.4L22 12l-7.4 2.6L12 22l-2.6-7.4L2 12l7.4-2.6Z"/></symbol>
+  </svg>
+  <div class="shell">
+    <aside class="rail" aria-label="เมนูมินิคุง">
+      <div class="brand"><img src="minikun-avatar.jpg" alt=""><div><strong>minikun</strong><small>พื้นที่เล็ก ๆ ของเรา</small></div></div>
+      <button class="new-chat" type="button" id="new-chat"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>เริ่มคุยเรื่องใหม่<span aria-hidden="true">↗</span></button>
+      <nav class="nav" aria-label="หน้าหลัก">
+        <button type="button" data-view="chat" aria-current="page"><svg aria-hidden="true"><use href="#chat-icon"/></svg>แชต</button>
+        <button type="button" data-view="today"><svg aria-hidden="true"><use href="#sun-icon"/></svg>วันนี้</button>
+      </nav>
+      <section class="history" aria-label="บทสนทนาตัวอย่าง"><p class="rail-label">เรื่องที่คุยกัน</p><button type="button" data-prompt="เรามาวางแผนสัปดาห์นี้กันต่อ">วางแผนสัปดาห์นี้</button><button type="button" data-prompt="ช่วยคิดเรื่องมุมทำงานเล็ก ๆ ต่อหน่อย">มุมทำงานเล็ก ๆ</button><button type="button" data-prompt="ช่วยดูแล homelab ให้หน่อย">ดูแล homelab ของเรา</button></section>
+      <div class="rail-footer"><p><span class="dot"></span>อยู่ตรงนี้ พร้อมช่วยเสมอ</p><small>ข้อมูลอยู่กับเรา · Local first</small></div>
+    </aside>
+    <main id="main" tabindex="-1">
+      <header class="topbar"><div class="breadcrumb"><img class="mobile-brand" src="minikun-avatar.jpg" alt="มินิคุง"><span>พื้นที่ของเรา</span><span aria-hidden="true">/</span><strong id="page-name">แชตกับมินิคุง</strong></div><span class="preview-label">พรีวิว · ข้อมูลตัวอย่าง</span></header>
+      <section class="chat" id="chat" aria-label="แชตกับมินิคุง">
+        <div class="welcome" id="welcome">
+          <div class="presence"><div class="portrait"><img src="minikun-avatar.jpg" alt="มินิคุง"><span class="dot"></span><svg class="spark" aria-hidden="true"><use href="#spark-icon"/></svg></div><div><p>คู่คิดพร้อมแล้วครับ!</p><small>งานก็ได้ คุยเล่นก็ดี</small></div></div>
+          <h1>สวัสดีครับ พี่สาว<br><span>วันนี้ <em>ลองอะไร</em>กันดี</span></h1>
+          <p class="intro">คิดงาน คุยเล่น หรือออกสำรวจไอเดียใหม่<br>หยิบมาสักเรื่อง แล้วไปด้วยกันครับ</p>
+          <div class="suggestions" aria-label="เริ่มบทสนทนา">
+            <button type="button" data-prompt="ช่วยเลือกสิ่งสำคัญที่ควรทำวันนี้"><svg aria-hidden="true"><use href="#sun-icon"/></svg><span><strong>จัดวันให้เบาลง</strong><small>เลือกสิ่งสำคัญ แล้วค่อย ๆ ทำ</small></span><svg class="arrow" aria-hidden="true"><use href="#arrow-icon"/></svg></button>
+            <button type="button" data-prompt="วันนี้มีเรื่องอยากเล่าให้มินิคุงฟัง"><svg aria-hidden="true"><use href="#leaf-icon"/></svg><span><strong>มีเรื่องอยากเล่า</strong><small>มินิคุงฟังอยู่ครับ</small></span><svg class="arrow" aria-hidden="true"><use href="#arrow-icon"/></svg></button>
+            <button type="button" data-prompt="ช่วยค้นข้อมูลเรื่องนี้ให้หน่อย: "><svg aria-hidden="true"><use href="#search-icon"/></svg><span><strong>เปิดโหมดนักสำรวจ</strong><small>ตามหาไอเดียและคำตอบใหม่ ๆ</small></span><svg class="arrow" aria-hidden="true"><use href="#arrow-icon"/></svg></button>
+            <button type="button" data-prompt="ช่วยตรวจสุขภาพ homelab ของเรา"><svg aria-hidden="true"><use href="#pulse-icon"/></svg><span><strong>ดูแล homelab</strong><small>ดูเฉพาะเรื่องที่ควรรู้</small></span><svg class="arrow" aria-hidden="true"><use href="#arrow-icon"/></svg></button>
+          </div>
+          <div class="thread"><svg aria-hidden="true"><use href="#chat-icon"/></svg><span>เรายังคุยเรื่องแผนสัปดาห์นี้ค้างไว้</span><button type="button" data-prompt="เรามาวางแผนสัปดาห์นี้กันต่อ">คุยต่อ ↗</button></div>
+        </div>
+        <div class="messages" id="messages" aria-label="ข้อความในบทสนทนา" aria-live="polite" tabindex="0" hidden></div>
+        <div class="composer-dock"><form class="composer" id="chat-form"><label class="sr-only" for="message-input">ข้อความถึงมินิคุง</label><textarea id="message-input" rows="2" maxlength="2000" placeholder="มีอะไรอยู่ในใจ เล่าให้มินิคุงฟังได้เลย…"></textarea><div class="composer-bottom"><svg aria-hidden="true"><use href="#leaf-icon"/></svg><small>พื้นที่คุย คิด และลงมือทำร่วมกัน</small><button class="send" type="submit" aria-label="ส่งข้อความตัวอย่าง"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 19V5m-6 6 6-6 6 6"/></svg></button></div></form><p class="composer-note">โหมดพรีวิว · ลองพิมพ์ได้ ข้อความไม่ถูกส่งไปยัง AI</p></div>
+      </section>
+      <section class="today" id="today" aria-labelledby="today-title" hidden>
+        <p class="day-meta">วันพุธที่ 7 ตุลาคม 2569</p><h1 id="today-title">วันนี้ ค่อย ๆ ไปด้วยกันครับ</h1><p class="intro">มินิคุงรวมเรื่องสำคัญไว้ให้แล้ว เลือกเริ่มทีละเรื่องก็พอ</p>
+        <div class="today-grid" tabindex="0" aria-label="รายการงานและนัดหมาย"><div>
+          <aside class="focus-note"><span class="note-sticker">ทีละก้าว ก็ไปถึง</span><p class="eyebrow"><svg aria-hidden="true"><use href="#spark-icon"/></svg>ภารกิจเล็ก ๆ ของวันนี้</p><p>ให้เวลากับงานที่อยากทำจริง ๆ<br>เรื่องจุกจิก ฝากมินิคุงดูแลได้ครับ</p><small>เริ่มจากช่วงโฟกัสสั้น ๆ สัก 25 นาที</small></aside>
+          <div class="section-head"><h2>มินิคุงกำลังดูแล</h2><small>3 เรื่อง</small></div>
+          <div class="task-row"><span class="task-symbol"><svg aria-hidden="true"><use href="#search-icon"/></svg></span><div><h3>รวบรวมข้อมูลสำหรับแผนสัปดาห์นี้</h3><p>กำลังอ่านแหล่งข้อมูล แล้วสรุปให้เลือกง่ายขึ้น</p></div><span class="state">กำลังทำ</span></div>
+          <div class="task-row"><span class="task-symbol"><svg aria-hidden="true"><use href="#pulse-icon"/></svg></span><div><h3>ตรวจสุขภาพ homelab</h3><p>ยังไม่พบเรื่องที่ต้องจัดการตอนนี้</p></div><span class="state">เรียบร้อย</span></div>
+          <div class="task-row"><span class="task-symbol"><svg aria-hidden="true"><use href="#leaf-icon"/></svg></span><div><h3>จัดระเบียบความรู้ส่วนตัว</h3><p>เตรียมเอกสารไว้ให้ค้นกลับมาใช้ได้ง่าย</p></div><span class="state">เรียบร้อย</span></div>
+          <details><summary>ดูรายละเอียดระบบ<svg aria-hidden="true"><use href="#chevron-icon"/></svg></summary><div class="system-list"><div>โมเดลสนทนา<small>พร้อมใช้งาน</small></div><div>ความรู้ส่วนตัว<small>ค้นหาได้ตามปกติ</small></div><div>ระบบแจ้งเตือน<small>ไม่มีรายการเร่งด่วน</small></div></div></details>
+        </div><details class="today-side" id="agenda" open><summary>จังหวะของวันนี้<span><small>2 รายการ</small><svg aria-hidden="true"><use href="#chevron-icon"/></svg></span></summary><div class="agenda"><time>10:00</time><div><strong>ช่วงโฟกัสของเรา</strong><small>ให้เวลากับงานหลัก · 25 นาที</small></div></div><div class="agenda"><time>18:00</time><div><strong>ทบทวนวันนี้ด้วยกัน</strong><small>อะไรเดินหน้า อะไรไว้พรุ่งนี้</small></div></div><div class="system-summary"><span class="dot"></span>วันนี้ยังไม่มีเรื่องเร่งด่วน</div></details></div>
+      </section>
+    </main>
+  </div>
+  <script>
+    const input = document.querySelector('#message-input');
+    const compactScreen = window.matchMedia('(max-width: 800px)');
+    const fitAgenda = () => { document.querySelector('#agenda').open = !compactScreen.matches; };
+    fitAgenda();
+    compactScreen.addEventListener('change', fitAgenda);
+    function showView(name) {
+      document.querySelector('#chat').hidden = name !== 'chat';
+      document.querySelector('#today').hidden = name !== 'today';
+      document.querySelector('#page-name').textContent = name === 'chat' ? 'แชตกับมินิคุง' : 'วันนี้';
+      document.querySelectorAll('[data-view]').forEach(button => {
+        if (button.dataset.view === name) button.setAttribute('aria-current', 'page');
+        else button.removeAttribute('aria-current');
+      });
+    }
+    document.querySelectorAll('[data-view]').forEach(button => button.addEventListener('click', () => showView(button.dataset.view)));
+    document.querySelectorAll('[data-prompt]').forEach(button => button.addEventListener('click', () => {
+      showView('chat'); input.value = button.dataset.prompt; input.focus();
+    }));
+    document.querySelector('#new-chat').addEventListener('click', () => {
+      showView('chat'); input.value = ''; document.querySelector('#messages').replaceChildren();
+      document.querySelector('#messages').hidden = true; document.querySelector('#welcome').hidden = false; input.focus();
+    });
+    document.querySelector('#chat-form').addEventListener('submit', event => {
+      event.preventDefault();
+      const text = input.value.trim();
+      if (!text) { input.focus(); return; }
+      document.querySelector('#welcome').hidden = true;
+      const messages = document.querySelector('#messages');
+      messages.hidden = false;
+      for (const [role, label, content] of [
+        ['user', 'พี่สาว', text],
+        ['assistant', 'มินิคุง · คำตอบตัวอย่าง', 'ค่อย ๆ เริ่มทีละเรื่องก็ได้ครับ\n\nเล่าให้มินิคุงฟังอีกนิดว่า ตอนนี้อยากให้ช่วยคิด ช่วยวางแผน หรือแค่อยู่เป็นเพื่อนก่อน']
+      ]) {
+        const article = document.createElement('article'); article.className = 'message ' + role;
+        const heading = document.createElement('p'); heading.className = 'message-label'; heading.textContent = label;
+        const paragraph = document.createElement('p'); paragraph.textContent = content;
+        article.append(heading, paragraph); messages.append(article);
+      }
+      messages.scrollTop = messages.scrollHeight;
+      input.value = ''; input.focus();
+    });
+  </script>
+</body>
+</html>

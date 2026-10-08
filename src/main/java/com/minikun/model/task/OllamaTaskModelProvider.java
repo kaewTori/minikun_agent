@@ -105,6 +105,12 @@ public final class OllamaTaskModelProvider implements TaskModelProvider {
 
     private String call(TaskModelRequest request) {
         List<TaskModelMessage> messages = request.messages();
+        if (!com.minikun.model.OllamaReasoning.qwen3Family(model)) {
+            messages = messages.stream().map(message -> "user".equalsIgnoreCase(message.role())
+                    && message.content().startsWith("/no_think\n")
+                    ? new TaskModelMessage(message.role(), message.content().substring("/no_think\n".length()))
+                    : message).toList();
+        }
         if (com.minikun.model.OllamaReasoning.qwen3Family(model)
                 && request.reasoning() == com.minikun.model.GenerationOptions.Reasoning.OFF) {
             messages = appendNoThink(messages);
@@ -114,8 +120,8 @@ public final class OllamaTaskModelProvider implements TaskModelProvider {
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(new NativeRequest(model, messages, false,
                             new Options(request.maxOutputTokens(), request.temperature()),
-                            request.responseFormat() == TaskModelRequest.ResponseFormat.JSON_OBJECT
-                                    ? "json" : null,
+                            request.responseSchema() != null ? schema(request.responseSchema())
+                                    : request.responseFormat() == TaskModelRequest.ResponseFormat.JSON_OBJECT ? "json" : null,
                             com.minikun.model.OllamaReasoning.wire(model, request.reasoning())))
                     .retrieve()
                     .body(NativeResponse.class);
@@ -131,7 +137,7 @@ public final class OllamaTaskModelProvider implements TaskModelProvider {
         Response response = restClient.post()
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(new Request(model, messages, false, request.maxOutputTokens(),
-                        request.temperature(), responseFormat(request.responseFormat()), reasoningEffort(request)))
+                        request.temperature(), responseFormat(request), reasoningEffort(request)))
                 .retrieve()
                 .body(Response.class);
         if (response == null || response.choices() == null || response.choices().isEmpty()
@@ -174,16 +180,25 @@ public final class OllamaTaskModelProvider implements TaskModelProvider {
         return messages;
     }
 
-    private ResponseFormat responseFormat(TaskModelRequest.ResponseFormat format) {
-        return format == TaskModelRequest.ResponseFormat.JSON_OBJECT
-                ? new ResponseFormat("json_object") : null;
+    private java.util.Map<?, ?> schema(String json) {
+        JsonNode node = readObject(json);
+        if (node == null) throw new IllegalArgumentException("response schema must be a JSON object");
+        return objectMapper.convertValue(node, java.util.Map.class);
+    }
+
+    private ResponseFormat responseFormat(TaskModelRequest request) {
+        if (request.responseSchema() != null) {
+            return new ResponseFormat("json_schema", new JsonSchema("task_response", schema(request.responseSchema()), true));
+        }
+        return request.responseFormat() == TaskModelRequest.ResponseFormat.JSON_OBJECT
+                ? new ResponseFormat("json_object", null) : null;
     }
 
     private record Request(String model, List<TaskModelMessage> messages, boolean stream,
             int max_tokens, double temperature, ResponseFormat response_format, String reasoning_effort) {}
 
     private record NativeRequest(String model, List<TaskModelMessage> messages, boolean stream,
-            Options options, String format, Object think) {}
+            Options options, Object format, Object think) {}
 
     private record Options(int num_predict, double temperature) {}
 
@@ -195,5 +210,6 @@ public final class OllamaTaskModelProvider implements TaskModelProvider {
 
     private record Message(String role, String content) {}
 
-    private record ResponseFormat(String type) {}
+    private record ResponseFormat(String type, JsonSchema json_schema) {}
+    private record JsonSchema(String name, java.util.Map<?, ?> schema, boolean strict) {}
 }

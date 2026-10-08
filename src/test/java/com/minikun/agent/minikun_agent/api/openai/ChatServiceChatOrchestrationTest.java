@@ -676,7 +676,9 @@ class ChatServiceChatOrchestrationTest {
         WeatherForecastTool weatherTool = new WeatherForecastTool(request ->
                 new WeatherReport("กรุงเทพมหานคร", "Thailand", 13.75, 100.50, "Asia/Bangkok",
                         "2026-08-19", 30.0, 34.0, 1.0, 12.0, 61, "ฝนตก",
-                        28.0, 35.0, 70, 4.0, "06:00", "18:40", java.time.Instant.now(), "test"));
+                        28.0, 35.0, 70, 4.0, "06:00", "18:40", java.time.Instant.now(), "test",
+                        List.of(new WeatherReport.HourlyForecast("2026-08-19T22:00", "2026-08-19T23:00",
+                                90, 2.0, "thunderstorm", 35.0))));
         WeatherToolRouter router = new WeatherToolRouter(new DefaultToolExecutor(
                 new DefaultToolRegistry(List.of(weatherTool))));
         ChatService service = service(chatModel, conversation);
@@ -699,6 +701,9 @@ class ChatServiceChatOrchestrationTest {
         assertTrue(text.contains("Verified tool result"));
         assertTrue(text.contains("กรุงเทพมหานคร"));
         assertTrue(text.contains("70%"));
+        assertTrue(text.contains("2026-08-19T22:00 – 2026-08-19T23:00"));
+        assertTrue(text.contains("90%"));
+        assertTrue(text.contains("do not invent exact onset times"));
         assertTrue(text.contains("Keep the identity, language, tone, and response style from MCS"));
         assertTrue(text.contains("พี่สาววางแผนจะออกจากบ้านพรุ่งนี้เช้าครับ"));
     }
@@ -1170,6 +1175,67 @@ class ChatServiceChatOrchestrationTest {
         verify(chatModel).stream(prompt.capture());
         assertFalse(promptText(prompt.getValue()).contains("Native tools"));
         verify(toolRuntime, never()).call(any(Prompt.class), any(ConversationId.class), any(String.class));
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void topUpFollowUpUsesTheToolRuntimeWithClientHistoryForBlockingAndStreaming(boolean streaming) throws Exception {
+        ChatModel chatModel = mock(ChatModel.class);
+        ConversationMemoryService conversation = mock(ConversationMemoryService.class);
+        SpringAiToolCallingRuntime runtime = mock(SpringAiToolCallingRuntime.class);
+        when(conversation.load(any())).thenReturn(List.of());
+        when(runtime.call(any(Prompt.class), any(ConversationId.class), any(String.class), any(String.class)))
+                .thenReturn(response("ยอดตามงบล่าสุดครับ"));
+        ChatService service = service(chatModel, conversation);
+        setField(service, "toolsEnabled", true);
+        setField(service, "toolCallingRuntime", runtime);
+        setField(service, "toolRequestRouters", List.of(
+                new com.minikun.tools.InvestmentMonitorRouter(mock(com.minikun.tools.ToolExecutor.class), new ObjectMapper()),
+                new com.minikun.tools.InvestmentReviewRouter(mock(com.minikun.tools.ToolExecutor.class), new ObjectMapper())));
+        var request = new ChatCompletionRequest("test-model", List.of(
+                new Message("user", "เรามีอยู่ 5000 บาทเอาไปเติมอะไรดีวันนี้"),
+                new Message("assistant", "เสนอแผนจากพอร์ตครับ"),
+                new Message("user", "เปลี่ยนใหม่เป็น 3800 บาท"),
+                new Message("assistant", "ปรับเป็น 3800 บาทครับ"),
+                new Message("user", "ขอยอดเป็น $ หน่อย")), "top-up-client", streaming, null, null, null);
+        var id = new ConversationId("top-up-client");
+        if (streaming) {
+            assertTrue(String.join("", service.chatCompletionStream(request, id).collectList().block())
+                    .contains("ยอดตามงบล่าสุด"));
+        } else {
+            assertTrue(service.chatCompletion(request, id).choices().getFirst().message().content()
+                    .contains("ยอดตามงบล่าสุด"));
+        }
+        ArgumentCaptor<Prompt> prompt = ArgumentCaptor.forClass(Prompt.class);
+        verify(runtime).call(prompt.capture(), any(ConversationId.class), any(String.class), any(String.class));
+        assertTrue(promptText(prompt.getValue()).contains("Portfolio top-up advice"));
+        assertTrue(promptText(prompt.getValue()).contains("3800"));
+        verify(chatModel, never()).call(any(Prompt.class));
+        verify(chatModel, never()).stream(any(Prompt.class));
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void theReportedAdditionalInvestmentQuestionAlwaysReadsThePortfolioThroughTheAdviceRuntime(boolean streaming) throws Exception {
+        ChatModel model = mock(ChatModel.class);
+        ConversationMemoryService memory = mock(ConversationMemoryService.class);
+        SpringAiToolCallingRuntime runtime = mock(SpringAiToolCallingRuntime.class);
+        when(memory.load(any())).thenReturn(List.of());
+        when(runtime.call(any(Prompt.class), any(ConversationId.class), any(String.class), any(String.class)))
+                .thenReturn(response("แนะนำเติม VTI ตามพอร์ตจริงครับ"));
+        ChatService service = service(model, memory);
+        setField(service, "toolsEnabled", true);
+        setField(service, "toolCallingRuntime", runtime);
+        var request = new ChatCompletionRequest("test-model", List.of(new Message("user",
+                "เรามีงบอยู่ 1000 บาท เอาไปลงทุนอะไรเพิ่มดี")), "actual-additional-investment", streaming, null, null, null);
+        var id = new ConversationId("actual-additional-investment");
+        if (streaming) assertTrue(String.join("", service.chatCompletionStream(request, id).collectList().block()).contains("พอร์ตจริง"));
+        else assertTrue(service.chatCompletion(request, id).choices().getFirst().message().content().contains("พอร์ตจริง"));
+        ArgumentCaptor<Prompt> prompt = ArgumentCaptor.forClass(Prompt.class);
+        verify(runtime).call(prompt.capture(), any(ConversationId.class), any(String.class), any(String.class));
+        assertTrue(promptText(prompt.getValue()).contains("MINIKUN_INVESTMENT_ADVICE_REQUIRED"));
+        verify(model, never()).call(any(Prompt.class));
+        verify(model, never()).stream(any(Prompt.class));
     }
 
     @Test

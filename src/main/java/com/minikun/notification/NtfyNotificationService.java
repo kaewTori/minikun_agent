@@ -37,6 +37,12 @@ public final class NtfyNotificationService implements NotificationTransport {
 
     @Override
     public boolean publish(NotificationChannel channel, String title, String message, int priority, String tags) {
+        return publish(channel, title, message, priority, tags, "");
+    }
+
+    @Override
+    public boolean publish(NotificationChannel channel, String title, String message, int priority,
+            String tags, String clickUrl) {
         Objects.requireNonNull(channel, "notification channel must not be null");
         Objects.requireNonNull(title, "notification title must not be null");
         Objects.requireNonNull(message, "notification message must not be null");
@@ -58,6 +64,12 @@ public final class NtfyNotificationService implements NotificationTransport {
                 .POST(HttpRequest.BodyPublishers.ofString(message));
         if (!token.isBlank()) {
             request.header("Authorization", "Bearer " + token);
+        }
+        if (clickUrl != null && !clickUrl.isBlank()) {
+            request.header("Click", clickUrl);
+            String action = "view, ตอบมินิคุง, " + clickUrl;
+            request.header("Actions", "=?UTF-8?B?" + java.util.Base64.getEncoder().encodeToString(
+                    action.getBytes(java.nio.charset.StandardCharsets.UTF_8)) + "?=");
         }
         try {
             HttpResponse<String> response = httpClient.send(request.build(), HttpResponse.BodyHandlers.ofString());

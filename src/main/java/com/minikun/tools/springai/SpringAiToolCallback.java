@@ -79,6 +79,12 @@ public final class SpringAiToolCallback implements ToolCallback {
             String conversationValue = value(toolContext, "conversationId", "tool-call");
             String ownerValue = value(toolContext, "ownerId", "default");
             String requestId = value(toolContext, "requestId", "");
+            if (booleanValue(toolContext, "investmentAdviceReadOnly") && "investment.data".equals(tool.definition().name())
+                    && !java.util.Set.of("quotes", "portfolio_value", "fx", "sec_filings")
+                            .contains(String.valueOf(arguments.get("action")).toLowerCase(java.util.Locale.ROOT))) {
+                return errorResult(ToolErrorCode.REVIEW_REQUIRED,
+                        "Portfolio advice is read-only: brokerage actions are not authorized by a recommendation request.");
+            }
             String toolCallId = callId();
             Optional<UUID> runId = uuid(toolContext, "agentRunId");
             boolean requiresRiskReview = booleanValue(toolContext, "riskExplicitReview")
@@ -239,6 +245,12 @@ public final class SpringAiToolCallback implements ToolCallback {
                         "The requested write operation has not been applied yet. Ask the user to confirm the "
                                 + "proposed change in the identity, language, tone, and response style from MCS. "
                                 + "Do not claim that the event or reminder was saved.");
+            } else if (result.value() instanceof Map<?, ?> value && "not_configured".equals(value.get("status"))) {
+                response.put("assistant_instruction",
+                        "The requested data is not configured and was not retrieved. setup_required describes "
+                                + "missing configuration, not market facts. Do not repeat this read hoping for data; "
+                                + "explain the limitation and continue a conditional analysis using the available "
+                                + "portfolio facts. Never invent prices, exchange rates, or a successful order.");
             } else {
                 response.put("assistant_instruction",
                         "This is a verified result from the tool. Answer the user's original request now using "

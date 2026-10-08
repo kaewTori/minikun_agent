@@ -70,7 +70,7 @@ final class KnowledgeAcquisitionAgent {
             for (ClaimDraft draft : drafts) {
                 Verification verification = verifier.verify(topic, draft, evidence);
                 List<String> urls = evidenceUrls(draft, evidence);
-                AcquiredKnowledgeIndex.EmbeddingValue embedding = index.embed(draft.text());
+                AcquiredKnowledgeIndex.EmbeddingValue embedding = index.embed(topic.name(), draft.text());
                 Instant now = clock.instant();
                 Claim claim = new Claim(UUID.randomUUID(), topic.id(), topic.ownerId(), topic.name(), draft.text(),
                         fingerprint(draft.text()), verification.status(), verification.confidence(), urls,

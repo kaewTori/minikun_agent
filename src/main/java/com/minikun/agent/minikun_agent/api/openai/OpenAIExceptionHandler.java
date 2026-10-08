@@ -12,6 +12,12 @@ import lombok.extern.slf4j.Slf4j;
 @RestControllerAdvice(assignableTypes = OpenAIController.class)
 @Slf4j
 public final class OpenAIExceptionHandler {
+    @ExceptionHandler(IllegalArgumentException.class)
+    ResponseEntity<ErrorEnvelope> invalidRequest(IllegalArgumentException exception) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(new ErrorEnvelope(new ApiError(exception.getMessage(), "invalid_request_error", null, "invalid_input")));
+    }
+
     @ExceptionHandler(VisionInputException.class)
     ResponseEntity<ErrorEnvelope> invalidVisionInput(VisionInputException exception) {
         log.warn("process=vision_input event=rejected reason={}", exception.getMessage());

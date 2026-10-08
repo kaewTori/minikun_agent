@@ -62,6 +62,16 @@ class MinikunAgentApplicationTests {
 	private ToolRegistry toolRegistry;
 
 	@Test
+	void embeddingsRejectUnconfiguredModelsAndNonStringInputWithClientErrors() throws Exception {
+		mockMvc.perform(post("/v1/embeddings").contentType(MediaType.APPLICATION_JSON)
+				.content("{\"model\":\"unconfigured-embedding\",\"input\":\"test\"}"))
+				.andExpect(status().isBadRequest()).andExpect(jsonPath("$.error.type").value("invalid_request_error"));
+		mockMvc.perform(post("/v1/embeddings").contentType(MediaType.APPLICATION_JSON)
+				.content("{\"input\":[1]}"))
+				.andExpect(status().isBadRequest()).andExpect(jsonPath("$.error.code").value("invalid_input"));
+	}
+
+	@Test
 	void contextLoads() {
 		org.junit.jupiter.api.Assertions.assertTrue(
 				applicationContext.getBeansOfType(javax.sql.DataSource.class).isEmpty());
@@ -75,6 +85,12 @@ class MinikunAgentApplicationTests {
 				applicationContext.getBean(com.minikun.personality.management.PersonaManagementController.class));
 		org.junit.jupiter.api.Assertions.assertNotNull(
 				applicationContext.getBean(com.minikun.memory.DeferredReflectionService.class));
+		org.junit.jupiter.api.Assertions.assertInstanceOf(
+				com.minikun.personality.preference.InMemoryPreferenceStore.class,
+				applicationContext.getBean(com.minikun.personality.preference.PreferenceStore.class));
+		org.junit.jupiter.api.Assertions.assertInstanceOf(
+				com.minikun.personality.learning.InMemoryAdaptationSignalStore.class,
+				applicationContext.getBean(com.minikun.personality.learning.AdaptationSignalStore.class));
 		org.junit.jupiter.api.Assertions.assertNotNull(
 				applicationContext.getBean(com.minikun.research.AutonomousResearchService.class));
 		org.junit.jupiter.api.Assertions.assertNotNull(
@@ -140,8 +156,8 @@ class MinikunAgentApplicationTests {
 				.andExpect(status().isOk())
 				.andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content()
 							.string(org.hamcrest.Matchers.allOf(
-									org.hamcrest.Matchers.containsString("YOUR PERSONAL AGENT"),
-									org.hamcrest.Matchers.containsString("MINIKUN PULSE"),
+									org.hamcrest.Matchers.containsString("id=\"chat-welcome\""),
+									org.hamcrest.Matchers.containsString("id=\"dashboard-content\""),
 									org.hamcrest.Matchers.containsString("href=\"#main-content\""),
 									org.hamcrest.Matchers.containsString("data-cockpit-target=\"today\""),
 									org.hamcrest.Matchers.containsString("data-cockpit-target=\"memory\""),

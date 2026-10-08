@@ -22,7 +22,7 @@ Investment Copilot เฟสแรกเป็นระบบช่วยบั�
 
 ข้อจำกัดที่ยังคงมี:
 
-- หลายสกุลเงินและการแปลง FX
+- ledger หลายสกุลเงิน (แปลงงบด้วย FX ได้ แต่ transaction ยังต้องตรงสกุลเงินฐาน)
 - corporate actions เช่น split, spin-off หรือ merger
 - tax-lot accounting
 - การส่งคำสั่งเข้า broker จริง (รองรับเฉพาะ Alpaca Paper ที่ยืนยันซ้ำ)
@@ -31,6 +31,18 @@ Investment Copilot เฟสแรกเป็นระบบช่วยบั�
 ส่วน `investment.data` ใช้ latest quote แบบ read-on-demand และต้องรายงานแหล่งที่มา/เวลาเสมอ
 
 ## Tools
+
+อัปเดต 8 ต.ค. 2026: คำสั่ง `อัพเดท port`/`อัปเดตพอร์ต` ที่รายงานการซื้อย้อนหลัง
+ต้องเข้าทาง ledger ก่อนเครื่องมืออ่านราคา แม้ข้อความมีคำว่า `ราคา` และชื่อ ticker
+รองรับหลายบรรทัด `ซื้อ SCHD 29.37$ ในราคา 32.80$ ต่อหน่วยได้ 0.8939024 หน่วย`
+ผ่าน batch proposal เดียว โดยไม่เรียก broker และบันทึกเมื่อเจ้าของยืนยันเท่านั้น
+ยอดซื้อถูกตีความเป็นยอดจ่ายรวม; ส่วนต่างกับจำนวน×ราคาแสดงเป็นค่าธรรมเนียมใน proposal
+พร้อมขอให้ตรวจสอบว่ามาจากค่าธรรมเนียมจริงหรือราคาที่ปัดเศษก่อนยืนยัน
+จำนวน สกุลเงิน หรือยอดที่ขัดกันจะปฏิเสธทั้ง proposal ไม่บันทึกเฉพาะบรรทัดที่อ่านได้
+รายการซ้ำในวันเดียวกันตรวจด้วย fingerprint เดิม; fingerprint รายการขายเดิมยังใช้ได้
+ผลอ่านราคาที่มี `Instant` ใช้ ObjectMapper ที่รองรับ Java time เพื่อไม่รายงาน format error
+นำตัวแก้ไขนี้ขึ้น runtime ที่รันอยู่แล้ว 8 ต.ค. 2026: Maven ตรวจ 1,384 รายการ ไม่มี failure/error
+(ข้าม 13 รายการตามเงื่อนไขทดสอบ), artifact ที่ติดตั้งตรงกับไฟล์ build และ health/db/conversation persistence เป็น UP
 
 ### `investment.manage`
 
@@ -71,11 +83,84 @@ Tool นี้เป็น read-only และไม่มี capability สำ�
 
 - `quotes` ดึงราคาล่าสุดแบบ batch จาก Twelve Data เมื่อกำหนด `MINIKUN_INVESTMENT_TWELVE_DATA_API_KEY`
 - `portfolio_value` คูณราคาล่าสุดกับจำนวนถือครองเพื่อแสดง market value และ unrealized P/L ของพอร์ตสกุลเดียวกัน
-- `fx` ดึง reference rate รายวันจาก Frankfurter/ECB โดยไม่ต้องใช้ key
+- `fx` ดึง reference rate รายวันจาก Frankfurter โดยไม่ต้องใช้ key; ส่ง `amount` พร้อม
+  `base_currency`/`quote_currency` หรือ `pair` เพื่อรับ `converted_amount` ที่คำนวณด้วย BigDecimal
+  ยอดนี้ยังไม่หัก spread และค่าธรรมเนียมของ broker
 - `sec_filings` ดึงรายการ filing ล่าสุดจาก SEC EDGAR โดยใช้ ticker mapping และ submissions API
 - `paper_account` และ `paper_order` ใช้ Alpaca Paper เท่านั้น; `paper_order` ต้องยืนยันอีกครั้งและไม่แก้ immutable ledger ให้เอง
 
 การใช้งานภายนอกเป็น read-on-demand เพื่อคุม quota; หากยังไม่มี key จะแสดง `setup_required` แทนการเดาราคา
+
+### คำแนะนำเติมพอร์ตในแชต
+
+คำถามเช่น `เรามีอยู่ 5000 บาทเอาไปเติมอะไรดีวันนี้` และ `แนะนำเติมพอร์ตวันนี้`
+ใช้ native tool loop เพื่ออ่าน ledger/mandate/thesis ผ่าน `investment.analyze review`
+runtime เรียก review ก่อนส่งเข้าโมเดล และเรียก FX ให้อัตโนมัติเมื่อระบุงบหนึ่งยอดชัดเจน
+เพื่อไม่ให้โมเดลถามรายการถือครองซ้ำหรือสมมติค่าเงินเอง; งบหลายยอดไม่ถูกนำมารวมโดยเดา
+แล้วให้โมเดลเสนอหนึ่งแผนหลักพร้อมยอด เหตุผลเรื่อง concentration/diversification และความเสี่ยง
+คำถามนี้ไม่ถูกปิดด้วย `brief_text` ของ daily monitor หรือรายการถือครองอย่างเดียว
+ไม่กำหนดคำตอบตายตัวว่าให้ซื้อกองทุนใด และ thesis ที่ยังไม่ครบไม่ปิดกั้นคำแนะนำแบบมีสมมติฐาน
+
+คำถามต่อเนื่อง `เปลี่ยนใหม่เป็น 3800 บาท` ใช้งบใหม่ ส่วน `ขอยอดเป็น $ หน่อย`
+ใช้แผนล่าสุดและ FX ที่มีวันที่/แหล่งข้อมูล; ทั้งประวัติที่เก็บในระบบและ messages ที่ client ส่งมารองรับเส้นทางนี้
+ราคา สัดส่วนตามมูลค่าตลาด และข้อมูลกองทุนต้องมีหลักฐานปัจจุบันก่อนนำมาอ้าง
+เมื่อดึงข้อมูลไม่สำเร็จ ให้อธิบายข้อจำกัดและเสนอได้เฉพาะแผนตามต้นทุนที่ระบุสมมติฐาน
+คำแนะนำไม่ถือเป็นการยืนยันซื้อขายหรือการเปลี่ยน ledger/policy/thesis
+เส้นทางนี้เปิดเฉพาะเครื่องมืออ่าน/วิเคราะห์/ค้นเว็บ และปฏิเสธ brokerage action ของ `investment.data`
+ก่อนเรียก executor แม้โมเดลส่ง `confirmed=true`; สถานะ `not_configured` ระบุว่าไม่ได้ดึงข้อมูล
+และส่งคำแนะนำให้โมเดลหยุดเรียกซ้ำจนกว่าจะตั้งค่า พร้อมใช้ข้อเท็จจริงที่มีทำข้อเสนอแบบมีเงื่อนไข
+
+ตรวจ routing, multi-turn blocking/streaming และยอด FX โดยไม่เรียก broker:
+
+```sh
+./mvnw -q -Dtest=TurnPlannerTest,ChatServiceChatOrchestrationTest,ChatCapabilityFactoryTest,InvestmentMonitorRouterTest,InvestmentReviewRouterTest,InvestmentMarketRouterTest,InvestmentDataToolTest,InvestmentExternalDataServiceTest test
+```
+
+การทดสอบเหล่านี้ตรวจ contract ด้วยโมเดลจำลอง; คุณภาพเหตุผลและภาษาไทยของโมเดลจริง
+ต้องตรวจด้วยบทสนทนาสามรอบข้างต้นหลังนำ runtime ใหม่ไปใช้
+
+ทดลอง 7 ต.ค. 2026 ด้วยโมเดล local ค่าเริ่มต้น, temperature 0.7, พอร์ตตัวอย่าง 9 รายการ
+และ FX จริงจาก Frankfurter: runtime อ่านพอร์ตและแปลงงบ 5,000 → 3,800 บาทได้ต่อเนื่อง
+ยอด 3,800 บาทในรอบทดสอบเท่ากับ $112.97 ที่ rate THB/USD 0.02973 วันที่ 2026-10-07
+โดยไม่เขียน ledger หรือส่ง order (ตัวเลขนี้เป็นหลักฐานรอบทดสอบ ไม่ใช่ค่า FX สำหรับคำตอบในอนาคต)
+การรับข้อมูลและยอดแปลงผ่าน แต่คำตอบของโมเดลยังต้องตรวจเรื่อง policy หลังเติมเงิน
+ยอดแต่ละสินทรัพย์ ความเสี่ยงหุ้นและ ETF และความกระชับ จึงยังไม่ถือว่าคุณภาพคำแนะนำเทียบเท่า ChatGPT ตัวอย่าง
+
+ทดลองโมเดล local 12B ที่ติดตั้งอยู่ด้วยพอร์ตและข้อมูลเดียวกัน: เรียก `simulate_buy` ได้
+และใช้ยอดรวม FX ถูกต้อง แต่ยังสลับน้ำหนัก QQQM กับ VTI, เสนอเงินรวมเกินงบ
+และพยายามเรียก paper order ซึ่งถูก read-only guard ปฏิเสธก่อนถึง executor
+ผลนี้จึงไม่ผ่านด้านคุณภาพคำแนะนำเช่นกัน การเปลี่ยนเป็นโมเดลใหญ่ขึ้นเพียงอย่างเดียวยังไม่เพียงพอ
+ชุดทดสอบ 141 checks ผ่านด้าน routing, ข้อมูล, FX, owner scope และข้อจำกัดการเขียน
+ขั้นต่อไปสำหรับการรับรองคำแนะนำคือให้ Java ตรวจแผนจัดสรรหลายสินทรัพย์และ policy หลังเติมเงิน
+ก่อนแสดงคำตอบ พร้อมตรวจรับภาษา/เหตุผลด้วยเคสนี้ (เป็นผลก่อนตัวแก้ไขคุณภาพคำแนะนำด้านล่าง)
+
+อัปเดตคุณภาพคำแนะนำ 8 ต.ค. 2026:
+
+- `ลงทุนอะไรเพิ่มดี` ถูกจัดเป็นการเติมพอร์ต และเปิดเส้นทางอ่าน ledger ทั้ง blocking/streaming
+- อ่านข้อมูลผู้ออกกองทุน โดยค้นตัวผู้ออกจากชื่อกองทุนแล้วตรวจหน้า issuer อีกครั้ง ไม่ใช้บทความเริ่มลงทุนเป็นฐานคำแนะนำ
+- เมื่อไม่มี mandate ที่ขัดกัน และกองทุนตลาดหุ้นรวมที่ยืนยันจาก issuer ยังมีสัดส่วนต่ำกว่ากองทุนส่วนอื่น
+  ใช้ข้อเสนอเสริม core แบบมีสมมติฐาน ไม่กำหนด ticker ตายตัว และไม่ใช้กับ core ที่ครองพอร์ตอยู่แล้ว
+- กรณี mandate เฉพาะ ใช้แผน JSON แบบน้ำหนักสัมพัทธ์จากโมเดล และตรวจ symbol, ภาษา, source และ policy ก่อนแสดง
+- `InvestmentAdvicePlan` คำนวณยอดทุกส่วนด้วย BigDecimal รวมเงินให้ตรงงบทั้งสองสกุลเงิน
+  คำนวณน้ำหนักตามต้นทุนหลังเติมจริงตามสมมติฐาน รวมถึงการลดน้ำหนักของตัวที่ไม่ได้เติม และแสดง policy ที่ขัดกัน
+- การขอยอดดอลลาร์แปลงแผนล่าสุดโดยตรง; รองรับวันที่ FX ทั้ง ISO และรูปแบบ array ของ Java-time serialization
+- ยังคงเป็น read-only ไม่เปลี่ยน ledger, mandate, thesis หรือส่งคำสั่ง broker
+
+ตรวจรับกับข้อมูลและบริการจริงโดยไม่เขียนพอร์ต:
+
+```sh
+./mvnw -q -DskipTests test-compile dependency:build-classpath -Dmdep.outputFile=target/investment-advice-classpath.txt
+# ใช้ credentials ที่ตั้งไว้ใน environment; ไม่ใส่ key ในคำสั่งหรือรายงาน
+java -javaagent:$HOME/.m2/repository/net/bytebuddy/byte-buddy-agent/1.18.10/byte-buddy-agent-1.18.10.jar \
+  -cp "target/test-classes:target/classes:$(cat target/investment-advice-classpath.txt)" \
+  com.minikun.search.internal.InvestmentAdviceLiveTest --fixture
+# เอา --fixture ออกเพื่อใช้ ledger จริง; connection เปิด default_transaction_read_only
+```
+
+ผ่านพอร์ตอ้างอิง `5,000 → 3,800 บาท → $` และพอร์ตจริง `1,000 → 800 บาท → $`
+พร้อมตรวจ holdings/cost/policy ไม่เปลี่ยน ผลข้อความอยู่ใน `target/investment-advice-fixture.txt`
+และ `target/investment-advice-default.txt`; FX และ fund evidence อ่านจากบริการจริง ไม่ใช่ค่าที่ hardcode
+ขอบเขตปัจจุบันเสนอเฉพาะสินทรัพย์ที่ยืนยันอยู่ใน ledger และเงินสด ไม่รับรองผลตอบแทนหรือประเมินว่าราคาตลาดวันนี้ถูก
 
 ### `investment.monitor`
 
@@ -95,6 +180,43 @@ symbols ที่ไม่ได้ refresh ใช้ราคาจาก brief
 เพื่อไม่ให้มินิคุงแสดงตัวเลขเก่าว่าเป็นราคาสด; ข่าวยังค้นหาครบทุก symbol ที่ติดตาม
 เจ้าของสามารถตั้ง `MINOR` ให้ symbol ที่ไม่ต้องการ refresh ทุกวันได้ โดย symbol นั้นจะไม่ถูกเลือกในกลุ่ม fixed
 และจะอยู่ใน rotation แทน; priority นี้ไม่ลดความถี่การติดตามข่าว
+
+Brief จะบันทึกสรุปภาษาไทยที่ผ่านการตรวจไว้ใน `news.events.what_happened` และ `brief_text`
+ก่อนส่ง reminder; คำถามสรุปข่าวในแชตอ่าน `brief_text` เดียวกันโดยไม่สรุปใหม่ตอนแสดงผล
+โมเดลเรียบเรียงเฉพาะข้อเท็จจริง ส่วนสัดส่วนต้นทุน เหตุผลการถือและเงื่อนไขทบทวนมาจาก ledger/thesis จริง
+ใช้โมเดลหลักที่ตั้งไว้เฉพาะงานสรุปข่าวลงทุน ผ่าน `MINIKUN_INVESTMENT_SUMMARY_MODEL` ซึ่ง override ได้
+งาน task/memory อื่นยังใช้โมเดลเดิม
+หากสรุปไม่ผ่าน จะระบุว่าเรียบเรียงไม่สำเร็จ แทนการบอกว่าข่าวไม่มีหลักฐาน
+
+วันเผยแพร่รองรับ ISO และ RFC 1123 ของ Tavily; ข่าวที่ไม่ทราบวันเผยแพร่ ข่าวเก่าและบทความคาดเดาระยะยาว
+จะไม่อยู่ใน daily brief วันเกิดเหตุการณ์แยกเป็น `event_at` เฉพาะเมื่อข้อความระบุวันที่ของเหตุการณ์ชัดเจน
+เลือกไม่เกิน 3 ประเด็นจากความสำคัญ แหล่งข่าว น้ำหนักต้นทุนในพอร์ตและความใหม่ แล้วรวมข่าวซ้ำ
+VTI, QQQM และ SCHD ใช้ข่าวภาพตลาดที่เกี่ยวข้องเป็นบริบท โดยไม่อ้างว่ารู้หุ้นหรือสัดส่วนทั้งหมดในกองทุน
+ราคาที่ใช้รอบก่อนจะแสดงชื่อ symbol/เวลา ราคาพ้นอายุ cache จะไม่ถูกนำมาตีมูลค่า และรายงานมูลค่าบางส่วนจะระบุชัด
+
+เมื่อยังไม่มี thesis จะขอเหตุผลการถือหนึ่งตัวก่อน เจ้าของตอบได้ด้วย
+`เหตุผลที่ถือ AMZN: <เหตุผลจริง>; ทบทวนเมื่อ: <เงื่อนไขจริง>`
+ระบบสร้าง proposal ผ่าน `investment.manage save_thesis` และบันทึกเมื่อเจ้าของยืนยันตามขั้นตอนเดิม
+
+ท้าย reminder จะบอกให้เปิดแชต เติมสองช่อง แล้วตอบ `ยืนยัน` หลังมินิคุงทวนข้อมูล
+แจ้งเตือนแนบ click URL ไปยัง `/cockpit/?view=chat&reply_symbol=SCHD` ผ่าน origin ของ device sync ที่ตั้งไว้
+ntfy ใช้ Click และปุ่ม view ตาม [รูปแบบการส่งแจ้งเตือนของ ntfy](https://docs.ntfy.sh/publish/#action-buttons)
+ส่วนเบราว์เซอร์มีปุ่ม `ตอบเรื่อง SCHD` และเมื่อกดแจ้งเตือนจะเปิดแบบตอบเดียวกัน
+แบบตอบเติมเฉพาะชื่อสินทรัพย์ ไม่ส่งข้อความหรือยืนยันการบันทึกอัตโนมัติ
+ถ้ามีข้อความ ไฟล์ หรือการตอบที่กำลังทำงานอยู่ จะให้เปิดแบบตอบอีกหน้าต่างแทนการทับงานเดิม
+
+ตรวจรับด้วยพอร์ตจริง Search Runtime และโมเดลจริงโดยไม่ส่ง reminder หรือเขียน ledger:
+
+```sh
+# ต้องมี SPRING_DATASOURCE_PASSWORD และ MINIKUN_SEARCH_TAVILY_API_KEY ใน environment
+./mvnw -q -DskipTests test-compile dependency:build-classpath -Dmdep.outputFile=target/investment-live-classpath.txt
+java -cp "target/test-classes:target/classes:$(<target/investment-live-classpath.txt)" com.minikun.search.internal.InvestmentBriefLiveTest
+```
+
+ผลตัวอย่างอยู่ใน `target/investment-brief-preview.txt` และ `.json`; ราคาใน preview ใช้ snapshot เดิม
+เพื่อตรวจการสรุปโดยไม่ใช้ quota ราคาเพิ่ม การทดสอบจะไม่ผ่านหากข่าวที่เลือกไม่มีวันเผยแพร่หรือไม่มีสรุปภาษาไทยที่ตรวจแล้ว
+log แยก `news_candidate_rejected`, `news_summary_rejected`, `news_summary_failed` และ `news_summary_completed`
+เพื่อแยกปัญหาแหล่งข้อมูลออกจากการเรียบเรียง ไม่ใช้สถานะส่งข้อความสำเร็จเป็นตัววัดคุณภาพสรุป
 
 Scheduler จะส่ง brief หนึ่งครั้งต่อ local date หลังเวลา `08:15` Asia/Bangkok โดย default
 และ mark ว่าส่งสำเร็จหลัง Notification Dispatcher รับงานแล้วเท่านั้น; การ refresh หรือส่งซ้ำไม่สร้าง order

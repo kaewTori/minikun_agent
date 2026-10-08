@@ -82,7 +82,7 @@ public class MemoryConfiguration {
             ObjectProvider<EmbeddingModel> embeddingModels,
             @Value("${minikun.memory.semantic.enabled:true}") boolean semanticEnabled,
             @Value("${minikun.memory.semantic.weight:0.85}") double semanticWeight,
-            @Value("${spring.ai.ollama.embedding.options.model:qwen3-embedding:0.6b}") String embeddingModelName) {
+            @Value("${spring.ai.ollama.embedding.options.model:embeddinggemma-2:270m-mxfp8-text}") String embeddingModelName) {
         return new JdbcMemoryRepository(jdbcTemplate, meterRegistry,
                 semanticEnabled ? embeddingModels.getIfAvailable() : null, embeddingModelName, semanticWeight);
     }

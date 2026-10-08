@@ -78,18 +78,24 @@ final class ChatRequestInspector {
     }
 
     String toolQuery(String message, ChatCompletionRequest request) {
-        if (message == null || !message.matches("(?iu).*?(?:ที่(?:เรา|รา)อยู่|แถวนี้|ตรงนี้|ที่นี่|current location).*")) {
-            return message;
-        }
-        String previousUserMessage = request.messages()
-                .subList(0, lastUserMessageIndex(request.messages()))
-                .reversed().stream()
+        if (!hasText(message)) return message;
+        var previousMessages = request.messages().subList(0, lastUserMessageIndex(request.messages()));
+        boolean currentLocation = message.matches(
+                "(?iu).*?(?:ที่(?:เรา|รา)อยู่|แถวนี้|ตรงนี้|ที่นี่|current location).*");
+        boolean suppliedPlace = previousMessages.reversed().stream()
+                .filter(previous -> "assistant".equals(previous.role()))
+                .map(Message::content).filter(this::hasText).findFirst().orElse("")
+                .startsWith("บอกชื่อเมืองหรือเปิด/อัปเดตตำแหน่ง")
+                && message.length() <= 100
+                && !message.matches("(?iu)^(?:ไม่|ยกเลิก|cancel|never mind).*");
+        if (!currentLocation && !suppliedPlace) return message;
+        String previousUserMessage = previousMessages.reversed().stream()
                 .filter(previous -> "user".equals(previous.role()))
                 .map(Message::content)
                 .filter(this::hasText)
                 .findFirst().orElse("");
-        return previousUserMessage.matches("(?iu).*(?:อากาศ|พยากรณ์|weather|forecast).*")
-                ? "อากาศ " + message : message;
+        return previousUserMessage.matches("(?iu).*(?:อากาศ|พยากรณ์|ฝน|weather|forecast|rain).*")
+                ? previousUserMessage + (currentLocation ? " " : " ที่ ") + message : message;
     }
 
     String classifierContext(List<ChatMessage> history, CommandCatalog commands) {

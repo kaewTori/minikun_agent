@@ -3,13 +3,13 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#07140f">
+  <meta name="theme-color" content="#0d1411">
   <meta name="description" content="Minikun — ผู้ช่วยส่วนตัวที่คุย คิด ค้นหา และลงมือทำร่วมกับคุณ">
   <title>Minikun</title>
   <link rel="icon" href="/cockpit/minikun-avatar.jpg">
   <link rel="stylesheet" href="/cockpit/minikun-system.css?v=20260922-minimal">
   <link rel="stylesheet" href="/cockpit/cockpit.css?v=20260922-minimal">
-  <link rel="stylesheet" href="/cockpit/minikun-minimal.css?v=20261004-actions1">
+  <link rel="stylesheet" href="/cockpit/minikun-minimal.css?v=20261007-links3">
 </head>
 <body>
   <a class="skip-link" href="#main-content">ข้ามไปยังเนื้อหาหลัก</a>
@@ -17,7 +17,7 @@
     <aside class="rail" aria-label="เมนูหลัก">
       <a class="brand" href="/cockpit/" aria-label="Minikun หน้าหลัก">
         <img src="/cockpit/minikun-avatar.jpg" alt="" class="brand-avatar">
-        <span><strong>MINIKUN</strong><small>PERSONAL AGENT</small></span>
+        <span><strong>minikun</strong><small>พื้นที่เล็ก ๆ ของเรา</small></span>
       </a>
       <button class="new-chat-button" id="new-chat" type="button"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg> แชตใหม่</button>
       <nav class="main-nav">
@@ -54,23 +54,17 @@
             <button class="icon-button" id="mobile-new-chat" type="button" aria-label="เริ่มแชตใหม่"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
           </div>
         </header>
-        <div class="messages-scroll" id="messages-scroll">
+        <div class="messages-scroll" id="messages-scroll" tabindex="0" aria-label="บทสนทนากับมินิคุง">
           <div class="messages" id="messages" aria-live="polite" aria-busy="false"></div>
           <section class="chat-welcome" id="chat-welcome" aria-labelledby="welcome-title">
-            <div class="hero-avatar-wrap"><img src="/cockpit/minikun-avatar.jpg" alt="มินิคุง" class="hero-avatar"><span class="hero-presence"></span></div>
-            <p class="eyebrow">YOUR PERSONAL AGENT</p>
-            <h1 id="welcome-title">วันนี้ ให้มินิคุงช่วยอะไรดีครับ</h1>
-            <p>คุยเล่น คิดงาน หรือวางแผนไปด้วยกัน เริ่มจากเรื่องที่อยู่ในใจได้เลย</p>
+            <div class="welcome-presence"><div class="hero-avatar-wrap"><img src="/cockpit/minikun-avatar.jpg" alt="มินิคุง" class="hero-avatar"><span class="hero-presence"></span><svg class="ui-icon hero-spark" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 2 2.6 7.4L22 12l-7.4 2.6L12 22l-2.6-7.4L2 12l7.4-2.6Z"/></svg></div><div><p>คู่คิดพร้อมแล้วครับ!</p><small>งานก็ได้ คุยเล่นก็ดี</small></div></div>
+            <h1 id="welcome-title">สวัสดีครับ พี่สาว<br><span>วันนี้ <em>ลองอะไร</em>กันดี</span></h1>
+            <p>คิดงาน คุยเล่น หรือออกสำรวจไอเดียใหม่<br>หยิบมาสักเรื่อง แล้วไปด้วยกันครับ</p>
             <div class="starter-grid" aria-label="คำแนะนำเริ่มต้น">
-              <button type="button" data-prompt="ช่วยสรุปสิ่งสำคัญที่ฉันควรโฟกัสวันนี้"><span aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg></span><strong>โฟกัสวันนี้</strong><small>งาน เป้าหมาย และเรื่องเร่งด่วน</small></button>
-              <button type="button" data-prompt="ช่วยตรวจสุขภาพ homelab และสรุปเฉพาะสิ่งที่ควรรู้"><span aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24"><path d="M3 12h4l2-5 4 10 2-5h6"/></svg></span><strong>ดูแล Homelab</strong><small>ตรวจสุขภาพและอธิบายความเสี่ยง</small></button>
-              <div class="starter-more is-collapsed">
-                <button class="starter-more-toggle" type="button" aria-expanded="false" aria-controls="starter-more-grid">ดูอีก 2 แนวทาง</button>
-                <div class="starter-more-grid" id="starter-more-grid">
-                  <button type="button" data-prompt="ช่วยค้นข้อมูลล่าสุดเรื่องนี้ให้หน่อย: "><span aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="5.5"/><path d="m15 15 4 4M10.5 8v5M8 10.5h5"/></svg></span><strong>ค้นและวิจัย</strong><small>ค้นเว็บพร้อมอ้างอิงแหล่งที่มา</small></button>
-                  <button type="button" data-prompt="ช่วยเปลี่ยนความคิดนี้ให้เป็นแผนที่ลงมือทำได้: "><span aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24"><path d="M7 3h10v18H7Z"/><path d="M10 7h4M10 11h4M10 15h4"/></svg></span><strong>วางแผนให้ฉัน</strong><small>แตกเป็นงาน เตือน และก้าวถัดไป</small></button>
-                </div>
-              </div>
+              <button type="button" data-prompt="ช่วยสรุปสิ่งสำคัญที่ฉันควรโฟกัสวันนี้"><span aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.4 1.4M17.6 17.6 19 19M5 19l1.4-1.4M17.6 6.4 19 5"/></svg></span><strong>จัดวันให้เบาลง</strong><small>เลือกสิ่งสำคัญ แล้วค่อย ๆ ทำ</small></button>
+              <button type="button" data-prompt="วันนี้มีเรื่องอยากเล่าให้มินิคุงฟัง"><span aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24"><path d="M20 4c0 11-3 16-9 16a7 7 0 0 1-7-7C4 7 9 4 20 4Z"/><path d="m4 20 11-11"/></svg></span><strong>มีเรื่องอยากเล่า</strong><small>มินิคุงฟังอยู่ครับ</small></button>
+              <button type="button" data-prompt="ช่วยค้นข้อมูลล่าสุดเรื่องนี้ให้หน่อย: "><span aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="5.5"/><path d="m15 15 4 4"/></svg></span><strong>เปิดโหมดนักสำรวจ</strong><small>ตามหาไอเดียและคำตอบใหม่ ๆ</small></button>
+              <button type="button" data-prompt="ช่วยตรวจสุขภาพ homelab และสรุปเฉพาะสิ่งที่ควรรู้"><span aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24"><path d="M3 12h4l2-5 4 10 2-5h6"/></svg></span><strong>ดูแล homelab</strong><small>ดูเฉพาะเรื่องที่ควรรู้</small></button>
             </div>
             <div class="capability-strip"><span>ค้นเว็บ</span><span>ความรู้ส่วนตัว</span><span>วิเคราะห์ภาพ</span><span>งานและปฏิทิน</span><span>เสียง</span><span>Agent mode</span></div>
           </section>
@@ -79,7 +73,7 @@
           <div class="attachment-tray hidden" id="attachment-tray" aria-label="ไฟล์แนบ"></div>
           <form class="chat-composer" id="chat-form">
             <label class="sr-only" for="chat-composer">ข้อความถึงมินิคุง</label>
-            <textarea id="chat-composer" rows="1" maxlength="50000" placeholder="คุยกับมินิคุง…" autocomplete="off" enterkeyhint="enter"></textarea>
+            <textarea id="chat-composer" rows="1" maxlength="50000" placeholder="มีอะไรอยู่ในใจ เล่าให้มินิคุงฟังได้เลย…" autocomplete="off" enterkeyhint="enter" aria-describedby="composer-hint"></textarea>
             <div class="composer-tools">
               <div><button class="composer-button" id="attach-file" type="button" aria-label="แนบรูปหรือไฟล์"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 5v14M5 12h14"/></svg></button><input id="file-input" type="file" multiple accept="image/*,.txt,.md,.json,.csv,.log,.yaml,.yml,.xml,.html,.java,.js,.ts,.py,.sql,.sh,.properties" hidden><button class="composer-button" id="record-voice" type="button" aria-label="บันทึกเสียง"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="3" width="8" height="12" rx="4"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M9 21h6"/></svg></button><span class="recording-time hidden" id="recording-time">00:00</span></div>
               <div class="composer-submit-group"><span class="composer-hint" id="composer-hint">Enter ส่ง · Shift+Enter ขึ้นบรรทัดใหม่</span><button class="send-button" id="send-message" type="submit" aria-label="ส่งข้อความ"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 14-7-4 14-3.2-5.2L5 12Z"/><path d="m11.8 13.8 3.2-3.2"/></svg></button><button class="stop-button hidden" id="stop-message" type="button" aria-label="หยุดคำตอบ"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="2"/></svg></button></div>
@@ -93,9 +87,9 @@
         <header class="studio-topbar">
           <div class="studio-heading">
             <button class="mobile-menu-trigger" type="button" data-open-mobile-menu aria-label="เปิดเมนูมินิคุง"><img src="/cockpit/minikun-avatar.jpg" alt=""></button>
-            <div><p class="eyebrow">MINIKUN IMAGE STUDIO</p><h1 id="studio-title">สร้างภาพด้วย Pony prompt ในแบบที่ถนัด</h1></div>
+            <div><p class="eyebrow">MINIKUN IMAGE STUDIO</p><h1 id="studio-title">สร้างภาพกับมินิคุง</h1></div>
           </div>
-          <button class="secondary-button studio-board-button" id="studio-open-boards" type="button"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="m6 16 4-4 3 3 2-2 3 3"/></svg> บอร์ดแรงบันดาลใจ</button>
+          <button class="secondary-button studio-board-button" id="studio-open-boards" type="button" aria-label="เปิดบอร์ดแรงบันดาลใจ"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="m6 16 4-4 3 3 2-2 3 3"/></svg> บอร์ดแรงบันดาลใจ</button>
         </header>
 
         <details class="studio-runtime-details">
@@ -123,7 +117,7 @@
 
         </details>
         <div class="studio-workbench">
-          <form class="prompt-lab" id="studio-form">
+          <form class="prompt-lab" id="studio-form" tabindex="0" aria-label="เขียนและปรับ Pony prompt">
             <div class="studio-mode-tabs" role="tablist" aria-label="วิธีสร้าง Pony prompt">
               <button id="studio-story-tab" type="button" role="tab" aria-selected="true" aria-controls="studio-story-panel">เล่าภาพให้มินิคุง</button>
               <button id="studio-manual-tab" type="button" role="tab" aria-selected="false" aria-controls="studio-manual-panel">Manual Pony</button>
@@ -185,7 +179,7 @@
             <div class="studio-form-actions"><button class="text-button" id="studio-load-example" type="button">ลองโจทย์ตัวอย่าง</button><button class="generate-button" id="studio-generate" type="submit" disabled><span>สร้างภาพนี้</span><small id="studio-generate-note">กำลังตรวจ TinyGrad</small><i aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24"><path d="M5 12h13M13 6l6 6-6 6"/></svg></i></button></div>
           </form>
 
-          <aside class="studio-review-column" aria-label="คะแนนและประวัติ Pony">
+          <aside class="studio-review-column" aria-label="คะแนนและประวัติ Pony" tabindex="0">
             <article class="studio-score-card" id="studio-history-review" aria-live="polite">
               <header><p class="eyebrow">MINIKUN PROMPT REVIEW</p><h2>คะแนนพรอมป์ที่เลือก</h2></header>
               <p class="studio-review-empty" id="studio-review-empty">สร้างภาพแรกแล้วมินิคุงจะประเมิน Pony prompt ที่ส่งให้ครับ</p>
@@ -216,8 +210,9 @@
         </div>
         <dialog class="studio-prompt-dialog" id="studio-prompt-dialog" aria-labelledby="studio-prompt-dialog-title"><header><div><p class="eyebrow">PONY PROMPT</p><h2 id="studio-prompt-dialog-title">พรอมป์ที่ส่งจริง</h2></div><button id="studio-close-prompt" type="button" aria-label="ปิด">✕</button></header><pre id="studio-prompt-dialog-text"></pre></dialog>
 
-        <details class="prompt-field-guide" aria-labelledby="prompt-guide-title">
-          <summary><div><p class="eyebrow">PONY PROMPT FIELD GUIDE</p><h2 id="prompt-guide-title">อยากเขียน Pony เอง? เปิดคู่มือฉบับย่อ</h2></div><span>คู่มือเสริม</span></summary>
+        <button class="prompt-field-guide" id="open-prompt-guide" type="button" aria-haspopup="dialog" aria-controls="prompt-guide-dialog"><span>เปิดคู่มือเขียน Pony prompt</span><span>คู่มือเสริม ↗</span></button>
+        <dialog class="prompt-guide-dialog" id="prompt-guide-dialog" aria-labelledby="prompt-guide-title">
+          <header class="dialog-heading"><h2 id="prompt-guide-title">คู่มือเขียน Pony prompt</h2><button class="close-button" type="button" data-close-dialog aria-label="ปิดคู่มือ">×</button></header>
           <div class="prompt-method-grid">
             <article><span>01 · QUALITY</span><h3>เริ่มด้วย score tags</h3><p><code>score_9, score_8_up, score_7_up</code> วางไว้ต้น prompt เพื่อกำหนดฐานคุณภาพของ Pony โดยไม่บังคับ source</p></article>
             <article><span>02 · COUNT / CHARACTER</span><h3>นับก่อน แล้วค่อยบอกตัวละคร</h3><p><code>1girl, solo, short black hair, green sweater</code> ช่วยลดตัวละครซ้ำและแยกคุณลักษณะได้ชัดกว่าประโยคยาว</p></article>
@@ -227,7 +222,7 @@
           </div>
           <div class="prompt-before-after"><div><span>ประโยคแบบแชต</span><p>ผู้หญิงผมดำกำลังถือดาวในหอดูดาว ภาพสวย ๆ</p></div><i aria-hidden="true">→</i><div><span>PONY TAG ORDER</span><p>score_9, score_8_up, score_7_up, 1girl, solo, short black hair, green sweater, holding a glowing glass jar, looking down, gentle smile, observatory workshop, rainy night, moonlight, anime key visual, close-up, depth of field, (detailed eyes:1.15)</p></div></div>
           <div class="pony-negative-guide"><span>NEGATIVE แยกอีกช่อง</span><p>score_4, score_3, score_2, score_1, worst quality, bad anatomy, bad hands, extra fingers, text, watermark</p><small>ใส่สิ่งที่ไม่ต้องการเป็น tag ตรง ๆ ไม่ต้องเขียน “no …” และอย่านำ negative tags ไปปนกับ positive prompt</small></div>
-        </details>
+        </dialog>
       </section>
 
       <section class="cockpit-view hidden" id="cockpit-view" data-view="cockpit" aria-label="วันนี้ ส่วนตัว">
@@ -243,7 +238,7 @@
           <button type="button" data-cockpit-target="memory"><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4a4 4 0 0 0-7 2.6A4 4 0 0 0 4 14a4 4 0 0 0 5 4h3ZM12 4a4 4 0 0 1 7 2.6A4 4 0 0 1 20 14a4 4 0 0 1-5 4h-3Z"/><path d="M9 9h3M15 12h-3M8 14h4"/></svg><span>ความจำ</span></button>
           <button type="button" data-cockpit-target="system"><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4 7v5c0 4.8 3.2 7.8 8 9 4.8-1.2 8-4.2 8-9V7Z"/><path d="m9 12 2 2 4-5"/></svg><span>ระบบ</span></button>
         </nav>
-        <section class="dashboard-grid" aria-label="ภาพรวมส่วนตัว">
+        <section class="dashboard-grid" id="dashboard-content" aria-label="ภาพรวมส่วนตัว" tabindex="0">
           <article class="panel action-runtime-panel" data-cockpit-page="agent" aria-labelledby="action-runtime-title">
             <div class="panel-heading"><div><p class="eyebrow">ลงมือและตรวจผล</p><h2 id="action-runtime-title">ฝากงานให้มินิคุง</h2></div><button type="button" class="text-button" id="action-refresh">อัปเดตงาน</button></div>
             <p class="permission-note">มินิคุงตรวจผลหลังลงมือ งานนอกสิทธิ์ที่ตั้งไว้จะรอให้เรายืนยันครับ</p>
@@ -348,7 +343,7 @@
           </article>
           <article class="panel decision-panel hidden" id="pending-panel" data-cockpit-page="today" aria-labelledby="pending-title"><div class="panel-heading"><div><p class="eyebrow coral">รอพี่สาว</p><h2 id="pending-title">เรื่องที่รอการตัดสินใจ</h2></div><span class="count-badge" id="decision-count">0</span></div><div class="decision-list" id="decision-list" aria-live="polite"></div></article>
           <article class="panel focus-panel" data-cockpit-page="today" aria-labelledby="focus-title"><div class="panel-heading"><div><p class="eyebrow">ก้าวถัดไป</p><h2 id="focus-title">สิ่งที่น่าขยับต่อวันนี้</h2></div><span class="soft-badge">เลือกมาให้แล้ว</span></div><div class="action-list" id="action-list" aria-live="polite"><div class="loading-row"><span></span><div><i></i><i></i></div></div></div><p class="empty-state hidden" id="action-empty">ยังไม่มีสิ่งเร่งด่วนครับ วันนี้มีพื้นที่ให้หายใจเต็มที่</p></article>
-          <article class="panel inbox-panel" id="inbox" data-cockpit-page="today" aria-labelledby="inbox-title"><div class="panel-heading"><div><p class="eyebrow">ฝากไว้ก่อน</p><h2 id="inbox-title">จดให้มินิคุงจัดการต่อ</h2></div><span class="count-badge" id="inbox-count">0</span></div><form class="capture-form" id="capture-form"><label class="sr-only" for="capture-input">ข้อความที่ต้องการฝากไว้</label><textarea id="capture-input" rows="2" placeholder="งาน ไอเดีย หรือสิ่งที่ต้องจำ…" maxlength="20000" required></textarea><button class="primary-button" type="submit">ฝากไว้</button></form><div class="inbox-list" id="inbox-list" aria-live="polite"></div><p class="empty-state" id="inbox-empty">ตอนนี้ไม่มีเรื่องที่ฝากไว้ครับ</p></article>
+          <article class="panel inbox-panel" id="inbox" data-cockpit-page="today" aria-labelledby="inbox-title"><div class="panel-heading"><div><p class="eyebrow">ฝากไว้ก่อน</p><h2 id="inbox-title">จดให้มินิคุงจัดการต่อ</h2></div><span class="count-badge" id="inbox-count">0</span></div><form class="capture-form" id="capture-form"><label class="sr-only" for="capture-input">ข้อความที่ต้องการฝากไว้</label><textarea id="capture-input" rows="2" placeholder="จดงานหรือไอเดีย…" maxlength="20000" required></textarea><button class="primary-button" type="submit">ฝากไว้</button></form><div class="inbox-list" id="inbox-list" aria-live="polite"></div><p class="empty-state" id="inbox-empty">ตอนนี้ไม่มีเรื่องที่ฝากไว้ครับ</p></article>
           <article class="panel experiment-panel" id="experiments" data-cockpit-page="agent" aria-labelledby="experiment-title"><div class="panel-heading"><div><p class="eyebrow coral">การทดลองส่วนตัว</p><h2 id="experiment-title">กำลังเรียนรู้ว่าอะไรเวิร์ก</h2></div><button class="text-button" id="new-experiment" type="button">+ ทดลองใหม่</button></div><div id="experiment-card" class="experiment-content" aria-live="polite"><div class="experiment-orbit" aria-hidden="true"><span>—</span></div><div><div class="loading-line wide"></div><div class="loading-line"></div></div></div><div class="empty-state hidden" id="experiment-empty"><strong>มีเรื่องเล็ก ๆ ที่อยากลองเปลี่ยนไหมครับ</strong><span>ตั้งสมมติฐาน วัดผลสั้น ๆ แล้วให้มินิคุงช่วยสรุป</span><button class="primary-button" type="button" data-open-experiment>สร้างการทดลองแรก</button></div></article>
           <article class="panel quick-actions-panel" id="quick-actions" data-cockpit-page="agent" aria-labelledby="quick-actions-title">
             <div class="panel-heading"><div><p class="eyebrow">ทางลัด</p><h2 id="quick-actions-title">ให้มินิคุงช่วยต่อ</h2></div><span class="panel-heading-note">เลือกแล้วไปต่อในแชต</span></div>
@@ -399,7 +394,7 @@
             <p class="permission-note" id="permission-note">มินิคุงจะขอสิทธิ์เมื่อพี่สาวแตะเท่านั้น และจะไม่บันทึกตำแหน่งปัจจุบันไว้ในเบราว์เซอร์ครับ</p>
           </article>
           <label>รูปแบบการคุยในบทสนทนานี้<select id="companion-mode"><option value="BALANCED">ปรับตามบริบทอัตโนมัติ</option><option value="COMPANION">คู่หู — ฟังและคุยอย่างอบอุ่น</option><option value="WORK">ทำงาน — เน้นผลลัพธ์และลงมือ</option><option value="FOCUS">โฟกัส — สั้นและทีละก้าว</option></select></label><details class="advanced-settings"><summary>การตั้งค่าขั้นสูง</summary><label>Owner ID<input id="owner-id" name="ownerId" value="default" autocomplete="off"></label><label>Personal token<input id="personal-token" name="token" type="password" autocomplete="off" placeholder="ไม่ต้องกรอก หากไม่ได้ตั้ง token"></label><label>โมเดลหลักจาก Ollama<select id="chat-model" name="model"><option value="">กำลังโหลด…</option></select></label></details><div class="dialog-actions"><button class="secondary-button" type="button" data-close-dialog>ปิด</button><button class="primary-button" value="default" id="save-settings">บันทึก</button></div></form></dialog>
-  <dialog id="visual-lightbox-dialog" class="visual-lightbox-dialog"><section class="dialog-card visual-lightbox-card"><div class="dialog-heading"><div><p class="eyebrow" id="visual-origin-label">ภาพจากเว็บ</p><h2 id="visual-lightbox-title">Visual reference</h2></div><button class="close-button" type="button" data-close-dialog aria-label="ปิด">×</button></div><img id="visual-lightbox-image" alt=""><p id="visual-lightbox-description" class="dialog-copy visual-lightbox-description"></p><a id="visual-lightbox-source" class="visual-source-link" target="_blank" rel="noopener noreferrer">เปิดหน้าต้นทาง ↗</a><div class="visual-action-grid"><button class="primary-button" id="visual-ask" type="button">ถามต่อจากรูปนี้</button><button class="secondary-button" id="visual-similar" type="button">หารูปคล้ายกัน</button><button class="secondary-button" id="visual-save" type="button">เก็บเป็น reference</button><button class="secondary-button" id="visual-create" type="button">สร้างต่อจาก reference</button></div></section></dialog>
+  <dialog id="visual-lightbox-dialog" class="visual-lightbox-dialog"><section class="dialog-card visual-lightbox-card"><div class="dialog-heading"><div><p class="eyebrow" id="visual-origin-label">ภาพจากเว็บ</p><h2 id="visual-lightbox-title">Visual reference</h2></div><button class="close-button" type="button" data-close-dialog aria-label="ปิด">×</button></div><img id="visual-lightbox-image" alt=""><p id="visual-lightbox-description" class="dialog-copy visual-lightbox-description"></p><a id="visual-lightbox-source" class="visual-source-link" target="_self" rel="noopener noreferrer">เปิดหน้าต้นทาง ↗</a><div class="visual-action-grid"><button class="primary-button" id="visual-ask" type="button">ถามต่อจากรูปนี้</button><button class="secondary-button" id="visual-similar" type="button">หารูปคล้ายกัน</button><button class="secondary-button" id="visual-save" type="button">เก็บเป็น reference</button><button class="secondary-button" id="visual-create" type="button">สร้างต่อจาก reference</button></div></section></dialog>
   <dialog id="inspiration-boards-dialog"><section class="dialog-card inspiration-dialog-card"><div class="dialog-heading"><div><p class="eyebrow">VISUAL MEMORY</p><h2>บอร์ดแรงบันดาลใจ</h2></div><button class="close-button" type="button" data-close-dialog aria-label="ปิด">×</button></div><form id="create-inspiration-board" class="board-create-form"><label class="sr-only" for="new-board-title">ชื่อบอร์ด</label><input id="new-board-title" maxlength="120" placeholder="ชื่อบอร์ดใหม่"><button class="primary-button" type="submit">สร้างบอร์ด</button></form><div id="inspiration-board-list" class="inspiration-board-list" aria-live="polite"></div></section></dialog>
   <dialog id="experiment-dialog"><form method="dialog" class="dialog-card experiment-form" id="experiment-form"><div class="dialog-heading"><div><p class="eyebrow coral">NEW EXPERIMENT</p><h2>ลองเรื่องเล็ก ๆ อย่างตั้งใจ</h2></div><button class="close-button" type="button" data-close-dialog aria-label="ปิด">×</button></div><label>ชื่อการทดลอง<input name="title" required maxlength="120" placeholder="เช่น โฟกัสก่อนเปิดแชต"></label><label>สมมติฐาน<textarea name="hypothesis" required rows="2" placeholder="ถ้าฉันทำ… แล้วน่าจะเกิด…"></textarea></label><label>วิธีที่เราจะลอง<textarea name="protocol" required rows="2" placeholder="กติกาเล็ก ๆ ที่ทำซ้ำได้"></textarea></label><div class="form-grid three"><label>ตัวชี้วัด<input name="metricName" required placeholder="นาทีโฟกัส"></label><label>หน่วย<input name="metricUnit" required placeholder="นาที"></label><label>ทิศทาง<select name="direction"><option value="INCREASE">เพิ่มขึ้น</option><option value="DECREASE">ลดลง</option></select></label></div><div class="form-grid three"><label>ค่าตั้งต้น<input name="baselineValue" required type="number" step="any" value="0"></label><label>เป้าหมาย<input name="targetValue" required type="number" step="any" value="1"></label><label>ระยะเวลา (วัน)<input name="durationDays" required type="number" min="1" max="365" value="7"></label></div><div class="dialog-actions"><button class="secondary-button" type="button" data-close-dialog>ไว้ก่อน</button><button class="primary-button" value="default">สร้างเป็นฉบับร่าง</button></div></form></dialog>
   <dialog id="learning-topic-dialog"><form method="dialog" class="dialog-card" id="learning-topic-form"><div class="dialog-heading"><div><p class="eyebrow">NEW LEARNING TOPIC</p><h2>อยากให้มินิคุงเรียนรู้อะไร</h2></div><button class="close-button" type="button" data-close-dialog aria-label="ปิด">×</button></div><label>ชื่อหัวข้อ<input name="name" required maxlength="200" placeholder="เช่น PostgreSQL performance"></label><label>เป้าหมายการเรียนรู้<textarea name="objective" required rows="3" maxlength="2000" placeholder="ติดตามความสามารถ การเปลี่ยนแปลง และคำแนะนำจากเอกสารทางการ"></textarea></label><div class="form-grid three"><label>ความถี่<select name="refreshPolicy"><option value="DAILY">ทุกวัน</option><option value="WEEKLY" selected>ทุกสัปดาห์</option><option value="MONTHLY">ทุกเดือน</option><option value="MANUAL">สั่งเอง</option></select></label><label>นโยบายแหล่งข้อมูล<select name="sourcePolicy"><option value="OFFICIAL_FIRST">ทางการก่อน</option><option value="OFFICIAL_ONLY">เฉพาะทางการ</option><option value="BALANCED">สมดุลหลายแหล่ง</option></select></label><label>ความสำคัญ<input name="priority" type="number" min="0" max="100" value="70"></label></div><label>Trusted domains <small>(คั่นด้วย comma)</small><input name="trustedDomains" placeholder="docs.example.com, example.com"></label><div class="dialog-actions"><button class="secondary-button" type="button" data-close-dialog>ยกเลิก</button><button class="primary-button" value="default">สร้างและเปิดเรียน</button></div></form></dialog>
@@ -428,10 +423,10 @@
       <div class="dialog-actions"><button class="secondary-button" type="button" data-close-dialog>ยกเลิก</button><button class="primary-button" type="submit">ตอบใหม่</button></div>
     </form>
   </dialog>
-  <script src="/cockpit/cockpit-core.js?v=20260929-feedback1" defer></script>
+  <script src="/cockpit/cockpit-core.js?v=20261007-reply1" defer></script>
   <script src="/cockpit/cockpit-chat-assets.js?v=20260828-storage1" defer></script>
-  <script src="/cockpit/cockpit-markdown.js?v=20260920-markdown2" defer></script>
+  <script src="/cockpit/cockpit-markdown.js?v=20261007-links3" defer></script>
   <script src="/cockpit/cockpit-actions.js?v=20261004-action1" defer></script>
-  <script src="/cockpit/cockpit.js?v=20261004-actions1" defer></script>
+  <script src="/cockpit/cockpit.js?v=20261007-links3" defer></script>
 </body>
 </html>

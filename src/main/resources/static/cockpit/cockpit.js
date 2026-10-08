@@ -172,10 +172,7 @@
   }
 
   function safeExternalUrl(url) {
-    try {
-      const parsed = new URL(url);
-      return parsed.protocol === "https:" || parsed.protocol === "http:" ? parsed.href : "";
-    } catch (_) { return ""; }
+    return window.MinikunMarkdown.safeUrl(url);
   }
 
   function visualMetadata(visual) {
@@ -218,7 +215,7 @@
     const sourceUrl = isSvg ? visual.url : safeExternalUrl(visual.sourceUrl || visual.originalUrl);
     source.href = sourceUrl || "#";
     source.textContent = isSvg ? "ดาวน์โหลด SVG" : "เปิดหน้าต้นทาง ↗";
-    source.target = isSvg ? "_self" : "_blank";
+    source.target = "_self";
     if (isSvg) source.setAttribute("download", "minikun-graphic.svg");
     else source.removeAttribute("download");
     source.classList.toggle("hidden", !sourceUrl);
@@ -594,11 +591,13 @@
       }
       const currentId = state.currentConversationId;
       state.conversations = remote;
-      const current = remote.find((conversation) => conversation.id === currentId) || remote[0];
+      let hasDraft = false;
+      try { hasDraft = Boolean(localStorage.getItem(`minikun.draft.${currentId}`)); } catch (_) { /* private storage */ }
+      const current = remote.find((conversation) => conversation.id === currentId) || (hasDraft ? null : remote[0]);
       if (current) {
         state.currentConversationId = current.id;
         state.chatMessages = current.messages;
-      } else {
+      } else if (!hasDraft) {
         state.currentConversationId = chatId();
         state.chatMessages = [];
       }
@@ -666,12 +665,40 @@
     return operation;
   }
 
+  function openInvestmentReply(symbol) {
+    const draft = Core.investmentReplyDraft(symbol);
+    if (!draft) return;
+    const composer = $("#chat-composer");
+    if (composer.value.trim() || state.attachments.length || state.pendingChats.size) {
+      toast("ยังมีข้อความหรือไฟล์ค้างอยู่ เปิดแบบตอบอีกหน้าต่างได้ครับ", false, {
+        label: "เปิดแบบตอบอีกหน้าต่าง",
+        onClick: () => window.open(`/cockpit/?view=chat&reply_symbol=${encodeURIComponent(symbol)}`, "_blank", "noopener")
+      });
+      return;
+    }
+    startNewChat();
+    composer.value = draft;
+    const url = new URL(window.location.href);
+    url.searchParams.set("view", "chat");
+    url.searchParams.set("conversation_id", state.currentConversationId);
+    url.searchParams.delete("reply_symbol");
+    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+    saveDraft();
+    autoGrowComposer();
+    composer.focus();
+    composer.setSelectionRange(draft.indexOf(":") + 2, draft.indexOf(":") + 2);
+    $("#composer-hint").textContent = "เติมคำตอบแล้วกดส่ง · รอมินิคุงทวนก่อนยืนยัน";
+  }
+
   function showBrowserNotification(payload, eventId = "", force = false) {
     const title = String(payload?.title || "Mini-kun").trim();
     const message = String(payload?.message || "").trim();
     if (!message) return;
+    const replySymbol = payload?.sourceType === "INVESTMENT"
+      ? Core.investmentReplySymbol(payload.clickUrl || "", window.location.href, state.sync.canonicalOrigin) : "";
+    const replyAction = replySymbol ? { label: `ตอบเรื่อง ${replySymbol}`, onClick: () => openInvestmentReply(replySymbol) } : null;
     if (!force && document.visibilityState === "visible") {
-      toast(message);
+      toast(message, false, replyAction);
       return;
     }
     if (!("Notification" in window) || Notification.permission !== "granted") return;
@@ -680,6 +707,7 @@
     notification.onclick = () => {
       window.focus();
       notification.close();
+      if (replySymbol) openInvestmentReply(replySymbol);
     };
   }
 
@@ -889,6 +917,8 @@
     const composer = $("#chat-composer");
     try { composer.value = localStorage.getItem(draftKey()) || ""; } catch (_) { composer.value = ""; }
     autoGrowComposer();
+    $("#composer-hint").textContent = isAppleMobile() ? "Enter ขึ้นบรรทัดใหม่ · แตะ ↑ เพื่อส่ง"
+      : "Enter ส่ง · Shift+Enter ขึ้นบรรทัดใหม่";
   }
 
   function actionConversation() {
@@ -1020,7 +1050,8 @@
     state.cockpitPage = allowed.has(requested) ? requested : "today";
     loadDashboard(state.cockpitPage, { force: state.cockpitPage === "system" }).catch((error) => toast(error.message, true));
     updateSystemPolling();
-    if (previousPage !== state.cockpitPage) state.dashboard.scroll.set(previousPage, window.scrollY);
+    const content = $("#dashboard-content");
+    if (previousPage !== state.cockpitPage) state.dashboard.scroll.set(previousPage, content?.scrollTop || 0);
     document.querySelectorAll("[data-cockpit-page]").forEach((node) => {
       const pages = String(node.dataset.cockpitPage || "").split(/\s+/);
       node.classList.toggle("cockpit-page-hidden", !pages.includes(state.cockpitPage));
@@ -1040,10 +1071,10 @@
       }
     });
     requestAnimationFrame(() => {
-      if (focusId) document.getElementById(focusId)?.scrollIntoView({ behavior: "smooth", block: "start" });
-      else if (state.dashboard.scroll.has(state.cockpitPage)) {
-        window.scrollTo({ top: state.dashboard.scroll.get(state.cockpitPage), behavior: "auto" });
-      } else if (!window.matchMedia?.("(max-width: 720px)").matches) window.scrollTo(0, 0);
+      if (focusId) document.getElementById(focusId)?.scrollIntoView({
+        behavior: window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start"
+      });
+      else if (content && previousPage !== state.cockpitPage) content.scrollTop = state.dashboard.scroll.get(state.cockpitPage) || 0;
     });
   }
 
@@ -1475,14 +1506,24 @@
   }
 
   function renderSourceCards(message) {
-    if (message.role !== "assistant" || !message.sources?.length) return null;
+    if (message.role !== "assistant") return null;
+    const sources = new Map();
+    for (const source of [...(message.sources || []), ...extractSources(message.content)]) {
+      if (!source || typeof source.url !== "string") continue;
+      const url = safeExternalUrl(source.url);
+      const previous = sources.get(url);
+      if (url && (!previous || previous.title === window.MinikunMarkdown.linkLabel("", url))) {
+        sources.set(url, { url, title: window.MinikunMarkdown.linkLabel(source.title, url) });
+      }
+    }
+    if (!sources.size) return null;
     const region = element("section", "message-sources");
     region.append(element("strong", "", "แหล่งอ้างอิง"));
     const list = element("div", "message-source-list");
-    for (const source of message.sources) {
-      const link = element("a", "message-source", source.title || source.url);
+    for (const source of [...sources.values()].slice(0, 12)) {
+      const link = element("a", "message-source", source.title);
       link.href = source.url;
-      link.target = "_blank";
+      link.target = "_self";
       link.rel = "noopener noreferrer";
       list.append(link);
     }
@@ -1752,7 +1793,7 @@
       const sourceUrl = safeExternalUrl(visual.sourceUrl || visual.originalUrl);
       if (sourceUrl) {
         const source = element("a", "visual-card-source", `เปิดต้นทาง ${visualHost(visual)} ↗`);
-        source.href = sourceUrl; source.target = "_blank"; source.rel = "noopener noreferrer";
+        source.href = sourceUrl; source.target = "_self"; source.rel = "noopener noreferrer";
         copy.append(source);
       }
       const actions = element("div", "visual-card-actions");
@@ -2101,18 +2142,7 @@
   }
 
   function extractSources(content) {
-    const seen = new Set();
-    const sources = [];
-    for (const match of String(content || "").matchAll(/https?:\/\/[^\s)\]}>"']+/g)) {
-      const url = match[0].replace(/[.,;:!?]+$/, "");
-      if (seen.has(url)) continue;
-      seen.add(url);
-      try {
-        sources.push({ url, title: new URL(url).hostname.replace(/^www\./, "") });
-      } catch (_) { /* ignore malformed model output */ }
-      if (sources.length >= 12) break;
-    }
-    return sources;
+    return window.MinikunMarkdown.extractSources(content);
   }
 
   async function hydrateMessageAttachments(message) {
@@ -3252,7 +3282,7 @@
         const safe = safeExternalUrl(url);
         if (!safe) continue;
         const link = element("a", "", new URL(safe).hostname.replace(/^www\./, ""));
-        link.href = safe; link.target = "_blank"; link.rel = "noopener noreferrer";
+        link.href = safe; link.target = "_self"; link.rel = "noopener noreferrer";
         citations.append(link);
       }
       if (citations.childElementCount) copy.append(citations);
@@ -3383,7 +3413,7 @@
         const safe = safeExternalUrl(url);
         if (!safe) continue;
         const link = element("a", "", `อ้างอิง · ${new URL(safe).hostname.replace(/^www\./, "")}`);
-        link.href = safe; link.target = "_blank"; link.rel = "noopener noreferrer";
+        link.href = safe; link.target = "_self"; link.rel = "noopener noreferrer";
         citations.append(link);
       }
       row.append(citations);
@@ -3959,6 +3989,7 @@
     dialog.close("cancel");
   });
 
+  $("#open-prompt-guide").addEventListener("click", () => $("#prompt-guide-dialog").showModal());
   document.querySelectorAll("[data-view-target]").forEach((button) => {
     button.addEventListener("click", () => {
       mobileMenuDialog?.close();
@@ -3983,14 +4014,6 @@
       composer.value = button.dataset.prompt;
       autoGrowComposer();
       composer.focus();
-    });
-  });
-  document.querySelectorAll(".starter-more-toggle").forEach((button) => {
-    button.addEventListener("click", () => {
-      const more = button.closest(".starter-more");
-      const collapsed = more.classList.toggle("is-collapsed");
-      button.setAttribute("aria-expanded", String(!collapsed));
-      button.textContent = collapsed ? "ดูอีก 2 แนวทาง" : "ซ่อนแนวทางเพิ่มเติม";
     });
   });
   $("#new-chat").addEventListener("click", startNewChat);
@@ -4285,6 +4308,14 @@
   const requestedParams = new URLSearchParams(window.location.search);
   const requestedView = requestedParams.get("view");
   showView(new Set(["chat", "studio", "cockpit"]).has(requestedView) ? requestedView : "chat", requestedParams.get("section") || "");
-  initializeSync();
+  initializeSync().then(() => {
+    const replySymbol = Core.investmentReplySymbol(window.location.href, window.location.href);
+    if (replySymbol) {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("reply_symbol");
+      window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+      openInvestmentReply(replySymbol);
+    }
+  });
   window.addEventListener("online", retryPendingSync);
 })();

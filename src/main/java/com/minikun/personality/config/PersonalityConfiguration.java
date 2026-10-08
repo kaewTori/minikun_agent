@@ -7,7 +7,6 @@ import com.minikun.personality.profile.InMemoryUserProfileStore;
 import com.minikun.personality.profile.UserProfileStore;
 import com.minikun.personality.profile.JdbcUserProfileStore;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.jdbc.core.JdbcTemplate;
 import com.minikun.personality.runtime.AdaptivePersonaRuntime;
 import com.minikun.personality.runtime.AdaptivePersonaService;
@@ -63,29 +62,21 @@ public class PersonalityConfiguration {
     AdaptivePersonaRuntime adaptivePersonaRuntime() { return new AdaptivePersonaRuntime(); }
 
     @Bean
-    @ConditionalOnMissingBean(JdbcTemplate.class)
-    UserProfileStore userProfileStore() { return new InMemoryUserProfileStore(); }
+    UserProfileStore userProfileStore(ObjectProvider<JdbcTemplate> jdbc) {
+        JdbcTemplate template = jdbc.getIfAvailable();
+        return template == null ? new InMemoryUserProfileStore() : new JdbcUserProfileStore(template);
+    }
 
     @Bean
-    @ConditionalOnMissingBean(JdbcTemplate.class)
-    PreferenceStore preferenceStore() { return new InMemoryPreferenceStore(); }
+    PreferenceStore preferenceStore(ObjectProvider<JdbcTemplate> jdbc) {
+        JdbcTemplate template = jdbc.getIfAvailable();
+        return template == null ? new InMemoryPreferenceStore() : new JdbcPreferenceStore(template);
+    }
 
     @Bean
-    @ConditionalOnMissingBean(JdbcTemplate.class)
-    AdaptationSignalStore adaptationSignalStore() { return new InMemoryAdaptationSignalStore(); }
-
-    @Bean
-    @ConditionalOnBean(JdbcTemplate.class)
-    UserProfileStore jdbcUserProfileStore(JdbcTemplate jdbc) { return new JdbcUserProfileStore(jdbc); }
-
-    @Bean
-    @ConditionalOnBean(JdbcTemplate.class)
-    PreferenceStore jdbcPreferenceStore(JdbcTemplate jdbc) { return new JdbcPreferenceStore(jdbc); }
-
-    @Bean
-    @ConditionalOnBean(JdbcTemplate.class)
-    AdaptationSignalStore jdbcAdaptationSignalStore(JdbcTemplate jdbc) {
-        return new JdbcAdaptationSignalStore(jdbc);
+    AdaptationSignalStore adaptationSignalStore(ObjectProvider<JdbcTemplate> jdbc) {
+        JdbcTemplate template = jdbc.getIfAvailable();
+        return template == null ? new InMemoryAdaptationSignalStore() : new JdbcAdaptationSignalStore(template);
     }
 
     @Bean

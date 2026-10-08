@@ -20,6 +20,19 @@ import org.junit.jupiter.api.Test;
 
 class InvestmentMarketRouterTest {
     @Test
+    void serializesQuoteTimestampsInsteadOfReportingAFormatError() {
+        InvestmentService investments = mock(InvestmentService.class);
+        when(investments.summary("owner-a")).thenReturn(portfolio());
+        ToolExecutor executor = mock(ToolExecutor.class);
+        when(executor.execute(any(), any())).thenReturn(ToolResult.success(Map.of(
+                "status", "ok", "as_of", Instant.parse("2026-10-08T00:00:00Z"), "quotes", List.of())));
+        var evidence = new InvestmentMarketRouter(executor, new ObjectMapper(), investments)
+                .route("ดูราคาปัจจุบันของ AMZN", new ConversationId("quote-time"), "owner-a").orElseThrow();
+        assertTrue(evidence.success(), evidence.content());
+        assertTrue(evidence.content().contains("as_of"));
+    }
+
+    @Test
     void routesAConcretePriceQuestionWithTheHeldSymbol() {
         InvestmentService investments = mock(InvestmentService.class);
         when(investments.summary("owner-a")).thenReturn(portfolio());

@@ -4,7 +4,7 @@ final class KnowledgeEmbeddingCodec {
     private KnowledgeEmbeddingCodec() {}
 
     static String encode(float[] vector) {
-        if (vector == null || vector.length == 0) return "";
+        EmbeddingSupport.requireVector(vector);
         StringBuilder result = new StringBuilder(vector.length * 10);
         for (int index = 0; index < vector.length; index++) {
             if (index > 0) result.append(',');
@@ -18,6 +18,6 @@ final class KnowledgeEmbeddingCodec {
         String[] fields = value.split(",");
         float[] result = new float[fields.length];
         for (int index = 0; index < fields.length; index++) result[index] = Float.parseFloat(fields[index]);
-        return result;
+        return EmbeddingSupport.requireVector(result);
     }
 }

@@ -18,6 +18,40 @@ import org.junit.jupiter.api.Test;
 
 class ChatCapabilityFactoryTest {
     @Test
+    void topUpGuidanceUsesThePortfolioAndLatestBudgetWithoutHardcodingAFundOrAllowingOrders() {
+        var factory = new ChatCapabilityFactory();
+        String history = "user: เรามีอยู่ 5000 บาทเอาไปเติมอะไรดีวันนี้\nassistant: เสนอแผนตามพอร์ต"
+                + "\nuser: เปลี่ยนใหม่เป็น 3800 บาท\nassistant: ปรับแผนแล้ว";
+        String instruction = factory.investmentAdvice("ขอยอดเป็น $ หน่อย", history, true).orElseThrow().content();
+        assertTrue(instruction.contains("MINIKUN_INVESTMENT_ADVICE_REQUIRED"));
+        assertTrue(instruction.contains("converted_amount"));
+        assertTrue(instruction.contains("replace the old budget"));
+        assertTrue(instruction.contains("costAllocationPercent"));
+        assertTrue(instruction.contains("never authorize a transaction"));
+        org.junit.jupiter.api.Assertions.assertFalse(instruction.contains("VTI"));
+        String unavailable = factory.investmentAdvice("แนะนำเติมพอร์ตวันนี้", "", false).orElseThrow().content();
+        assertTrue(unavailable.contains("current ledger, prices and FX have not been checked"));
+        assertTrue(factory.investmentAdvice("ขอยอดเป็น $ หน่อย", "user: ค่าจองโรงแรม", true).isEmpty());
+    }
+
+    @Test
+    void preservesCompleteSourceUrlsWhenEvidenceSnippetsAreShortened() {
+        String url = "https://example.com/" + "%E0%B8%94".repeat(100);
+        var source = new KnowledgeCandidate("search-1", KnowledgeSource.SEARCH,
+                "บทความ (" + url + "): " + "evidence ".repeat(100), 0, url);
+        var knowledge = new ChatKnowledgeSelection(new KnowledgeSelection(List.of(source), false),
+                KnowledgeConsolidation.EMPTY, new SearchSelectionSignals(true), SearchContext.EMPTY);
+        String evidence = new ChatCapabilityFactory().create("ค้นข้อมูล", knowledge,
+                null, null, null, null, "", false).stream()
+                .filter(capability -> capability.name().equals("Web search evidence"))
+                .map(capability -> capability.content()).findFirst().orElseThrow();
+        assertTrue(evidence.contains("Source URL: " + url));
+        assertTrue(evidence.contains("[search-1]"));
+        assertTrue(evidence.contains("The application resolves the ID"));
+        org.junit.jupiter.api.Assertions.assertFalse(evidence.contains("(" + url.substring(0, 100)));
+    }
+
+    @Test
     void requiresPresentationToolForActualDeckRequests() {
         var knowledge = new ChatKnowledgeSelection(KnowledgeSelection.EMPTY, KnowledgeConsolidation.EMPTY,
                 SearchSelectionSignals.EMPTY, SearchContext.EMPTY);

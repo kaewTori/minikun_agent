@@ -28,6 +28,68 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
 class InvestmentConfirmationRouterTest {
+    @Test
+    void recordsTheReportedFractionalBuysAsOneConfirmedBatchWithoutFetchingMarketPrices() {
+        InMemoryInvestmentStore store = new InMemoryInvestmentStore();
+        Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
+        InvestmentService service = new InvestmentService(store, clock, "USD");
+        service.addTransaction("owner-a", "opening", "broker", "BUY", "SCHD", "Schwab", "ETF", "USD",
+                BigDecimal.ONE, BigDecimal.TEN, null, null, NOW.minusSeconds(10), "");
+        service.addTransaction("owner-a", "opening", "broker", "BUY", "VTI", "Vanguard", "ETF", "USD",
+                BigDecimal.ONE, BigDecimal.TEN, null, null, NOW.minusSeconds(10), "");
+        var confirmations = new PlannerConfirmationService(new InMemoryConfirmationStore(), clock);
+        var router = new InvestmentTradeReportRouter(service, confirmations, new ObjectMapper(), clock);
+        String report = """
+                อัพเดท port ให้เราตามนี้หน่อย
+                ซื้อ SCHD 29.37$ ในราคา 32.80$ ต่อหน่วยได้ 0.8939024 หน่วย
+                ซื้อ VTI 89.01$ ในราคา 380.60$ ต่อหน่วยได้ 0.2338675 หน่วย
+                """;
+        ToolExecutor noMarketReads = (context, call) -> { throw new AssertionError("update must not fetch quotes"); };
+        var id = new ConversationId("fractional-buys");
+        assertTrue(new InvestmentMarketRouter(noMarketReads, new ObjectMapper(), service).route(report, id, "owner-a").isEmpty());
+        assertTrue(new InvestmentMonitorRouter(noMarketReads, new ObjectMapper()).route(report, id, "owner-a").isEmpty());
+        assertTrue(new InvestmentReviewRouter(noMarketReads, new ObjectMapper()).route(report, id, "owner-a").isEmpty());
+        var proposal = router.route(report, id, "owner-a").orElseThrow();
+        assertTrue(proposal.requiresConfirmation(), proposal.content());
+        assertTrue(proposal.content().contains("ส่วนต่าง"));
+        assertEquals(2, store.transactions.size());
+        assertTrue(router.route("ยืนยัน", id, "owner-b").isEmpty());
+        var result = router.route("ยืนยัน", id, "owner-a").orElseThrow();
+        assertTrue(result.success(), result.content());
+        assertEquals(4, store.transactions.size());
+        var buys = store.transactions.subList(2, 4);
+        assertEquals(List.of("SCHD", "VTI"), buys.stream().map(InvestmentTransaction::symbol).toList());
+        assertTrue(buys.stream().allMatch(trade -> trade.type() == com.minikun.investment.InvestmentTransactionType.BUY));
+        assertEquals(0, new BigDecimal("0.8939024").compareTo(buys.getFirst().quantity()));
+        assertEquals(0, new BigDecimal("0.2338675").compareTo(buys.getLast().quantity()));
+        assertEquals(0, new BigDecimal("0.050001280").compareTo(buys.getFirst().fee()));
+        assertEquals(0, new BigDecimal("138.38").compareTo(service.summary("owner-a").totalOpenCostBasis()));
+        assertTrue(confirmations.find(id, "owner-a").isEmpty());
+        assertTrue(!router.route(report, id, "owner-a").orElseThrow().success());
+        assertEquals(4, store.transactions.size());
+    }
+
+    @Test
+    void rejectsAnIncompleteOrInconsistentBuyBatchBeforeSavingAProposal() {
+        var store = new InMemoryInvestmentStore();
+        Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
+        var service = new InvestmentService(store, clock, "USD");
+        service.addTransaction("owner-a", "opening", "broker", "BUY", "VTI", "Vanguard", "ETF", "USD",
+                BigDecimal.ONE, BigDecimal.TEN, null, null, NOW.minusSeconds(10), "");
+        var confirmations = new PlannerConfirmationService(new InMemoryConfirmationStore(), clock);
+        var router = new InvestmentTradeReportRouter(service, confirmations, new ObjectMapper(), clock);
+        var id = new ConversationId("invalid-buys");
+        String first = "อัพเดท port\nซื้อ SCHD 29.37$ ในราคา 32.80$ ต่อหน่วยได้ 0.8939024 หน่วย\n";
+        for (String second : List.of("ซื้อ VTI 80.00$ ในราคา 380.60$ ต่อหน่วยได้ 0.2338675 หน่วย",
+                "ซื้อ VTI 89.01$ ในราคา 380.60$ ต่อหน่วย", "ซื้อ VTI 89.01 THB ในราคา 380.60$ ต่อหน่วยได้ 0.2338675 หน่วย")) {
+            assertTrue(!router.route(first + second, id, "owner-a").orElseThrow().success());
+            assertTrue(confirmations.find(id, "owner-a").isEmpty());
+            assertEquals(1, store.transactions.size());
+        }
+        assertTrue(router.route("ถ้าซื้อตามนี้จะดีไหม\nซื้อ VTI 89.01$ ในราคา 380.60$ ต่อหน่วยได้ 0.2338675 หน่วย",
+                id, "owner-a").isEmpty());
+    }
+
     private static final Instant NOW = Instant.parse("2026-08-22T03:00:00Z");
 
     @Test

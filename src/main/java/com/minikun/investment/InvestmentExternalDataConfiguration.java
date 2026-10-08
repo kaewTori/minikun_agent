@@ -1,6 +1,8 @@
 package com.minikun.investment;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.minikun.model.task.OllamaTaskModelProvider;
+import com.minikun.model.task.TaskModelProvider;
 import java.net.http.HttpClient;
 import java.time.Clock;
 import java.time.Duration;
@@ -14,6 +16,14 @@ import org.springframework.web.client.RestClient;
 @Configuration(proxyBeanMethods = false)
 @ConditionalOnProperty(name = "minikun.investment.enabled", havingValue = "true", matchIfMissing = true)
 public class InvestmentExternalDataConfiguration {
+    @Bean("investmentNewsModelProvider")
+    TaskModelProvider investmentNewsModelProvider(ObjectMapper mapper,
+            @Value("${minikun.model.task.ollama.base-url:http://127.0.0.1:11434}") String baseUrl,
+            @Value("${minikun.investment.monitor.summary-model:${spring.ai.ollama.chat.options.model}}") String model,
+            @Value("${minikun.investment.monitor.summary-timeout:120s}") Duration timeout) {
+        return new OllamaTaskModelProvider(client(baseUrl + "/api/chat", timeout), mapper, model, timeout, true);
+    }
+
     @Bean
     InvestmentExternalDataService investmentExternalDataService(
             ObjectMapper objectMapper,

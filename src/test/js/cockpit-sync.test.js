@@ -19,7 +19,7 @@ function syncContext(fetch) {
   const context = {
     state,
     Core: require("../../main/resources/static/cockpit/cockpit-core.js"),
-    localStorage: { setItem: (key, value) => stored.set(key, value) },
+    localStorage: { setItem: (key, value) => stored.set(key, value), getItem: key => stored.get(key) || null },
     window: { clearTimeout() {}, setTimeout() { return 1; } },
     queueMicrotask() {},
     $: () => null,
@@ -73,6 +73,14 @@ test("remote deletion clears the open conversation", async () => {
   assert.equal(state.conversations.length, 0);
   assert.equal(state.chatMessages.length, 0);
   assert.equal(state.currentConversationId, "new");
+});
+
+test("sync preserves the reply conversation while its unsent draft is only local", async () => {
+  const { context, state, stored } = syncContext(async () => [{ id: "other", messages: [] }]);
+  stored.set("minikun.draft.chat", "เหตุผลที่ถือ SCHD: อยากลงทุนระยะยาว\nทบทวนเมื่อ: ");
+  await context.refreshSyncedConversations();
+  assert.equal(state.currentConversationId, "chat");
+  assert.match(stored.get("minikun.draft.chat"), /อยากลงทุนระยะยาว/);
 });
 
 test("voice sync reuses the saved timestamp and clears its retry entry", async () => {

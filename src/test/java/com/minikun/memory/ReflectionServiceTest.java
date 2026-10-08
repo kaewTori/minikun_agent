@@ -8,6 +8,8 @@ import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.doThrow;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -47,7 +49,8 @@ class ReflectionServiceTest {
         when(parser.parse("opaque raw output", CONVERSATION)).thenReturn(List.of());
         when(decisionService.decide(List.of())).thenReturn(List.of());
 
-        new ReflectionService(builder, client, parser, decisionService, repository, CLOCK).reflect(CONVERSATION);
+        assertTrue(new ReflectionService(builder, client, parser, decisionService, repository, CLOCK)
+                .reflect(CONVERSATION));
 
         verify(builder).build(CONVERSATION, LocalDate.of(2026, 8, 5));
         verify(client).reflect(prompt);
@@ -68,7 +71,8 @@ class ReflectionServiceTest {
         when(parser.parse("not JSON and intentionally opaque", CONVERSATION))
             .thenThrow(new MemoryException("invalid reflection"));
 
-        new ReflectionService(builder, client, parser, decisionService, repository, CLOCK).reflect(CONVERSATION);
+        assertFalse(new ReflectionService(builder, client, parser, decisionService, repository, CLOCK)
+                .reflect(CONVERSATION));
 
         verify(client).reflect(prompt);
         verify(parser).parse("not JSON and intentionally opaque", CONVERSATION);
@@ -86,7 +90,8 @@ class ReflectionServiceTest {
         when(builder.build(any(), any())).thenReturn(prompt);
         when(client.reflect(prompt)).thenThrow(new MemoryException("transport unavailable"));
 
-        new ReflectionService(builder, client, parser, decisionService, repository, CLOCK).reflect(CONVERSATION);
+        assertFalse(new ReflectionService(builder, client, parser, decisionService, repository, CLOCK)
+                .reflect(CONVERSATION));
 
         verify(client).reflect(prompt);
         verifyNoInteractions(parser);

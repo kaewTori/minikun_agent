@@ -28,6 +28,27 @@ class ChatRequestInspectorTest {
     }
 
     @Test
+    void preservesTonightRainRequestWhenUserSuppliesCurrentLocation() {
+        var request = request(List.of(new Message("user", "คืนนี้ฝนจะตกช่วงกี่โมง"),
+                new Message("assistant", "บอกชื่อเมืองหรือเปิดตำแหน่งให้หน่อยครับ"),
+                new Message("user", "เอาที่เราอยู่ตอนนี้")));
+
+        assertEquals("คืนนี้ฝนจะตกช่วงกี่โมง เอาที่เราอยู่ตอนนี้",
+                inspector.toolQuery("เอาที่เราอยู่ตอนนี้", request));
+    }
+
+    @Test
+    void acceptsCityAfterWeatherLocationClarificationAndAllowsCancellation() {
+        var request = request(List.of(new Message("user", "คืนนี้ฝนจะตกช่วงกี่โมง"),
+                new Message("assistant", "บอกชื่อเมืองหรือเปิด/อัปเดตตำแหน่งแล้วถามสภาพอากาศอีกครั้งได้ไหมครับ"),
+                new Message("user", "กรุงเทพ")));
+
+        assertEquals("คืนนี้ฝนจะตกช่วงกี่โมง ที่ กรุงเทพ", inspector.toolQuery("กรุงเทพ", request));
+        assertEquals("ไม่ต้องแล้ว", inspector.toolQuery("ไม่ต้องแล้ว", request));
+        assertEquals("ยกเลิก", inspector.toolQuery("ยกเลิก", request));
+    }
+
+    @Test
     void selectsTheLastNonBlankUserMessage() {
         List<Message> messages = List.of(
                 new Message("user", "first"),

@@ -70,6 +70,7 @@ final class ChatPromptFactory {
     private final ChatPerformanceMetrics performanceMetrics;
     private final Configuration configuration;
     private final ConversationStyleAdvisor conversationStyleAdvisor = new ConversationStyleAdvisor();
+    private final ChatRequestInspector requestInspector = new ChatRequestInspector();
     private final ConversationHistoryWindow conversationHistoryWindow = new ConversationHistoryWindow();
     private final ConversationContinuityResolver continuityResolver = new ConversationContinuityResolver();
     private final ConversationRepairAdvisor conversationRepairAdvisor = new ConversationRepairAdvisor();
@@ -329,6 +330,9 @@ final class ChatPromptFactory {
                 input.userMessage().content(), input.knowledgeSelection(), input.imageAwareness(),
                 input.verifiedToolResult(), input.visionInput(), input.interactionMode(),
                 conversationStyleInstruction, nativeToolsAvailable, creativeRequest));
+        capabilityFactory.investmentAdvice(input.userMessage().content(), continuityContext(
+                requestInspector.visualHistory(input.history(), input.request())), nativeToolsAvailable)
+                .ifPresent(values::add);
         if (configuration.visualGenerationAvailable()) {
             values.add(capabilityFactory.visualOutput(
                     configuration.svgGenerationAvailable(), input.illustrationPlanned()));

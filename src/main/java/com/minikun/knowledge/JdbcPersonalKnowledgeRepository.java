@@ -29,6 +29,14 @@ public final class JdbcPersonalKnowledgeRepository implements PersonalKnowledgeR
     }
 
     @Override
+    public boolean embeddingsCurrent(UUID sourceId, String model) {
+        return Boolean.TRUE.equals(jdbc.queryForObject("""
+                SELECT COUNT(*) > 0 AND bool_and(embedding <> '' AND embedding_model = ?)
+                FROM minikun_knowledge_chunk WHERE source_id = ?
+                """, Boolean.class, model, sourceId));
+    }
+
+    @Override
     public UUID begin(String ownerId, String root, String path, String name) {
         return jdbc.queryForObject("""
                 INSERT INTO minikun_knowledge_source

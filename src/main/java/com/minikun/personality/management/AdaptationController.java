@@ -2,7 +2,11 @@ package com.minikun.personality.management;
 
 import com.minikun.personality.learning.AdaptationSnapshot;
 import com.minikun.personality.learning.AdaptivePreferenceLearningService;
+import com.minikun.memory.DeferredReflectionService;
+import java.util.Map;
 import java.util.Objects;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -20,12 +24,24 @@ import org.springframework.web.server.ResponseStatusException;
 @RequestMapping("/v1/adaptation")
 public final class AdaptationController {
     private final AdaptivePreferenceLearningService learning;
+    private final DeferredReflectionService reflectionQueue;
 
     @Value("${minikun.adaptation.management.token:${minikun.memory.management.token:}}")
     private String managementToken;
 
     public AdaptationController(AdaptivePreferenceLearningService learning) {
+        this(learning, (DeferredReflectionService) null);
+    }
+
+    @Autowired
+    public AdaptationController(AdaptivePreferenceLearningService learning,
+            ObjectProvider<DeferredReflectionService> reflectionQueue) {
+        this(learning, reflectionQueue.getIfAvailable());
+    }
+
+    private AdaptationController(AdaptivePreferenceLearningService learning, DeferredReflectionService reflectionQueue) {
         this.learning = Objects.requireNonNull(learning);
+        this.reflectionQueue = reflectionQueue;
     }
 
     @GetMapping
@@ -34,6 +50,18 @@ public final class AdaptationController {
             @RequestHeader(value = "X-Minikun-Adaptation-Token", required = false) String token) {
         authorize(token);
         return learning.snapshot(ownerId);
+    }
+
+    @GetMapping("/learning")
+    public Map<String, Object> learningStatus(
+            @RequestParam(name = "owner_id", defaultValue = "default") String ownerId,
+            @RequestHeader(value = "X-Minikun-Adaptation-Token", required = false) String token) {
+        authorize(token);
+        AdaptationSnapshot snapshot = learning.snapshot(ownerId);
+        return Map.of("ownerId", snapshot.ownerId(),
+                "activePreferences", snapshot.activePreferences().size(),
+                "evidenceSignals", snapshot.evidence().size(),
+                "reflectionJobs", reflectionQueue == null ? Map.of() : reflectionQueue.counts(ownerId));
     }
 
     @PostMapping("/feedback")

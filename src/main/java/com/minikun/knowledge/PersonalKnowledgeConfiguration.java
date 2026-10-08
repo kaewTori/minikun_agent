@@ -39,8 +39,8 @@ public class PersonalKnowledgeConfiguration {
             @Value("${minikun.personal-knowledge.chunk.overlap:160}") int chunkOverlap,
             @Value("${minikun.personal-knowledge.retrieval.max-candidates:2000}") int maxCandidates,
             @Value("${minikun.personal-knowledge.semantic.weight:0.85}") double semanticWeight,
-            @Value("${minikun.personal-knowledge.retrieval.minimum-score:0.65}") double minimumScore,
-            @Value("${spring.ai.ollama.embedding.options.model:qwen3-embedding:0.6b}") String embeddingModelName) {
+            @Value("${minikun.personal-knowledge.retrieval.minimum-score:0.70}") double minimumScore,
+            @Value("${spring.ai.ollama.embedding.options.model:embeddinggemma-2:270m-mxfp8-text}") String embeddingModelName) {
         return new PersonalKnowledgeService(repository,
                 new KnowledgeDocumentReader(KnowledgeRoot.parseList(roots), maxFileBytes, maxFiles, maxDepth),
                 new KnowledgeChunker(chunkCharacters, chunkOverlap), embeddingModels.getIfAvailable(),

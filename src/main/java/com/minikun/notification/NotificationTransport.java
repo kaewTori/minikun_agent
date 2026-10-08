@@ -4,4 +4,9 @@ package com.minikun.notification;
 public interface NotificationTransport {
     /** Returns whether the transport accepted the notification. */
     boolean publish(NotificationChannel channel, String title, String message, int priority, String tags);
+
+    default boolean publish(NotificationChannel channel, String title, String message, int priority,
+            String tags, String clickUrl) {
+        return publish(channel, title, message, priority, tags);
+    }
 }

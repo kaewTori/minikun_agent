@@ -40,4 +40,21 @@ class ThaiPreferenceSemanticsTest {
         assertTrue(detector.detectDurable("ชอบอ่านหนังสือ").stream().noneMatch(AdaptationObservation::explicit));
         assertTrue(prefs.findByOwner("other").isEmpty());
     }
+
+    @Test
+    void semanticExtractorCannotPromoteOnePlainRequestOrQuotedRequest() {
+        var detector = new ResponsePreferenceDetector(request -> """
+            {"preferences":[{"dimension":"response_length","value":"concise","evidence":"ตอบสั้น"}]}
+            """, new ObjectMapper());
+        assertTrue(detector.detectDurable("ช่วยตอบสั้นหน่อย").stream()
+                .filter(o -> o.dimension().equals("response_length")).noneMatch(AdaptationObservation::explicit));
+        assertTrue(detector.detectDurable("แม่บอกว่าให้ตอบสั้น").stream()
+                .filter(o -> o.dimension().equals("response_length")).noneMatch(AdaptationObservation::explicit));
+
+        var withdrawalModel = new ResponsePreferenceDetector(request -> """
+            {"preferences":[{"dimension":"response_length","value":"unset","evidence":"ตอบสั้น"}]}
+            """, new ObjectMapper());
+        assertTrue(withdrawalModel.detectDurable("ช่วยตอบสั้นหน่อย").stream()
+                .noneMatch(o -> "unset".equals(o.value())));
+    }
 }

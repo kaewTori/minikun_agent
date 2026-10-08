@@ -19,24 +19,9 @@ class SearchDecisionPromptBuilderTest {
         assertEquals("2026-08-02", first.currentDate());
         assertEquals("today's gold price", first.userMessage());
         assertTrue(first.instructions().contains("external web search"));
-        assertTrue(first.instructions().contains("Do not output thinking"));
-        assertTrue(first.instructions().contains("shouldSearch, reason, intent, confidence"));
-        assertTrue(first.instructions().contains("Never combine"));
-        assertTrue(first.instructions().contains(
-            "CURRENT_INFORMATION, FACT_LOOKUP, EXTERNAL_RESOURCE, IMAGE_REQUEST"));
-        assertTrue(first.instructions().contains(
-            "GENERAL_KNOWLEDGE always requires shouldSearch=false"));
-        assertTrue(first.instructions().contains("แล้วตอนนี้ล่ะ"));
-        assertTrue(first.instructions().contains("real-world businesses"));
-        assertTrue(first.instructions().contains("museums"));
-        assertTrue(first.instructions().contains("อยากไป"));
-        assertTrue(first.instructions().contains("transit station"));
-        assertTrue(first.instructions().contains("local_discovery"));
-        assertTrue(first.instructions().contains("intent=images"));
-        assertTrue(first.instructions().contains("evidenceNeeds"));
-        assertTrue(first.instructions().contains("atmosphere"));
-        assertTrue(first.instructions().contains("at most 2 alternateQueries"));
-        assertTrue(first.instructions().contains("Never output RULE_FALLBACK"));
+        assertTrue(first.instructions().contains("Negated, quoted and past"));
+        assertTrue(first.instructions().contains("exact option key"));
+        assertTrue(first.instructions().contains("IMAGE_REQUEST"));
         assertFalse(first.instructions().contains("system prompt"));
         assertFalse(first.instructions().contains("chat messages"));
     }

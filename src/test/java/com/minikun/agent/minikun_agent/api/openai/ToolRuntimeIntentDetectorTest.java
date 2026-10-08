@@ -78,7 +78,7 @@ class ToolRuntimeIntentDetectorTest {
     }
 
     @Test
-    void routesCompletedInvestmentTradesToToolsButKeepsAdviceAsDirectGeneration() {
+    void routesCompletedInvestmentTradesAndAdviceToTools() {
         List.of(
                 "เราขายหุ้น GIL ไปแล้ว",
                 "ขาย GIL ไปแล้ว",
@@ -89,6 +89,6 @@ class ToolRuntimeIntentDetectorTest {
                 "WHR 35.13USD หลังหักค่าธรรมเนียมแล้วได้มา 0.95 USD\n"
                         + "SPOT 523.37 หลังหักค่าธรรมเนียมได้มา 1.01 USD")
                 .forEach(text -> assertTrue(detector.requiresTools(text), text));
-        assertFalse(detector.requiresTools("ควรขายหุ้น GIL ไหม"));
+        assertTrue(detector.requiresTools("ควรขายหุ้น GIL ไหม"));
     }
 }

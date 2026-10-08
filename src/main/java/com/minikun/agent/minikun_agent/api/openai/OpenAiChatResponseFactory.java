@@ -12,6 +12,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.minikun.agent.minikun_agent.api.openai.dto.ChatAttachment;
 import com.minikun.agent.minikun_agent.api.openai.dto.ChatCompletionResponse;
 import com.minikun.agent.minikun_agent.api.openai.dto.Message;
+import com.minikun.agent.minikun_agent.api.openai.dto.EmbeddingResponse;
+import com.minikun.knowledge.EmbeddingSupport;
 import com.minikun.model.ModelUsage;
 
 /**
@@ -62,6 +64,21 @@ final class OpenAiChatResponseFactory {
                 ModelUsage.empty(),
                 List.of(),
                 "stop");
+    }
+
+    EmbeddingResponse embeddings(String model, List<float[]> vectors) {
+        List<EmbeddingResponse.Data> data = java.util.stream.IntStream.range(0, vectors.size())
+                .mapToObj(index -> {
+                    float[] vector;
+                    try { vector = EmbeddingSupport.requireVector(vectors.get(index)); }
+                    catch (IllegalArgumentException exception) {
+                        throw new IllegalStateException("embedding backend returned an invalid vector", exception);
+                    }
+                    List<Float> values = java.util.stream.IntStream.range(0, vector.length)
+                            .mapToObj(i -> vector[i]).toList();
+                    return new EmbeddingResponse.Data("embedding", values, index);
+                }).toList();
+        return new EmbeddingResponse("list", data, model, new EmbeddingResponse.Usage(0, 0));
     }
 
     List<ChatAttachment> combineAttachments(List<ChatAttachment> existing, List<ChatAttachment> generated) {

@@ -21,6 +21,22 @@ class InvestmentExternalDataServiceTest {
     private static final Clock CLOCK = Clock.fixed(Instant.parse("2026-09-11T00:00:00Z"), ZoneOffset.UTC);
 
     @Test
+    void rejectsNonPositiveOrUndatedFxInsteadOfInventingAConversionDate() {
+        for (String json : java.util.List.of("{\"rate\":0,\"date\":\"2026-09-10\"}",
+                "{\"rate\":-1,\"date\":\"2026-09-10\"}", "{\"rate\":33.12}")) {
+            RestClient.Builder frankfurter = RestClient.builder().baseUrl("https://fx.test");
+            MockRestServiceServer server = MockRestServiceServer.bindTo(frankfurter).build();
+            server.expect(requestTo("https://fx.test/v2/rate/USD/THB"))
+                    .andRespond(withSuccess(json, MediaType.APPLICATION_JSON));
+            var service = new InvestmentExternalDataService(RestClient.create(), frankfurter.build(),
+                    RestClient.create(), RestClient.create(), new ObjectMapper(), CLOCK, "", "MinikunAgent/1.0", "", "");
+            org.junit.jupiter.api.Assertions.assertThrows(IllegalStateException.class,
+                    () -> service.latestFxRate("USD", "THB"), json);
+            server.verify();
+        }
+    }
+
+    @Test
     void readsBatchQuotesWithoutPuttingTheApiKeyInTheUrl() {
         RestClient.Builder twelve = RestClient.builder().baseUrl("https://twelve.test");
         MockRestServiceServer server = MockRestServiceServer.bindTo(twelve).build();

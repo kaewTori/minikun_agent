@@ -167,7 +167,8 @@ public final class PersonalKnowledgeService {
     private IndexOutcome indexOne(String owner, KnowledgeDocument document, boolean force) {
         var existing = repository.find(owner, document.root(), document.relativePath());
         if (!force && existing.filter(source -> document.hash().equals(source.fileHash())
-                && "READY".equals(source.status())).isPresent()) return new IndexOutcome(true, 0);
+                && "READY".equals(source.status()) && (embeddingModel == null
+                || repository.embeddingsCurrent(source.id(), embeddingModelName))).isPresent()) return new IndexOutcome(true, 0);
         UUID sourceId = repository.begin(owner, document.root(), document.relativePath(), document.name());
         try {
             List<KnowledgeChunker.ChunkText> texts = chunker.chunk(document.content());
@@ -180,7 +181,8 @@ public final class PersonalKnowledgeService {
                 String model = "";
                 if (semantic) {
                     try {
-                        embedding = KnowledgeEmbeddingCodec.encode(embeddingModel.embed(text.content()));
+                        embedding = KnowledgeEmbeddingCodec.encode(embeddingModel.embed(EmbeddingSupport.document(
+                                embeddingModelName, document.name() + " " + text.heading(), text.content())));
                         model = embeddingModelName;
                         semanticHealthy.set(true);
                     } catch (RuntimeException exception) {
@@ -252,9 +254,9 @@ public final class PersonalKnowledgeService {
     private float[] embed(String value) {
         if (embeddingModel == null) return new float[0];
         try {
-            String instructedQuery = "Instruct: Retrieve passages from the user's personal documents that "
-                    + "directly answer the question.\nQuery: " + value;
-            float[] result = embeddingModel.embed(instructedQuery);
+            String instructedQuery = EmbeddingSupport.query(embeddingModelName, value,
+                    "Retrieve passages from the user's personal documents that directly answer the question.");
+            float[] result = EmbeddingSupport.requireVector(embeddingModel.embed(instructedQuery));
             semanticHealthy.set(true);
             return result;
         } catch (RuntimeException exception) {

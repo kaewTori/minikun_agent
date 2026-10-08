@@ -40,7 +40,7 @@ class TavilySearchProviderTest {
                 .andRespond(withSuccess("""
                         {"results":[{"title":"Java Records","url":"https://example.com/java",
                         "content":"Immutable data carrier","score":0.9,
-                        "published_date":"2026-08-01T12:00:00Z"}]}
+                        "published_date":"Sat, 01 Aug 2026 12:00:00 GMT"}]}
                         """, MediaType.APPLICATION_JSON));
 
         var response = provider.search(request("java records", 5));

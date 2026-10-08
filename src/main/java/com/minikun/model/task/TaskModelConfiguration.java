@@ -7,6 +7,7 @@ import java.util.Map;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 
@@ -15,6 +16,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 @Configuration(proxyBeanMethods = false)
 public class TaskModelConfiguration {
     @Bean
+    @Primary
     TaskModelProvider taskModelProvider(
             ObjectMapper objectMapper,
             @Value("${minikun.model.task.provider:ollama}") String provider,

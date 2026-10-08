@@ -28,6 +28,38 @@ class KnowledgeAcquisitionServiceTest {
     private static final Clock CLOCK = Clock.fixed(NOW, ZoneOffset.UTC);
 
     @Test
+    void backfillsGemmaWithoutRenewingClaimsAndKeepsOldVectorsOnFailure() {
+        String name = "embeddinggemma-2:270m-mxfp8-text";
+        KnowledgeAcquisitionStore store = new KnowledgeAcquisitionStore(null, new ObjectMapper());
+        Claim original = new Claim(UUID.randomUUID(), UUID.randomUUID(), "default", "Spring AI",
+                "Spring AI supports model APIs", "test-fingerprint", ClaimStatus.PUBLISHED, .9,
+                List.of("https://docs.spring.io/spring-ai/reference/"), "verified", "1,0", "qwen3-embedding:0.6b",
+                NOW, NOW, NOW, NOW.plusSeconds(86400), NOW);
+        store.saveClaim(original);
+        var model = org.mockito.Mockito.mock(org.springframework.ai.embedding.EmbeddingModel.class);
+        List<String> documents = List.of("title: Spring AI | text: Spring AI supports model APIs");
+        org.mockito.Mockito.when(model.embed(documents)).thenReturn(List.of(new float[] {1, 0}));
+        AcquiredKnowledgeIndex index = new AcquiredKnowledgeIndex(store, model, name, CLOCK, 100, .85, .70);
+        index.backfillEmbeddings();
+        Claim refreshed = store.claim("default", original.id()).orElseThrow();
+        assertEquals(name, refreshed.embeddingModel());
+        assertEquals(original.status(), refreshed.status());
+        assertEquals(original.expiresAt(), refreshed.expiresAt());
+        assertEquals(original.updatedAt(), refreshed.updatedAt());
+        assertEquals(original.evidenceUrls(), refreshed.evidenceUrls());
+        assertEquals(original.confidence(), refreshed.confidence());
+        index.backfillEmbeddings();
+        org.mockito.Mockito.verify(model).embed(documents);
+        org.mockito.Mockito.when(model.embed("task: search result | query: ภูเขาไฟระเบิดได้อย่างไร"))
+                .thenReturn(new float[] {.63f, (float) Math.sqrt(1 - .63*.63)});
+        assertTrue(index.recall("default", "ภูเขาไฟระเบิดได้อย่างไร", 5).candidates().isEmpty());
+        store.saveClaim(original);
+        org.mockito.Mockito.when(model.embed(documents)).thenReturn(List.of(new float[] {Float.NaN, 0}));
+        index.backfillEmbeddings();
+        assertEquals(original, store.claim("default", original.id()).orElseThrow());
+    }
+
+    @Test
     void keepsInternalEmbeddingOutOfManagementApiJson() throws Exception {
         assertTrue(Claim.class.getMethod("embedding")
                 .isAnnotationPresent(com.fasterxml.jackson.annotation.JsonIgnore.class));

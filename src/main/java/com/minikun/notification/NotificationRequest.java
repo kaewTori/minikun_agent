@@ -10,7 +10,13 @@ public record NotificationRequest(
         String title,
         String message,
         int priority,
-        String tags) {
+        String tags,
+        String clickUrl) {
+
+    public NotificationRequest(String sourceType, String sourceId, NotificationChannel channel,
+            String title, String message, int priority, String tags) {
+        this(sourceType, sourceId, channel, title, message, priority, tags, "");
+    }
 
     public NotificationRequest {
         sourceType = required(sourceType, "notification source type").toUpperCase(java.util.Locale.ROOT);
@@ -20,6 +26,14 @@ public record NotificationRequest(
         message = required(message, "notification message");
         priority = Math.max(1, Math.min(5, priority));
         tags = Objects.requireNonNullElse(tags, "").trim();
+        clickUrl = Objects.requireNonNullElse(clickUrl, "").trim();
+        if (!clickUrl.isBlank()) {
+            java.net.URI uri = java.net.URI.create(clickUrl);
+            if ((!"http".equals(uri.getScheme()) && !"https".equals(uri.getScheme()))
+                    || uri.getHost() == null || uri.getUserInfo() != null || clickUrl.matches(".*[,;\\r\\n].*"))
+                throw new IllegalArgumentException("notification click URL must be a plain HTTP(S) URL");
+            clickUrl = uri.toASCIIString();
+        }
     }
 
     private static String required(String value, String name) {

@@ -144,7 +144,8 @@ final class TurnPlanner {
             boolean hasVision, ToolEvidence verifiedTool, boolean toolsAvailable, boolean voiceMode,
             String visualRequest) {
         String text = message == null ? "" : message.strip();
-        CooperationRoutingDecision cooperation = cooperationRouter.decide(text);
+        boolean investmentAdvice = com.minikun.investment.InvestmentAdviceIntent.matches(text, conversationContext);
+        CooperationRoutingDecision cooperation = cooperationRouter.decide(investmentAdvice ? "การลงทุน " + text : text);
         boolean contextualRoute = text.length() <= 160 && FOLLOW_UP.matcher(text).find()
                 && conversationContext != null && !conversationContext.isBlank();
         if (contextualRoute && !cooperation.needsExpert()
@@ -156,7 +157,8 @@ final class TurnPlanner {
         boolean imageOutput = !voiceMode && illustrationIntentDetector
                 .detect(visualRequest, autoIllustrateCreativeStories) != StoryIllustrationIntent.NONE;
         boolean research = researchIntent.detect(text).deepResearch();
-        boolean tools = toolsAvailable && verifiedTool == null && toolIntent.requiresTools(text);
+        boolean tools = toolsAvailable && verifiedTool == null && (toolIntent.requiresTools(text)
+                || investmentAdvice);
         boolean ambiguous = text.length() <= 100 && AMBIGUOUS.matcher(text.toLowerCase(Locale.ROOT)).find()
                 && conversationContext != null && !conversationContext.isBlank();
         TurnPlan.Intent intent = intent(mode, hasVision, tools, research, creative, cooperation);
@@ -167,16 +169,24 @@ final class TurnPlanner {
         TurnPlan.Execution execution = research || BACKGROUND.matcher(text).find()
                 ? TurnPlan.Execution.BACKGROUND
                 : tools ? TurnPlan.Execution.TOOL_LOOP : TurnPlan.Execution.DIRECT_STREAM;
-        if (ambiguous && ambiguityResolver != null) {
+        boolean knownContinuation = java.util.Set.of("ต่อ", "ทำต่อ", "ทำต่อเลย", "continue")
+                .contains(text.toLowerCase(Locale.ROOT))
+                && (creative || "technical_work".equals(cooperation.reason()) && conversationContext != null
+                        && java.util.regex.Pattern.compile("(?iu)(อธิบาย|เข้าใจ|explain|understand)")
+                                .matcher(new com.minikun.conversation.continuity.ConversationContinuityResolver()
+                                        .resolve(text, conversationContext).previousTopic()).find());
+        if (ambiguous && ambiguityResolver != null && !knownContinuation) {
             Optional<TurnAmbiguityResolver.Resolution> resolved = ambiguityResolver.resolve(text, conversationContext);
             if (resolved.isPresent()) {
                 var value = resolved.get();
                 intent = value.intent();
-                tools = toolsAvailable && (tools || value.needsTools());
+                tools = toolsAvailable && verifiedTool == null && (tools || value.needsTools());
                 execution = value.background() ? TurnPlan.Execution.BACKGROUND
                         : tools ? TurnPlan.Execution.TOOL_LOOP : TurnPlan.Execution.DIRECT_STREAM;
-                confidence = value.confidence();
-                reason = "ambiguity_resolved:" + value.reason();
+                research = intent == TurnPlan.Intent.RESEARCH;
+                creative = intent == TurnPlan.Intent.CREATIVE;
+                // Ambiguous model routing is not calibrated confidence or permission to execute an action.
+                reason = "ambiguity_resolved:" + intent.name().toLowerCase(Locale.ROOT);
             } else {
                 reason = "ambiguous_deterministic_fallback";
             }

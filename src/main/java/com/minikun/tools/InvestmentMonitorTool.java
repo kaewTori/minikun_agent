@@ -20,6 +20,10 @@ public final class InvestmentMonitorTool implements Tool {
             "Act as a read-only professional investment companion. Use plan for the owner's saved mandate and thesis, "
                     + "daily_brief for the current portfolio plus fresh market/news evidence, or news for recent stored "
                     + "news. Explain facts, assumptions, risks, counterarguments, thesis invalidation, and uncertainty. "
+                    + "Use brief_text and news.events.what_happened as the reviewed Thai summaries shared with reminders; "
+                    + "do not replace them with raw links. ETF market-context news is not proof of its holdings or returns. "
+                    + "When missing_thesis_symbols is non-empty, ask for the owner's reason for holding one symbol "
+                    + "and its review condition; save only their actual answers using investment.manage save_thesis. "
                     + "Recommendations are conditional research guidance only; never place live orders or present a "
                     + "backtest as a guarantee.",
             parameters());
@@ -47,9 +51,10 @@ public final class InvestmentMonitorTool implements Tool {
             return switch (action) {
                 case "plan" -> ToolResult.success(monitoring.plan(context.ownerId()));
                 case "daily_brief", "refresh" -> ToolResult.success(
-                        monitoring.dailyBrief(context.ownerId(), booleanValue(arguments, "refresh")));
+                        monitoring.dailyBrief(context.ownerId(), "refresh".equals(action) || booleanValue(arguments, "refresh")));
                 case "news" -> ToolResult.success(Map.of(
                         "owner_id", context.ownerId(),
+                        "reviewed_brief", monitoring.dailyBrief(context.ownerId(), false),
                         "news", monitoring.recentNews(context.ownerId(),
                                 integer(arguments, "lookback_hours", 48), integer(arguments, "limit", 20))));
                 default -> ToolResult.failure(ToolErrorCode.INVALID_ARGUMENTS,

@@ -81,6 +81,8 @@ final class ToolRuntimeIntentDetector {
                     + "[0-9]+(?:\\.[0-9]+)?\\s*(?:[A-Z]{3})?\\s*$");
 
     boolean requiresTools(String message) {
+        if (com.minikun.investment.InvestmentAdviceIntent.requestsLedgerUpdate(message)) return true;
+        if (com.minikun.investment.InvestmentAdviceIntent.matches(message)) return true;
         String value = message == null ? "" : message.toLowerCase(Locale.ROOT).trim();
         if (value.isBlank()) return false;
         if (PRESENTATION_REVISION.matcher(value).find() && !PRESENTATION_DISCUSSION.matcher(value).find()) return true;

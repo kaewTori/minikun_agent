@@ -44,6 +44,22 @@ class AdaptivePreferenceLearningServiceTest {
     }
 
     @Test
+    void repeatedPlainStyleRequestsPromoteButTurnOnlyRequestsDoNot() {
+        var service = service(new InMemoryPreferenceStore());
+        service.observe("owner-a", "ช่วยตอบสั้นหน่อย");
+        service.observe("owner-a", "ตอบสั้นหน่อยนะ");
+        assertTrue(service.snapshot("owner-a").activePreferences().stream()
+                .noneMatch(preference -> preference.key().endsWith(AdaptationDimensions.RESPONSE_LENGTH)));
+        service.observe("owner-a", "ขอตอบสั้นหน่อย");
+        assertEquals("concise", value(service, AdaptationDimensions.RESPONSE_LENGTH));
+
+        var turnOnly = service(new InMemoryPreferenceStore());
+        for (int i = 0; i < 3; i++) turnOnly.observe("owner-b", "ครั้งนี้ขอตอบสั้น ๆ");
+        assertTrue(turnOnly.snapshot("owner-b").activePreferences().stream()
+                .noneMatch(preference -> preference.key().endsWith(AdaptationDimensions.RESPONSE_LENGTH)));
+    }
+
+    @Test
     void resetDeletesOnlyLearnedPreferencesAndKeepsUserManagedPreferences() {
         var preferences = new InMemoryPreferenceStore();
         preferences.save(new Preference("owner-a", "food", "ไม่เผ็ด", 1, NOW));

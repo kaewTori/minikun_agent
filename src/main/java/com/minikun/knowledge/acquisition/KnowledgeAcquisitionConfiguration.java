@@ -39,11 +39,11 @@ public class KnowledgeAcquisitionConfiguration {
     @Bean
     AcquiredKnowledgeIndex acquiredKnowledgeIndex(KnowledgeAcquisitionStore store,
             ObjectProvider<EmbeddingModel> embeddings,
-            @Value("${spring.ai.ollama.embedding.options.model:qwen3-embedding:0.6b}") String embeddingModelName,
+            @Value("${spring.ai.ollama.embedding.options.model:embeddinggemma-2:270m-mxfp8-text}") String embeddingModelName,
             Clock memoryClock,
             @Value("${minikun.knowledge-acquisition.retrieval.max-candidates:2000}") int maximumCandidates,
             @Value("${minikun.knowledge-acquisition.retrieval.semantic-weight:0.85}") double semanticWeight,
-            @Value("${minikun.knowledge-acquisition.retrieval.minimum-score:0.55}") double minimumScore) {
+            @Value("${minikun.knowledge-acquisition.retrieval.minimum-score:0.70}") double minimumScore) {
         return new AcquiredKnowledgeIndex(store, embeddings.getIfAvailable(), embeddingModelName, memoryClock,
                 maximumCandidates, semanticWeight, minimumScore);
     }

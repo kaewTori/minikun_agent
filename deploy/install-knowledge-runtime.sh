@@ -2,7 +2,7 @@
 
 set -eu
 
-model="qwen3-embedding:0.6b"
+model="${EMBEDDING_MODEL:-embeddinggemma-2:270m-mxfp8-text}"
 
 if ! command -v ollama >/dev/null 2>&1; then
   echo "Ollama is required before installing the Personal Knowledge runtime" >&2

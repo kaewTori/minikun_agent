@@ -199,10 +199,9 @@ public class SearchConfiguration {
             default -> throw new IllegalArgumentException(
                     "Unsupported minikun.search.decision.mode: " + mode);
         };
-        if ("rule".equals(mode)) {
-            decisionService = new FastPathSearchDecisionService(
-                    decisionService, new RuleBasedSearchDecisionService(meterRegistry), meterRegistry, fastPathEnabled);
-        }
+        decisionService = new FastPathSearchDecisionService(decisionService,
+                "rule".equals(mode) ? new RuleBasedSearchDecisionService(meterRegistry) : null,
+                meterRegistry, fastPathEnabled);
         return new ImageIntentSearchDecisionService(decisionService, imageIntentDetector);
     }
 

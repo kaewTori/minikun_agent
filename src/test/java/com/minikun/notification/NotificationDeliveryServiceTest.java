@@ -99,6 +99,20 @@ class NotificationDeliveryServiceTest {
     }
 
     @Test
+    void keepsTheReplyLinkWhenDeliveringToTheBrowser() {
+        SyncEventBroker events = mock(SyncEventBroker.class);
+        when(events.publishNotification(eq("default"), anyMap())).thenReturn(true);
+        var service = new NotificationDeliveryService((channel, title, message, priority, tags) -> true,
+                Optional.empty(), Clock.fixed(NOW, ZoneOffset.UTC), new SimpleMeterRegistry(), Optional.of(events));
+        String url = "https://mini-kun:8443/cockpit/?view=chat&reply_symbol=SCHD";
+        service.publish(new NotificationRequest("INVESTMENT", "default:today", NotificationChannel.REMINDER,
+                "Investment", "สรุปข่าว", 3, "investment", url));
+        org.mockito.ArgumentCaptor<java.util.Map<String, Object>> payload = org.mockito.ArgumentCaptor.forClass(java.util.Map.class);
+        verify(events).publishNotification(eq("default"), payload.capture());
+        assertEquals(url, payload.getValue().get("clickUrl"));
+    }
+
+    @Test
     void fallsBackToNtfyWhenNoBrowserClientIsConnected() {
         SyncEventBroker browserEvents = mock(SyncEventBroker.class);
         when(browserEvents.publishNotification(eq("default"), anyMap())).thenReturn(false);

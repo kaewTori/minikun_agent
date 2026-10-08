@@ -20,6 +20,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import com.minikun.pcs.KnowledgeSource;
+import org.springframework.ai.embedding.EmbeddingModel;
+import static org.mockito.Mockito.*;
+import static org.mockito.ArgumentMatchers.anyString;
 
 class PersonalKnowledgeServiceTest {
     @TempDir Path root;
@@ -68,11 +71,43 @@ class PersonalKnowledgeServiceTest {
         assertTrue(service.search("default", "สูตรทำขนมช็อกโกแลต", 5).isEmpty());
     }
 
+    @Test
+    void migratesUnchangedDocumentsRetriesMissingVectorsAndRejectsUnrelatedGemmaMatches() throws Exception {
+        String model = "embeddinggemma-2:270m-mxfp8-text";
+        Files.writeString(root.resolve("architecture.md"), "Minikun stores knowledge in PostgreSQL");
+        InMemoryRepository repository = new InMemoryRepository();
+        EmbeddingModel old = mock(EmbeddingModel.class);
+        when(old.embed(anyString())).thenReturn(new float[] {1, 0});
+        service(repository, old, "qwen3-embedding:0.6b").index("default", "knowledge", "architecture.md", false, false);
+        EmbeddingModel gemma = mock(EmbeddingModel.class);
+        when(gemma.embed(anyString())).thenReturn(new float[] {1, 0});
+        PersonalKnowledgeService service = service(repository, gemma, model);
+        assertEquals(1, service.index("default", "knowledge", "architecture.md", false, false).indexed());
+        assertEquals(1, service.index("default", "knowledge", "architecture.md", false, false).unchanged());
+        assertEquals(model, repository.chunks("default", 10).getFirst().embeddingModel());
+        when(gemma.embed("task: search result | query: ภูเขาไฟระเบิดได้อย่างไร"))
+                .thenReturn(new float[] {.63f, (float) Math.sqrt(1 - .63*.63)});
+        assertTrue(service.search("default", "ภูเขาไฟระเบิดได้อย่างไร", 5).isEmpty());
+        assertTrue(service.search("default", "PostgreSQL", 5).getFirst().semantic());
+        verify(gemma).embed("task: search result | query: PostgreSQL");
+        String document = "title: architecture.md | text: Minikun stores knowledge in PostgreSQL";
+        verify(gemma).embed(document);
+        when(gemma.embed(document)).thenThrow(new IllegalStateException("outage"));
+        service.index("default", "knowledge", "architecture.md", false, true);
+        assertTrue(repository.chunks("default", 10).getFirst().embedding().isBlank());
+        doReturn(new float[] {1, 0}).when(gemma).embed(document);
+        assertEquals(1, service.index("default", "knowledge", "architecture.md", false, false).indexed());
+    }
+
     private PersonalKnowledgeService service(InMemoryRepository repository) {
+        return service(repository, null, "qwen3-embedding:0.6b");
+    }
+
+    private PersonalKnowledgeService service(InMemoryRepository repository, EmbeddingModel model, String name) {
         return new PersonalKnowledgeService(repository,
                 new KnowledgeDocumentReader(List.of(new KnowledgeRoot("knowledge", root)), 8192, 20, 4),
-                new KnowledgeChunker(500, 50), null, "qwen3-embedding:0.6b",
-                Clock.fixed(Instant.parse("2026-08-20T00:00:00Z"), ZoneOffset.UTC), 100, 0.85, 0.65);
+                new KnowledgeChunker(500, 50), model, name,
+                Clock.fixed(Instant.parse("2026-08-20T00:00:00Z"), ZoneOffset.UTC), 100, 0.85, 0.70);
     }
 
     private static final class InMemoryRepository implements PersonalKnowledgeRepository {
@@ -83,6 +118,13 @@ class PersonalKnowledgeServiceTest {
         public Optional<KnowledgeSourceRecord> find(String ownerId, String root, String path) {
             return sources.values().stream().filter(source -> source.ownerId().equals(ownerId)
                     && source.root().equals(root) && source.path().equals(path)).findFirst();
+        }
+
+        @Override
+        public boolean embeddingsCurrent(UUID sourceId, String model) {
+            List<KnowledgeChunkDraft> values = chunks.getOrDefault(sourceId, List.of());
+            return !values.isEmpty() && values.stream().allMatch(c -> !c.embedding().isBlank()
+                    && model.equals(c.embeddingModel()));
         }
 
         @Override

@@ -6,6 +6,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
@@ -20,7 +21,7 @@ import org.springframework.web.util.UriComponentsBuilder;
 /** Open-Meteo forecast adapter using the shared location resolver. */
 public final class OpenMeteoWeatherProvider implements WeatherProvider {
     private static final Logger LOGGER = LoggerFactory.getLogger(OpenMeteoWeatherProvider.class);
-    private static final String SOURCE = "Open-Meteo (CC BY 4.0)";
+    private static final String SOURCE = "[Open-Meteo](https://open-meteo.com/) (CC BY 4.0)";
 
     private final LocationResolver locationResolver;
     private final RestClient forecastClient;
@@ -55,7 +56,8 @@ public final class OpenMeteoWeatherProvider implements WeatherProvider {
                     : forecastTimezone(body);
             ZoneId zone = ZoneId.of(timezone);
             LocalDate requestedDate = requestedDate(request.when(), clock.instant(), zone);
-            WeatherReport report = parseReport(location, body, requestedDate, latitude, longitude, timezone);
+            WeatherReport report = parseReport(location, body, requestedDate, latitude, longitude, timezone,
+                    request.when());
             LOGGER.info("process=weather event=completed location={} requested_date={} duration_ms={}",
                     report.location(), report.requestedDate(), Duration.between(started, clock.instant()).toMillis());
             return report;
@@ -86,6 +88,7 @@ public final class OpenMeteoWeatherProvider implements WeatherProvider {
                 .queryParam("daily",
                         "weather_code,temperature_2m_min,temperature_2m_max,precipitation_probability_max,"
                                 + "precipitation_sum,sunrise,sunset")
+                .queryParam("hourly", "precipitation_probability,precipitation,weather_code,wind_gusts_10m")
                 .queryParam("forecast_days", 16)
                 .queryParam("timezone", "auto")
                 .queryParam("temperature_unit", "celsius")
@@ -101,7 +104,8 @@ public final class OpenMeteoWeatherProvider implements WeatherProvider {
             LocalDate requestedDate,
             double latitude,
             double longitude,
-            String timezone) {
+            String timezone,
+            String when) {
         try {
             JsonNode root = objectMapper.readTree(body);
             JsonNode current = root.path("current");
@@ -111,22 +115,47 @@ public final class OpenMeteoWeatherProvider implements WeatherProvider {
             if (index < 0) {
                 throw new IllegalArgumentException("weather forecast is unavailable for " + requestedDate);
             }
-            int code = integerAt(daily.path("weather_code"), index, integer(current, "weather_code", -1));
             return new WeatherReport(
                     location.name(), location.country(), latitude, longitude,
                     timezone, requestedDate.toString(), nullableNumber(current, "temperature_2m"),
                     nullableNumber(current, "apparent_temperature"), nullableNumber(current, "precipitation"),
                     nullableNumber(current, "wind_speed_10m"), integerOrNull(current, "weather_code"),
-                    weatherDescription(code), nullableNumberAt(daily.path("temperature_2m_min"), index),
+                    weatherDescription(integer(current, "weather_code", -1)),
+                    nullableNumberAt(daily.path("temperature_2m_min"), index),
                     nullableNumberAt(daily.path("temperature_2m_max"), index),
                     nullableIntegerAt(daily.path("precipitation_probability_max"), index),
                     nullableNumberAt(daily.path("precipitation_sum"), index), stringAt(daily.path("sunrise"), index),
-                    stringAt(daily.path("sunset"), index), clock.instant(), SOURCE);
+                    stringAt(daily.path("sunset"), index), clock.instant(), SOURCE,
+                    hourlyForecast(root.path("hourly"), requestedDate, when, ZoneId.of(timezone)));
         } catch (IllegalArgumentException exception) {
             throw exception;
         } catch (Exception exception) {
             throw new IllegalStateException("weather forecast response is invalid", exception);
         }
+    }
+
+    private List<WeatherReport.HourlyForecast> hourlyForecast(
+            JsonNode hourly, LocalDate date, String when, ZoneId zone) {
+        String normalized = when.trim().toLowerCase(Locale.ROOT);
+        boolean night = List.of("tonight", "คืนนี้", "tomorrow evening", "tomorrow night", "พรุ่งนี้เย็น",
+                "พรุ่งนี้คืน").contains(normalized);
+        LocalDateTime start = night ? date.atTime(18, 0) : date.atStartOfDay();
+        LocalDateTime end = night ? date.plusDays(1).atTime(6, 0) : date.plusDays(1).atStartOfDay();
+        LocalDateTime now = clock.instant().atZone(zone).toLocalDateTime();
+        if (now.isAfter(start)) start = now;
+        List<WeatherReport.HourlyForecast> result = new ArrayList<>();
+        List<String> times = strings(hourly.path("time"));
+        for (int index = 0; index < times.size(); index++) {
+            LocalDateTime to = LocalDateTime.parse(times.get(index));
+            // Open-Meteo precipitation and gusts describe the preceding hour.
+            if (!to.isAfter(start) || to.isAfter(end)) continue;
+            result.add(new WeatherReport.HourlyForecast(to.minusHours(1).toString(), to.toString(),
+                    nullableIntegerAt(hourly.path("precipitation_probability"), index),
+                    nullableNumberAt(hourly.path("precipitation"), index),
+                    weatherDescription(integerAt(hourly.path("weather_code"), index, -1)),
+                    nullableNumberAt(hourly.path("wind_gusts_10m"), index)));
+        }
+        return result;
     }
 
     private LocalDate requestedDate(String when, Instant now, ZoneId zone) {
@@ -138,8 +167,9 @@ public final class OpenMeteoWeatherProvider implements WeatherProvider {
             return today;
         }
         if (normalized.equals("tomorrow") || normalized.equals("tomorrow morning")
-                || normalized.equals("tomorrow evening") || normalized.equals("พรุ่งนี้")
-                || normalized.equals("พรุ่งนี้เช้า") || normalized.equals("พรุ่งนี้เย็น")) {
+                || normalized.equals("tomorrow evening") || normalized.equals("tomorrow night")
+                || normalized.equals("พรุ่งนี้") || normalized.equals("พรุ่งนี้เช้า")
+                || normalized.equals("พรุ่งนี้เย็น") || normalized.equals("พรุ่งนี้คืน")) {
             return today.plusDays(1);
         }
         try {

@@ -70,7 +70,7 @@ public class ReflectionService {
                 ? new NoOpObservationPublisher() : observationPublisher;
     }
 
-    public void reflect(CompletedConversation conversation) {
+    public boolean reflect(CompletedConversation conversation) {
         Timer.Sample sample = startTimer();
         long startedNanos = System.nanoTime();
         String outcome = "success";
@@ -100,7 +100,7 @@ public class ReflectionService {
                 log.warn("memory_reflection parser_failure conversation_id={} response_length={} reason={}",
                         conversation == null ? null : conversation.conversationId(),
                         response == null ? 0 : response.length(), exception.getMessage());
-                return;
+                return false;
             }
             List<AcceptedMemory> accepted;
             try {
@@ -110,7 +110,7 @@ public class ReflectionService {
             } catch (RuntimeException exception) {
                 outcome = "decision_failure";
                 incrementFailure("decision");
-                return;
+                return false;
             }
             acceptedCount = accepted.size();
             rejectedCount = Math.max(0, candidates.size() - acceptedCount);
@@ -138,6 +138,7 @@ public class ReflectionService {
             publishObservation(conversation, outcome, acceptedCount, rejectedCount, persistedCount);
             restoreConversationId(previousConversationId);
         }
+        return "success".equals(outcome);
     }
 
     private void publishObservation(CompletedConversation conversation, String outcome,

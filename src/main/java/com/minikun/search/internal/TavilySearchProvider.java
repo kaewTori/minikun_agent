@@ -12,9 +12,6 @@ import com.minikun.search.model.SearchSource;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
-import java.time.LocalDate;
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -139,7 +136,7 @@ public final class TavilySearchProvider implements SearchProvider {
                 double score = number(result, "score");
                 mapped.add(new SearchResult(title, url, content,
                         new SearchSource("tavily", url, clock.instant()), position++, score,
-                        instant(result, "published_date", "publishedAt", "date")));
+                        SearchPublicationTime.parse(result, "published_date", "publishedAt", "date")));
             }
             return List.copyOf(mapped);
         } catch (SearchExecutionException exception) {
@@ -164,27 +161,6 @@ public final class TavilySearchProvider implements SearchProvider {
         JsonNode value = node.get(field);
         return value != null && value.isNumber()
                 ? Math.max(0.0, Math.min(1.0, value.asDouble())) : 0.0;
-    }
-
-    private Instant instant(JsonNode node, String... fields) {
-        for (String field : fields) {
-            String value = text(node, field);
-            if (value.isBlank()) continue;
-            try {
-                return Instant.parse(value);
-            } catch (RuntimeException ignored) {
-                try {
-                    return OffsetDateTime.parse(value).toInstant();
-                } catch (RuntimeException ignoredOffset) {
-                    try {
-                        return LocalDate.parse(value).atStartOfDay(ZoneOffset.UTC).toInstant();
-                    } catch (RuntimeException ignoredDate) {
-                        // Try the next provider field.
-                    }
-                }
-            }
-        }
-        return null;
     }
 
     private String normalizeDepth(String value) {

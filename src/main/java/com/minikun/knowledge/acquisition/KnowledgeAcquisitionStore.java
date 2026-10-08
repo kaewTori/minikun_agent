@@ -214,6 +214,31 @@ public final class KnowledgeAcquisitionStore {
                 ownerId, status.name(), limit);
     }
 
+    List<Claim> embeddingsToRefresh(String model, int limit) {
+        if (jdbc == null) return claims.values().stream()
+                .filter(c -> c.embedding().isBlank() || !model.equals(c.embeddingModel()))
+                .sorted(Comparator.comparing(Claim::discoveredAt).thenComparing(Claim::id)).limit(limit).toList();
+        return jdbc.query("SELECT " + CLAIM_COLUMNS + " FROM minikun_knowledge_claim "
+                + "WHERE embedding = '' OR embedding_model <> ? "
+                + "ORDER BY CASE WHEN status = 'PUBLISHED' THEN 0 ELSE 1 END, discovered_at, id LIMIT ?",
+                this::claim, model, limit);
+    }
+
+    void updateEmbedding(Claim snapshot, String embedding, String model) {
+        if (jdbc == null) {
+            claims.computeIfPresent(snapshot.id(), (id, c) ->
+                    !c.text().equals(snapshot.text()) || !c.topicName().equals(snapshot.topicName()) ? c
+                    : new Claim(c.id(), c.topicId(), c.ownerId(), c.topicName(), c.text(), c.fingerprint(),
+                            c.status(), c.confidence(), c.evidenceUrls(), c.verificationReason(), embedding, model,
+                            c.discoveredAt(), c.verifiedAt(), c.publishedAt(), c.expiresAt(), c.updatedAt()));
+            return;
+        }
+        jdbc.update("""
+                UPDATE minikun_knowledge_claim SET embedding = ?, embedding_model = ?
+                WHERE id = ? AND owner_id = ? AND claim_text = ? AND topic_name = ?
+                """, embedding, model, snapshot.id(), snapshot.ownerId(), snapshot.text(), snapshot.topicName());
+    }
+
     public List<Claim> published(String ownerId, Instant now, int limit) {
         if (jdbc == null) {
             return claims.values().stream().filter(v -> v.ownerId().equals(ownerId))

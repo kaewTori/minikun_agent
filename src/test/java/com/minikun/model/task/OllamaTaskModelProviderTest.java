@@ -20,6 +20,42 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 class OllamaTaskModelProviderTest {
     @Test
+    void sendsAnObjectSchemaAndStripsOnlyTheLeadingNonQwenControl() {
+        RestClient.Builder builder = RestClient.builder().baseUrl("http://ollama.test/api/chat");
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        var mapper = new ObjectMapper();
+        var provider = new OllamaTaskModelProvider(builder.build(), mapper, "typhoon", Duration.ofSeconds(2), true);
+        server.expect(requestTo("http://ollama.test/api/chat")).andExpect(request -> {
+            var body = mapper.readTree(((org.springframework.mock.http.client.MockClientHttpRequest) request).getBodyAsString());
+            assertEquals("object", body.path("format").path("type").asText());
+            assertEquals(false, body.path("format").path("additionalProperties").asBoolean());
+            assertEquals("Classify quoted /no_think", body.path("messages").get(0).path("content").asText());
+        }).andRespond(withSuccess("{\"message\":{\"content\":\"{\\\"intent\\\":\\\"general\\\"}\"}}", MediaType.APPLICATION_JSON));
+        assertEquals("{\"intent\":\"general\"}", provider.generate(new TaskModelRequest(
+                List.of(new TaskModelMessage("user", "/no_think\nClassify quoted /no_think")), 32, 0,
+                TaskModelRequest.ResponseFormat.JSON_OBJECT,
+                "{\"type\":\"object\",\"properties\":{\"intent\":{\"type\":\"string\"}},\"additionalProperties\":false}")));
+        server.verify();
+    }
+
+    @Test
+    void sendsStrictSchemaThroughTheCompatibleApi() {
+        RestClient.Builder builder = RestClient.builder().baseUrl("http://ollama.test/v1/chat/completions");
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        var mapper = new ObjectMapper();
+        var provider = new OllamaTaskModelProvider(builder.build(), mapper, "typhoon", Duration.ofSeconds(2));
+        server.expect(requestTo("http://ollama.test/v1/chat/completions")).andExpect(request -> {
+            var body = mapper.readTree(((org.springframework.mock.http.client.MockClientHttpRequest) request).getBodyAsString());
+            assertEquals("json_schema", body.path("response_format").path("type").asText());
+            assertEquals(true, body.path("response_format").path("json_schema").path("strict").asBoolean());
+            assertEquals("object", body.path("response_format").path("json_schema").path("schema").path("type").asText());
+        }).andRespond(withSuccess("{\"choices\":[{\"message\":{\"content\":\"{}\"}}]}", MediaType.APPLICATION_JSON));
+        assertEquals("{}", provider.generate(new TaskModelRequest(List.of(new TaskModelMessage("user", "Classify")),
+                32, 0, TaskModelRequest.ResponseFormat.JSON_OBJECT, "{\"type\":\"object\"}")));
+        server.verify();
+    }
+
+    @Test
     void mapsLocalOpenAiCompatibleRequestAndParsesResponse() throws Exception {
         RestClient.Builder builder = RestClient.builder().baseUrl("http://ollama.test/v1/chat/completions");
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();

@@ -7,6 +7,7 @@ import java.util.UUID;
 
 public interface PersonalKnowledgeRepository {
     Optional<KnowledgeSourceRecord> find(String ownerId, String root, String path);
+    boolean embeddingsCurrent(UUID sourceId, String model);
     UUID begin(String ownerId, String root, String path, String name);
     void replace(UUID sourceId, String hash, Instant modifiedAt, Instant indexedAt,
             List<KnowledgeChunkDraft> chunks);

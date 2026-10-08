@@ -2,6 +2,8 @@ package com.minikun.search.internal;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.minikun.pcs.model.KnowledgeContext;
+import com.minikun.pcs.KnowledgeCandidate;
+import com.minikun.pcs.model.ImageSource;
 import com.minikun.search.SearchCache;
 import com.minikun.search.SearchCacheKey;
 import java.nio.charset.StandardCharsets;
@@ -10,6 +12,7 @@ import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.util.HexFormat;
 import java.util.Optional;
+import java.util.List;
 import java.util.Objects;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -19,7 +22,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 
 public final class ValkeySearchCache implements SearchCache {
     private static final Logger LOGGER = LoggerFactory.getLogger(ValkeySearchCache.class);
-    private static final String PREFIX = "minikun:search:v1:";
+    private static final String PREFIX = "minikun:search:v2:";
 
     private final StringRedisTemplate redis;
     private final ObjectMapper objectMapper;
@@ -33,7 +36,8 @@ public final class ValkeySearchCache implements SearchCache {
     public ValkeySearchCache(
             StringRedisTemplate redis, ObjectMapper objectMapper, Duration ttl, MeterRegistry meterRegistry) {
         this.redis = Objects.requireNonNull(redis, "redis must not be null");
-        this.objectMapper = Objects.requireNonNull(objectMapper, "object mapper must not be null");
+        this.objectMapper = Objects.requireNonNull(objectMapper, "object mapper must not be null")
+                .copy().findAndRegisterModules();
         this.ttl = Objects.requireNonNull(ttl, "ttl must not be null");
         this.meterRegistry = meterRegistry;
         if (ttl.isZero() || ttl.isNegative()) {
@@ -50,7 +54,8 @@ public final class ValkeySearchCache implements SearchCache {
                 return Optional.empty();
             }
             increment("minikun.search.cache.hit");
-            return Optional.of(objectMapper.readValue(value, KnowledgeContext.class));
+            CachedContext cached = objectMapper.readValue(value, CachedContext.class);
+            return Optional.of(new KnowledgeContext(cached.content(), cached.candidates(), cached.images()));
         } catch (Exception exception) {
             LOGGER.warn("Search cache lookup failed; continuing without cache", exception);
             increment("minikun.search.cache.miss");
@@ -61,7 +66,9 @@ public final class ValkeySearchCache implements SearchCache {
     @Override
     public void put(SearchCacheKey key, KnowledgeContext context) {
         try {
-            String value = objectMapper.writeValueAsString(context);
+            // KnowledgeContext hides candidates from chat JSON; the internal cache must retain their evidence.
+            String value = objectMapper.writeValueAsString(new CachedContext(
+                    context.content(), context.candidates(), context.images()));
             redis.opsForValue().set(redisKey(key), value, ttl);
             increment("minikun.search.cache.put");
         } catch (Exception exception) {
@@ -76,6 +83,8 @@ public final class ValkeySearchCache implements SearchCache {
             // Observability must not affect cache behavior.
         }
     }
+
+    private record CachedContext(String content, List<KnowledgeCandidate> candidates, List<ImageSource> images) { }
 
     static String redisKey(SearchCacheKey key) {
         String material = key.normalizedQuery() + "\u0000" + key.maximumResultCount();

@@ -47,6 +47,7 @@
 - คำสั่ง runtime และ diagnostics ที่จัดการในระดับ application
 - Native function tools: `time.get_current_time`, `weather.get_forecast`, `web.search`, `web.open_url`, `image.generate`, `presentation.create`, `presentation.read_latest`, `presentation.revise`, `calculator.add`, `planner.manage`, `calendar.manage`, `task.manage`, `investment.manage`, `investment.analyze`, `investment.data`, `homelab.guardian`, `computer.local`, `knowledge.personal`, `communication.assist` และ `personal.loop`
 - ผลลัพธ์จาก tool จะถูกส่งกลับเข้า prompt ของ MCS/PCS เพื่อให้โมเดลตอบต่อด้วยตัวตน บริบท และน้ำเสียงเดิมของมินิคุง
+- อากาศจาก Open-Meteo มีข้อมูลรายชั่วโมงสำหรับคำถาม เช่น “คืนนี้ฝนจะตกที่กรุงเทพช่วงกี่โมง” พร้อมโอกาสฝน ช่วงข้ามเที่ยงคืน เขตเวลา แหล่งอ้างอิง และเวลาที่ดึงข้อมูล; ถามพื้นที่เมื่อไม่มีตำแหน่ง และไม่เดาเวลาฝนจากภาพรวมรายวัน
 - เก็บ reminder ใน PostgreSQL และส่ง browser notification ผ่าน Cockpit โดยมี ntfy เป็น fallback
 - เชื่อม private iCalendar feed จาก Google, Apple หรือ Outlook เพื่ออ่าน agenda และเตือนก่อนนัด
 - มี proactive safety policy สำหรับ quiet hours และ daily briefing ที่รวมอากาศ นัดหมาย งาน และสิ่งค้างเวลา 08:00 (`Asia/Bangkok`)
@@ -168,7 +169,7 @@ Actuator ที่เปิดให้เข้าถึงคือ `/actuator
 | `MINIKUN_EVAL_MANAGEMENT_TOKEN` | ใช้ค่า memory token | token สำหรับเรียก Eval Lab baseline/custom suite และ quality report |
 | `MINIKUN_TURN_PLANNING_AMBIGUITY_ENABLED` | `true` | เปิด task-model resolver เฉพาะ turn สั้นที่มีความกำกวม |
 | `MINIKUN_TURN_PLANNING_AMBIGUITY_TIMEOUT` | `PT1S` | เวลาสูงสุดของ ambiguity resolver ก่อนใช้ deterministic fallback |
-| `EMBEDDING_MODEL` | `qwen3-embedding:0.6b` | multilingual embedding model |
+| `EMBEDDING_MODEL` | `embeddinggemma-2:270m-mxfp8-text` | multilingual embedding model |
 | `OLLAMA_NUM_CTX` | `16384` | context window ของ Ollama; dynamic budget จองพื้นที่คำตอบตาม profile ก่อนจัดบริบท |
 | `OLLAMA_KEEP_ALIVE` | `30m` | เก็บโมเดลหลักไว้ใน memory เพื่อลด cold start; ลดค่านี้ถ้า RAM/VRAM ไม่พอให้ main และ task model อยู่พร้อมกัน |
 | `MINIKUN_REASONING_MODEL` | ว่าง | โมเดล Ollama สำรองสำหรับ request ที่ตั้ง `reasoning_effort` หรือเข้า deep-research/tool-loop; ว่าง = ใช้โมเดลหลัก |
@@ -649,7 +650,7 @@ state ของโหมดเป็น bounded in-memory และจะกล�
 curl -X POST http://127.0.0.1:8080/v1/embeddings \
   -H 'Content-Type: application/json' \
   -d '{
-    "model": "qwen3-embedding:0.6b",
+    "model": "embeddinggemma-2:270m-mxfp8-text",
     "input": ["ข้อความแรก", "ข้อความที่สอง"]
   }'
 ```
@@ -714,9 +715,20 @@ curl -X POST http://127.0.0.1:8080/v1/knowledge/search \
 curl 'http://127.0.0.1:8080/v1/knowledge/sources?owner_id=default&limit=100'
 ```
 
-ระบบแบ่งเอกสารเป็น chunk, เก็บ SHA-256 เพื่อข้ามไฟล์ที่ไม่เปลี่ยน และใช้ `qwen3-embedding:0.6b`
-ผ่าน Ollama สำหรับ semantic retrieval พร้อม lexical fallback หาก embedding ใช้งานไม่ได้ ผลค้นหาทุกชิ้นมี
+ระบบแบ่งเอกสารเป็น chunk, เก็บ SHA-256 เพื่อข้ามไฟล์ที่ไม่เปลี่ยน และใช้ `embeddinggemma-2:270m-mxfp8-text`
+ผ่าน Ollama 0.36.0 ขึ้นไป ให้เวกเตอร์ 768 มิติ ใช้ query prefix `task: search result | query:`
+และ document prefix `title: ... | text: ...` สำหรับ semantic retrieval พร้อม lexical fallback
+หาก embedding ใช้งานไม่ได้ ผลค้นหาทุกชิ้นมี
 `knowledge://` citation และ top results จะถูกเรียกคืนเข้า knowledge pipeline ของบทสนทนาอัตโนมัติ
+
+เมื่อเปลี่ยนโมเดล ความจำและ acquired knowledge จะ backfill เวกเตอร์เป็น batch ละ 64 ทุก 30 วินาที
+โดยคง status, confidence, verification และอายุของข้อมูลเดิม เอกสารที่ hash ไม่เปลี่ยนจะ reindex
+เมื่อเวกเตอร์ขาดหรือเป็นโมเดลเก่า ตั้งเกณฑ์ค้นเอกสารและ acquired knowledge เริ่มต้นที่ `0.70`
+ปรับได้ผ่าน `MINIKUN_PERSONAL_KNOWLEDGE_MINIMUM_SCORE` และ
+`MINIKUN_KNOWLEDGE_ACQUISITION_MINIMUM_SCORE` ตามผลทดสอบข้อมูลจริง
+
+`/v1/embeddings` คืนชื่อโมเดล embedding จริง รับข้อความดิบที่ผู้เรียกจัด prefix เอง และปฏิเสธ
+ชื่อโมเดลที่ไม่ได้ตั้งค่า (ยอมรับ alias `mini-kun`) จึงไม่แอบสลับโมเดลตาม request
 
 รองรับไฟล์ UTF-8 เช่น Markdown, text, JSON, YAML, CSV, properties, source code, HTML, SQL,
 log และ iCalendar โดยจำกัดเริ่มต้น 2 MB ต่อไฟล์ ไม่ตาม symlink และไม่อ่าน hidden file, `.env`

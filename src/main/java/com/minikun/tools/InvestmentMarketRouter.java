@@ -35,7 +35,8 @@ public final class InvestmentMarketRouter implements ToolRequestRouter {
 
     public InvestmentMarketRouter(ToolExecutor executor, ObjectMapper objectMapper, InvestmentService investments) {
         this.executor = Objects.requireNonNull(executor, "tool executor must not be null");
-        this.objectMapper = Objects.requireNonNull(objectMapper, "object mapper must not be null");
+        this.objectMapper = Objects.requireNonNull(objectMapper, "object mapper must not be null")
+                .copy().findAndRegisterModules();
         this.investments = Objects.requireNonNull(investments, "investment service must not be null");
     }
 
@@ -70,6 +71,8 @@ public final class InvestmentMarketRouter implements ToolRequestRouter {
     }
 
     private boolean isMarketRequest(String text, String ownerId) {
+        if (com.minikun.investment.InvestmentAdviceIntent.matches(text)
+                || com.minikun.investment.InvestmentAdviceIntent.requestsLedgerUpdate(text)) return false;
         String normalized = text.toLowerCase(Locale.ROOT);
         return ACTION.matcher(normalized).find()
                 && (TARGET.matcher(normalized).find() || !portfolioSymbols(text, ownerId).isEmpty());

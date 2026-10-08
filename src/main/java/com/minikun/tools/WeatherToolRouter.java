@@ -102,8 +102,15 @@ public final class WeatherToolRouter implements ToolRequestRouter {
             }
         }
         String normalized = text.toLowerCase(Locale.ROOT);
+        if (normalized.contains("พรุ่งนี้เย็น") || normalized.contains("พรุ่งนี้คืน")
+                || normalized.contains("tomorrow evening") || normalized.contains("tomorrow night")) {
+            return Optional.of("tomorrow evening");
+        }
         if (normalized.contains("พรุ่งนี้") || normalized.contains("tomorrow")) {
             return Optional.of("tomorrow");
+        }
+        if (normalized.contains("คืนนี้") || normalized.contains("tonight")) {
+            return Optional.of("tonight");
         }
         if (normalized.contains("วันนี้") || normalized.contains("today")) {
             return Optional.of("today");
@@ -129,7 +136,8 @@ public final class WeatherToolRouter implements ToolRequestRouter {
         int end = candidate.length();
         for (String suffix : java.util.List.of(
                 "จังเลย", "หน่อย", "ครับ", "ค่ะ", "คะ", "นะ", "ไหม", "ได้ไหม",
-                "วันนี้", "พรุ่งนี้", "ตอนนี้")) {
+                "วันนี้", "พรุ่งนี้", "คืนนี้", "ตอนนี้", "ช่วง", "กี่โมง", "ฝน", "อากาศ",
+                "tonight", "tomorrow", "today")) {
             int suffixIndex = candidateNormalized.indexOf(suffix);
             if (suffixIndex >= 0) {
                 end = Math.min(end, suffixIndex);
@@ -147,13 +155,14 @@ public final class WeatherToolRouter implements ToolRequestRouter {
 
     private Optional<String> temporalWeatherLocation(String text) {
         String normalized = text.toLowerCase(Locale.ROOT);
-        for (String timeWord : java.util.List.of("พรุ่งนี้", "วันนี้", "tomorrow", "today")) {
+        for (String timeWord : java.util.List.of("พรุ่งนี้เย็น", "พรุ่งนี้คืน", "พรุ่งนี้", "วันนี้", "คืนนี้",
+                "tomorrow evening", "tomorrow night", "tomorrow", "today", "tonight")) {
             int timeEnd = normalized.indexOf(timeWord);
             if (timeEnd < 0) {
                 continue;
             }
             timeEnd += timeWord.length();
-            for (String weatherWord : java.util.List.of("อากาศ", "weather", "forecast")) {
+            for (String weatherWord : java.util.List.of("อากาศ", "ฝน", "weather", "forecast", "rain")) {
                 int weatherStart = normalized.indexOf(weatherWord, timeEnd);
                 if (weatherStart < 0) {
                     continue;
@@ -172,10 +181,12 @@ public final class WeatherToolRouter implements ToolRequestRouter {
         StringBuilder content = new StringBuilder()
                 .append("พยากรณ์อากาศสำหรับ ").append(report.location())
                 .append(" วันที่ ").append(report.requestedDate()).append("\n");
-        append(content, "สภาพอากาศ", report.currentWeatherDescription());
+        append(content, "เขตเวลา", report.timezone());
+        append(content, "ดึงข้อมูลเมื่อ", report.retrievedAt().atZone(java.time.ZoneId.of(report.timezone())));
+        append(content, "สภาพอากาศปัจจุบัน", report.currentWeatherDescription());
         appendRange(content, report.dailyTemperatureMinCelsius(), report.dailyTemperatureMaxCelsius());
         if (report.dailyPrecipitationProbabilityPercent() != null) {
-            append(content, "โอกาสฝนตก", report.dailyPrecipitationProbabilityPercent() + "%");
+            append(content, "โอกาสเกิดหยาดน้ำฟ้าสูงสุดรายวัน", report.dailyPrecipitationProbabilityPercent() + "%");
         }
         if (report.dailyPrecipitationMm() != null) {
             append(content, "ปริมาณฝนคาดการณ์", report.dailyPrecipitationMm() + " มม.");
@@ -183,7 +194,27 @@ public final class WeatherToolRouter implements ToolRequestRouter {
         if (report.currentWindKmh() != null) {
             append(content, "ลม", report.currentWindKmh() + " กม./ชม.");
         }
-        content.append("แหล่งข้อมูล: ").append(report.source());
+        if (report.hourlyForecast().isEmpty()) {
+            content.append("ไม่มีข้อมูลรายชั่วโมง จึงยังระบุช่วงเวลาฝนไม่ได้\n");
+        } else {
+            content.append("พยากรณ์รายชั่วโมง (เวลาท้องถิ่น; สภาพอากาศ ณ ท้ายช่วง):\n");
+            for (WeatherReport.HourlyForecast hour : report.hourlyForecast()) {
+                content.append(hour.from()).append(" – ").append(hour.to()).append(": ");
+                if (hour.precipitationProbabilityPercent() != null) {
+                    content.append("โอกาสเกิดหยาดน้ำฟ้า ").append(hour.precipitationProbabilityPercent()).append("%; ");
+                }
+                if (hour.precipitationMm() != null) {
+                    content.append("ปริมาณ ").append(hour.precipitationMm()).append(" มม.; ");
+                }
+                content.append(hour.weatherDescription());
+                if (hour.windGustKmh() != null) {
+                    content.append("; ลมกระโชก ").append(hour.windGustKmh()).append(" กม./ชม.");
+                }
+                content.append("\n");
+            }
+        }
+        content.append("แหล่งข้อมูล: ").append(report.source()).append("\n")
+                .append(WeatherForecastTool.ANSWER_GUIDANCE);
         return content.toString();
     }
 

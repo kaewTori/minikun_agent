@@ -5,6 +5,7 @@ import static com.minikun.knowledge.acquisition.KnowledgeAcquisitionModels.*;
 import com.minikun.pcs.KnowledgeCandidate;
 import com.minikun.pcs.KnowledgeSource;
 import com.minikun.pcs.model.KnowledgeContext;
+import com.minikun.knowledge.EmbeddingSupport;
 import java.time.Clock;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -15,8 +16,11 @@ import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
 import org.springframework.ai.embedding.EmbeddingModel;
+import org.springframework.scheduling.annotation.Scheduled;
+import lombok.extern.slf4j.Slf4j;
 
 /** Hybrid retrieval index for verified externally acquired claims. */
+@Slf4j
 public final class AcquiredKnowledgeIndex {
     private final KnowledgeAcquisitionStore store;
     private final EmbeddingModel embeddingModel;
@@ -42,12 +46,33 @@ public final class AcquiredKnowledgeIndex {
         this.minimumScore = minimumScore;
     }
 
-    EmbeddingValue embed(String text) {
+    EmbeddingValue embed(String title, String text) {
         if (embeddingModel == null) return new EmbeddingValue("", "");
         try {
-            return new EmbeddingValue(encode(embeddingModel.embed(text)), embeddingModelName);
+            return new EmbeddingValue(encode(embeddingModel.embed(
+                    EmbeddingSupport.document(embeddingModelName, title, text))), embeddingModelName);
         } catch (RuntimeException exception) {
             return new EmbeddingValue("", "");
+        }
+    }
+
+    @Scheduled(initialDelayString = "${minikun.knowledge-acquisition.embedding.backfill-initial-delay:10000}",
+            fixedDelayString = "${minikun.knowledge-acquisition.embedding.backfill-delay:30000}")
+    void backfillEmbeddings() {
+        if (embeddingModel == null) return;
+        try {
+            List<Claim> rows = store.embeddingsToRefresh(embeddingModelName, 64);
+            if (rows.isEmpty()) return;
+            List<float[]> vectors = embeddingModel.embed(rows.stream().map(claim ->
+                    EmbeddingSupport.document(embeddingModelName, claim.topicName(), claim.text())).toList());
+            if (vectors == null || vectors.size() != rows.size())
+                throw new IllegalStateException("embedding batch size mismatch");
+            List<String> encoded = vectors.stream().map(this::encode).toList();
+            for (int i = 0; i < rows.size(); i++)
+                store.updateEmbedding(rows.get(i), encoded.get(i), embeddingModelName);
+            log.info("acquired_knowledge_embedding_backfill rows={}", rows.size());
+        } catch (RuntimeException exception) {
+            log.warn("acquired_knowledge_embedding_backfill_failed error_type={}", exception.getClass().getSimpleName());
         }
     }
 
@@ -98,8 +123,8 @@ public final class AcquiredKnowledgeIndex {
     private float[] queryEmbedding(String query) {
         if (embeddingModel == null) return new float[0];
         try {
-            return embeddingModel.embed("Instruct: Retrieve verified external knowledge that directly answers "
-                    + "the question.\nQuery: " + query);
+            return EmbeddingSupport.requireVector(embeddingModel.embed(EmbeddingSupport.query(
+                    embeddingModelName, query, "Retrieve verified external knowledge that directly answers the question.")));
         } catch (RuntimeException exception) {
             return new float[0];
         }
@@ -119,7 +144,9 @@ public final class AcquiredKnowledgeIndex {
     }
 
     private double cosine(float[] left, float[] right) {
-        if (left.length == 0 || left.length != right.length) return -1;
+        EmbeddingSupport.requireVector(left);
+        EmbeddingSupport.requireVector(right);
+        if (left.length != right.length) throw new IllegalArgumentException("embedding mismatch");
         double dot = 0, leftNorm = 0, rightNorm = 0;
         for (int index = 0; index < left.length; index++) {
             dot += left[index] * right[index];
@@ -130,7 +157,7 @@ public final class AcquiredKnowledgeIndex {
     }
 
     private String encode(float[] vector) {
-        if (vector == null || vector.length == 0) return "";
+        EmbeddingSupport.requireVector(vector);
         StringBuilder value = new StringBuilder(vector.length * 10);
         for (int index = 0; index < vector.length; index++) {
             if (index > 0) value.append(',');

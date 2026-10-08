@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.springframework.ai.embedding.EmbeddingModel;
+import com.minikun.knowledge.EmbeddingSupport;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 
@@ -75,7 +76,9 @@ final class JdbcMemoryRepository implements MemoryRepository {
                             rs.getString("category"), rs.getString("content")), embeddingModelName);
             if (rows.isEmpty()) return;
             List<float[]> vectors = embeddingModel.embed(rows.stream()
-                    .map(row -> row.category() + ": " + row.content()).toList());
+                    .map(row -> EmbeddingSupport.gemma(embeddingModelName)
+                            ? EmbeddingSupport.document(embeddingModelName, row.category(), row.content())
+                            : row.category() + ": " + row.content()).toList());
             if (vectors == null || vectors.size() != rows.size()) throw new IllegalStateException("embedding batch size mismatch");
             for (int i = 0; i < rows.size(); i++) {
                 var row = rows.get(i);
@@ -93,14 +96,7 @@ final class JdbcMemoryRepository implements MemoryRepository {
     private record EmbeddingRow(java.util.UUID id, String category, String content) {}
 
     private static String vector(float[] values) {
-        if (values == null || values.length == 0) throw new IllegalArgumentException("embedding vector is empty");
-        boolean nonzero = false;
-        for (float value : values) {
-            if (!Float.isFinite(value)) throw new IllegalArgumentException("embedding vector must be finite");
-            nonzero |= value != 0;
-        }
-        if (!nonzero) throw new IllegalArgumentException("embedding vector must not be zero");
-        return Arrays.toString(values);
+        return Arrays.toString(EmbeddingSupport.requireVector(values));
     }
 
     @Override
@@ -273,7 +269,7 @@ final class JdbcMemoryRepository implements MemoryRepository {
                 terms.isEmpty() ? limit : Math.max(1, limit / 5)).forEach(memory -> candidates.putIfAbsent(memory.id(), memory));
         if (embeddingModel == null || query == null || query.isBlank()) return candidates.values().stream().limit(limit).toList();
         try {
-            float[] queryVector = embeddingModel.embed(query);
+            float[] queryVector = embeddingModel.embed(EmbeddingSupport.query(embeddingModelName, query, ""));
             String vector = vector(queryVector);
             List<Memory> semantic = queryOwnerMemories("""
                     WHERE owner_id = ? AND embedding_model = ? AND vector_dims(embedding) = ?

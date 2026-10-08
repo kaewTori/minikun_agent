@@ -21,6 +21,55 @@ import org.mockito.ArgumentCaptor;
 
 class InvestmentMonitorRouterTest {
     @Test
+    void recommendationsBypassAllReadOnlyShortcutRoutersInsteadOfReturningANewsBrief() {
+        ToolExecutor executor = mock(ToolExecutor.class);
+        var monitor = new InvestmentMonitorRouter(executor, new ObjectMapper());
+        var review = new InvestmentReviewRouter(executor, new ObjectMapper());
+        var market = new InvestmentMarketRouter(executor, new ObjectMapper(),
+                mock(com.minikun.investment.InvestmentService.class));
+        for (String text : List.of("แนะนำเติมพอร์ตวันนี้", "เรามีอยู่ 5000 บาทเอาไปเติมอะไรดีวันนี้",
+                "ช่วยดูพอร์ตควรเติมอะไรดี", "ราคาหุ้น AMZN ลง ควรซื้อเพิ่มไหม")) {
+            var conversation = new ConversationId("top-up");
+            assertTrue(monitor.route(text, conversation, "owner-a").isEmpty(), text);
+            assertTrue(review.route(text, conversation, "owner-a").isEmpty(), text);
+            assertTrue(market.route(text, conversation, "owner-a").isEmpty(), text);
+        }
+        org.mockito.Mockito.verifyNoInteractions(executor);
+    }
+
+    @Test
+    void reusesTheReviewedReminderAndCollectsOnlyTheOwnersActualThesis() {
+        ToolExecutor executor = mock(ToolExecutor.class);
+        when(executor.execute(any(), any())).thenReturn(ToolResult.success(Map.of("brief_text", "สรุปที่ตรวจแล้ว")));
+        InvestmentMonitorRouter router = new InvestmentMonitorRouter(executor, new ObjectMapper());
+        var news = router.route("สรุปข่าวในพอร์ต", new ConversationId("same-brief"), "owner-a").orElseThrow();
+        assertTrue(news.finalResponse());
+        assertEquals("สรุปที่ตรวจแล้ว", news.content());
+
+        org.mockito.Mockito.reset(executor);
+        when(executor.execute(any(), any())).thenReturn(ToolResult.success(Map.of("requires_confirmation", true)));
+        var proposal = router.route("เหตุผลที่ถือ AMZN: ต้องการเติบโตจากคลาวด์; ทบทวนเมื่อ: รายได้คลาวด์หดตัว",
+                new ConversationId("thesis"), "owner-a").orElseThrow();
+        assertTrue(proposal.requiresConfirmation());
+        ArgumentCaptor<ToolCall> call = ArgumentCaptor.forClass(ToolCall.class);
+        verify(executor).execute(any(), call.capture());
+        assertEquals("save_thesis", call.getValue().arguments().get("action"));
+        assertEquals("รายได้คลาวด์หดตัว", call.getValue().arguments().get("invalidation"));
+        assertTrue(!call.getValue().arguments().containsKey("confirmed"));
+    }
+
+    @Test
+    void asksForTheReviewConditionWithoutInventingOrSavingIt() {
+        ToolExecutor executor = mock(ToolExecutor.class);
+        var router = new InvestmentMonitorRouter(executor, new ObjectMapper());
+        var result = router.route("เหตุผลที่ถือ AMZN: ต้องการเติบโตจากคลาวด์", new ConversationId("missing"), "owner-a");
+        assertTrue(result.orElseThrow().content().contains("ขอเงื่อนไข"));
+        org.mockito.Mockito.verifyNoInteractions(executor);
+        var placeholder = router.route("เหตุผลที่ถือ SCHD: …\nทบทวนเมื่อ: …", new ConversationId("placeholder"), "owner-a");
+        assertTrue(placeholder.orElseThrow().content().contains("ยังไม่ได้บันทึก"));
+        org.mockito.Mockito.verifyNoInteractions(executor);
+    }
+    @Test
     void routesDailyInvestmentNewsToTheMonitorTool() {
         ToolExecutor executor = mock(ToolExecutor.class);
         when(executor.execute(any(), any())).thenReturn(ToolResult.success(Map.of("status", "ok")));

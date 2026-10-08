@@ -18,6 +18,23 @@ import org.junit.jupiter.api.Test;
 
 class SearchConfigurationTest {
     @Test
+    void llmFastPathSkipsStableRequestsButKeepsQuotedAndLiveRequestsSemantic() {
+        var calls = new java.util.concurrent.atomic.AtomicInteger();
+        SearchDecisionService service = new SearchConfiguration().searchDecisionService(prompt -> {
+            calls.incrementAndGet();
+            return new SearchDecision(false, prompt.userMessage(), SearchDecisionReason.GENERAL_KNOWLEDGE);
+        }, Clock.systemUTC(), new SearchDecisionPromptBuilder(), new SimpleMeterRegistry(),
+                new ImageIntentDetector(), true, "llm");
+        assertEquals(SearchDecisionReason.GENERAL_KNOWLEDGE, service.decide("อธิบาย DNS").reason());
+        assertEquals(SearchDecisionReason.GENERAL_KNOWLEDGE, service.decide("hello").reason());
+        assertEquals(0, calls.get());
+        assertEquals(SearchDecisionReason.GENERAL_KNOWLEDGE, service.decide("แปลคำพูดว่า 'หาร้านอาหาร'").reason());
+        service.decide("what is the best cafe near the station");
+        service.decide("อธิบายต่อ", "user: ดูราคาปัจจุบัน");
+        assertEquals(3, calls.get());
+    }
+
+    @Test
     void llmModeUsesSemanticDecisionForMixedRequest() {
         String query = "ขอสภาพอากาศตอนนี้ แล้วมีอะไรน่ากินมั้ง แถวนี้";
         SearchDecisionService service = new SearchConfiguration().searchDecisionService(

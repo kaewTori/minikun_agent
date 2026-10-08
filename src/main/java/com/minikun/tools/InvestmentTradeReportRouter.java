@@ -34,7 +34,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
-/** Turns a clear owner-reported completed sale into one durable, confirmable ledger proposal. */
+/** Turns a clear owner-reported completed trade into one durable, confirmable ledger proposal. */
 @Component
 @Order(0)
 @ConditionalOnProperty(name = "minikun.investment.enabled", havingValue = "true", matchIfMissing = true)
@@ -46,6 +46,12 @@ public final class InvestmentTradeReportRouter implements ToolRequestRouter {
             "(?iu)(cut\\s*loss|cut\\s*lost|ขาย(?:ไป|แล้ว|ทิ้ง|ออก)|sold|closed\\s+(?:the\\s+)?position)");
     private static final Pattern PROCEEDS = Pattern.compile(
             "(?iu)(ได้มา|ได้รับ|net\\s*(?:proceeds?)?|received|got)");
+    private static final Pattern BUY_HINT = Pattern.compile("(?ium)^\\s*(?:[-*•]\\s*)?ซื้อ(?=\\s|[A-Z])");
+    private static final Pattern BUY_LINE = Pattern.compile(
+            "(?ium)^\\s*(?:[-*•]\\s*)?ซื้อ\\s+([A-Z][A-Z0-9.-]{0,7})\\s+"
+                    + "([0-9]+(?:\\.[0-9]+)?)\\s*(\\$|USD|THB|บาท)\\s*ในราคา\\s*"
+                    + "([0-9]+(?:\\.[0-9]+)?)\\s*(\\$|USD|THB|บาท)\\s*ต่อ(?:หน่วย|หุ้น)\\s*ได้\\s*"
+                    + "([0-9]+(?:\\.[0-9]+)?)\\s*(?:หน่วย|หุ้น)\\s*$");
     private static final Pattern SALE_LINE = Pattern.compile(
             "(?iu)^\\s*(?:[-*•]\\s*)?([A-Z][A-Z0-9.-]{0,7})\\s+"
                     + "(?:(?:ขาย\\s*)?([0-9]+(?:\\.[0-9]+)?)\\s*"
@@ -109,10 +115,10 @@ public final class InvestmentTradeReportRouter implements ToolRequestRouter {
             return Optional.of(ToolEvidence.finalVerified(TOOL_NAME, savedMessage(saved)));
         } catch (IllegalArgumentException exception) {
             return Optional.of(ToolEvidence.finalFailed(TOOL_NAME,
-                    "ขออภัยครับ บันทึกรายการขายไม่สำเร็จ: " + exception.getMessage()));
+                    "ขออภัยครับ บันทึกรายการซื้อขายไม่สำเร็จ: " + exception.getMessage()));
         } catch (RuntimeException exception) {
             return Optional.of(ToolEvidence.finalFailed(TOOL_NAME,
-                    "ขออภัยครับ บันทึกรายการขายไม่สำเร็จ จึงยังไม่ล้างรายการรอยืนยันครับ"));
+                    "ขออภัยครับ บันทึกรายการซื้อขายไม่สำเร็จ จึงยังไม่ล้างรายการรอยืนยันครับ"));
         }
     }
 
@@ -124,50 +130,52 @@ public final class InvestmentTradeReportRouter implements ToolRequestRouter {
                             position -> position.symbol().toUpperCase(Locale.ROOT),
                             position -> position, (first, ignored) -> first, LinkedHashMap::new));
             String account = uniqueAccount(ownerId);
-            List<ReportedSale> sales = parse(text, portfolio.baseCurrency());
+            List<ReportedTrade> trades = parse(text, portfolio.baseCurrency());
             Instant occurredAt = occurredAt(text);
-            String fingerprint = fingerprint(account, occurredAt, sales);
+            String fingerprint = fingerprint(account, occurredAt, trades);
             if (alreadyRecorded(ownerId, fingerprint)) {
                 throw new IllegalArgumentException("รายการรายงานนี้ถูกบันทึกไปแล้วใน ledger");
             }
             List<Map<String, Object>> transactions = new ArrayList<>();
             List<String> preview = new ArrayList<>();
-            for (ReportedSale sale : sales) {
-                PortfolioPosition position = positions.get(sale.symbol());
-                if (position == null || position.quantity().signum() <= 0) {
-                    throw new IllegalArgumentException("ไม่พบจำนวนถืออยู่ของ " + sale.symbol() + " ใน ledger");
+            for (ReportedTrade trade : trades) {
+                PortfolioPosition position = positions.get(trade.symbol());
+                boolean selling = "SELL".equals(trade.type());
+                if (selling && (position == null || position.quantity().signum() <= 0)) {
+                    throw new IllegalArgumentException("ไม่พบจำนวนถืออยู่ของ " + trade.symbol() + " ใน ledger");
                 }
-                BigDecimal quantity = sale.quantity() == null ? position.quantity() : sale.quantity();
-                if (quantity.signum() <= 0 || quantity.compareTo(position.quantity()) > 0) {
-                    throw new IllegalArgumentException("จำนวนขายของ " + sale.symbol()
+                BigDecimal quantity = trade.quantity() == null ? position.quantity() : trade.quantity();
+                if (quantity.signum() <= 0 || selling && quantity.compareTo(position.quantity()) > 0) {
+                    throw new IllegalArgumentException("จำนวนขายของ " + trade.symbol()
                             + " ต้องมากกว่า 0 และไม่เกินจำนวนที่ถืออยู่ " + position.quantity());
                 }
-                BigDecimal gross = quantity.multiply(sale.unitPrice());
-                BigDecimal fee = gross.subtract(sale.netProceeds());
+                BigDecimal gross = quantity.multiply(trade.unitPrice());
+                BigDecimal fee = selling ? gross.subtract(trade.totalAmount()) : trade.totalAmount().subtract(gross);
                 if (fee.signum() < 0) {
                     throw new IllegalArgumentException(
-                            sale.symbol() + " มียอดสุทธิมากกว่ามูลค่าขายก่อนหักค่าธรรมเนียม");
+                            trade.symbol() + " ยอดรวมไม่สอดคล้องกับจำนวน × ราคา กรุณาตรวจสอบตัวเลข");
                 }
                 Map<String, Object> transaction = new LinkedHashMap<>();
                 transaction.put("account", account);
-                transaction.put("type", "SELL");
-                transaction.put("symbol", sale.symbol());
-                transaction.put("instrument_name", position.instrumentName());
-                transaction.put("asset_class", position.assetClass());
-                transaction.put("currency", sale.currency());
+                transaction.put("type", trade.type());
+                transaction.put("symbol", trade.symbol());
+                transaction.put("instrument_name", position == null ? "" : position.instrumentName());
+                transaction.put("asset_class", position == null ? "OTHER" : position.assetClass());
+                transaction.put("currency", trade.currency());
                 transaction.put("quantity", quantity);
-                transaction.put("unit_price", sale.unitPrice());
-                transaction.put("net_proceeds", sale.netProceeds());
+                transaction.put("unit_price", trade.unitPrice());
+                if (selling) transaction.put("net_proceeds", trade.totalAmount());
                 transaction.put("fee", fee);
                 transaction.put("occurred_at", occurredAt.toString());
-                transaction.put("note", "Owner-reported completed sale; "
-                        + (sale.quantity() == null ? "full recorded holding" : "partial quantity reported")
+                transaction.put("note", "Owner-reported completed " + trade.type() + "; "
+                        + (trade.quantity() == null ? "full recorded holding" : "partial quantity reported")
                         + " report_fingerprint=" + fingerprint);
                 transactions.add(transaction);
-                preview.add("• " + sale.symbol() + ": " + quantity + " หน่วย @ "
-                        + sale.unitPrice() + " " + sale.currency() + " | สุทธิ "
-                        + sale.netProceeds() + " " + sale.currency() + " | ค่าธรรมเนียม "
-                        + fee.stripTrailingZeros().toPlainString() + " " + sale.currency());
+                preview.add("• " + (selling ? "ขาย " : "ซื้อ ") + trade.symbol() + ": " + quantity + " หน่วย @ "
+                        + trade.unitPrice() + " " + trade.currency() + (selling ? " | สุทธิ " : " | ยอดจ่ายรวมที่รายงาน ")
+                        + trade.totalAmount() + " " + trade.currency() + " | ค่าธรรมเนียม "
+                        + fee.stripTrailingZeros().toPlainString() + " " + trade.currency()
+                        + (selling ? "" : " (ส่วนต่างยอดซื้อ − จำนวน×ราคา โปรดตรวจว่าเป็นค่าธรรมเนียมจริงก่อนยืนยัน)"));
             }
             Map<String, Object> arguments = new LinkedHashMap<>();
             arguments.put("action", "add_transaction_batch");
@@ -175,27 +183,47 @@ public final class InvestmentTradeReportRouter implements ToolRequestRouter {
             arguments.put("transactions", transactions);
             confirmations.save(conversationId, ownerId, PENDING_ACTION, arguments);
             return ToolEvidence.pendingConfirmation(TOOL_NAME,
-                    "มินิคุงอ่านเป็นรายการขายที่เกิดขึ้นแล้ว และเตรียมบันทึกตามข้อมูลที่เรารายงาน:\n"
+                    "มินิคุงอ่านเป็นรายการซื้อขายที่เกิดขึ้นแล้ว และเตรียมบันทึกตามข้อมูลที่เรารายงาน:\n"
                             + String.join("\n", preview)
-                            + "\nบัญชี: " + account + " | ใช้จำนวนถือจริงล่าสุดจาก ledger"
+                            + "\nบัญชี: " + account + " | รายการซื้อใช้จำนวนที่รายงาน รายการขายไม่ระบุจำนวนใช้ยอดถือจริง"
                             + "\nวันที่รายการ: " + occurredAt
                             + "\nยังไม่บันทึกจริงจนกว่าจะพิมพ์ ‘ยืนยัน’ ครับ");
         } catch (IllegalArgumentException exception) {
             return ToolEvidence.finalFailed(TOOL_NAME,
-                    "ยังเตรียมบันทึกรายการขายไม่ได้: " + exception.getMessage());
+                    "ยังเตรียมบันทึกรายการซื้อขายไม่ได้: " + exception.getMessage());
         } catch (RuntimeException exception) {
             return ToolEvidence.finalFailed(TOOL_NAME,
-                    "ยังเตรียมบันทึกรายการขายไม่ได้ เพราะอ่าน ledger ไม่สำเร็จครับ");
+                    "ยังเตรียมบันทึกรายการซื้อขายไม่ได้ เพราะอ่าน ledger ไม่สำเร็จครับ");
         }
     }
 
-    private List<ReportedSale> parse(String text, String baseCurrency) {
-        List<ReportedSale> sales = new ArrayList<>();
+    private List<ReportedTrade> parse(String text, String baseCurrency) {
+        List<ReportedTrade> trades = new ArrayList<>();
         for (String line : text.split("\\R")) {
+            if (BUY_HINT.matcher(line).find()) {
+                Matcher buy = BUY_LINE.matcher(line);
+                if (!buy.matches()) throw new IllegalArgumentException("อ่านบรรทัดรายการซื้อไม่สำเร็จ: " + line.trim());
+                String currency = currency(buy.group(3));
+                if (!currency.equals(currency(buy.group(5))) || !currency.equals(baseCurrency)) {
+                    throw new IllegalArgumentException("สกุลเงินยอดซื้อและราคาต้องตรงกับ ledger: " + baseCurrency);
+                }
+                BigDecimal amount = decimal(buy.group(2), "ยอดซื้อ");
+                BigDecimal price = decimal(buy.group(4), "ราคาซื้อ");
+                BigDecimal quantity = decimal(buy.group(6), "จำนวนซื้อ");
+                if (amount.signum() <= 0 || price.signum() <= 0 || quantity.signum() <= 0) {
+                    throw new IllegalArgumentException("ยอดซื้อ ราคา และจำนวนต้องมากกว่า 0");
+                }
+                String symbol = buy.group(1).toUpperCase(Locale.ROOT);
+                if (trades.stream().anyMatch(value -> value.symbol().equals(symbol))) {
+                    throw new IllegalArgumentException("มีรายการ " + symbol + " ซ้ำในรายงานเดียวกัน");
+                }
+                trades.add(new ReportedTrade("BUY", symbol, quantity, price, amount, currency));
+                continue;
+            }
             if (!PROCEEDS.matcher(line).find()) continue;
             Matcher matcher = SALE_LINE.matcher(line);
             if (!matcher.matches()) {
-                throw new IllegalArgumentException("อ่านบรรทัดรายการขายไม่สำเร็จ: " + line.trim());
+                throw new IllegalArgumentException("อ่านบรรทัดรายการซื้อขายไม่สำเร็จ: " + line.trim());
             }
             String symbol = matcher.group(1).toUpperCase(Locale.ROOT);
             String currency = first(matcher.group(6), matcher.group(4), baseCurrency).toUpperCase(Locale.ROOT);
@@ -206,15 +234,15 @@ public final class InvestmentTradeReportRouter implements ToolRequestRouter {
             BigDecimal quantity = matcher.group(2) == null ? null : decimal(matcher.group(2), "จำนวนขาย " + symbol);
             BigDecimal unitPrice = decimal(matcher.group(3), "ราคาขาย " + symbol);
             BigDecimal netProceeds = decimal(matcher.group(5), "เงินสุทธิ " + symbol);
-            if (sales.stream().anyMatch(value -> value.symbol().equals(symbol))) {
+            if (trades.stream().anyMatch(value -> value.symbol().equals(symbol))) {
                 throw new IllegalArgumentException("มีรายการ " + symbol + " ซ้ำในรายงานเดียวกัน");
             }
-            sales.add(new ReportedSale(symbol, quantity, unitPrice, netProceeds, currency));
+            trades.add(new ReportedTrade("SELL", symbol, quantity, unitPrice, netProceeds, currency));
         }
-        if (sales.isEmpty()) {
-            throw new IllegalArgumentException("ต้องมีบรรทัดรูปแบบ SYMBOL ราคาขาย ... ได้มา เงินสุทธิ");
+        if (trades.isEmpty()) {
+            throw new IllegalArgumentException("ต้องมีจำนวนและราคาซื้อ หรือบรรทัด SYMBOL ราคาขาย ... ได้มา เงินสุทธิ");
         }
-        return List.copyOf(sales);
+        return List.copyOf(trades);
     }
 
     private InvestmentService.TransactionInput transactionInput(Map<String, Object> row) {
@@ -237,7 +265,7 @@ public final class InvestmentTradeReportRouter implements ToolRequestRouter {
     }
 
     private String savedMessage(List<InvestmentTransaction> saved) {
-        StringBuilder content = new StringBuilder("ยืนยันแล้วครับ บันทึกรายการขายตามที่เรารายงานลง investment ledger เรียบร้อยแล้ว\n");
+        StringBuilder content = new StringBuilder("ยืนยันแล้วครับ บันทึกรายการซื้อขายตามที่เรารายงานลง investment ledger เรียบร้อยแล้ว\n");
         saved.forEach(transaction -> content.append("• ").append(transaction.symbol())
                 .append(": ").append(transaction.quantity()).append(" หน่วย @ ")
                 .append(transaction.unitPrice()).append(" ").append(transaction.currency())
@@ -288,12 +316,12 @@ public final class InvestmentTradeReportRouter implements ToolRequestRouter {
                 .anyMatch(transaction -> transaction.note().contains("report_fingerprint=" + fingerprint));
     }
 
-    private String fingerprint(String account, Instant occurredAt, List<ReportedSale> sales) {
+    private String fingerprint(String account, Instant occurredAt, List<ReportedTrade> trades) {
         String canonical = account + "|" + occurredAt.atZone(clock.getZone()).toLocalDate() + "|"
-                + sales.stream()
-                        .map(sale -> String.join("|", sale.symbol(),
-                                sale.quantity() == null ? "FULL" : canonical(sale.quantity()),
-                                canonical(sale.unitPrice()), canonical(sale.netProceeds()), sale.currency()))
+                + trades.stream()
+                        .map(trade -> ("BUY".equals(trade.type()) ? "BUY|" : "") + String.join("|", trade.symbol(),
+                                trade.quantity() == null ? "FULL" : canonical(trade.quantity()),
+                                canonical(trade.unitPrice()), canonical(trade.totalAmount()), trade.currency()))
                         .sorted()
                         .collect(Collectors.joining("||"));
         try {
@@ -309,8 +337,16 @@ public final class InvestmentTradeReportRouter implements ToolRequestRouter {
     }
 
     private boolean isReportCandidate(String text) {
-        return PROCEEDS.matcher(text).find()
+        if (text.matches("(?isu)^\\s*(?:ถ้า|สมมติ|if\\b|suppose\\b).*")
+                || text.matches("(?isu).*(?:ควรซื้อ|should\\s+(?:I\\s+)?buy).*")) return false;
+        return (BUY_HINT.matcher(text).find() && com.minikun.investment.InvestmentAdviceIntent.requestsLedgerUpdate(text))
+                || BUY_LINE.matcher(text).find()
+                || PROCEEDS.matcher(text).find()
                 && (COMPLETED_SALE.matcher(text).find() || hasSaleLine(text));
+    }
+
+    private String currency(String value) {
+        return "$".equals(value) ? "USD" : "บาท".equals(value) ? "THB" : value.toUpperCase(Locale.ROOT);
     }
 
     private boolean hasSaleLine(String text) {
@@ -361,6 +397,6 @@ public final class InvestmentTradeReportRouter implements ToolRequestRouter {
         return value == null ? "" : value.toString().trim();
     }
 
-    private record ReportedSale(
-            String symbol, BigDecimal quantity, BigDecimal unitPrice, BigDecimal netProceeds, String currency) { }
+    private record ReportedTrade(
+            String type, String symbol, BigDecimal quantity, BigDecimal unitPrice, BigDecimal totalAmount, String currency) { }
 }

@@ -91,8 +91,10 @@ public final class NotificationDeliveryService implements NotificationDispatcher
                 if (!ntfyFallbackEnabled) {
                     throw new IllegalStateException("browser notification has no active client");
                 }
-                if (!transport.publish(request.channel(), request.title(), request.message(),
-                        request.priority(), request.tags())) {
+                boolean delivered = request.clickUrl().isBlank()
+                        ? transport.publish(request.channel(), request.title(), request.message(), request.priority(), request.tags())
+                        : transport.publish(request.channel(), request.title(), request.message(), request.priority(), request.tags(), request.clickUrl());
+                if (!delivered) {
                     throw new IllegalStateException("notification transport did not deliver");
                 }
                 incrementTransport(request, "ntfy");
@@ -115,7 +117,8 @@ public final class NotificationDeliveryService implements NotificationDispatcher
                     "title", request.title(),
                     "message", request.message(),
                     "priority", request.priority(),
-                    "tags", request.tags()));
+                    "tags", request.tags(),
+                    "clickUrl", request.clickUrl()));
             if (delivered) incrementTransport(request, "browser");
             return delivered;
         } catch (RuntimeException exception) {

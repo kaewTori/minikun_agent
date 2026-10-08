@@ -28,7 +28,8 @@ public final class InvestmentDataTool implements Tool {
     private static final ToolDefinition DEFINITION = new ToolDefinition(
             "investment.data",
             "Read external investment data. Use quotes for current Twelve Data prices, portfolio_value for a "
-                    + "latest-quote valuation, fx for a reference exchange rate, sec_filings for official EDGAR "
+                    + "latest-quote valuation, fx for a reference exchange rate and optional budget conversion "
+                    + "(amount in base_currency multiplied by rate to quote_currency), sec_filings for official EDGAR "
                     + "filings, paper_account for Alpaca paper status, or paper_order to submit a paper-only order "
                     + "after explicit confirmation. Never treats a quote as a guarantee or submits a live order.",
             parameters());
@@ -152,17 +153,31 @@ public final class InvestmentDataTool implements Tool {
         String pair = text(arguments, "pair");
         String base = text(arguments, "base_currency");
         String quote = text(arguments, "quote_currency");
+        BigDecimal amount = decimal(arguments, "amount");
+        if (amount != null && amount.signum() <= 0) {
+            throw new IllegalArgumentException("amount must be positive");
+        }
         if (!pair.isBlank()) {
             String[] parts = pair.toUpperCase(Locale.ROOT).split("[/_-]");
             if (parts.length != 2) throw new IllegalArgumentException("pair must look like USD/THB");
             base = parts[0];
             quote = parts[1];
         }
+        if (amount != null && (base.isBlank() || quote.isBlank())) {
+            throw new IllegalArgumentException("budget conversion requires explicit base_currency and quote_currency or pair");
+        }
         if (base.isBlank()) base = investments.policy(ownerId).baseCurrency();
         if (quote.isBlank()) quote = base.equalsIgnoreCase("THB") ? "USD" : "THB";
         var rate = external.latestFxRate(base, quote);
-        return Map.of("base_currency", rate.baseCurrency(), "quote_currency", rate.quoteCurrency(),
-                "rate", rate.rate(), "date", rate.date(), "source", rate.source());
+        Map<String, Object> result = new LinkedHashMap<>(Map.of(
+                "base_currency", rate.baseCurrency(), "quote_currency", rate.quoteCurrency(),
+                "rate", rate.rate(), "date", rate.date(), "source", rate.source()));
+        if (amount != null) {
+            result.put("amount", amount);
+            result.put("converted_amount", amount.multiply(rate.rate(), MATH).setScale(2, RoundingMode.HALF_UP));
+            result.put("conversion_basis", "REFERENCE_RATE_BEFORE_BROKER_SPREAD_AND_FEES");
+        }
+        return Map.copyOf(result);
     }
 
     private Map<String, Object> secFilings(Map<String, Object> arguments) {
@@ -283,6 +298,9 @@ public final class InvestmentDataTool implements Tool {
                 "Three-letter FX quote currency."));
         values.put("pair", new ToolParameter("pair", ToolParameterType.STRING, false,
                 "FX pair such as USD/THB."));
+        values.put("amount", new ToolParameter("amount", ToolParameterType.NUMBER, false,
+                "Positive budget in the FX base currency; optional for fx. Explicit currencies or pair are required. "
+                        + "Returns converted_amount in quote currency before broker spread and fees."));
         values.put("limit", new ToolParameter("limit", ToolParameterType.INTEGER, false,
                 "Maximum SEC filings to return, from 1 to 20."));
         values.put("quantity", new ToolParameter("quantity", ToolParameterType.NUMBER, false,

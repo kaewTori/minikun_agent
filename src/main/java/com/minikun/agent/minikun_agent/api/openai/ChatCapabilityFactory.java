@@ -22,6 +22,30 @@ final class ChatCapabilityFactory {
     private final CooperationRouter cooperationRouter = new CooperationRouter();
     private final ToolRuntimeIntentDetector toolIntent = new ToolRuntimeIntentDetector();
 
+    java.util.Optional<CapabilityInstruction> investmentAdvice(
+            String message, String conversationContext, boolean nativeToolsAvailable) {
+        if (!com.minikun.investment.InvestmentAdviceIntent.matches(message, conversationContext)) {
+            return java.util.Optional.empty();
+        }
+        String tools = nativeToolsAvailable ? """
+                MINIKUN_INVESTMENT_ADVICE_REQUIRED
+                The read-only advice runtime supplies the authenticated portfolio, dated FX and issuer evidence,
+                then validates allocations and renders their monetary amounts and projected cost weights in Java.
+                Use converted_amount and costAllocationPercent as verified cost-based inputs, not market-value weights.
+                Budget revisions replace the old budget. Currency-only follow-ups preserve the validated plan.
+                Recommendations never authorize a transaction, order, policy change or saved thesis.
+                """ : """
+                Native tools are unavailable this turn. Use explicitly supplied holdings only for conditional
+                cost-based analysis; current ledger, prices and FX have not been checked. Never invent a rate.
+                """;
+        return java.util.Optional.of(new CapabilityInstruction("Portfolio top-up advice", (tools + """
+                The user is adding to an existing portfolio, not starting investing or a business.
+                Lead with one preferred concrete allocation and explain why it fits the actual holdings and mandate.
+                A missing thesis alone does not block a provisional long-term suggestion. State assumptions and
+                uncertainties, respect policy conflicts, and never claim guaranteed returns or low-risk equity.
+                """).strip(), true));
+    }
+
     CapabilityInstruction visualOutput(boolean svgAvailable, boolean planned) {
         String formats = svgAvailable
                 ? "ระบบนี้สร้างและแนบไฟล์ภาพ SVG สำหรับอินโฟกราฟิก ผังงาน ไทม์ไลน์ กราฟ และการ์ดข้อความได้ "
@@ -181,14 +205,18 @@ final class ChatCapabilityFactory {
             String concreteEvidence = selection.selection().selectedCandidates().stream()
                     .filter(candidate -> candidate.source() == KnowledgeSource.SEARCH)
                     .limit(3)
-                    .map(candidate -> truncate(candidate.content(), 350))
+                    .map(candidate -> "[" + candidate.candidateId() + "] " + truncate(candidate.content()
+                            .replace(" (" + candidate.provenance() + ")", ""), 350)
+                            + "\nSource URL: " + candidate.provenance())
                     .collect(Collectors.joining("\n"));
             capabilities.add(new CapabilityInstruction("Web search evidence", ("""
                     A web search returned usable evidence. Answer the original question now with concrete facts
                     from the evidence below and cite its URLs. Treat profile self-descriptions as claims. Do not say
                     information was unavailable, ask for identifiers already present, or output bracketed/template
-                    placeholders. Never cite internal candidate IDs such as [search-1] or [browser-2]. Cite only as
-                    [descriptive source title](https://source-url), and omit a citation when no real URL is supplied.
+                    placeholders. Cite a supplied evidence ID exactly in square brackets, for example [search-1].
+                    The application resolves the ID to a short descriptive link with the complete Source URL.
+                    Do not compose, shorten, or invent URLs or create Markdown links yourself.
+                    Omit a citation when no real source URL is supplied.
                     If evidence is incomplete, give supported findings first, then name the remaining uncertainty.
 
                     Concrete search evidence:

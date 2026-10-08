@@ -127,9 +127,8 @@ public final class InvestmentExternalDataService {
         try {
             JsonNode root = objectMapper.readTree(response);
             BigDecimal rate = decimal(root, "rate");
-            LocalDate date = root.hasNonNull("date")
-                    ? LocalDate.parse(root.path("date").asText())
-                    : clock.instant().atZone(java.time.ZoneOffset.UTC).toLocalDate();
+            if (rate.signum() <= 0) throw new IllegalStateException("exchange rate must be positive");
+            LocalDate date = LocalDate.parse(root.path("date").asText());
             return new FxRate(base, quote, rate, date, "frankfurter");
         } catch (Exception exception) {
             throw new IllegalStateException("Frankfurter response is invalid", exception);

@@ -3,13 +3,13 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#07140f">
+  <meta name="theme-color" content="#0d1411">
   <meta name="description" content="Minikun Voice Room — ห้องคุยสดกับมินิคุง">
   <title>Minikun Voice Room</title>
   <link rel="icon" href="/cockpit/minikun-avatar.jpg">
   <link rel="stylesheet" href="/cockpit/minikun-system.css?v=20260922-minimal">
   <link rel="stylesheet" href="/cockpit/voice-room.css?v=20260922-minimal">
-  <link rel="stylesheet" href="/cockpit/minikun-minimal.css?v=20260926-attachment2">
+  <link rel="stylesheet" href="/cockpit/minikun-minimal.css?v=20261007-links3">
 </head>
 <body>
   <a class="skip-link" href="#main-content">ข้ามไปยังเนื้อหาหลัก</a>
@@ -17,7 +17,7 @@
     <aside class="rail" aria-label="เมนูหลัก">
       <a class="brand" href="/cockpit/" aria-label="กลับไปหน้า Minikun">
         <img src="/cockpit/minikun-avatar.jpg" alt="" width="42" height="42">
-        <span><strong>MINIKUN</strong><small>PERSONAL AGENT</small></span>
+        <span><strong>minikun</strong><small>พื้นที่เล็ก ๆ ของเรา</small></span>
       </a>
       <button class="new-chat-button new-room" type="button" id="new-room">
         <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>
@@ -50,11 +50,11 @@
         </div>
         <div class="topbar-actions">
           <span class="model-pill">VOICE</span>
-          <button class="top-action" id="top-settings" type="button" aria-label="เลื่อนไปที่แผงตั้งค่าเสียง"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"></path><circle cx="16" cy="7" r="2"></circle><circle cx="8" cy="17" r="2"></circle></svg><span>จังหวะเสียง</span></button>
+          <button class="top-action" id="top-settings" type="button" aria-label="เปิดการตั้งค่าเสียง"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"></path><circle cx="16" cy="7" r="2"></circle><circle cx="8" cy="17" r="2"></circle></svg><span>จังหวะเสียง</span></button>
         </div>
       </header>
 
-      <div class="workspace-body">
+      <div class="workspace-body" tabindex="0" aria-label="ห้องคุยด้วยเสียง">
         <div class="room-grid">
           <section class="avatar-stage" id="avatar-stage" data-state="ready" aria-labelledby="stage-title">
             <div class="stage-heading">
@@ -103,8 +103,14 @@
             </form>
             <p class="stage-footnote">กลับมาอ่านบทสนทนานี้ต่อได้ที่หน้าแชต</p>
           </section>
+        </div>
+      </div>
+    </main>
+  </div>
 
-          <div class="side-stack">
+  <dialog id="voice-settings-dialog" class="voice-settings-dialog" aria-labelledby="voice-settings-title">
+    <div class="dialog-heading"><h2 id="voice-settings-title">ตั้งค่าห้องเสียง</h2><button class="close-button" type="button" id="close-voice-settings" aria-label="ปิดการตั้งค่าเสียง">×</button></div>
+          <div class="side-stack" tabindex="0" aria-label="การตั้งค่าเสียงและประวัติ">
             <details class="voice-deck" id="voice-deck">
               <summary class="panel-header voice-deck-summary">
                 <div><div class="panel-kicker">ปรับเสียงให้ถูกใจ</div><h2 id="voice-deck-title">จังหวะเสียง</h2></div>
@@ -129,24 +135,21 @@
               </div>
             </details>
 
-            <section class="sync-card" aria-labelledby="sync-title">
-              <header class="panel-header">
+            <details class="sync-card" aria-labelledby="sync-title">
+              <summary class="panel-header">
                 <div><div class="panel-kicker">CHAT SYNC <span class="live-dot"></span></div><h2 id="sync-title">ประวัติอยู่ที่หน้าแชต</h2></div>
                 <span class="deck-status" id="sync-status">LOCAL</span>
-              </header>
+              </summary>
               <p class="sync-copy">คุยแล้วกลับมาอ่านต่อได้ บทสนทนาเสียงจะบันทึกไว้ในแชตเดียวกันครับ</p>
-              <div class="sync-summary"><span class="sync-orb"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 0 1 13.7-5.6M20 12a8 8 0 0 1-13.7 5.6"></path><path d="M17 3v4h-4M7 21v-4h4"></path></svg></span><div><span>VOICE SESSION</span><strong id="sync-turns">2 turns พร้อมซิงก์</strong></div></div>
+              <div class="sync-summary"><span class="sync-orb"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 0 1 13.7-5.6M20 12a8 8 0 0 1-13.7 5.6"></path><path d="M17 3v4h-4M7 21v-4h4"></path></svg></span><div><span>VOICE SESSION</span><strong id="sync-turns">กำลังอ่านบทสนทนา…</strong></div></div>
               <button class="sync-link" id="open-chat-history" type="button">เปิดประวัติในหน้าแชตหลัก<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6"></path></svg></button>
-            </section>
+            </details>
           </div>
-        </div>
-      </div>
-    </main>
-  </div>
+  </dialog>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
   <script src="/cockpit/cockpit-core.js?v=20260913-core2" defer></script>
-  <script src="/cockpit/voice-room.js?v=20260913-redesign6" defer></script>
+  <script src="/cockpit/voice-room.js?v=20261007-design1" defer></script>
 </body>
 </html>

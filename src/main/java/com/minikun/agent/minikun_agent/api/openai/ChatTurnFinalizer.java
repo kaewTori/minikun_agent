@@ -84,7 +84,7 @@ final class ChatTurnFinalizer {
         observeConversationThread(ownerId, conversationId, userMessage.content(), assistantContent);
         reflectOnCompletedConversation(new CompletedConversation(ownerId, conversationId.value(), List.of(
                 new CompletedConversation.Message("user", userMessage.content()),
-                new CompletedConversation.Message("assistant", assistantContent))));
+                new CompletedConversation.Message("assistant", assistantContent))), requestId);
     }
 
     void persistDeterministic(
@@ -166,7 +166,7 @@ final class ChatTurnFinalizer {
         return "system".equalsIgnoreCase(message.role());
     }
 
-    private void reflectOnCompletedConversation(CompletedConversation completed) {
+    private void reflectOnCompletedConversation(CompletedConversation completed, String requestId) {
         String ownerId = completed.ownerId();
         ConversationId conversationId = new ConversationId(completed.conversationId());
         if (!reflectionEnabled) {
@@ -177,18 +177,15 @@ final class ChatTurnFinalizer {
             if (service == null) {
                 return;
             }
-            Optional<CompletedConversation> snapshot = Optional.of(completed);
-            if (snapshot.isEmpty()) return;
             if (deferredReflectionService != null) {
-                boolean submitted = deferredReflectionService.submit(
-                        () -> service.reflect(snapshot.get()));
+                boolean submitted = deferredReflectionService.submit(service, completed, requestId);
                 if (!submitted) {
-                    log.warn("memory_reflection conversation_id={} success=false reason=queue_full action=dropped",
+                    log.warn("memory_reflection conversation_id={} success=false reason=queue_unavailable action=dropped",
                             conversationId.value());
                 }
                 return;
             }
-            service.reflect(snapshot.get());
+            service.reflect(completed);
         } catch (RuntimeException exception) {
             log.warn("memory_reflection conversation_id={} success=false", conversationId.value(), exception);
         }

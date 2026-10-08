@@ -756,7 +756,8 @@ public class ChatService {
         Optional<ConversationSummary> summarySnapshot = OptionalContextBudget.await(
                 summaryFuture, contextDeadline, Optional.empty(), "summary_wait", performanceMetrics);
         String conversationSummary = summarySnapshot.map(ConversationSummary::content).orElse("");
-        String classifierContext = requestInspector.classifierContext(history, commandCatalog);
+        String classifierContext = requestInspector.classifierContext(
+                requestInspector.visualHistory(history, request), commandCatalog);
         String visualRequest = turnPlanner.resolveVisualRequest(userMessage.content(),
                 requestInspector.visualHistory(history, request));
         TurnPlan turnPlan = turnPlanner.plan(userMessage.content(), classifierContext, interactionMode,
@@ -907,22 +908,17 @@ public class ChatService {
     }
     public EmbeddingResponse embeddings(EmbeddingRequest request) {
         long started = System.nanoTime();
-        List<EmbeddingResponse.Data> data = java.util.stream.IntStream.range(0, request.texts().size())
-                .mapToObj(index -> new EmbeddingResponse.Data(
-                        "embedding", toFloatList(embeddingModel.embed(request.texts().get(index))), index))
-                .toList();
-        EmbeddingResponse result = new EmbeddingResponse("list", data,
-                requestInspector.publicModelName(),
-                new EmbeddingResponse.Usage(0, 0));
+        String model = modelsService.snapshot().embeddingModel().value();
+        if (request.model() != null && !request.model().isBlank() && !request.model().equals(model)
+                && !request.model().equals(requestInspector.publicModelName()))
+            throw new IllegalArgumentException("embedding model is not configured: " + request.model());
+        List<String> texts = request.texts();
+        List<float[]> vectors = embeddingModel.embed(texts);
+        if (vectors == null || vectors.size() != texts.size())
+            throw new IllegalStateException("embedding batch size mismatch");
+        EmbeddingResponse result = responseFactory.embeddings(model, vectors);
         logModelDuration("embedding_model", started, null);
         return result;
-    }
-    private List<Float> toFloatList(float[] vector) {
-        List<Float> values = new java.util.ArrayList<>(vector.length);
-        for (float value : vector) {
-            values.add(value);
-        }
-        return values;
     }
     private String memoryOwnerId(ChatCompletionRequest request, ConversationId conversationId) {
         String requestedOwnerId = request.owner_id();

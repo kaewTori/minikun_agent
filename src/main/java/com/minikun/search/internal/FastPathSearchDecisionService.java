@@ -27,6 +27,8 @@ public final class FastPathSearchDecisionService implements SearchDecisionServic
                     + "research|investigat(?:e|ion)|fact[- ]?check|deep\\s+dive|"
                     + "https?://|www\\.)",
             Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+    private static final Pattern MODEL_LOOKUP = Pattern.compile(
+            "(?iu)(recommend|suggest|restaurant|cafe|museum|library|best|quote|citation|official)");
     private static final Pattern CASUAL_CONVERSATION = Pattern.compile(
             "(สวัสดี|หวัดดี|เป็น(?:ยัง)?ไง|ขอบคุณ|ขอบใจ|ฝันดี|คิดถึง|เหงา|เหนื่อย|เครียด|เศร้า|ดีใจ|"
                     + "ไม่สบายใจ|คุย(?:กัน|เล่น|เป็นเพื่อน|แบบ)|คู่หู|เพื่อนคุย|companion|hello|hi\\b|"
@@ -56,7 +58,8 @@ public final class FastPathSearchDecisionService implements SearchDecisionServic
             SearchDecisionService delegate, SearchDecisionService rules,
             MeterRegistry meterRegistry, boolean enabled) {
         this.delegate = Objects.requireNonNull(delegate, "delegate must not be null");
-        this.rules = Objects.requireNonNull(rules, "rules must not be null");
+        // No keyword search overrides in LLM mode; only the known no-search paths below.
+        this.rules = rules;
         this.continuityResolver = new ConversationContinuityResolver();
         this.cooperationRouter = new CooperationRouter();
         this.meterRegistry = meterRegistry;
@@ -65,7 +68,7 @@ public final class FastPathSearchDecisionService implements SearchDecisionServic
 
     @Override
     public SearchDecision decide(String query) {
-        if (GroundingIntent.requiresSource(query, "")) {
+        if (rules != null && GroundingIntent.requiresSource(query, "")) {
             return new SearchDecision(true, query, SearchDecisionReason.FACT_LOOKUP);
         }
         if (dynamicLocalDiscovery(query)) {
@@ -77,7 +80,10 @@ public final class FastPathSearchDecisionService implements SearchDecisionServic
 
     @Override
     public SearchDecision decide(String query, String conversationContext) {
-        if (GroundingIntent.requiresSource(query, conversationContext)) {
+        if (rules == null && conversationContext != null && !conversationContext.isBlank()) {
+            return delegate.decide(query, conversationContext);
+        }
+        if (rules != null && GroundingIntent.requiresSource(query, conversationContext)) {
             return new SearchDecision(true, query, SearchDecisionReason.FACT_LOOKUP);
         }
         if (dynamicLocalDiscovery(query)) {
@@ -107,18 +113,22 @@ public final class FastPathSearchDecisionService implements SearchDecisionServic
             return fastNoSearch("", "blank");
         }
         String value = query.trim().toLowerCase(Locale.ROOT);
-        if (!LIVE_INFORMATION.matcher(value).find()
-                && CASUAL_CONVERSATION.matcher(value).find()) {
+        boolean live = LIVE_INFORMATION.matcher(value).find()
+                || rules == null && MODEL_LOOKUP.matcher(value).find();
+        if (!live
+                && (rules == null ? CASUAL_CONVERSATION.matcher(value).matches()
+                                  : CASUAL_CONVERSATION.matcher(value).find())) {
             return fastNoSearch(query, "conversation");
         }
-        if (!LIVE_INFORMATION.matcher(value).find()
+        if (!live
                 && GENERAL_KNOWLEDGE.matcher(value).matches()) {
             return fastNoSearch(query, "general_knowledge");
         }
-        if (!LIVE_INFORMATION.matcher(value).find()
+        if (!live
                 && "creative_request".equals(cooperationRouter.decide(value).reason())) {
             return fastNoSearch(query, "creative_content");
         }
+        if (rules == null) return null;
         SearchDecision ruleDecision = rules.decide(query);
         if (ruleDecision.shouldSearch()) {
             return ruleDecision;
@@ -127,7 +137,7 @@ public final class FastPathSearchDecisionService implements SearchDecisionServic
     }
 
     private boolean dynamicLocalDiscovery(String query) {
-        return enabled && RuleBasedSearchDecisionService.isLocalDiscovery(query);
+        return enabled && rules != null && RuleBasedSearchDecisionService.isLocalDiscovery(query);
     }
 
     private SearchDecision requireLocalSearch(String query, SearchDecision decision) {

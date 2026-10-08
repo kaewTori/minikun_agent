@@ -2,6 +2,7 @@ package com.minikun.agent.minikun_agent.api.openai;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -137,8 +138,34 @@ class ChatServiceDiagnosticsTest {
         return service(chatModel, diagnosticsService, null);
     }
 
+    @Test
+    void embeddingsUseOneBatchReturnActualModelAndRejectWrongModelsOrInvalidInput() {
+        String name = "embeddinggemma-2:270m-mxfp8-text";
+        EmbeddingModel model = mock(EmbeddingModel.class);
+        when(model.embed(List.of("first", "second"))).thenReturn(List.of(new float[] {1, 0}, new float[] {0, 1}));
+        ChatService service = service(mock(ChatModel.class), mock(DiagnosticsService.class), null,
+                model, new ModelsService("chat", name, "memory", "task"));
+        var request = new com.minikun.agent.minikun_agent.api.openai.dto.EmbeddingRequest("mini-kun", List.of("first", "second"));
+        var response = service.embeddings(request);
+        assertEquals(name, response.model());
+        assertEquals(2, response.data().size());
+        assertEquals(1, response.data().get(1).index());
+        verify(model).embed(List.of("first", "second"));
+        assertThrows(IllegalArgumentException.class, () -> service.embeddings(
+                new com.minikun.agent.minikun_agent.api.openai.dto.EmbeddingRequest("qwen3-embedding:0.6b", "first")));
+        assertThrows(IllegalArgumentException.class, () -> new com.minikun.agent.minikun_agent.api.openai.dto.EmbeddingRequest(name, List.of(1)).texts());
+        assertThrows(IllegalArgumentException.class, () -> new com.minikun.agent.minikun_agent.api.openai.dto.EmbeddingRequest(name, List.of()).texts());
+        when(model.embed(List.of("first", "second"))).thenReturn(List.of(new float[] {1, 0}));
+        assertThrows(IllegalStateException.class, () -> service.embeddings(request));
+    }
+
     private ChatService service(
             ChatModel chatModel, DiagnosticsService diagnosticsService, DiagnosticsPromptBuilder promptBuilder) {
+        return service(chatModel, diagnosticsService, promptBuilder, mock(EmbeddingModel.class), mock(ModelsService.class));
+    }
+
+    private ChatService service(ChatModel chatModel, DiagnosticsService diagnosticsService,
+            DiagnosticsPromptBuilder promptBuilder, EmbeddingModel embeddingModel, ModelsService modelsService) {
         CharacterSpecification character = new CharacterLoader(MCS_ROOT).load();
         DiagnosticsPromptBuilder builder = promptBuilder == null
                 ? spy(new DiagnosticsPromptBuilder(new MinikunPersonaProvider(character)))
@@ -147,7 +174,7 @@ class ChatServiceDiagnosticsTest {
                 new DefaultActiveChatModelProvider(
                     new ActiveModelConfiguration(ChatModelId.EXISTING),
                     new DefaultChatModelProviderRegistry(List.of(new ExistingChatModelProvider(chatModel)))),
-                mock(EmbeddingModel.class),
+                embeddingModel,
                 mock(ChatTransactionLogger.class),
                 mock(ConversationMemoryService.class),
                 mock(ObjectProvider.class),
@@ -163,7 +190,7 @@ class ChatServiceDiagnosticsTest {
                 new CommandFormatter(),
                 mock(VersionService.class),
                 mock(VersionFormatter.class),
-                mock(ModelsService.class),
+                modelsService,
                 mock(ModelsFormatter.class),
                 mock(CacheService.class),
                 mock(CacheFormatter.class),

@@ -35,6 +35,22 @@
     return String(value ?? "");
   }
 
+  function investmentReplySymbol(value, baseUrl, canonicalOrigin = baseUrl) {
+    try {
+      const url = new URL(value, baseUrl);
+      const origins = new Set([new URL(baseUrl).origin, new URL(canonicalOrigin).origin]);
+      if (!origins.has(url.origin) || !["http:", "https:"].includes(url.protocol)
+          || url.username || url.password || !["/cockpit/", "/cockpit/index.html"].includes(url.pathname)) return "";
+      const symbol = url.searchParams.get("reply_symbol") || "";
+      return /^[A-Z][A-Z0-9.-]{0,7}$/.test(symbol) ? symbol : "";
+    } catch (_) { return ""; }
+  }
+
+  function investmentReplyDraft(symbol) {
+    return /^[A-Z][A-Z0-9.-]{0,7}$/.test(symbol)
+      ? `เหตุผลที่ถือ ${symbol}: \nทบทวนเมื่อ: ` : "";
+  }
+
   function normalizeMessage(value = {}) {
     const metadata = value.metadata || {};
     return {
@@ -277,6 +293,8 @@
   return Object.freeze({
     uniqueId,
     textContent,
+    investmentReplySymbol,
+    investmentReplyDraft,
     normalizeMessage,
     normalizeConversations,
     compactMessages,

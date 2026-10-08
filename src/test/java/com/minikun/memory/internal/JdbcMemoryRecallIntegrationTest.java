@@ -122,21 +122,21 @@ class JdbcMemoryRecallIntegrationTest {
                     ('owner', 'old', ?, 'PREFERENCE', 'LLM_EXTRACTION', 'ชอบเดินทางด้วยรถไฟ', now() - interval '1 year', .8, 'fixture'),
                     ('other', 'private', ?, 'PREFERENCE', 'USER_DIRECTIVE', 'ชอบเดินทางด้วยรถไฟ', now(), 1, 'fixture')
                     """, oldId, privateId);
-            jdbc.update("UPDATE minikun_memory SET embedding = '[1,0]'::vector, embedding_model = 'fixture-model' WHERE id = ?", privateId);
+            jdbc.update("UPDATE minikun_memory SET embedding = '[1,0]'::vector, embedding_model = 'embeddinggemma-2:270m-mxfp8-text' WHERE id = ?", privateId);
             var model = mock(EmbeddingModel.class);
-            when(model.embed("การคมนาคมที่พี่โปรด")).thenReturn(new float[] {1, 0});
+            when(model.embed("task: search result | query: การคมนาคมที่พี่โปรด")).thenReturn(new float[] {1, 0});
             when(model.embed(org.mockito.ArgumentMatchers.<java.util.List<String>>any())).thenAnswer(invocation ->
                     ((java.util.List<String>) invocation.getArgument(0)).stream()
                             .map(text -> text.contains("รถไฟ") ? new float[] {1, 0} : new float[] {0, 1}).toList());
-            var repository = new JdbcMemoryRepository(jdbc, new SimpleMeterRegistry(), model, "fixture-model", .85);
+            var repository = new JdbcMemoryRepository(jdbc, new SimpleMeterRegistry(), model, "embeddinggemma-2:270m-mxfp8-text", .85);
             repository.backfillEmbeddings();
             assertTrue(jdbc.queryForObject("SELECT embedding IS NOT NULL FROM minikun_memory WHERE id = ?", Boolean.class, oldId));
             var matches = repository.findLongTerm(new LongTermMemoryScope("owner"), "การคมนาคมที่พี่โปรด", 200);
             assertEquals(oldId, matches.getFirst().id().value());
             assertTrue(matches.stream().allMatch(memory -> memory.ownerId().equals("owner")));
             verify(model, times(1)).embed(anyList());
-            verify(model, times(1)).embed("การคมนาคมที่พี่โปรด");
-            when(model.embed("รถไฟ")).thenThrow(new IllegalStateException("temporary embedding outage"));
+            verify(model, times(1)).embed("task: search result | query: การคมนาคมที่พี่โปรด");
+            when(model.embed("task: search result | query: รถไฟ")).thenThrow(new IllegalStateException("temporary embedding outage"));
             assertEquals(oldId, repository.findLongTerm(new LongTermMemoryScope("owner"), "รถไฟ", 200).getFirst().id().value());
         }
     }

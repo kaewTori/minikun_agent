@@ -1283,10 +1283,12 @@
   function openVoiceSettings() {
     const deck = $('#voice-deck');
     if (deck) deck.open = true;
-    deck?.scrollIntoView({ behavior: reducedMotion() ? 'auto' : 'smooth', block: 'center' });
+    const dialog = $('#voice-settings-dialog');
+    if (dialog && !dialog.open) dialog.showModal();
   }
 
   selectConversation();
+  $('#close-voice-settings').addEventListener('click', () => $('#voice-settings-dialog').close());
   loadControls();
   updateConversationCount();
   renderQueue();

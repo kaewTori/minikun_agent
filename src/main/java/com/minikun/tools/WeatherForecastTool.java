@@ -10,16 +10,27 @@ import org.springframework.stereotype.Component;
 /** Structured weather capability; location and time are resolved at runtime. */
 @Component
 public final class WeatherForecastTool implements Tool {
+    static final String ANSWER_GUIDANCE =
+            "For rain timing, lead with the likely hourly intervals and their probabilities, use the "
+                    + "location timezone, cite the source and retrieval time, and give practical outdoor advice. "
+                    + "Hourly from/to delimit precipitation and gust intervals; weatherDescription is at to. "
+                    + "For an ongoing interval, describe the remaining time from retrieval onward. "
+                    + "Treat null/unknown values as unavailable, never as zero. "
+                    + "Daily probability is a daily maximum, not an hourly probability or percentage of area. "
+                    + "Forecasts are uncertain; do not invent exact onset times, radar observations, warnings "
+                    + "or agreement between multiple sources. If hourly data is missing, say timing is unavailable.";
     private static final ToolDefinition DEFINITION = new ToolDefinition(
             "weather.get_forecast",
-            "Get current weather or a forecast for a user-provided location and time. "
+            "Get current weather, daily and hourly forecasts for a user-provided location and time. "
                     + "Use this for weather, rain, temperature, wind, umbrella, outdoor-plan, "
-                    + "and forecast questions. Do not guess coordinates.",
+                    + "and forecast questions, including when rain is likely tonight. Do not guess coordinates. "
+                    + ANSWER_GUIDANCE,
             Map.of(
                     "location", new ToolParameter("location", ToolParameterType.STRING, true,
                             "Place name, address, postal code, or coordinates provided by the user."),
                     "when", new ToolParameter("when", ToolParameterType.STRING, false,
-                            "Current, today, tomorrow, or an ISO date such as 2026-08-20."),
+                            "Current, today, tonight (18:00–06:00 next day), tomorrow, tomorrow evening, "
+                                    + "or an ISO date such as 2026-08-20."),
                     "latitude", new ToolParameter("latitude", ToolParameterType.NUMBER, false,
                             "Latitude supplied by the user's device for a current-location forecast."),
                     "longitude", new ToolParameter("longitude", ToolParameterType.NUMBER, false,

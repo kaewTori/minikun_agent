@@ -34,27 +34,74 @@
       .trim();
   }
 
-  function renderInline(value) {
-    const codeSpans = [];
-    const links = [];
-    let html = escapeHtml(value).replace(/`([^`\n]+)`/g, (_, code) => {
-      const token = `\u0000CODE${codeSpans.length}\u0000`;
-      codeSpans.push(`<code>${code}</code>`);
-      return token;
-    });
-    html = html
-      .replace(/\[([^\]]+)]\((https?:\/\/[^\s)]+)\)/g, (_, label, url) => {
-        const token = `\u0000LINK${links.length}\u0000`;
-        links.push(`<a href="${url}" target="_blank" rel="noopener noreferrer">${label}</a>`);
-        return token;
-      })
+  function safeUrl(value) {
+    const text = String(value ?? "").trim();
+    if (/[\u0000-\u0020<>]|…|\.\.\.|%(?![\da-f]{2})/i.test(text)) return "";
+    try {
+      const url = new URL(text);
+      return ["http:", "https:"].includes(url.protocol) ? url.href : "";
+    } catch (_) { return ""; }
+  }
+
+  function linkLabel(label, url) {
+    const text = String(label ?? "").trim();
+    if (text && !/^<?(?:https?:\/\/|www\.)/i.test(text)) return text;
+    try { return new URL(url).hostname.replace(/^www\./, ""); }
+    catch (_) { return "แหล่งอ้างอิง"; }
+  }
+
+  function renderInline(value, sources = []) {
+    const literals = [];
+    const protect = (html) => {
+      literals.push(html);
+      return `\u0000INLINE${literals.length - 1}\u0000`;
+    };
+    const link = (label, target, complete = true) => {
+      const url = safeUrl(target);
+      const title = linkLabel(label, target);
+      if (!url) return protect(`<span class="reference-unavailable">${escapeHtml(title)} · ลิงก์ไม่ครบ</span>`);
+      if (!complete) return protect(escapeHtml(title));
+      sources.push({ url, title });
+      return protect(`<a href="${escapeHtml(url)}" rel="noopener noreferrer">${escapeHtml(title)}</a>`);
+    };
+    let text = String(value ?? "").replace(/\u0000/g, "")
+      .replace(/`([^`\n]+)`/g, (_, code) => protect(`<code>${escapeHtml(code)}</code>`))
+      .replace(/\[([^\]\n]+)]\(\s*(?:<(https?:\/\/[^<>\s]+)>|((?:[^()\s]|\([^()\s]*\))+))\s*\)/gi,
+        (match, label, angle, target) => /^https?:\/\//i.test(angle || target) ? link(label, angle || target) : protect(escapeHtml(match)))
+      .replace(/\[([^\]\n]+)]\((https?:\/\/[^\s]*)/gi, (_, label, target) => link(label, target, false))
+      .replace(/<(https?:\/\/[^<>\s]+)>|https?:\/\/[^\s<>"']+/gi, (match, angle) => {
+        if (/…|\.\.\./.test(match)) return link("", angle || match);
+        let url = angle || match.replace(/[.,;:!?]+$/, "");
+        while (/[)\]}]$/.test(url)) {
+          const end = url.at(-1), start = { ")": "(", "]": "[", "}": "{" }[end];
+          if (url.split(end).length <= url.split(start).length) break;
+          url = url.slice(0, -1);
+        }
+        return link("", url) + (angle ? "" : match.slice(url.length));
+      });
+    let html = escapeHtml(text)
       .replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>")
       .replace(/__([^_\n]+)__/g, "<strong>$1</strong>")
       .replace(/~~([^~\n]+)~~/g, "<del>$1</del>")
       .replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, "$1<em>$2</em>")
       .replace(/(^|[^_])_([^_\n]+)_(?!_)/g, "$1<em>$2</em>");
-    html = links.reduce((result, link, index) => result.replace(`\u0000LINK${index}\u0000`, link), html);
-    return codeSpans.reduce((result, block, index) => result.replace(`\u0000CODE${index}\u0000`, block), html);
+    return html.replace(/\u0000INLINE(\d+)\u0000/g, (_, index) => literals[Number(index)]);
+  }
+
+  function extractSources(value) {
+    let fenced = false;
+    const prose = normalize(value).split("\n").filter((line) => {
+      if (/^\s*```/.test(line)) { fenced = !fenced; return false; }
+      return !fenced;
+    }).join("\n");
+    const sources = [];
+    renderInline(prose, sources);
+    const unique = new Map();
+    for (const source of sources) {
+      const previous = unique.get(source.url);
+      if (!previous || previous.title === linkLabel("", source.url)) unique.set(source.url, source);
+    }
+    return [...unique.values()].slice(0, 12);
   }
 
   function splitTableRow(line) {
@@ -171,7 +218,7 @@
       if (/^\s*>\s?/.test(line)) {
         const quote = [];
         while (index < lines.length && /^\s*>\s?/.test(lines[index])) quote.push(lines[index++].replace(/^\s*>\s?/, ""));
-        output.push(`<blockquote>${quote.map(renderInline).join("<br>")}</blockquote>`);
+        output.push(`<blockquote>${quote.map(line => renderInline(line)).join("<br>")}</blockquote>`);
         continue;
       }
 
@@ -205,10 +252,10 @@
       while (index < lines.length && lines[index].trim() && (paragraph.length === 0 || !isBlockStart(lines, index))) {
         paragraph.push(lines[index++]);
       }
-      output.push(`<p>${paragraph.map(renderInline).join("<br>")}</p>`);
+      output.push(`<p>${paragraph.map(line => renderInline(line)).join("<br>")}</p>`);
     }
     return output.join("");
   }
 
-  return { normalize, render };
+  return { normalize, render, safeUrl, linkLabel, extractSources };
 });

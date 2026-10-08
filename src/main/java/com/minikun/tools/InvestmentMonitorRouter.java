@@ -15,13 +15,18 @@ import java.util.regex.Pattern;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
+import org.springframework.core.annotation.Order;
 
 /** Routes daily investment/news questions to deterministic evidence before model generation. */
 @Component
+@Order(10)
 @ConditionalOnProperty(name = "minikun.investment.enabled", havingValue = "true", matchIfMissing = true)
 @ConditionalOnBean(InvestmentMonitorTool.class)
 public final class InvestmentMonitorRouter implements ToolRequestRouter {
     private static final String TOOL_NAME = "investment.monitor";
+    private static final Pattern THESIS_REPLY = Pattern.compile(
+            "(?isu)^\\s*(?:บันทึก\\s*)?เหตุผลที่ถือ\\s+([A-Z][A-Z0-9.-]{0,7})\\s*[:：]\\s*(.+?)"
+                    + "\\s*[;；\\n]\\s*ทบทวนเมื่อ\\s*[:：]\\s*(.+?)\\s*$");
     private static final Pattern TARGET = Pattern.compile(
             "(?iu)(พอร์ต|หุ้น|การลงทุน|ตลาดทุน|ตลาดหุ้น|portfolio|holdings?|investment|market)");
     private static final Pattern ACTION = Pattern.compile(
@@ -68,6 +73,28 @@ public final class InvestmentMonitorRouter implements ToolRequestRouter {
 
     @Override
     public Optional<ToolEvidence> route(String userText, ConversationId conversationId, String ownerId) {
+        if (userText != null && conversationId != null) {
+            var thesis = THESIS_REPLY.matcher(userText);
+            if (thesis.matches()) {
+                if (thesis.group(2).strip().matches("[.\\s…]+") || thesis.group(3).strip().matches("[.\\s…]+"))
+                    return Optional.of(ToolEvidence.finalVerified("investment.manage",
+                            "เติมเหตุผลที่ถือและเงื่อนไขทบทวนจริงแทนจุดไข่ปลาก่อนครับ ยังไม่ได้บันทึกข้อมูล"));
+                String callId = "investment-thesis-" + UUID.randomUUID();
+                ToolResult proposal = executor.execute(new ToolCallContext(conversationId, callId, ownerId),
+                        new ToolCall(callId, "investment.manage", Map.of("action", "save_thesis",
+                                "symbol", thesis.group(1).toUpperCase(Locale.ROOT), "summary", thesis.group(2).strip(),
+                                "invalidation", thesis.group(3).strip())));
+                if (!proposal.success()) return Optional.of(ToolEvidence.finalFailed("investment.manage",
+                        "เตรียมบันทึกเหตุผลการถือไม่สำเร็จครับ: " + proposal.error()));
+                return Optional.of(ToolEvidence.pendingConfirmation("investment.manage",
+                        "พี่สาวต้องการบันทึกเหตุผลที่ถือ " + thesis.group(1).toUpperCase(Locale.ROOT)
+                                + ": " + thesis.group(2).strip() + "\nทบทวนเมื่อ: " + thesis.group(3).strip()
+                                + "\nตอบยืนยันเพื่อบันทึกครับ"));
+            }
+            if (userText.matches("(?isu).*เหตุผลที่ถือ\\s+[A-Z][A-Z0-9.-]{0,7}\\s*[:：].*"))
+                return Optional.of(ToolEvidence.finalVerified("investment.manage",
+                        "ขอเงื่อนไขที่จะทบทวนการถือด้วยครับ เช่น เหตุผลที่ถือ AMZN: …; ทบทวนเมื่อ: …"));
+        }
         if (userText == null || userText.isBlank() || conversationId == null || !isMonitorRequest(userText)) {
             return Optional.empty();
         }
@@ -91,6 +118,10 @@ public final class InvestmentMonitorRouter implements ToolRequestRouter {
         try {
             if (portfolioFact) {
                 return Optional.of(ToolEvidence.finalVerified(TOOL_NAME, formatPortfolio(result.value(), ownerId)));
+            }
+            if (!marketAnalysis && result.value() instanceof Map<?, ?> report
+                    && report.get("brief_text") instanceof String brief && !brief.isBlank()) {
+                return Optional.of(ToolEvidence.finalVerified(TOOL_NAME, brief));
             }
             return Optional.of(ToolEvidence.verified(TOOL_NAME,
                     (marketAnalysis ? "ข้อมูลพอร์ตของผู้ใช้และตลาดล่าสุดสำหรับวิเคราะห์:\n"
@@ -130,6 +161,8 @@ public final class InvestmentMonitorRouter implements ToolRequestRouter {
     }
 
     private boolean isMonitorRequest(String text) {
+        if (com.minikun.investment.InvestmentAdviceIntent.matches(text)
+                || com.minikun.investment.InvestmentAdviceIntent.requestsLedgerUpdate(text)) return false;
         String normalized = text.toLowerCase(Locale.ROOT).strip();
         boolean marketAnalysis = isMarketAnalysis(normalized);
         boolean portfolioFact = isPortfolioFactRequest(normalized);

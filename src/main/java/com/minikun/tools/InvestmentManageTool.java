@@ -28,7 +28,9 @@ public final class InvestmentManageTool implements Tool {
                     + "confirmation. Use add_transaction to record exactly one completed past BUY or SELL; it updates the ledger only and never "
                     + "submits a brokerage order. If multiple trades are reported, handle them one at a time and never claim an unlisted symbol was saved. "
                     + "For add_transaction, collect the type, symbol, quantity, and unit price before calling the tool; use an existing account only when exactly one is known. "
-                    + "Ask for missing trade details instead of guessing. This tool never fetches market prices.",
+                    + "Ask for missing trade details instead of guessing. For save_thesis, collect the owner's actual "
+                    + "reason for holding the symbol and its review condition; never infer them from news. "
+                    + "This tool never fetches market prices.",
             parameters());
 
     private final InvestmentService investments;
@@ -150,6 +152,12 @@ public final class InvestmentManageTool implements Tool {
     }
 
     private void validateWriteArguments(String action, Map<String, Object> arguments) {
+        if ("save_thesis".equals(action)) {
+            requireText(arguments, "symbol");
+            requireText(arguments, "summary");
+            requireText(arguments, "invalidation");
+            return;
+        }
         if (!"add_transaction".equals(action)) return;
         if (text(arguments, "account").isBlank()) {
             throw new IllegalArgumentException("account is required for add_transaction");

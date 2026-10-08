@@ -13,8 +13,11 @@ import static org.mockito.Mockito.when;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.minikun.pcs.model.KnowledgeContext;
 import com.minikun.pcs.model.ImageSource;
+import com.minikun.pcs.KnowledgeCandidate;
+import com.minikun.pcs.KnowledgeSource;
 import com.minikun.search.SearchCacheKey;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import org.mockito.ArgumentCaptor;
@@ -75,7 +78,8 @@ class ValkeySearchCacheTest {
         ValueOperations<String, String> values = mock(ValueOperations.class);
         when(redis.opsForValue()).thenReturn(values);
         ValkeySearchCache cache = new ValkeySearchCache(redis, new ObjectMapper(), TTL);
-        KnowledgeContext original = new KnowledgeContext("content", List.of(), List.of(
+        KnowledgeContext original = new KnowledgeContext("content", List.of(new KnowledgeCandidate("news",
+                KnowledgeSource.SEARCH, "News", 0, "https://news.example", Instant.parse("2026-10-06T01:00:00Z"), 0.95)), List.of(
                 new ImageSource("https://images.example/one.jpg", "One", "source-one", "Description one"),
                 new ImageSource("https://images.example/two.jpg", "Two", "source-two", "Description two")));
 
@@ -87,6 +91,7 @@ class ValkeySearchCacheTest {
         KnowledgeContext restored = cache.get(KEY).orElseThrow();
 
         assertEquals(original.content(), restored.content());
+        assertEquals(original.candidates(), restored.candidates());
         assertEquals(original.images(), restored.images());
         assertEquals("https://images.example/one.jpg", restored.images().getFirst().url());
         assertEquals("One", restored.images().getFirst().title());
@@ -111,6 +116,6 @@ class ValkeySearchCacheTest {
     }
 
     private static String assertSerialized(KnowledgeContext context) {
-        return "{\"content\":\"" + context.content() + "\",\"images\":[]}";
+        return "{\"content\":\"" + context.content() + "\",\"candidates\":[],\"images\":[]}";
     }
 }

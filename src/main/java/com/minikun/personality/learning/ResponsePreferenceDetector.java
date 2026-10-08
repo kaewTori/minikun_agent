@@ -26,6 +26,9 @@ public final class ResponsePreferenceDetector {
         if (com.minikun.memory.MemoryPolicy.temporaryPreference(message))
             return detect(message).stream().filter(value -> !value.explicit()).toList();
         if (contains(text, "เมื่อก่อน", "แต่ก่อน") && contains(text, "แต่ตอนนี้", "แต่จากนี้")) return detect(message);
+        if (contains(text, "วันนี้", "ครั้งนี้", "คราวนี้", "ตอนนี้ขอ", "for this", "today", "ถ้า", "สมมติ", "บอกว่า", "เขา", "แม่", "“", "\"", "ไม่ใช่ว่า")
+                || text.strip().endsWith("?") || text.strip().endsWith("？"))
+            return detect(message).stream().filter(value -> !value.explicit()).toList();
         if (message.length() <= 4000 && model != null && contains(text, "ตอบ", "ละเอียด", "สั้น", "ต่อไป", "ชอบ", "แบบเดิม", "จากนี้", "prefer", "answer", "respond") && semanticSlot.tryAcquire()) {
             try {
                 String response = java.util.concurrent.CompletableFuture.supplyAsync(() -> {
@@ -65,14 +68,20 @@ public final class ResponsePreferenceDetector {
                         throw new IllegalArgumentException("ungrounded preference");
                     result.add(new AdaptationObservation(dimension, value, 1.5, true));
                 }
-                return List.copyOf(result);
+                if (!result.isEmpty()) {
+                    if (contains(text, "ต่อไป", "จากนี้", "เป็นค่าเริ่มต้น", "โดยปกติ", "from now on", "always", "แต่ตอนนี้", "but now"))
+                        return List.copyOf(result);
+                    return result.stream().filter(value -> !"unset".equals(value.value()))
+                            .map(value -> new AdaptationObservation(
+                            value.dimension(), value.value(), .5, false)).toList();
+                }
             } catch (Exception ignored) { /* Conservative local fallback below. */ }
         }
         // ponytail: fallback recognizes explicit future defaults; model resolves richer paraphrases when available.
-        if (contains(text, "วันนี้", "ครั้งนี้", "คราวนี้", "ตอนนี้ขอ", "for this", "today", "ถ้า", "สมมติ", "บอกว่า", "เขา", "แม่", "“", "\"", "ไม่ใช่ว่า"))
-            return detect(message).stream().filter(value -> !value.explicit()).toList();
         if (contains(text, "ต่อไป", "จากนี้", "เป็นค่าเริ่มต้น", "โดยปกติ", "from now on", "always")) return detect(message);
-        return detect(message).stream().filter(value -> !value.explicit()).toList();
+        // A plain style request is weak evidence; only repetition promotes it to a default.
+        return detect(message).stream().map(value -> value.explicit()
+                ? new AdaptationObservation(value.dimension(), value.value(), .5, false) : value).toList();
     }
 
     private List<AdaptationObservation> withdrawn(String text) {

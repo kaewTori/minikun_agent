@@ -63,6 +63,8 @@ public final class InvestmentReviewRouter implements ToolRequestRouter {
     }
 
     private boolean isReviewRequest(String text) {
+        if (com.minikun.investment.InvestmentAdviceIntent.matches(text)
+                || com.minikun.investment.InvestmentAdviceIntent.requestsLedgerUpdate(text)) return false;
         String normalized = text.toLowerCase(Locale.ROOT);
         return TARGET.matcher(normalized).find() && ACTION.matcher(normalized).find()
                 && !MONITOR_SIGNAL.matcher(normalized).find();

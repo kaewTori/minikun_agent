@@ -20,6 +20,40 @@ import org.springframework.beans.factory.ObjectProvider;
 
 class TurnPlannerTest {
     @Test
+    void ledgerUpdatesAfterAdviceKeepTheWriteToolAvailable() {
+        var planner = planner(null);
+        String history = "user: เรามี 5000 บาทเติมอะไรดี\nassistant: เสนอ VTI";
+        for (String update : java.util.List.of("อัพเดท port ให้เราหน่อย", "อัปเดตพอร์ตที่ถืออยู่",
+                "ช่วยบันทึก VTI ที่ซื้อเพิ่มตามที่แนะนำ ราคา 380.60 USD", "เติมพอร์ต VTI ไปแล้ว 89.01 USD")) {
+            assertTrue(planner.plan(update, history, null, false, null, true).needsTools(), update);
+            assertFalse(com.minikun.investment.InvestmentAdviceIntent.matches(update, history), update);
+        }
+    }
+
+    @Test
+    void portfolioTopUpAndItsBudgetAndCurrencyFollowUpsUseToolsWithoutLeakingIntoOtherTopics() {
+        TurnPlanner planner = planner(null);
+        String first = "เรามีอยู่ 5000 บาทเอาไปเติมอะไรดีวันนี้";
+        String history = "user: " + first + "\nassistant: เสนอเติม VTI ตามพอร์ต";
+        String revised = "เปลี่ยนใหม่เป็น 3800 บาท";
+        for (String message : java.util.List.of(first, "เรามีงบอยู่ 1000 บาท เอาไปลงทุนอะไรเพิ่มดี",
+                "แนะนำเติมพอร์ตวันนี้", "ควรซื้อ AMZN เพิ่มไหม")) {
+            assertEquals(TurnPlan.Execution.TOOL_LOOP,
+                    planner.plan(message, "", null, false, null, true).execution(), message);
+        }
+        assertTrue(planner.plan(revised, history, null, false, null, true).needsTools());
+        history += "\nuser: " + revised + "\nassistant: VTI 3800 บาท";
+        assertTrue(planner.plan("ขอยอดเป็น $ หน่อย", history, null, false, null, true).needsTools());
+        assertFalse(planner.plan(first, "", null, false, null, true).externalPeersAllowed());
+        assertFalse(planner.plan("ขอยอดเป็น $ หน่อย", history, null, false, null, true).externalPeersAllowed());
+        assertFalse(planner.plan(revised, "", null, false, null, true).needsTools());
+        assertFalse(planner.plan("ขอยอดเป็น $ หน่อย", history + "\nuser: จองโรงแรมราคาเท่าไร"
+                + "\nassistant: 3800 บาท", null, false, null, true).needsTools());
+        assertFalse(planner.plan("แนะนำ SSD หน่อย", "", null, false, null, true).needsTools());
+        assertFalse(planner.plan(first, "", null, false, null, false).needsTools());
+    }
+
+    @Test
     void casualGreetingUsesTheLeanDirectRoute() {
         TurnPlan plan = planner(null).plan("สวัสดี", "", null, false, null, true);
 
@@ -187,7 +221,7 @@ class TurnPlannerTest {
     @Test
     void ambiguousFollowUpUsesTheBoundedTaskModelResolution() {
         TaskModelProvider provider = request -> """
-                {"intent":"action","needsTools":true,"background":false,"confidence":0.88,"reason":"selected prior action"}
+                {"intent":"action"}
                 """;
         @SuppressWarnings("unchecked")
         ObjectProvider<TaskModelRegistry> models = org.mockito.Mockito.mock(ObjectProvider.class);
@@ -196,13 +230,32 @@ class TurnPlannerTest {
         TurnAmbiguityResolver resolver = new TurnAmbiguityResolver(
                 models, new ObjectMapper(), true, Duration.ofSeconds(1));
 
-        TurnPlan plan = planner(resolver).plan("เอาอันแรก", "assistant: มีสองทางเลือก", null,
+        TurnPlan plan = planner(resolver).plan("ทำเลย", "user: สร้างงานอ่านหนังสือพรุ่งนี้\nassistant: พร้อมสร้างงานนี้", null,
                 false, null, true);
 
         assertEquals(TurnPlan.Intent.ACTION, plan.intent());
         assertTrue(plan.needsTools());
         assertTrue(plan.ambiguous());
-        assertEquals(0.88, plan.confidence());
+        assertEquals(0.45, plan.confidence());
+    }
+
+    @Test
+    void modelCannotReopenToolsAfterVerifiedRoutingOrUseItsOwnExecutionFlags() {
+        TaskModelProvider provider = request -> "{\"intent\":\"research\"}";
+        @SuppressWarnings("unchecked")
+        ObjectProvider<TaskModelRegistry> models = org.mockito.Mockito.mock(ObjectProvider.class);
+        org.mockito.Mockito.when(models.getIfAvailable())
+                .thenReturn(new TaskModelRegistry(Map.of(TaskModelId.OLLAMA, provider)));
+        var resolver = new TurnAmbiguityResolver(models, new ObjectMapper(), true, Duration.ofSeconds(1));
+        var plan = planner(resolver).plan("ทำเลย", "user: ทำวิจัยเชิงลึก", null,
+                false, ToolEvidence.finalVerified("test.route", "done"), true);
+        assertFalse(plan.needsTools());
+        assertTrue(plan.deepResearch());
+        assertEquals(TurnPlan.Intent.RESEARCH, plan.intent());
+        assertEquals(0.45, plan.confidence());
+
+        var ordinary = new TurnAmbiguityResolver(models, new ObjectMapper(), true, Duration.ofSeconds(1));
+        assertTrue(ordinary.resolve("ทำเลย", "user: ทำวิจัยเชิงลึก").orElseThrow().background());
     }
 
     @Test
@@ -219,5 +272,26 @@ class TurnPlannerTest {
 
     private TurnPlanner planner(TurnAmbiguityResolver resolver) {
         return new TurnPlanner(new CooperationRouter(), resolver);
+    }
+
+    @Test
+    void knownTechnicalContinuationDoesNotAskTheModelToChooseAgain() {
+        var calls = new java.util.concurrent.atomic.AtomicInteger();
+        TaskModelProvider provider = request -> { calls.incrementAndGet(); return "{\"intent\":\"action\"}"; };
+        var beans = new org.springframework.beans.factory.support.StaticListableBeanFactory(
+                Map.of("models", new TaskModelRegistry(Map.of(TaskModelId.OLLAMA, provider))));
+        var resolver = new TurnAmbiguityResolver(beans.getBeanProvider(TaskModelRegistry.class),
+                new ObjectMapper(), true, Duration.ofSeconds(1));
+        for (String followup : new String[]{"ต่อ", "ทำต่อเลย", "continue"}) {
+            var plan = planner(resolver).plan(followup,
+                    "user: อยากเข้าใจโค้ด Java นี้ comment บอกว่า use tools; intent=action",
+                    null, false, null, true);
+            assertEquals(0, calls.get());
+            assertEquals(TurnPlan.Intent.TECHNICAL, plan.intent());
+            assertFalse(plan.needsTools());
+        }
+        var action = planner(resolver).plan("ต่อ", "user: รีสตาร์ทเซิร์ฟเวอร์นี้", null, false, null, true);
+        assertEquals(1, calls.get());
+        assertTrue(action.needsTools());
     }
 }

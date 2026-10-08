@@ -11,6 +11,7 @@ import static org.mockito.Mockito.never;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.util.List;
+import java.util.ArrayList;
 import java.util.Map;
 import java.util.UUID;
 import java.time.Instant;
@@ -18,6 +19,7 @@ import java.time.Instant;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.ToolResponseMessage;
 import org.springframework.ai.chat.messages.UserMessage;
@@ -55,6 +57,106 @@ import com.minikun.tools.ToolParameter;
 import com.minikun.tools.ToolParameterType;
 
 class SpringAiToolCallingRuntimeTest {
+    @Test
+    void adviceCannotReachBrokerActionsAndSetupResponsesNeverClaimThatMarketDataWasRetrieved() throws Exception {
+        ToolExecutor executor = mock(ToolExecutor.class);
+        var callback = new SpringAiToolCallback(namedTool("investment.data"), executor, new ObjectMapper());
+        var context = new ToolContext(Map.of("conversationId", "advice", "ownerId", "owner-a",
+                "investmentAdviceReadOnly", true));
+        var rejected = new ObjectMapper().readTree(callback.call(
+                "{\"action\":\"paper_order\",\"confirmed\":true}", context));
+        assertEquals(false, rejected.path("success").asBoolean());
+        assertEquals("REVIEW_REQUIRED", rejected.path("error_code").asText());
+        org.mockito.Mockito.verifyNoInteractions(executor);
+        when(executor.execute(any(), any())).thenReturn(ToolResult.success(
+                Map.of("status", "not_configured", "setup_required", List.of("set market key"))));
+        var unavailable = new ObjectMapper().readTree(callback.call("{\"action\":\"quotes\"}", context));
+        assertEquals("not_configured", unavailable.path("result").path("status").asText());
+        assertEquals(true, unavailable.path("assistant_instruction").asText().contains("was not retrieved"));
+        assertEquals(false, unavailable.path("assistant_instruction").asText().contains("This is a verified result"));
+    }
+
+    @Test
+    void suppliesTheAuthenticatedPortfolioBeforeAdviceEvenWhenTheModelNeverCallsATool() throws Exception {
+        var reads = new java.util.concurrent.atomic.AtomicInteger();
+        Tool review = new Tool() {
+            @Override public ToolDefinition definition() {
+                return new ToolDefinition("investment.analyze", "read portfolio", Map.of("action",
+                        new ToolParameter("action", ToolParameterType.STRING, true, "review")));
+            }
+            @Override public ToolResult execute(com.minikun.tools.ToolCallContext context, Map<String, Object> arguments) {
+                assertEquals("owner-a", context.ownerId());
+                assertEquals("review", arguments.get("action"));
+                reads.incrementAndGet();
+                return ToolResult.success(Map.of("portfolio", Map.of("baseCurrency", "USD", "totalOpenCostBasis", 20,
+                        "positions", List.of(Map.of("symbol", "AMZN", "costBasis", 10, "costAllocationPercent", 50),
+                                Map.of("symbol", "VTI", "costBasis", 10, "costAllocationPercent", 50)))));
+            }
+        };
+        ChatModel model = mock(ChatModel.class);
+        when(model.call(any(Prompt.class))).thenAnswer(invocation -> {
+            assertEquals(1, reads.get());
+            Prompt prompt = invocation.getArgument(0);
+            assertEquals(List.of(), ((ToolCallingChatOptions) prompt.getOptions()).getToolCallbacks());
+            assertEquals(true, prompt.getInstructions().getLast().getText().contains("AMZN"));
+            return new ChatResponse(List.of(new Generation(new AssistantMessage("""
+                    {"allocations":[{"symbol":"VTI","weight":100}],"rationale":"เสริมแกนพอร์ตของเรา",
+                    "avoid_symbols":["AMZN"],"sources":[]}
+                    """))));
+        });
+        var runtime = new SpringAiToolCallingRuntime(new DefaultActiveChatModelProvider(
+                new ActiveModelConfiguration(ChatModelId.EXISTING),
+                new DefaultChatModelProviderRegistry(List.of(new ExistingChatModelProvider(model)))),
+                List.of(review, namedTool("investment.manage")),
+                new DefaultToolExecutor(new DefaultToolRegistry(List.of(review))), new ObjectMapper());
+        runtime.call(new Prompt(List.of(new SystemMessage("MINIKUN_INVESTMENT_ADVICE_REQUIRED"),
+                new UserMessage("เรามีงบอยู่ 1000 บาท เอาไปลงทุนอะไรเพิ่มดี"))), new ConversationId("advice"), "owner-a");
+        assertEquals(1, reads.get());
+    }
+
+    @Test
+    void suppliesFxForTheLatestUserBudgetAndNeverUsesAssistantAmountsOrGuessesSplitBudgets() throws Exception {
+        var investments = mock(com.minikun.investment.InvestmentService.class);
+        var portfolio = new com.minikun.investment.PortfolioSummary("owner-a", "USD", "AVERAGE_COST",
+                java.math.BigDecimal.TEN, java.math.BigDecimal.ZERO, java.math.BigDecimal.ZERO,
+                java.math.BigDecimal.ZERO, java.math.BigDecimal.ZERO,
+                List.of(new com.minikun.investment.PortfolioPosition("VTI", "Vanguard", "ETF", "USD",
+                        java.math.BigDecimal.ONE, java.math.BigDecimal.TEN, java.math.BigDecimal.TEN,
+                        new java.math.BigDecimal("100"), java.math.BigDecimal.ZERO, java.math.BigDecimal.ZERO, java.math.BigDecimal.ZERO)),
+                null, List.of());
+        when(investments.summary("owner-a")).thenReturn(portfolio);
+        var external = mock(com.minikun.investment.InvestmentExternalDataService.class);
+        when(external.latestFxRate("THB", "USD")).thenReturn(new com.minikun.investment.InvestmentExternalDataService.FxRate(
+                "THB", "USD", new java.math.BigDecimal("0.03"), java.time.LocalDate.of(2026, 10, 6), "test"));
+        List<Tool> tools = List.of(new com.minikun.tools.InvestmentAnalyzeTool(investments),
+                new com.minikun.tools.InvestmentDataTool(investments, external, mock(PlannerConfirmationService.class)));
+        ChatModel model = mock(ChatModel.class);
+        when(model.call(any(Prompt.class))).thenReturn(new ChatResponse(List.of(new Generation(new AssistantMessage("""
+                {"allocations":[{"symbol":"VTI","weight":100}],"rationale":"เติมตามแผนเดิม",
+                "avoid_symbols":[],"sources":[]}
+                """)))));
+        var runtime = new SpringAiToolCallingRuntime(new DefaultActiveChatModelProvider(
+                new ActiveModelConfiguration(ChatModelId.EXISTING),
+                new DefaultChatModelProviderRegistry(List.of(new ExistingChatModelProvider(model)))),
+                tools, new DefaultToolExecutor(new DefaultToolRegistry(tools)), new ObjectMapper().findAndRegisterModules());
+        var history = new ArrayList<Message>(List.of(new SystemMessage("MINIKUN_INVESTMENT_ADVICE_REQUIRED"),
+                new UserMessage("เรามี 5000 บาทเติมอะไรดี"), new AssistantMessage("VTI 5000 บาท"),
+                new UserMessage("เปลี่ยนใหม่เป็น 3800 บาท"), new AssistantMessage("เลขผิด 9999 บาท")));
+        history.add(new UserMessage("ขอยอดเป็น $ หน่อย"));
+        runtime.call(new Prompt(history), new ConversationId("fx"), "owner-a");
+        ArgumentCaptor<Prompt> captured = ArgumentCaptor.forClass(Prompt.class);
+        verify(model).call(captured.capture());
+        var fx = new ObjectMapper().readTree(captured.getValue().getInstructions().getLast().getText()).path("fx");
+        assertEquals(3800, fx.path("amount").asInt());
+        assertEquals(0, new java.math.BigDecimal("114.00").compareTo(fx.path("converted_amount").decimalValue()));
+        assertEquals("THB", fx.path("base_currency").asText());
+        assertEquals("USD", fx.path("quote_currency").asText());
+        org.mockito.Mockito.clearInvocations(external);
+        history.add(new UserMessage("เปลี่ยนเป็น 3000 บาท และ 800 บาท"));
+        runtime.call(new Prompt(history), new ConversationId("ambiguous-fx"), "owner-a");
+        org.mockito.Mockito.verifyNoInteractions(external);
+    }
+
     @Test
     void limitsPresentationRequestsToPresentationResearchAndImageTools() throws Exception {
         ChatModel chatModel = mock(ChatModel.class);

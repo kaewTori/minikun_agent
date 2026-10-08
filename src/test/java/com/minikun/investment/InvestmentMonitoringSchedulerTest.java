@@ -23,6 +23,7 @@ class InvestmentMonitoringSchedulerTest {
         InvestmentMonitoringService monitoring = mock(InvestmentMonitoringService.class);
         when(monitoring.prepareDaily("owner-a")).thenReturn(Optional.of(Map.of("report_date", "2026-09-11")));
         when(monitoring.formatBrief(any())).thenReturn("brief");
+        when(monitoring.replySymbol(any())).thenReturn("SCHD");
         NotificationDispatcher notifications = mock(NotificationDispatcher.class);
         NotificationSchedulerMonitor monitor = mock(NotificationSchedulerMonitor.class);
         ProactiveNotificationPolicy policy = new ProactiveNotificationPolicy(
@@ -30,11 +31,15 @@ class InvestmentMonitoringSchedulerTest {
         InvestmentMonitoringScheduler scheduler = new InvestmentMonitoringScheduler(
                 monitoring, notifications, monitor, policy,
                 Clock.fixed(Instant.parse("2026-09-11T09:00:00Z"), ZoneOffset.UTC),
-                "owner-a", "UTC", "08:15");
+                "owner-a", "UTC", "08:15", "https://mini-kun:8443");
 
         scheduler.deliverDailyBrief();
 
-        verify(notifications).publish(any());
+        org.mockito.ArgumentCaptor<com.minikun.notification.NotificationRequest> request =
+                org.mockito.ArgumentCaptor.forClass(com.minikun.notification.NotificationRequest.class);
+        verify(notifications).publish(request.capture());
+        org.junit.jupiter.api.Assertions.assertEquals("https://mini-kun:8443/cockpit/?view=chat&reply_symbol=SCHD",
+                request.getValue().clickUrl());
         verify(monitoring).markDelivered("owner-a", java.time.LocalDate.of(2026, 9, 11));
     }
 }

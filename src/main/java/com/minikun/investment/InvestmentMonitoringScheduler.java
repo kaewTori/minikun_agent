@@ -37,6 +37,7 @@ public final class InvestmentMonitoringScheduler {
     private final String ownerId;
     private final ZoneId zone;
     private final LocalTime sendAt;
+    private final java.net.URI chatOrigin;
 
     public InvestmentMonitoringScheduler(
             InvestmentMonitoringService monitoring,
@@ -46,13 +47,18 @@ public final class InvestmentMonitoringScheduler {
             Clock clock,
             @Value("${minikun.investment.monitor.owner-id:default}") String ownerId,
             @Value("${minikun.investment.monitor.zone:Asia/Bangkok}") String zone,
-            @Value("${minikun.investment.monitor.time:08:15}") String sendAt) {
+            @Value("${minikun.investment.monitor.time:08:15}") String sendAt,
+            @Value("${minikun.sync.canonical-origin:https://mini-kun:8443}") String canonicalOrigin) {
         this.monitoring = Objects.requireNonNull(monitoring, "investment monitoring service must not be null");
         this.notifications = Objects.requireNonNull(notifications, "notification dispatcher must not be null");
         this.monitor = Objects.requireNonNull(monitor, "notification scheduler monitor must not be null");
         this.notificationPolicy = Objects.requireNonNull(notificationPolicy, "notification policy must not be null");
         this.clock = Objects.requireNonNull(clock, "investment scheduler clock must not be null");
         this.ownerId = InvestmentPolicy.requireOwner(ownerId);
+        this.chatOrigin = java.net.URI.create(canonicalOrigin);
+        if (!"https".equals(chatOrigin.getScheme()) || chatOrigin.getHost() == null
+                || chatOrigin.getUserInfo() != null || chatOrigin.getQuery() != null || chatOrigin.getFragment() != null)
+            throw new IllegalArgumentException("investment chat origin must be an HTTPS origin");
         try {
             this.zone = ZoneId.of(Objects.requireNonNullElse(zone, "Asia/Bangkok").trim());
             this.sendAt = LocalTime.parse(Objects.requireNonNullElse(sendAt, "08:15").trim());
@@ -73,10 +79,13 @@ public final class InvestmentMonitoringScheduler {
         try {
             var report = monitoring.prepareDaily(ownerId);
             if (report.isEmpty()) return;
+            String replySymbol = monitoring.replySymbol(report.get());
+            String clickUrl = replySymbol.isBlank() ? "" : chatOrigin.resolve(
+                    "/cockpit/?view=chat&reply_symbol=" + java.net.URLEncoder.encode(replySymbol, java.nio.charset.StandardCharsets.UTF_8)).toString();
             notifications.publish(new NotificationRequest(
                     "INVESTMENT", ownerId + ":" + date, NotificationChannel.REMINDER,
                     "Mini-kun investment brief", monitoring.formatBrief(report.get()), 3,
-                    "investment,market,news"));
+                    "investment,market,news", clickUrl));
             monitoring.markDelivered(ownerId, date);
             monitor.delivered(SCHEDULER, clock.instant());
             LOGGER.info("process=investment_monitor event=delivered owner_id={} date={}", ownerId, date);

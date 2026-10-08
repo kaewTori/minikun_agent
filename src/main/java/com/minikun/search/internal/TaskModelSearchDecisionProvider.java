@@ -40,13 +40,12 @@ final class TaskModelSearchDecisionProvider implements SearchDecisionProvider {
     // ponytail: split common conjunctions only; use semantic segmentation if wider phrasing proves necessary.
     private static final Pattern REQUEST_SEPARATOR = Pattern.compile(
             "(?iu)(?:\\s*(?:แล้ว|และ|;|\\n)\\s*|\\s+(?:and|then)\\s+)");
-    private static final String PART_INSTRUCTIONS = """
-            Classify ONE request into reason and searchQuery, output JSON only.
-            Reasons: EXTERNAL_RESOURCE for recommending real places or services;
-            CURRENT_INFORMATION for time-varying facts; FACT_LOOKUP for external source;
-            IMAGE_REQUEST for finding images; GENERAL_KNOWLEDGE for stable explanations or conversation.
-            searchQuery must be a concise nonempty query in the user language if search is needed,
-            empty otherwise. Never invent locations or constraints. No examples.
+    private static final Pattern UNSPLIT_REQUEST = Pattern.compile(
+            "(?iu)[\"'`“”‘’]|ไม่ต้อง|อย่า|เมื่อก่อน|do not|don't|used to");
+    private static final String RESPONSE_SCHEMA = """
+            {"type":"object","properties":{"reason":{"type":"string","enum":[
+            "CURRENT_INFORMATION","FACT_LOOKUP","EXTERNAL_RESOURCE","IMAGE_REQUEST","GENERAL_KNOWLEDGE"]}},
+            "required":["reason"],"additionalProperties":false}
             """;
     private final TaskModelProvider taskModelProvider;
     private final ObjectMapper objectMapper;
@@ -69,18 +68,14 @@ final class TaskModelSearchDecisionProvider implements SearchDecisionProvider {
         int current = message.lastIndexOf("Current user message:\n");
         int start = current < 0 ? 0 : current + "Current user message:\n".length();
         String prefix = message.substring(0, start);
+        if (UNSPLIT_REQUEST.matcher(message.substring(start)).find()) return classifySingle(prompt);
         List<String> parts = java.util.Arrays.stream(REQUEST_SEPARATOR.split(message.substring(start)))
                 .map(String::trim).filter(part -> !part.isBlank()).toList();
         if (parts.size() < 2 || parts.size() > 4) return classifySingle(prompt);
         List<SearchDecision> decisions = new ArrayList<>();
         for (String part : parts) {
-            try {
-                decisions.add(classifySingle(new SearchDecisionPrompt(
-                        PART_INSTRUCTIONS, prompt.currentDate(), prefix + part)));
-            } catch (SearchDecisionClientException exception) {
-                decisions.add(classifySingle(new SearchDecisionPrompt(
-                        prompt.instructions(), prompt.currentDate(), prefix + part)));
-            }
+            decisions.add(classifySingle(new SearchDecisionPrompt(
+                    prompt.instructions(), prompt.currentDate(), prefix + part)));
         }
         SearchDecision selected = decisions.stream()
                 .filter(decision -> decision.reason() == SearchDecisionReason.EXTERNAL_RESOURCE)
@@ -112,11 +107,14 @@ final class TaskModelSearchDecisionProvider implements SearchDecisionProvider {
 
     private SearchDecision classifySingle(SearchDecisionPrompt prompt) {
         try {
+            var state = new java.util.LinkedHashMap<String, String>();
+            state.put("currentDate", prompt.currentDate());
+            state.put("context", priorContext(prompt));
+            state.put("latestMessage", currentMessage(prompt));
             TaskModelRequest request = new TaskModelRequest(
                     List.of(new TaskModelMessage("system", prompt.instructions()),
-                            new TaskModelMessage("user", "/no_think\ncurrentDate: %s\nuserMessage: %s"
-                                    .formatted(prompt.currentDate(), prompt.userMessage()))),
-                    256, 0.0, TaskModelRequest.ResponseFormat.JSON_OBJECT);
+                            new TaskModelMessage("user", objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(state))),
+                    32, 0.0, TaskModelRequest.ResponseFormat.JSON_OBJECT, RESPONSE_SCHEMA);
             String response;
             try {
                 response = CompletableFuture.supplyAsync(() -> taskModelProvider.generate(request))
@@ -133,7 +131,13 @@ final class TaskModelSearchDecisionProvider implements SearchDecisionProvider {
             SearchDecisionReason reason = SearchDecisionReason.valueOf(root.get("reason").textValue());
             boolean reasonRequiresSearch = reason != SearchDecisionReason.GENERAL_KNOWLEDGE;
             SearchPlanHints hints = new SearchPlanHints(
-                    text(root, "intent"), number(root, "confidence"), text(root, "searchQuery"),
+                    root.has("intent") ? text(root, "intent") : switch (reason) {
+                        case EXTERNAL_RESOURCE -> "local_discovery";
+                        case CURRENT_INFORMATION -> "current_information";
+                        case FACT_LOOKUP -> "";
+                        case IMAGE_REQUEST -> "images";
+                        default -> "general";
+                    }, number(root, "confidence"), primaryQuery(root, prompt, reason),
                     stringList(root, "alternateQueries", 2), stringList(root, "evidenceNeeds", 6),
                     text(root, "location"));
             return new SearchDecision(reasonRequiresSearch, prompt.userMessage(), reason, hints);
@@ -142,6 +146,31 @@ final class TaskModelSearchDecisionProvider implements SearchDecisionProvider {
         } catch (RuntimeException | java.io.IOException exception) {
             throw new SearchDecisionClientException("search decision provider failed", exception);
         }
+    }
+
+    private String currentMessage(SearchDecisionPrompt prompt) {
+        String marker = "Current user message:\n";
+        int index = prompt.userMessage().lastIndexOf(marker);
+        return index < 0 ? prompt.userMessage() : prompt.userMessage().substring(index + marker.length());
+    }
+
+    private String priorContext(SearchDecisionPrompt prompt) {
+        int index = prompt.userMessage().lastIndexOf("Current user message:\n");
+        if (index < 0 || prompt.userMessage().startsWith("No prior conversation")) return "";
+        return prompt.userMessage().substring(0, index).replace(
+                "Prior conversation context (use only to resolve references; do not search it):\n", "").strip();
+    }
+
+    private String primaryQuery(JsonNode root, SearchDecisionPrompt prompt, SearchDecisionReason reason) {
+        if (reason == SearchDecisionReason.GENERAL_KNOWLEDGE) return "";
+        String generated = text(root, "searchQuery");
+        if (!generated.isBlank()) return generated;
+        String message = currentMessage(prompt).strip();
+        // Reuse contextual planning for follow-ups; preserve exact names and constraints otherwise.
+        if (new com.minikun.conversation.continuity.ConversationContinuityResolver()
+                .resolve(message, priorContext(prompt)).followUp()) return "";
+        return reason == SearchDecisionReason.IMAGE_REQUEST
+                ? DefaultSearchQueryPlanningService.focusImageQuery(message) : message;
     }
 
     private void validateSchema(JsonNode root) {

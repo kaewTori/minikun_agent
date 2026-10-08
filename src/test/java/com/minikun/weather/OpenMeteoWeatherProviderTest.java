@@ -9,7 +9,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
@@ -29,7 +32,8 @@ class OpenMeteoWeatherProviderTest {
         forecastServer.expect(requestTo("https://forecast.test/v1/forecast?latitude=13.75&longitude=100.5"
                 + "&current=temperature_2m,apparent_temperature,precipitation,wind_speed_10m,weather_code"
                 + "&daily=weather_code,temperature_2m_min,temperature_2m_max,precipitation_probability_max,"
-                + "precipitation_sum,sunrise,sunset&forecast_days=16&timezone=auto&temperature_unit=celsius"
+                + "precipitation_sum,sunrise,sunset&hourly=precipitation_probability,precipitation,weather_code,wind_gusts_10m"
+                + "&forecast_days=16&timezone=auto&temperature_unit=celsius"
                 + "&wind_speed_unit=kmh&precipitation_unit=mm"))
                 .andRespond(withSuccess("""
                         {"timezone":"Asia/Bangkok","current":{"temperature_2m":30},
@@ -65,7 +69,8 @@ class OpenMeteoWeatherProviderTest {
         forecastServer.expect(requestTo("https://forecast.test/v1/forecast?latitude=18.79&longitude=98.98"
                 + "&current=temperature_2m,apparent_temperature,precipitation,wind_speed_10m,weather_code"
                 + "&daily=weather_code,temperature_2m_min,temperature_2m_max,precipitation_probability_max,"
-                + "precipitation_sum,sunrise,sunset&forecast_days=16&timezone=auto&temperature_unit=celsius"
+                + "precipitation_sum,sunrise,sunset&hourly=precipitation_probability,precipitation,weather_code,wind_gusts_10m"
+                + "&forecast_days=16&timezone=auto&temperature_unit=celsius"
                 + "&wind_speed_unit=kmh&precipitation_unit=mm"))
                 .andExpect(method(HttpMethod.GET))
                 .andRespond(withSuccess("""
@@ -84,8 +89,61 @@ class OpenMeteoWeatherProviderTest {
         assertEquals("2026-08-18", report.requestedDate());
         assertEquals(28.4, report.currentTemperatureCelsius());
         assertEquals(31.0, report.dailyTemperatureMaxCelsius());
+        assertEquals(List.of(), report.hourlyForecast());
         geocodingServer.verify();
         forecastServer.verify();
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+            "tonight, 2026-10-06, 2026-10-06T22:00, 2026-10-07T06:00, 3",
+            "คืนนี้, 2026-10-06, 2026-10-06T22:00, 2026-10-07T06:00, 3",
+            "today, 2026-10-06, 2026-10-06T22:00, 2026-10-07T00:00, 2",
+            "tomorrow evening, 2026-10-07, 2026-10-07T18:00, 2026-10-08T06:00, 3",
+            "2026-10-07, 2026-10-07, 2026-10-07T05:00, 2026-10-08T00:00, 4"
+    })
+    void selectsLocalHourlyIntervalsIncludingMidnightAndPreservesMissingValues(
+            String when, String date, String firstFrom, String lastTo, int size) {
+        RestClient.Builder builder = RestClient.builder().baseUrl("https://forecast.test");
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        OpenMeteoWeatherProvider provider = new OpenMeteoWeatherProvider(
+                request -> { throw new AssertionError("device coordinates must bypass geocoding"); },
+                builder.build(), new ObjectMapper(),
+                Clock.fixed(Instant.parse("2026-10-06T15:15:00Z"), ZoneOffset.UTC));
+        server.expect(requestTo("https://forecast.test/v1/forecast?latitude=13.75&longitude=100.5"
+                + "&current=temperature_2m,apparent_temperature,precipitation,wind_speed_10m,weather_code"
+                + "&daily=weather_code,temperature_2m_min,temperature_2m_max,precipitation_probability_max,"
+                + "precipitation_sum,sunrise,sunset"
+                + "&hourly=precipitation_probability,precipitation,weather_code,wind_gusts_10m"
+                + "&forecast_days=16&timezone=auto&temperature_unit=celsius&wind_speed_unit=kmh&precipitation_unit=mm"))
+                .andRespond(withSuccess("""
+                        {"timezone":"Asia/Bangkok","current":{"weather_code":2},
+                         "daily":{"time":["2026-10-06","2026-10-07"],"weather_code":[95,95]},
+                         "hourly":{"time":["2026-10-06T22:00","2026-10-06T23:00","2026-10-07T00:00",
+                            "2026-10-07T06:00","2026-10-07T07:00","2026-10-07T19:00",
+                            "2026-10-08T00:00","2026-10-08T06:00","2026-10-08T07:00"],
+                            "precipitation_probability":[5,90,100,null,10,50,60,null,10],
+                            "precipitation":[0,2,3,null,0,1,2,null,0],
+                            "weather_code":[2,95,61,null,2,61,61,null,2],
+                            "wind_gusts_10m":[10,35,20,null,10,15,20,null,10]}}
+                        """, MediaType.APPLICATION_JSON));
+
+        WeatherReport report = provider.forecast(new WeatherRequest(
+                "ตำแหน่งปัจจุบัน", when, "", 13.75, 100.5));
+
+        assertEquals(date, report.requestedDate());
+        assertEquals("mainly clear or cloudy", report.currentWeatherDescription());
+        assertEquals(size, report.hourlyForecast().size());
+        assertEquals(firstFrom, report.hourlyForecast().getFirst().from());
+        assertEquals(lastTo, report.hourlyForecast().getLast().to());
+        if (when.equals("tonight") || when.equals("คืนนี้")) {
+            assertEquals(90, report.hourlyForecast().getFirst().precipitationProbabilityPercent());
+            assertEquals("thunderstorm", report.hourlyForecast().getFirst().weatherDescription());
+            assertEquals(35.0, report.hourlyForecast().getFirst().windGustKmh());
+            assertEquals(null, report.hourlyForecast().getLast().precipitationProbabilityPercent());
+            assertEquals(null, report.hourlyForecast().getLast().precipitationMm());
+        }
+        server.verify();
     }
 
     @Test
@@ -109,7 +167,8 @@ class OpenMeteoWeatherProviderTest {
         forecastServer.expect(requestTo("https://forecast.test/v1/forecast?latitude=13.75&longitude=100.5"
                 + "&current=temperature_2m,apparent_temperature,precipitation,wind_speed_10m,weather_code"
                 + "&daily=weather_code,temperature_2m_min,temperature_2m_max,precipitation_probability_max,"
-                + "precipitation_sum,sunrise,sunset&forecast_days=16&timezone=auto&temperature_unit=celsius"
+                + "precipitation_sum,sunrise,sunset&hourly=precipitation_probability,precipitation,weather_code,wind_gusts_10m"
+                + "&forecast_days=16&timezone=auto&temperature_unit=celsius"
                 + "&wind_speed_unit=kmh&precipitation_unit=mm"))
                 .andExpect(method(HttpMethod.GET))
                 .andRespond(withSuccess("""
